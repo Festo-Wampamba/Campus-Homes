@@ -32,17 +32,25 @@ async function syncOne(draft: InspectionDraft): Promise<void> {
     });
     await putDraft({ ...draft, syncStatus: "synced" });
   } catch (err) {
-    const isClientError = err instanceof ApiError && err.status >= 400 && err.status < 500;
-    await putDraft({ ...draft, syncStatus: isClientError ? "failed" : "queued" });
+    // Only network-shaped failures are worth retrying: fetch itself throws a
+    // TypeError on a network failure, and a 5xx means the server may recover.
+    // Everything else (local validation throws, unexpected errors, 4xx) is
+    // terminal — retrying it forever would just resend the same bad request.
+    const isRetryable = err instanceof TypeError || (err instanceof ApiError && err.status >= 500);
+    await putDraft({ ...draft, syncStatus: isRetryable ? "queued" : "failed" });
   }
 }
 
-/** Drains every queued/failed draft, one at a time. Safe to call
- * concurrently with itself — each call re-reads the queue fresh. */
+/** Drains every queued draft, one at a time. "failed" drafts are terminal —
+ * they need an explicit manual retry (out of scope here), not the automatic
+ * loop. Safe to call concurrently with itself — each call re-reads the queue
+ * fresh. */
 export async function syncQueuedDrafts(): Promise<void> {
   const drafts = await getQueuedDrafts();
   for (const draft of drafts) {
-    await syncOne(draft);
+    if (draft.syncStatus === "queued") {
+      await syncOne(draft);
+    }
   }
 }
 

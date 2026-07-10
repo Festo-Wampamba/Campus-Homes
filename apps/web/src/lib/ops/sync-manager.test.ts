@@ -1,3 +1,5 @@
+import { IDBFactory } from "fake-indexeddb";
+
 import { getDraft, putDraft, type InspectionDraft } from "./inspection-db";
 import { syncQueuedDrafts } from "./sync-manager";
 
@@ -25,6 +27,14 @@ function queuedDraft(visitId: string): InspectionDraft {
 
 describe("syncQueuedDrafts", () => {
   const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    // Fresh, empty IndexedDB per test — inspection-db.ts never closes its
+    // connections, so deleting the real database would hang forever waiting
+    // for them to close. Swapping in a new factory instance sidesteps that
+    // without touching inspection-db.ts.
+    global.indexedDB = new IDBFactory();
+  });
 
   afterEach(() => {
     global.fetch = originalFetch;
@@ -65,5 +75,25 @@ describe("syncQueuedDrafts", () => {
 
     const updated = await getDraft("visit-offline");
     expect(updated?.syncStatus).toBe("queued");
+  });
+
+  it("marks a draft with no GPS captured as failed, not retried forever", async () => {
+    await putDraft({ ...queuedDraft("visit-no-gps"), visitGpsLat: null, visitGpsLon: null });
+    global.fetch = jest.fn();
+
+    await syncQueuedDrafts();
+
+    const updated = await getDraft("visit-no-gps");
+    expect(updated?.syncStatus).toBe("failed");
+  });
+
+  it("does not resend a draft that is already marked failed", async () => {
+    await putDraft({ ...queuedDraft("visit-already-failed"), syncStatus: "failed" });
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    expect(fetchMock.mock.calls.length).toBe(0);
   });
 });
