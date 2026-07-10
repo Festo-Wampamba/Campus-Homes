@@ -67,6 +67,13 @@ user ctx (no `service_role` needed):
    `listings_read` includes `app_is_ops()` — this just exposes it as an
    ops-facing query. Visit detail uses it to link "Approve" through to the
    right "Publish" target.
+4. **`GET /ops/visits/:id`** (`ops_lead`, `admin`) — the full
+   `verification_visits` row (checklist, visit GPS, started/completed at,
+   result, failure reason, approval state). Found while mapping the lead's
+   "visit detail" screen to endpoints: `GET /ops/queue` is list-shaped and
+   deliberately excludes the checklist column, so there was no way to review
+   a completed checklist before approving. RLS already permits it
+   (`visits_read`: `inspector_id = app_user_id() OR app_is_lead()`).
 
 New shared schemas in `packages/shared/src/ops.ts`: `opsInspectorSchema`,
 `opsVisitMineSchema` — response contracts, following the existing pattern of
