@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import type {
   IssueStrikeInput,
@@ -21,8 +21,10 @@ import {
   landlordStrikes,
   listingVersions,
   listings,
+  opsStaff,
   semesters,
   units,
+  users,
   verificationVisits,
 } from '../../db/schema';
 import { AuditService } from './audit.service';
@@ -53,6 +55,60 @@ export class OpsService {
       );
       return res.rows as unknown[];
     });
+  }
+
+  /** Inspector picker for the schedule-visit form. Ops-lead-only read. */
+  listInspectors(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (db) =>
+      db
+        .select({ id: users.id, name: users.name, catchment: opsStaff.assignedCatchment })
+        .from(opsStaff)
+        .innerJoin(users, eq(opsStaff.userId, users.id))
+        .where(and(eq(opsStaff.team, 'inspector'), eq(opsStaff.active, true))),
+    );
+  }
+
+  /** An inspector's own assigned, not-yet-approved visits — their Inspection
+   * Mode home screen. Not reusing queue(): that's property-shaped for leads,
+   * and RLS-scoping verification_visits to the caller means a property
+   * assigned to a *different* inspector would show as "no visit yet" here. */
+  myVisits(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT vv.id AS visit_id, vv.property_id, vv.scheduled_at, vv.result,
+                p.name AS property_name, p.street_address
+         FROM verification_visits vv
+         JOIN properties p ON p.id = vv.property_id
+         WHERE vv.inspector_id = $1 AND vv.approved_at IS NULL
+         ORDER BY vv.scheduled_at ASC NULLS LAST`,
+        [ctx.userId],
+      );
+      return res.rows as unknown[];
+    });
+  }
+
+  /** Full visit record for the lead's review-before-approve screen. */
+  async visitDetail(ctx: RlsContext, visitId: string) {
+    return this.rlsDb.run(ctx, async (db) => {
+      const visit = await db.query.verificationVisits.findFirst({
+        where: eq(verificationVisits.id, visitId),
+      });
+      if (!visit) {
+        throw new NotFoundException('Visit not found');
+      }
+      return visit;
+    });
+  }
+
+  /** Links an approved visit's property to the listing it should publish —
+   * publishListingSchema takes a listingId, not a propertyId. */
+  propertyListings(ctx: RlsContext, propertyId: string) {
+    return this.rlsDb.run(ctx, async (db) =>
+      db
+        .select({ id: listings.id, status: listings.status, semesterId: listings.semesterId })
+        .from(listings)
+        .where(eq(listings.propertyId, propertyId)),
+    );
   }
 
   async scheduleVisit(ctx: RlsContext, input: ScheduleVisitInput) {

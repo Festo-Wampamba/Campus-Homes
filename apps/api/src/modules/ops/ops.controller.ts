@@ -16,6 +16,30 @@ export class OpsController {
     return this.ops.queue(rlsCtx(req));
   }
 
+  @Get('inspectors')
+  @Roles('ops_lead', 'admin')
+  listInspectors(@Req() req: AuthenticatedRequest) {
+    return this.ops.listInspectors(rlsCtx(req));
+  }
+
+  @Get('visits/mine')
+  @Roles('ops_inspector')
+  myVisits(@Req() req: AuthenticatedRequest) {
+    return this.ops.myVisits(rlsCtx(req));
+  }
+
+  @Get('visits/:id')
+  @Roles('ops_lead', 'admin')
+  visitDetail(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ops.visitDetail(rlsCtx(req), id);
+  }
+
+  @Get('properties/:id/listings')
+  @Roles('ops_lead', 'admin')
+  propertyListings(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ops.propertyListings(rlsCtx(req), id);
+  }
+
   @Post('visits')
   @Roles('ops_lead', 'admin')
   scheduleVisit(@Req() req: AuthenticatedRequest, @Body() body: ScheduleVisitDto) {
