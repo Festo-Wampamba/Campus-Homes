@@ -81,3 +81,5 @@ export type ListingStatus = (typeof LISTING_STATUSES)[number];
 export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type VerificationChecklistComponent = (typeof VERIFICATION_CHECKLIST_COMPONENTS)[number];
+export type VisitResult = (typeof VISIT_RESULTS)[number];
+export type StrikeReason = (typeof STRIKE_REASONS)[number];
