@@ -1,0 +1,322 @@
+/**
+ * Service-level flow tests (brief §18): the reservation-hold state machine,
+ * payment-webhook idempotency, and the offline-sync checklist endpoint's
+ * idempotency. Runs against the docker test DB through the real services.
+ */
+import { Pool } from 'pg';
+
+import { StubPayments } from '../../src/adapters/payments.adapter';
+import { RlsDb } from '../../src/db/db.module';
+import { AuditService } from '../../src/modules/ops/audit.service';
+import { OpsService } from '../../src/modules/ops/ops.service';
+import { ReservationsService } from '../../src/modules/reservations/reservations.service';
+import type { RlsContext } from '../../src/db/rls-context';
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+
+const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
+const rlsDb = new RlsDb(pool);
+const audit = new AuditService(rlsDb);
+const ops = new OpsService(rlsDb, audit);
+const reservationsService = new ReservationsService(rlsDb, audit, new StubPayments(), null, null);
+
+let student1: string;
+let student2: string;
+let landlord1: string;
+let opsLead: string;
+let listingId: string;
+let unitId: string;
+
+const studentCtx = (): RlsContext => ({ userId: student1, role: 'student' });
+const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
+
+const FULL_CHECKLIST = Object.fromEntries(
+  ['location_gps', 'rooms_capacity', 'amenities', 'photos', 'landlord_identity', 'safety'].map(
+    (c) => [c, { passed: true }],
+  ),
+) as Record<string, { passed: boolean }>;
+
+async function seed(sql: string, params: unknown[] = []): Promise<string> {
+  const res = await pool.query(sql, params);
+  return res.rows[0]?.id as string;
+}
+
+beforeAll(async () => {
+  await pool.query(
+    `TRUNCATE users, students, landlords, ops_staff, semesters, properties,
+     property_documents, verification_visits, listings, listing_versions,
+     units, reservations, payments, refunds, move_ins, audit_log,
+     notifications CASCADE`,
+  );
+
+  student1 = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000001', 'student', 'active') RETURNING id`,
+  );
+  student2 = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000002', 'student', 'active') RETURNING id`,
+  );
+  landlord1 = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000003', 'landlord', 'active') RETURNING id`,
+  );
+  opsLead = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000004', 'ops_lead', 'active') RETURNING id`,
+  );
+  const inspector = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000005', 'ops_inspector', 'active') RETURNING id`,
+  );
+  await pool.query(`INSERT INTO students (user_id, university) VALUES ($1), ($2)`.replace('($1), ($2)', `($1, 'MUK'), ($2, 'MUK')`), [student1, student2]);
+  await pool.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'LL One')`, [landlord1]);
+  await pool.query(
+    `INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`,
+    [opsLead, inspector],
+  );
+
+  const semester = await seed(
+    `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+     VALUES ('Sem 1 26/27', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
+  );
+  const property = await seed(
+    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon)
+     VALUES ($1, 'Test Hostel', 'Wandegeya', 'active', 0.33, 32.57) RETURNING id`,
+    [landlord1],
+  );
+  await pool.query(
+    `INSERT INTO verification_visits
+       (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at, completed_at)
+     VALUES ($1, $2, $3, 'seed-visit-key-0001', 'passed', $4, now(), now())`,
+    [property, inspector, JSON.stringify(FULL_CHECKLIST), opsLead],
+  );
+  listingId = await seed(
+    `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'pending_verification') RETURNING id`,
+    [property, semester],
+  );
+
+  // Publish through the real ops path: version snapshot + verified flip + unit.
+  const published = await ops.publishListing(leadCtx(), {
+    listingId,
+    pricePerTermUgx: 800_000,
+    amenities: { water: true, power: true },
+    description: 'Test listing',
+    units: [{ label: 'Room 1A', capacity: 1 }],
+  });
+  expect(published.listing.status).toBe('verified');
+  const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
+  unitId = unitRes.rows[0].id as string;
+});
+
+afterAll(async () => {
+  await pool.end();
+});
+
+describe('listing publish (ops path)', () => {
+  it('created version 1 as the listing current version', async () => {
+    const res = await pool.query(
+      `SELECT l.current_version_id, v.version_number
+       FROM listings l JOIN listing_versions v ON v.id = l.current_version_id
+       WHERE l.id = $1`,
+      [listingId],
+    );
+    expect(res.rows[0].version_number).toBe(1);
+  });
+});
+
+describe('reservation hold state machine', () => {
+  const KEY_1 = 'hold-key-0000000001';
+
+  it('creates a held reservation with a pending payment and checkout url', async () => {
+    const result = await reservationsService.createHold(
+      studentCtx(),
+      { unitId, idempotencyKey: KEY_1 },
+      'http://localhost:3000/r',
+    );
+    expect({
+      status: result.reservation.status,
+      paymentStatus: result.payment?.status,
+      hasCheckout: 'checkoutUrl' in result && result.checkoutUrl.length > 0,
+    }).toEqual({ status: 'held', paymentStatus: 'pending', hasCheckout: true });
+  });
+
+  it('replays the same idempotency key onto the same reservation', async () => {
+    const first = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [
+      KEY_1,
+    ]);
+    const replay = await reservationsService.createHold(
+      studentCtx(),
+      { unitId, idempotencyKey: KEY_1 },
+      'http://localhost:3000/r',
+    );
+    expect(replay.reservation.id).toBe(first.rows[0].id);
+  });
+
+  it('rejects a second live hold on the same unit', async () => {
+    await expect(
+      reservationsService.createHold(
+        { userId: student2, role: 'student' },
+        { unitId, idempotencyKey: 'hold-key-0000000002' },
+        'http://localhost:3000/r',
+      ),
+    ).rejects.toThrow(/live hold/i);
+  });
+
+  it('fulfills the reservation when the payment webhook succeeds', async () => {
+    const payment = await pool.query(
+      `SELECT p.provider_ref FROM payments p
+       JOIN reservations r ON r.id = p.reservation_id
+       WHERE r.idempotency_key = $1`,
+      [KEY_1],
+    );
+    const outcome = await reservationsService.applyPaymentWebhook({
+      txRef: payment.rows[0].provider_ref as string,
+      providerTxnId: 'fw-txn-1001',
+      status: 'successful',
+      paymentMethod: 'mobilemoneyug',
+      raw: { test: true },
+    });
+    expect(outcome).toEqual({ applied: true, outcome: 'fulfilled' });
+  });
+
+  it('ignores a duplicate webhook for the same transaction', async () => {
+    const payment = await pool.query(
+      `SELECT p.provider_ref FROM payments p
+       JOIN reservations r ON r.id = p.reservation_id
+       WHERE r.idempotency_key = $1`,
+      [KEY_1],
+    );
+    const outcome = await reservationsService.applyPaymentWebhook({
+      txRef: payment.rows[0].provider_ref as string,
+      providerTxnId: 'fw-txn-1001',
+      status: 'successful',
+      raw: {},
+    });
+    expect(outcome).toEqual({ applied: false, reason: 'duplicate webhook' });
+  });
+
+  it('confirms move-in by the student on the fulfilled reservation', async () => {
+    const r = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
+    const moveIn = await reservationsService.confirmMoveIn(
+      studentCtx(),
+      r.rows[0].id as string,
+    );
+    expect(moveIn).toMatchObject({ confirmedByRole: 'student' });
+  });
+
+  it('refunds instead of activating when the webhook lands on an expired hold', async () => {
+    // Free the unit, then build an already-expired hold directly.
+    await pool.query(
+      `INSERT INTO units (listing_id, label, capacity, available_for_semester_id)
+       SELECT listing_id, 'Room 2B', 1, available_for_semester_id FROM units WHERE id = $1`,
+      [unitId],
+    );
+    const unit2 = (
+      await pool.query(`SELECT id FROM units WHERE label = 'Room 2B'`)
+    ).rows[0].id as string;
+
+    const hold = await reservationsService.createHold(
+      { userId: student2, role: 'student' },
+      { unitId: unit2, idempotencyKey: 'hold-key-0000000003' },
+      'http://localhost:3000/r',
+    );
+    await pool.query(
+      `UPDATE reservations SET hold_expires_at = now() - interval '1 hour' WHERE id = $1`,
+      [hold.reservation.id],
+    );
+    const payment = await pool.query(
+      `SELECT provider_ref FROM payments WHERE reservation_id = $1`,
+      [hold.reservation.id],
+    );
+    const outcome = await reservationsService.applyPaymentWebhook({
+      txRef: payment.rows[0].provider_ref as string,
+      providerTxnId: 'fw-txn-2002',
+      status: 'successful',
+      raw: {},
+    });
+    expect(outcome).toEqual({ applied: true, outcome: 'refunded_expired_hold' });
+  });
+
+  it('records the refund row for the expired-hold payment', async () => {
+    const res = await pool.query(
+      `SELECT reason FROM refunds rf
+       JOIN payments p ON p.id = rf.payment_id
+       WHERE p.provider_txn_id = 'fw-txn-2002'`,
+    );
+    expect(res.rows[0].reason).toBe('cooling_off');
+  });
+
+  it('lets a student cancel their own held reservation', async () => {
+    await pool.query(
+      `INSERT INTO units (listing_id, label, capacity, available_for_semester_id)
+       SELECT listing_id, 'Room 3C', 1, available_for_semester_id FROM units WHERE id = $1`,
+      [unitId],
+    );
+    const unit3 = (
+      await pool.query(`SELECT id FROM units WHERE label = 'Room 3C'`)
+    ).rows[0].id as string;
+    const hold = await reservationsService.createHold(
+      studentCtx(),
+      { unitId: unit3, idempotencyKey: 'hold-key-0000000004' },
+      'http://localhost:3000/r',
+    );
+    const result = await reservationsService.cancel(studentCtx(), hold.reservation.id);
+    expect(result).toEqual({ outcome: 'cancelled' });
+  });
+});
+
+describe('offline-sync checklist idempotency (§9 flow 2)', () => {
+  let visitId: string;
+  let inspector: string;
+  const SYNC_KEY = 'sync-key-00000000000001';
+
+  beforeAll(async () => {
+    inspector = (
+      await pool.query(`SELECT user_id FROM ops_staff WHERE team = 'inspector'`)
+    ).rows[0].user_id as string;
+    const property = (
+      await pool.query(`SELECT id FROM properties LIMIT 1`)
+    ).rows[0].id as string;
+    visitId = await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
+       VALUES ($1, $2, 'server-created-sync-test') RETURNING id`,
+      [property, inspector],
+    );
+  });
+
+  it('applies the checklist on first sync', async () => {
+    const visit = await ops.syncVisit(
+      { userId: inspector, role: 'ops_inspector' },
+      {
+        clientIdempotencyKey: SYNC_KEY,
+        visitId,
+        checklist: FULL_CHECKLIST as never,
+        visitGpsLat: 0.33,
+        visitGpsLon: 32.57,
+        startedAt: new Date(Date.now() - 3600_000).toISOString(),
+        completedAt: new Date().toISOString(),
+        result: 'passed',
+      },
+    );
+    expect(visit.result).toBe('passed');
+  });
+
+  it('a replayed sync with the same key does not double-apply', async () => {
+    const replay = await ops.syncVisit(
+      { userId: inspector, role: 'ops_inspector' },
+      {
+        clientIdempotencyKey: SYNC_KEY,
+        visitId,
+        checklist: FULL_CHECKLIST as never,
+        visitGpsLat: 0.99, // different data — must be ignored
+        visitGpsLon: 30.0,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        result: 'failed',
+      },
+    );
+    expect({ id: replay.id, result: replay.result, lat: replay.visitGpsLat }).toEqual({
+      id: visitId,
+      result: 'passed',
+      lat: '0.3300000',
+    });
+  });
+});

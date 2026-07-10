@@ -1,0 +1,22 @@
+# deps
+node_modules/
+
+# env — secrets never committed
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+.next/
+*.tsbuildinfo
+
+# test
+coverage/
+
+# misc
+.DS_Store
+*.log
+
+# local resources (design references, surveys — not source code)
+OwnResourceFolder/

@@ -1,0 +1,1 @@
+export const REALTIME = 'REALTIME_ADAPTER';

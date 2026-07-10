@@ -1,0 +1,57 @@
+{
+  "name": "@campushomes/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "start:dev": "nest start --watch",
+    "dev": "node --env-file=.env node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:rls": "jest --runInBand test/rls",
+    "db:generate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate",
+    "db:studio": "node --env-file=.env node_modules/drizzle-kit/bin.cjs studio",
+    "db:check": "node --env-file=.env node_modules/drizzle-kit/bin.cjs check",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@better-auth/infra": "^0.3.4",
+    "@campushomes/shared": "workspace:*",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "better-auth": "^1.6.23",
+    "bullmq": "^5.79.2",
+    "drizzle-orm": "^0.44.5",
+    "express": "^5.2.1",
+    "ioredis": "^5.10.1",
+    "nestjs-zod": "^5.0.1",
+    "pg": "^8.16.3",
+    "pusher": "^5.3.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@campushomes/config": "workspace:*",
+    "@nestjs/cli": "^11.0.10",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.3.1",
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "^0.31.4",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.1",
+    "typescript": "catalog:"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/test"
+    ],
+    "testTimeout": 30000
+  }
+}

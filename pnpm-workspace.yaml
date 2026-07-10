@@ -1,0 +1,16 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  esbuild: true
+  # optional native accel for bullmq's msgpack — pure-JS fallback is fine
+  msgpackr-extract: false
+  sharp: true
+  unrs-resolver: true
+
+catalog:
+  zod: ^4.1.12
+  typescript: ^5.9.3

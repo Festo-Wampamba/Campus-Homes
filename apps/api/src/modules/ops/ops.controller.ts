@@ -1,0 +1,49 @@
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+
+import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
+import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
+import { IssueStrikeDto, PublishListingDto, ScheduleVisitDto, SyncVisitDto } from './ops.dto';
+import { OpsService } from './ops.service';
+
+@Controller('ops')
+@UseGuards(AuthGuard, RolesGuard)
+export class OpsController {
+  constructor(private readonly ops: OpsService) {}
+
+  @Get('queue')
+  @Roles('ops_inspector', 'ops_lead', 'admin')
+  queue(@Req() req: AuthenticatedRequest) {
+    return this.ops.queue(rlsCtx(req));
+  }
+
+  @Post('visits')
+  @Roles('ops_lead', 'admin')
+  scheduleVisit(@Req() req: AuthenticatedRequest, @Body() body: ScheduleVisitDto) {
+    return this.ops.scheduleVisit(rlsCtx(req), body);
+  }
+
+  // Offline-sync drain target (§9 flow 2) — inspector-only, idempotency-keyed.
+  @Post('visits/sync')
+  @Roles('ops_inspector')
+  syncVisit(@Req() req: AuthenticatedRequest, @Body() body: SyncVisitDto) {
+    return this.ops.syncVisit(rlsCtx(req), body);
+  }
+
+  @Post('visits/:id/approve')
+  @Roles('ops_lead', 'admin')
+  approveVisit(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ops.approveVisit(rlsCtx(req), id);
+  }
+
+  @Post('listings/publish')
+  @Roles('ops_lead', 'admin')
+  publishListing(@Req() req: AuthenticatedRequest, @Body() body: PublishListingDto) {
+    return this.ops.publishListing(rlsCtx(req), body);
+  }
+
+  @Post('strikes')
+  @Roles('ops_lead', 'admin')
+  issueStrike(@Req() req: AuthenticatedRequest, @Body() body: IssueStrikeDto) {
+    return this.ops.issueStrike(rlsCtx(req), body);
+  }
+}

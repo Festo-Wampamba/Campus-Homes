@@ -1,0 +1,15 @@
+# PostGIS-enabled Postgres for local dev + RLS tests only — production is NeonDB.
+services:
+  db:
+    image: postgis/postgis:17-3.5-alpine
+    environment:
+      POSTGRES_USER: campushomes
+      POSTGRES_PASSWORD: campushomes_test
+      POSTGRES_DB: campushomes_test
+    ports:
+      - '54329:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U campushomes -d campushomes_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
