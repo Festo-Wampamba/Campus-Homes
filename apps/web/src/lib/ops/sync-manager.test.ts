@@ -96,4 +96,17 @@ describe("syncQueuedDrafts", () => {
 
     expect(fetchMock.mock.calls.length).toBe(0);
   });
+
+  it("retries a draft orphaned mid-sync (interrupted before a prior attempt could finish)", async () => {
+    await putDraft({ ...queuedDraft("visit-orphaned"), syncStatus: "syncing" });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "visit-orphaned" }),
+    }) as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    const updated = await getDraft("visit-orphaned");
+    expect(updated?.syncStatus).toBe("synced");
+  });
 });

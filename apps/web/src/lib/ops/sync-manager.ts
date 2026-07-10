@@ -41,14 +41,18 @@ async function syncOne(draft: InspectionDraft): Promise<void> {
   }
 }
 
-/** Drains every queued draft, one at a time. "failed" drafts are terminal —
- * they need an explicit manual retry (out of scope here), not the automatic
- * loop. Safe to call concurrently with itself — each call re-reads the queue
- * fresh. */
+/** Drains every queued or orphaned-mid-sync draft, one at a time. "failed"
+ * drafts are terminal — they need an explicit manual retry (out of scope
+ * here), not the automatic loop. "syncing" drafts are included: that status
+ * only ever means a prior attempt was interrupted (tab closed/navigated away
+ * between putDraft(..., "syncing") and the fetch resolving) — getQueuedDrafts
+ * returns them for exactly this reason, and resending is safe since the sync
+ * POST is idempotent on clientIdempotencyKey. Safe to call concurrently with
+ * itself — each call re-reads the queue fresh. */
 export async function syncQueuedDrafts(): Promise<void> {
   const drafts = await getQueuedDrafts();
   for (const draft of drafts) {
-    if (draft.syncStatus === "queued") {
+    if (draft.syncStatus === "queued" || draft.syncStatus === "syncing") {
       await syncOne(draft);
     }
   }
