@@ -36,13 +36,18 @@ describe("inspection-db", () => {
     expect(loaded).toEqual(saved);
   });
 
-  it("returns only queued and failed drafts from getQueuedDrafts", async () => {
+  it("returns queued, failed, and syncing drafts from getQueuedDrafts, but not draft or synced", async () => {
     await putDraft(makeDraft({ visitId: "visit-draft", syncStatus: "draft" }));
     await putDraft(makeDraft({ visitId: "visit-queued", syncStatus: "queued" }));
     await putDraft(makeDraft({ visitId: "visit-failed", syncStatus: "failed" }));
+    await putDraft(makeDraft({ visitId: "visit-syncing", syncStatus: "syncing" }));
     await putDraft(makeDraft({ visitId: "visit-synced", syncStatus: "synced" }));
 
     const queued = await getQueuedDrafts();
-    expect(queued.map((d) => d.visitId).sort()).toEqual(["visit-failed", "visit-queued"]);
+    expect(queued.map((d) => d.visitId).sort()).toEqual([
+      "visit-failed",
+      "visit-queued",
+      "visit-syncing",
+    ]);
   });
 });

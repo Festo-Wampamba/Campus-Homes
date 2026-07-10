@@ -57,7 +57,20 @@ export async function getQueuedDrafts(): Promise<InspectionDraft[]> {
     const req = tx.objectStore(STORE_NAME).getAll();
     req.onsuccess = () => {
       const all = req.result as InspectionDraft[];
-      resolve(all.filter((d) => d.syncStatus === "queued" || d.syncStatus === "failed"));
+      // "syncing" is included so a draft orphaned mid-sync (the tab was
+      // closed/navigated away between putDraft(..., "syncing") and the
+      // fetch resolving — getQueuedDrafts only ever ran "queued"/"failed"
+      // before, so a "syncing" draft was invisible to every future retry
+      // and stuck forever) gets picked back up. Safe to resend: the sync
+      // POST is idempotent on clientIdempotencyKey.
+      resolve(
+        all.filter(
+          (d) =>
+            d.syncStatus === "queued" ||
+            d.syncStatus === "failed" ||
+            d.syncStatus === "syncing",
+        ),
+      );
     };
     req.onerror = () => reject(req.error);
   });
