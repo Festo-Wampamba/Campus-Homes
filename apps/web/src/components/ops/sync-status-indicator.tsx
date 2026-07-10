@@ -1,29 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Wifi, WifiOff } from "lucide-react";
 
 import { startSyncManager } from "@/lib/ops/sync-manager";
 import { cn } from "@/lib/utils";
 
-/** Mounted once in the ops layout for inspectors — starts the sync manager
- * for the lifetime of any (ops) page and shows connectivity state. */
-function SyncStatusIndicator() {
-  const [online, setOnline] = useState(true);
+function subscribeToConnectivity(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
 
-  useEffect(() => {
-    setOnline(navigator.onLine);
-    const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
-    window.addEventListener("online", goOnline);
-    window.addEventListener("offline", goOffline);
-    const stopSync = startSyncManager();
-    return () => {
-      window.removeEventListener("online", goOnline);
-      window.removeEventListener("offline", goOffline);
-      stopSync();
-    };
-  }, []);
+/** Mounted once in the ops layout for inspectors — starts the sync manager
+ * for the lifetime of any (ops) page and shows connectivity state.
+ * Connectivity is read via useSyncExternalStore (React's recommended way to
+ * subscribe to a browser API) rather than setState-in-effect, which avoids
+ * both a hydration mismatch (getServerSnapshot returns true) and the
+ * cascading-render lint rule a plain effect+setState would trip. */
+function SyncStatusIndicator() {
+  const online = useSyncExternalStore(
+    subscribeToConnectivity,
+    () => navigator.onLine,
+    () => true,
+  );
+
+  useEffect(() => startSyncManager(), []);
 
   return (
     <span
