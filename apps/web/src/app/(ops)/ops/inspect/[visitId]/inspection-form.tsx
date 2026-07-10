@@ -132,6 +132,13 @@ export function InspectionForm({ visitId }: { visitId: string }) {
   const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null;
 
   async function submit() {
+    // Cancel any pending debounced autosave first — otherwise it can fire
+    // ~300ms later with a stale pre-submission draft and silently overwrite
+    // this submission's completedAt/syncStatus back to unsynced "draft".
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     const completed: InspectionDraft = {
       ...currentDraft,
       completedAt: new Date().toISOString(),
