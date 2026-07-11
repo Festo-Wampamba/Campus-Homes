@@ -20,3 +20,6 @@ coverage/
 
 # local resources (design references, surveys — not source code)
 OwnResourceFolder/
+
+# generated tool output (graphify knowledge-graph artifacts)
+graphify-out/
