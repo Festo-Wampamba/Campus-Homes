@@ -5,6 +5,10 @@ import Pusher from 'pusher';
 
 export interface RealtimeAdapter {
   trigger(channel: string, event: string, payload: unknown): Promise<void>;
+  /** Signs a private-channel subscription request. Local HMAC op, no network
+   * call — pusher-js posts { socket_id, channel_name } here before it will
+   * let a client subscribe to `private-*` channels. */
+  authorizeChannel(socketId: string, channelName: string): { auth: string } | null;
 }
 
 export class SoketiRealtime implements RealtimeAdapter {
@@ -24,6 +28,11 @@ export class SoketiRealtime implements RealtimeAdapter {
   async trigger(channel: string, event: string, payload: unknown): Promise<void> {
     await this.pusher.trigger(channel, event, payload);
   }
+
+  authorizeChannel(socketId: string, channelName: string): { auth: string } {
+    const result = this.pusher.authorizeChannel(socketId, channelName);
+    return { auth: result.auth };
+  }
 }
 
 /** Used until a Soketi instance is provisioned (SOKETI_* env unset) — chat
@@ -31,5 +40,9 @@ export class SoketiRealtime implements RealtimeAdapter {
 export class NoopRealtime implements RealtimeAdapter {
   trigger(): Promise<void> {
     return Promise.resolve();
+  }
+
+  authorizeChannel(): null {
+    return null;
   }
 }
