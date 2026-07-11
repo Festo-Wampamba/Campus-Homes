@@ -27,6 +27,7 @@ let inspectorInactive: string;
 let propertyA: string;
 let propertyB: string;
 let visitA: string;
+let pendingListingA: string;
 
 const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
 const inspectorActiveCtx = (): RlsContext => ({
@@ -80,7 +81,33 @@ beforeAll(async () => {
      VALUES ($1, 'Property B', 'Wandegeya', 'active') RETURNING id`,
     [landlord],
   );
+  const priorSemester = await seed(
+    `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+     VALUES ('Sem Directory Test — Prior', '2026-01-01', '2026-05-15', '2026-04-15') RETURNING id`,
+  );
+  // The 6-component-checklist trigger requires a lead-approved, fully-passed
+  // visit to exist before a listing can be inserted as 'verified'.
+  const fullChecklist = JSON.stringify(
+    Object.fromEntries(
+      ['location_gps', 'rooms_capacity', 'amenities', 'photos', 'landlord_identity', 'safety'].map(
+        (c) => [c, { passed: true }],
+      ),
+    ),
+  );
   await seed(
+    `INSERT INTO verification_visits
+       (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at)
+     VALUES ($1, $2, $3, 'directory-test-visit-prior-verified', 'passed', $4, now()) RETURNING id`,
+    [propertyA, inspectorActive, fullChecklist, opsLead],
+  );
+  // A prior-semester listing already verified — re-verification means a
+  // property can carry more than one listing row over time; propertyListings
+  // must not surface this one as a publish target.
+  await seed(
+    `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'verified') RETURNING id`,
+    [propertyA, priorSemester],
+  );
+  pendingListingA = await seed(
     `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'pending_verification') RETURNING id`,
     [propertyA, semester],
   );
@@ -133,12 +160,11 @@ describe('visitDetail', () => {
 });
 
 describe('propertyListings', () => {
-  it("returns property A's listing", async () => {
+  it("returns only property A's pending listing, excluding its already-verified prior-semester one", async () => {
     const rows = await ops.propertyListings(leadCtx(), propertyA);
-    expect({ count: rows.length, status: rows[0]?.status }).toEqual({
-      count: 1,
-      status: 'pending_verification',
-    });
+    expect(rows.map((r) => ({ id: r.id, status: r.status }))).toEqual([
+      { id: pendingListingA, status: 'pending_verification' },
+    ]);
   });
 
   it('returns empty for a property with no listing', async () => {

@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 
 import type {
   IssueStrikeInput,
@@ -101,13 +101,18 @@ export class OpsService {
   }
 
   /** Links an approved visit's property to the listing it should publish —
-   * publishListingSchema takes a listingId, not a propertyId. */
+   * publishListingSchema takes a listingId, not a propertyId. A property can
+   * carry one listing per semester (re-verification), so this excludes
+   * already-verified listings from prior semesters and orders newest-first —
+   * the caller (visit-approval UI) always wants the current pending one, not
+   * an arbitrary row. */
   propertyListings(ctx: RlsContext, propertyId: string) {
     return this.rlsDb.run(ctx, async (db) =>
       db
         .select({ id: listings.id, status: listings.status, semesterId: listings.semesterId })
         .from(listings)
-        .where(eq(listings.propertyId, propertyId)),
+        .where(and(eq(listings.propertyId, propertyId), ne(listings.status, 'verified')))
+        .orderBy(desc(listings.createdAt)),
     );
   }
 
