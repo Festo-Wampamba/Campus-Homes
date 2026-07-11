@@ -18,11 +18,13 @@ function PortalShell({
   portalLabel,
   nav,
   user,
+  headerExtra,
   children,
 }: {
   portalLabel: string;
   nav: PortalNavItem[];
   user: SessionUser;
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -47,6 +49,7 @@ function PortalShell({
                 {item.label}
               </Link>
             ))}
+            {headerExtra}
             <SignOutButton />
           </nav>
         </div>

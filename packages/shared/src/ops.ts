@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { STRIKE_REASONS, VISIT_RESULTS } from './enums.js';
+import {
+  CATCHMENTS,
+  LISTING_STATUSES,
+  PROPERTY_STATUSES,
+  STRIKE_REASONS,
+  VISIT_RESULTS,
+} from './enums.js';
 import { idempotencyKey, ugxAmount, uuid } from './common.js';
 import { verificationChecklistSchema } from './listing.js';
 
@@ -55,3 +61,66 @@ export const issueStrikeSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 export type IssueStrikeInput = z.infer<typeof issueStrikeSchema>;
+
+// Ops-lead inspector picker (schedule-visit form) — GET /ops/inspectors.
+export const opsInspectorSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  catchment: z.enum(CATCHMENTS),
+});
+export type OpsInspector = z.infer<typeof opsInspectorSchema>;
+
+// Ops-lead verification queue row — GET /ops/queue (raw SQL row, snake_case
+// like listingSearchResultSchema — see listing.ts).
+export const opsQueueRowSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  street_address: z.string(),
+  status: z.enum(PROPERTY_STATUSES),
+  created_at: z.string(),
+  visit_id: uuid.nullable(),
+  result: z.enum(VISIT_RESULTS).nullable(),
+  scheduled_at: z.string().nullable(),
+  inspector_id: uuid.nullable(),
+  age_hours: z.coerce.number(),
+});
+export type OpsQueueRow = z.infer<typeof opsQueueRowSchema>;
+
+// Inspector's own assigned, not-yet-approved visits — GET /ops/visits/mine
+// (raw SQL row).
+export const opsVisitMineSchema = z.object({
+  visit_id: uuid,
+  property_id: uuid,
+  property_name: z.string(),
+  street_address: z.string(),
+  scheduled_at: z.string().nullable(),
+  result: z.enum(VISIT_RESULTS),
+});
+export type OpsVisitMine = z.infer<typeof opsVisitMineSchema>;
+
+// Full visit record for lead review — GET /ops/visits/:id.
+export const opsVisitDetailSchema = z.object({
+  id: uuid,
+  propertyId: uuid,
+  inspectorId: uuid,
+  scheduledAt: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  visitGpsLat: z.string().nullable(),
+  visitGpsLon: z.string().nullable(),
+  checklist: verificationChecklistSchema.partial(),
+  result: z.enum(VISIT_RESULTS),
+  failureReason: z.string().nullable(),
+  approvedBy: uuid.nullable(),
+  approvedAt: z.string().nullable(),
+});
+export type OpsVisitDetail = z.infer<typeof opsVisitDetailSchema>;
+
+// A property's listings, for linking visit approval to the right publish
+// target — GET /ops/properties/:id/listings.
+export const opsPropertyListingSchema = z.object({
+  id: uuid,
+  status: z.enum(LISTING_STATUSES),
+  semesterId: uuid,
+});
+export type OpsPropertyListing = z.infer<typeof opsPropertyListingSchema>;
