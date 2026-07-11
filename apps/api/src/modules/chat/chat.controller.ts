@@ -1,13 +1,14 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 
-import { sendMessageSchema } from '@campushomes/shared';
+import { pusherAuthSchema, sendMessageSchema } from '@campushomes/shared';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ChatService } from './chat.service';
 
 class SendMessageDto extends createZodDto(sendMessageSchema) {}
+class PusherAuthDto extends createZodDto(pusherAuthSchema) {}
 
 @Controller('chat')
 @UseGuards(AuthGuard, RolesGuard)
@@ -41,5 +42,10 @@ export class ChatController {
     @Body() body: SendMessageDto,
   ) {
     return this.chat.sendMessage(rlsCtx(req), id, body.body);
+  }
+
+  @Post('pusher/auth')
+  authorizePusher(@Req() req: AuthenticatedRequest, @Body() body: PusherAuthDto) {
+    return this.chat.authorizeChannel(rlsCtx(req), body.socket_id, body.channel_name);
   }
 }
