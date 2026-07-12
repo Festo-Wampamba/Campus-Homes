@@ -20,7 +20,6 @@ export function useThreadMessages(threadId: string | null) {
 
   useEffect(() => {
     if (!threadId) {
-      setMessages([]);
       seenIds.current = new Set();
       return;
     }
@@ -102,5 +101,5 @@ export function useThreadMessages(threadId: string | null) {
     setMessages((prev) => [...prev, message]);
   }
 
-  return { messages, appendOptimistic };
+  return { messages: threadId ? messages : [], appendOptimistic };
 }
