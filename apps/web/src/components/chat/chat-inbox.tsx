@@ -28,6 +28,7 @@ function Composer({
   const [error, setError] = useState<string | null>(null);
 
   async function send() {
+    if (pending) return;
     const trimmed = body.trim();
     if (!trimmed) return;
     setPending(true);
