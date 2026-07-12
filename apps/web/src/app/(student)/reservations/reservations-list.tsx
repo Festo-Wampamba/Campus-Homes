@@ -7,6 +7,7 @@ import type { PaymentStatus, Reservation } from "@campushomes/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
+import { MessageButton } from "@/components/chat/message-button";
 import { api } from "@/lib/api";
 import { formatUgx } from "@/lib/format";
 
@@ -147,6 +148,11 @@ function ReservationCard({ reservation }: { reservation: Reservation }) {
           {reservation.status === "fulfilled" && (
             <MoveInButton reservationId={reservation.id} />
           )}
+          {reservation.status !== "cancelled" &&
+            reservation.status !== "refunded" &&
+            reservation.status !== "expired" && (
+              <MessageButton reservationId={reservation.id} messagesHref="/messages" />
+            )}
         </div>
       </CardContent>
     </Card>
