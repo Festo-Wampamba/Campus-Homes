@@ -12,6 +12,7 @@ export default async function StudentLayout({
       nav={[
         { label: "Find housing", href: "/search" },
         { label: "My reservations", href: "/reservations" },
+        { label: "Messages", href: "/messages" },
       ]}
     >
       {children}
