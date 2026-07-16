@@ -34,7 +34,7 @@ export class AfricasTalkingMessaging implements MessagingAdapter {
  * AuthModule refuses to boot without a real adapter there. */
 export class ConsoleMessaging implements MessagingAdapter {
   sendSms(to: string, message: string): Promise<void> {
-    console.log(`[sms:dev] to=${to} message="${message}"`);
+    console.log(`[sms:dev] OTP for ${to}: ${message}`);
     return Promise.resolve();
   }
 }
