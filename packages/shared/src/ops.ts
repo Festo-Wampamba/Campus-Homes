@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   CATCHMENTS,
+  KYC_STATUSES,
   LISTING_STATUSES,
   PROPERTY_STATUSES,
   STRIKE_REASONS,
@@ -124,3 +125,23 @@ export const opsPropertyListingSchema = z.object({
   semesterId: uuid,
 });
 export type OpsPropertyListing = z.infer<typeof opsPropertyListingSchema>;
+
+// Ops-lead KYC review queue row — GET /ops/landlords/kyc-queue (raw SQL row,
+// landlords joined to users like the verification queue).
+export const opsLandlordKycRowSchema = z.object({
+  user_id: uuid,
+  legal_name: z.string(),
+  kyc_status: z.enum(KYC_STATUSES),
+  id_doc_storage_key: z.string().nullable(),
+  created_at: z.string(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+});
+export type OpsLandlordKycRow = z.infer<typeof opsLandlordKycRowSchema>;
+
+// Ops-lead KYC decision — POST /ops/landlords/:userId/kyc.
+export const opsKycDecisionSchema = z.object({
+  decision: z.enum(['verified', 'rejected']),
+});
+export type OpsKycDecisionInput = z.infer<typeof opsKycDecisionSchema>;

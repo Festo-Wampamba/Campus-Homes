@@ -9,6 +9,7 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 
 import type {
   IssueStrikeInput,
+  OpsKycDecisionInput,
   PublishListingInput,
   ScheduleVisitInput,
   SyncVisitInput,
@@ -19,6 +20,7 @@ import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import {
   landlordStrikes,
+  landlords,
   listingVersions,
   listings,
   opsStaff,
@@ -264,6 +266,48 @@ export class OpsService {
       priceUgx: input.pricePerTermUgx,
     });
     return published;
+  }
+
+  /** Landlords awaiting KYC review, oldest first. landlords_read already
+   * grants app_is_lead() a read, same as users_read — no service_role
+   * needed, unlike the write below. */
+  kycQueue(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT l.user_id, l.legal_name, l.kyc_status, l.id_doc_storage_key, l.created_at,
+                u.name, u.phone, u.email
+         FROM landlords l
+         JOIN users u ON u.id = l.user_id
+         WHERE l.kyc_status = 'pending'
+         ORDER BY l.created_at ASC`,
+      );
+      return res.rows as unknown[];
+    });
+  }
+
+  /** Approve/reject a landlord's KYC. landlords has no ops UPDATE policy
+   * (only the owner's own "while pending" edit and svc_all) so this runs as
+   * service_role, same as the audit trail it writes to. */
+  async decideKyc(ctx: RlsContext, landlordUserId: string, input: OpsKycDecisionInput) {
+    const landlord = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+      const [row] = await db
+        .update(landlords)
+        .set({
+          kycStatus: input.decision,
+          kycReviewedBy: ctx.userId,
+          kycReviewedAt: new Date(),
+        })
+        .where(eq(landlords.userId, landlordUserId))
+        .returning();
+      if (!row) {
+        throw new NotFoundException('Landlord not found');
+      }
+      return row;
+    });
+    await this.audit.record(ctx, 'landlord.kyc_decision', 'landlord', landlordUserId, {
+      decision: input.decision,
+    });
+    return landlord;
   }
 
   async issueStrike(ctx: RlsContext, input: IssueStrikeInput) {

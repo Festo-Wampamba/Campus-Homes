@@ -2,7 +2,13 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } fro
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
-import { IssueStrikeDto, PublishListingDto, ScheduleVisitDto, SyncVisitDto } from './ops.dto';
+import {
+  IssueStrikeDto,
+  OpsKycDecisionDto,
+  PublishListingDto,
+  ScheduleVisitDto,
+  SyncVisitDto,
+} from './ops.dto';
 import { OpsService } from './ops.service';
 
 @Controller('ops')
@@ -69,5 +75,21 @@ export class OpsController {
   @Roles('ops_lead', 'admin')
   issueStrike(@Req() req: AuthenticatedRequest, @Body() body: IssueStrikeDto) {
     return this.ops.issueStrike(rlsCtx(req), body);
+  }
+
+  @Get('landlords/kyc-queue')
+  @Roles('ops_lead', 'admin')
+  kycQueue(@Req() req: AuthenticatedRequest) {
+    return this.ops.kycQueue(rlsCtx(req));
+  }
+
+  @Post('landlords/:userId/kyc')
+  @Roles('ops_lead', 'admin')
+  decideKyc(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() body: OpsKycDecisionDto,
+  ) {
+    return this.ops.decideKyc(rlsCtx(req), userId, body);
   }
 }

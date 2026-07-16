@@ -17,6 +17,7 @@ export default async function OpsLayout({
           ? [{ label: "My visits", href: "/ops/inspect" }]
           : [
               { label: "Verification queue", href: "/ops" },
+              { label: "Landlord KYC", href: "/ops/landlords" },
               { label: "Issue strike", href: "/ops/strikes" },
             ]
       }

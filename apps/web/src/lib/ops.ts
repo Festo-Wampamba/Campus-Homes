@@ -1,5 +1,6 @@
 import type {
   OpsInspector,
+  OpsLandlordKycRow,
   OpsPropertyListing,
   OpsQueueRow,
   OpsVisitDetail,
@@ -28,4 +29,8 @@ export function getPropertyListings(propertyId: string): Promise<OpsPropertyList
   return apiServer<OpsPropertyListing[]>(`/ops/properties/${propertyId}/listings`).then(
     (rows) => rows ?? [],
   );
+}
+
+export function getKycQueue(): Promise<OpsLandlordKycRow[]> {
+  return apiServer<OpsLandlordKycRow[]>("/ops/landlords/kyc-queue").then((rows) => rows ?? []);
 }
