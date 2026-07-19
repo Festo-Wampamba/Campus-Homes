@@ -108,10 +108,9 @@ beforeAll(async () => {
     { userId: opsLead, role: 'ops_lead' },
     {
       listingId,
-      pricePerTermUgx: 800_000,
       amenities: { water: true, power: true },
       description: 'Chat test listing',
-      units: [{ label: 'Room 1A', capacity: 1 }],
+      units: [{ label: 'Room 1A', capacity: 1, roomCategory: 'single', pricePerTermUgx: 800_000 }],
     },
   );
   const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
