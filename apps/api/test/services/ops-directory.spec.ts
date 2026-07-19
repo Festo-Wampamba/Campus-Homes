@@ -72,13 +72,13 @@ beforeAll(async () => {
      VALUES ('Sem Directory Test', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
   );
   propertyA = await seed(
-    `INSERT INTO properties (landlord_id, name, street_address, status)
-     VALUES ($1, 'Property A', 'Kikoni', 'active') RETURNING id`,
+    `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+     VALUES ($1, 'Property A', 'Kikoni', 'active', 'MUK') RETURNING id`,
     [landlord],
   );
   propertyB = await seed(
-    `INSERT INTO properties (landlord_id, name, street_address, status)
-     VALUES ($1, 'Property B', 'Wandegeya', 'active') RETURNING id`,
+    `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+     VALUES ($1, 'Property B', 'Wandegeya', 'active', 'MUK') RETURNING id`,
     [landlord],
   );
   const priorSemester = await seed(

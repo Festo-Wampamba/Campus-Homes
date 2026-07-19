@@ -162,10 +162,12 @@ export function SignInForm() {
     router.refresh();
   }
 
+  const isStaffRole = role === "admin" || role === "ops";
+
   function continueFromLanding() {
     if (!role) return;
     setError(null);
-    setScreen(role === "admin" || role === "ops" ? "staff" : "phone");
+    setScreen(isStaffRole ? "staff" : "phone");
   }
 
   async function sendOtp(e: React.FormEvent) {
@@ -330,6 +332,18 @@ export function SignInForm() {
               <Button type="submit" disabled={pending} className="w-full">
                 {pending ? "Sending code…" : "Send SMS code"}
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setScreen("staff");
+                }}
+              >
+                Sign in with email instead
+              </Button>
             </form>
             <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
               By continuing you agree to our Terms & Data Handling under the
@@ -374,14 +388,14 @@ export function SignInForm() {
 
         {screen === "staff" && (
           <>
-            <BackLink onClick={() => setScreen("landing")}>
-              Choose a different role
+            <BackLink onClick={() => setScreen(isStaffRole ? "landing" : "phone")}>
+              {isStaffRole ? "Choose a different role" : "Use SMS code instead"}
             </BackLink>
             <h1 className="mb-1 font-display text-lg font-bold text-foreground">
-              Internal sign in
+              {isStaffRole ? "Internal sign in" : "Sign in with email"}
             </h1>
             <p className="mb-4 text-sm text-muted-foreground">
-              For Operations & Admin staff only
+              {isStaffRole ? "For Operations & Admin staff only" : "For an existing CampusHomes account"}
             </p>
             <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-accent px-3 py-2 text-sm font-semibold text-teal-700">
               Signing in as {roleLabel}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BedDouble, Camera, Check } from "lucide-react";
+import { Camera, Check, Phone, User } from "lucide-react";
 import {
   listingDetailResponseSchema,
   type ListingDetailResponse,
@@ -10,11 +10,15 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatUgx, humanizeKey } from "@/lib/format";
+import { formatPriceRange, humanizeKey } from "@/lib/format";
+import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
-import { ReserveButton } from "@/components/reserve-button";
-import { StatusChip } from "@/components/status-chip";
+import { cn } from "@/lib/utils";
+import { BackButton } from "@/components/back-button";
+import { RoomCategoryList } from "@/components/room-category-list";
+import { SaveButton } from "@/components/save-button";
+import { TrackRecentlyViewed } from "@/components/track-recently-viewed";
 import { VerifiedBadge } from "@/components/verified-badge";
 
 // Renders the version snapshot the API returns — never re-fetch live listing
@@ -50,12 +54,18 @@ export default async function ListingDetailPage({
   const [detail, session] = await Promise.all([getDetail(listingId), getServerSession()]);
   if (!detail) notFound();
   const isStudent = session?.user.role === "student";
-  const studentProfile = isStudent ? await getStudentProfile() : null;
+  const [studentProfile, savedListings] = await Promise.all([
+    isStudent ? getStudentProfile() : Promise.resolve(null),
+    isStudent ? getSavedListings() : Promise.resolve([]),
+  ]);
   const canReserve = isStudent && studentProfile !== null;
   const needsProfile = isStudent && studentProfile === null;
+  const isSaved = savedListings.some((row) => row.id === listingId);
 
-  const { property, version, photos, units, availability } = detail;
-  const availableByUnit = new Map(availability.map((a) => [a.id, a.available]));
+  const { property, version, photos, units, unitPhotos, availability } = detail;
+  const unitPrices = units.map((u) => u.pricePerTermUgx);
+  const minPriceUgx = unitPrices.length > 0 ? Math.min(...unitPrices) : version.pricePerTermUgx;
+  const maxPriceUgx = unitPrices.length > 0 ? Math.max(...unitPrices) : version.pricePerTermUgx;
   const amenities = Object.entries(version.amenities)
     .filter(([, has]) => has)
     .map(([key]) => humanizeKey(key));
@@ -65,63 +75,75 @@ export default async function ListingDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <Link
-        href="/search"
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft aria-hidden className="size-4" />
-        Back to search
-      </Link>
+      <TrackRecentlyViewed
+        id={listingId}
+        name={property.name}
+        streetAddress={property.street_address}
+        photoStorageKey={orderedPhotos[0]?.storageKey ?? null}
+        priceUgx={minPriceUgx}
+      />
+      <BackButton fallbackHref="/search" label="Back" />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl">{property.name}</h1>
         <VerifiedBadge />
+        {isStudent && (
+          <div className="ml-auto">
+            <SaveButton listingId={listingId} initialSaved={isSaved} />
+          </div>
+        )}
       </div>
       <p className="mt-1 text-md text-muted-foreground">{property.street_address}</p>
 
-      {/* Photos — inspector-captured, EXIF-verified server-side */}
-      {orderedPhotos.length === 0 ? (
-        <div className="mt-6 flex h-64 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <span className="inline-flex items-center gap-2 text-sm">
-            <Camera aria-hidden className="size-4" />
-            Inspection photos coming soon
-          </span>
-        </div>
-      ) : (
-        <div className="mt-6 grid gap-2 sm:grid-cols-3 sm:grid-rows-2">
-          {orderedPhotos.slice(0, 5).map((photo, i) => {
-            const url = listingPhotoUrl(photo.storageKey, i === 0 ? 1200 : 600);
-            return (
-              <div
-                key={photo.id}
-                className={
-                  i === 0
-                    ? "relative h-64 overflow-hidden rounded-lg sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-96"
-                    : "relative hidden overflow-hidden rounded-lg sm:block"
-                }
-              >
-                {url ? (
-                  <Image
-                    src={url}
-                    alt={`${property.name} — inspection photo ${i + 1}`}
-                    fill
-                    sizes={i === 0 ? "(min-width: 640px) 66vw, 100vw" : "33vw"}
-                    className="object-cover"
-                    priority={i === 0}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center bg-muted text-muted-foreground">
-                    <Camera aria-hidden className="size-5" />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_minmax(0,22rem)]">
+      {/* Gallery + money/custodian card sit side by side on large screens,
+          starting at the same vertical position — the reservation card is
+          never scrolled below the photos, same layout logic as an
+          e-commerce product image + buy box. */}
+      <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_minmax(0,22rem)] lg:items-start">
         <div>
+          {/* Photos — inspector-captured, EXIF-verified server-side */}
+          <div className="mb-8">
+            {orderedPhotos.length === 0 ? (
+              <div className="flex h-64 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <span className="inline-flex items-center gap-2 text-sm">
+                  <Camera aria-hidden className="size-4" />
+                  Inspection photos coming soon
+                </span>
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-3 sm:grid-rows-2">
+                {orderedPhotos.slice(0, 5).map((photo, i) => {
+                  const url = listingPhotoUrl(photo.storageKey, i === 0 ? 1200 : 600);
+                  return (
+                    <div
+                      key={photo.id}
+                      className={
+                        i === 0
+                          ? "relative h-64 overflow-hidden rounded-lg sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-96"
+                          : "relative hidden overflow-hidden rounded-lg sm:block"
+                      }
+                    >
+                      {url ? (
+                        <Image
+                          src={url}
+                          alt={`${property.name} — inspection photo ${i + 1}`}
+                          fill
+                          sizes={i === 0 ? "(min-width: 640px) 66vw, 100vw" : "33vw"}
+                          className="object-cover"
+                          priority={i === 0}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-muted text-muted-foreground">
+                          <Camera aria-hidden className="size-5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {version.description && (
             <section aria-labelledby="about-heading">
               <h2 id="about-heading" className="text-xl">
@@ -151,83 +173,149 @@ export default async function ListingDetailPage({
 
           <section aria-labelledby="units-heading" className="mt-8">
             <h2 id="units-heading" className="text-xl">
-              Rooms
+              Room types
             </h2>
-            <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
-              {units.map((unit) => {
-                const available = availableByUnit.get(unit.id) ?? false;
-                return (
-                  <li
-                    key={unit.id}
-                    className="flex flex-wrap items-center gap-3 p-4"
-                  >
-                    <BedDouble aria-hidden className="size-4 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold">{unit.label}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Sleeps {unit.capacity}
-                      </p>
-                    </div>
-                    {available ? (
-                      canReserve ? (
-                        <ReserveButton unitId={unit.id} />
-                      ) : (
-                        <StatusChip tone="success">Available</StatusChip>
-                      )
-                    ) : (
-                      <StatusChip tone="warning">On hold</StatusChip>
-                    )}
-                  </li>
-                );
-              })}
-              {units.length === 0 && (
-                <li className="p-4 text-sm text-muted-foreground">
-                  Room list is being finalised by our team.
-                </li>
-              )}
-            </ul>
+            <RoomCategoryList
+              units={units}
+              availability={availability}
+              photos={orderedPhotos}
+              unitPhotos={unitPhotos}
+              propertyName={property.name}
+              canReserve={canReserve}
+            />
           </section>
         </div>
 
-        {/* Reservation panel — Phase 4 wires the real hold flow */}
-        <aside className="lg:sticky lg:top-20 lg:self-start">
-          <div className="rounded-lg border border-border bg-card p-5 shadow-xs">
-            <p className="tabular font-display text-2xl font-semibold">
-              {formatUgx(version.pricePerTermUgx)}
-              <span className="text-sm font-normal text-muted-foreground"> / term</span>
-            </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Reserve any available room with a one-time{" "}
-              <strong className="text-foreground">UGX 5,000</strong> fee — the
-              room is held for you for 72 hours.
-            </p>
-            {!session && (
-              <Link
-                href="/sign-in"
-                className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
-              >
-                Sign in to reserve
-              </Link>
-            )}
-            {needsProfile && (
-              <Link
-                href={`/profile?next=/listings/${listingId}`}
-                className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
-              >
-                Complete your profile to reserve
-              </Link>
-            )}
-            {canReserve && (
-              <p className="mt-4 text-sm font-semibold text-foreground">
-                Select an available room below to reserve.
-              </p>
-            )}
-            <p className="mt-3 text-xs text-muted-foreground">
-              Rent and tenancy terms are agreed directly with the landlord.
-            </p>
-          </div>
+        {/* Reservation panel — pinned so price + CTA are never scrolled out
+            of view: a sticky sidebar on desktop, a fixed bottom bar on
+            mobile (there's no room beside the content there). */}
+        <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
+          <MoneyCard
+            session={session}
+            needsProfile={needsProfile}
+            canReserve={canReserve}
+            listingId={listingId}
+            minPriceUgx={minPriceUgx}
+            maxPriceUgx={maxPriceUgx}
+            custodianName={property.custodian_name}
+            custodianPhone={property.custodian_phone}
+          />
         </aside>
       </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] lg:hidden">
+        <MoneyCard
+          session={session}
+          needsProfile={needsProfile}
+          canReserve={canReserve}
+          listingId={listingId}
+          minPriceUgx={minPriceUgx}
+          maxPriceUgx={maxPriceUgx}
+          compact
+        />
+      </div>
+      {/* Clears the fixed mobile bar so it never covers the last room row. */}
+      <div className="h-28 lg:hidden" aria-hidden />
+    </div>
+  );
+}
+
+function MoneyCard({
+  session,
+  needsProfile,
+  canReserve,
+  listingId,
+  minPriceUgx,
+  maxPriceUgx,
+  custodianName,
+  custodianPhone,
+  compact = false,
+}: {
+  session: Awaited<ReturnType<typeof getServerSession>>;
+  needsProfile: boolean;
+  canReserve: boolean;
+  listingId: string;
+  minPriceUgx: number;
+  maxPriceUgx: number;
+  custodianName?: string;
+  custodianPhone?: string | null;
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? "flex items-center justify-between gap-3" : "rounded-lg border border-border bg-card p-5 shadow-xs"}>
+      <div>
+        <p className="tabular font-display text-2xl font-semibold">
+          {minPriceUgx !== maxPriceUgx && (
+            <span className="mr-1 text-base font-normal text-muted-foreground">From</span>
+          )}
+          {formatPriceRange(minPriceUgx, maxPriceUgx)}
+          <span className="text-sm font-normal text-muted-foreground"> / semester</span>
+        </p>
+        {!compact && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Reserve any available room with a one-time{" "}
+            <strong className="text-foreground">UGX 5,000</strong> fee — the
+            room is held for you for 72 hours.
+          </p>
+        )}
+      </div>
+      {!session && (
+        <Link
+          href="/sign-in"
+          className={cn(
+            "inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700",
+            compact ? "shrink-0" : "mt-4 w-full",
+          )}
+        >
+          Sign in to reserve
+        </Link>
+      )}
+      {needsProfile && (
+        <Link
+          href={`/profile?next=/listings/${listingId}`}
+          className={cn(
+            "inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700",
+            compact ? "shrink-0" : "mt-4 w-full",
+          )}
+        >
+          Complete your profile
+        </Link>
+      )}
+      {canReserve && (
+        <p
+          className={cn(
+            "text-sm font-semibold text-foreground",
+            compact ? "shrink-0 text-right" : "mt-4",
+          )}
+        >
+          Select an available room{compact ? "" : " below to reserve."}
+        </p>
+      )}
+      {!compact && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Rent and tenancy terms are agreed directly with the landlord.
+        </p>
+      )}
+      {!compact && custodianName && (
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Custodian
+          </p>
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            {custodianName}
+          </p>
+          {custodianPhone && (
+            <a
+              href={`tel:${custodianPhone}`}
+              className="mt-1 flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900"
+            >
+              <Phone aria-hidden className="size-4 shrink-0" />
+              {custodianPhone}
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }

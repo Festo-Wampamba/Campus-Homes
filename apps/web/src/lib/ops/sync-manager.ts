@@ -1,7 +1,29 @@
 import type { SyncVisitInput } from "@campushomes/shared";
 
 import { api, ApiError } from "@/lib/api";
+import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { getQueuedDrafts, putDraft, type InspectionDraft } from "./inspection-db";
+
+/** Uploads captured photos one at a time, persisting progress after each —
+ * a network drop mid-batch loses at most the file in flight, not everything
+ * captured so far. Cloudinary needs real connectivity, which is exactly why
+ * this waits until sync time instead of uploading at capture time (offline
+ * in the field is the whole point of Inspection Mode). */
+async function uploadPendingPhotos(draft: InspectionDraft): Promise<InspectionDraft> {
+  let current = draft;
+  while (current.photos.length > 0) {
+    const [file, ...rest] = current.photos;
+    const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+    const { publicId } = await uploadToCloudinary(file, sig);
+    current = {
+      ...current,
+      photos: rest,
+      photoStorageKeys: [...current.photoStorageKeys, publicId],
+    };
+    await putDraft(current);
+  }
+  return current;
+}
 
 function toSyncPayload(draft: InspectionDraft): SyncVisitInput {
   if (draft.visitGpsLat === null || draft.visitGpsLon === null) {
@@ -20,24 +42,31 @@ function toSyncPayload(draft: InspectionDraft): SyncVisitInput {
     completedAt: draft.completedAt,
     result: draft.result,
     failureReason: draft.failureReason || undefined,
+    photoStorageKeys: draft.photoStorageKeys,
   };
 }
 
 async function syncOne(draft: InspectionDraft): Promise<void> {
-  await putDraft({ ...draft, syncStatus: "syncing" });
+  // Reassigned as photo-upload progress persists, so the catch block below
+  // always saves the latest state — not the pre-upload snapshot, which would
+  // otherwise silently erase any photos that did finish uploading before a
+  // later one (or the sync POST itself) failed.
+  let current: InspectionDraft = { ...draft, syncStatus: "syncing" };
+  await putDraft(current);
   try {
+    current = await uploadPendingPhotos(current);
     await api("/ops/visits/sync", {
       method: "POST",
-      body: JSON.stringify(toSyncPayload(draft)),
+      body: JSON.stringify(toSyncPayload(current)),
     });
-    await putDraft({ ...draft, syncStatus: "synced" });
+    await putDraft({ ...current, syncStatus: "synced" });
   } catch (err) {
     // Only network-shaped failures are worth retrying: fetch itself throws a
     // TypeError on a network failure, and a 5xx means the server may recover.
     // Everything else (local validation throws, unexpected errors, 4xx) is
     // terminal — retrying it forever would just resend the same bad request.
     const isRetryable = err instanceof TypeError || (err instanceof ApiError && err.status >= 500);
-    await putDraft({ ...draft, syncStatus: isRetryable ? "queued" : "failed" });
+    await putDraft({ ...current, syncStatus: isRetryable ? "queued" : "failed" });
   }
 }
 

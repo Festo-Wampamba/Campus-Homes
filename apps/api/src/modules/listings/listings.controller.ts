@@ -1,12 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   AddPropertyDocumentDto,
+  AddUnitPhotoDto,
   CreateDraftListingDto,
   ListingSearchDto,
   SubmitPropertyDto,
+  UpdatePropertyDto,
 } from './listings.dto';
 import { ListingsService } from './listings.service';
 
@@ -19,6 +21,17 @@ export class ListingsController {
   @Get('search')
   search(@Query() query: ListingSearchDto) {
     return this.listings.search(query);
+  }
+
+  // Declared before the ':id' catch-all below — route order matters in Nest.
+  @Get('campuses')
+  campuses() {
+    return this.listings.campuses();
+  }
+
+  @Get('reviews')
+  reviews() {
+    return this.listings.reviews(6);
   }
 
   @Get(':id')
@@ -42,6 +55,24 @@ export class ListingsController {
     return this.listings.myProperties(rlsCtx(req));
   }
 
+  @Patch('properties/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  updateProperty(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdatePropertyDto,
+  ) {
+    return this.listings.updateProperty(rlsCtx(req), id, body);
+  }
+
+  @Get('properties/:id/detail')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  propertyDetail(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.listings.propertyDetail(rlsCtx(req), id);
+  }
+
   @Post('properties/:id/documents')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('landlord')
@@ -58,5 +89,23 @@ export class ListingsController {
   @Roles('landlord')
   createDraft(@Req() req: AuthenticatedRequest, @Body() body: CreateDraftListingDto) {
     return this.listings.createDraftListing(rlsCtx(req), body.propertyId, body.semesterId);
+  }
+
+  @Post('units/:id/photos')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  addUnitPhoto(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) unitId: string,
+    @Body() body: AddUnitPhotoDto,
+  ) {
+    return this.listings.addUnitPhoto(rlsCtx(req), unitId, body.storageKey);
+  }
+
+  @Delete('units/photos/:photoId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  removeUnitPhoto(@Req() req: AuthenticatedRequest, @Param('photoId', ParseUUIDPipe) photoId: string) {
+    return this.listings.removeUnitPhoto(rlsCtx(req), photoId);
   }
 }

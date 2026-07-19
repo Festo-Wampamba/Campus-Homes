@@ -1,15 +1,27 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
-import { createStudentProfileSchema } from '@campushomes/shared';
+import { createStudentProfileSchema, saveListingSchema } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
-import { students } from '../../db/schema';
+import { savedListings, students } from '../../db/schema';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
+import { ListingsService } from '../listings/listings.service';
 
 class CreateStudentProfileDto extends createZodDto(createStudentProfileSchema) {}
+class SaveListingDto extends createZodDto(saveListingSchema) {}
 
 /**
  * Completes the domain profile a phone-OTP signup doesn't collect (brief §7:
@@ -20,7 +32,10 @@ class CreateStudentProfileDto extends createZodDto(createStudentProfileSchema) {
 @Controller('students')
 @UseGuards(AuthGuard, RolesGuard)
 export class ProfileController {
-  constructor(private readonly rlsDb: RlsDb) {}
+  constructor(
+    private readonly rlsDb: RlsDb,
+    private readonly listings: ListingsService,
+  ) {}
 
   @Get('me')
   @Roles('student')
@@ -46,5 +61,42 @@ export class ProfileController {
         .returning();
       return row ?? { alreadyExists: true };
     });
+  }
+
+  @Get('saved-listings')
+  @Roles('student')
+  savedListings(@Req() req: AuthenticatedRequest) {
+    return this.listings.savedByStudent(rlsCtx(req).userId);
+  }
+
+  @Post('saved-listings')
+  @Roles('student')
+  saveListing(@Req() req: AuthenticatedRequest, @Body() body: SaveListingDto) {
+    const ctx = rlsCtx(req);
+    // RLS (saved_listings_self) independently requires student_id = caller —
+    // onConflictDoNothing makes re-saving an already-saved listing a no-op
+    // rather than a duplicate-key error.
+    return this.rlsDb.run(ctx, async (db) => {
+      await db
+        .insert(savedListings)
+        .values({ studentId: ctx.userId, listingId: body.listingId })
+        .onConflictDoNothing();
+      return { saved: true };
+    });
+  }
+
+  @Delete('saved-listings/:listingId')
+  @Roles('student')
+  async unsaveListing(
+    @Req() req: AuthenticatedRequest,
+    @Param('listingId', ParseUUIDPipe) listingId: string,
+  ) {
+    const ctx = rlsCtx(req);
+    await this.rlsDb.run(ctx, (db) =>
+      db
+        .delete(savedListings)
+        .where(and(eq(savedListings.studentId, ctx.userId), eq(savedListings.listingId, listingId))),
+    );
+    return { saved: false };
   }
 }

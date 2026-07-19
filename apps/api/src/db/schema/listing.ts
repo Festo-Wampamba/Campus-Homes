@@ -11,8 +11,8 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { listingStatus } from './enums';
-import { opsStaff } from './identity';
+import { listingStatus, roomCategory } from './enums';
+import { opsStaff, users } from './identity';
 import { properties, semesters } from './property';
 
 export const listings = pgTable(
@@ -84,8 +84,31 @@ export const units = pgTable('units', {
     .references(() => listings.id, { onDelete: 'restrict' }),
   label: text('label').notNull(), // "Room 2A / Bed 1"
   capacity: smallint('capacity').notNull().default(1),
+  // Room type (single/double/triple/...) — priced independently per category,
+  // not one flat price for the whole listing. CHECK price > 0 in SQL migration.
+  roomCategory: roomCategory('room_category').notNull().default('other'),
+  pricePerTermUgx: integer('price_per_term_ugx').notNull(),
   availableForSemesterId: uuid('available_for_semester_id')
     .notNull()
     .references(() => semesters.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Per-room photos — distinct from listing_photos (Ops-captured during
+// verification, whole-listing gallery): these are landlord-uploaded, one
+// specific room at a time, visible to students on that room once the
+// listing is verified. Units themselves stay Ops-only to write (RLS 0001);
+// this table is the landlord's one write surface tied to a room they don't
+// otherwise control.
+export const unitPhotos = pgTable('unit_photos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  unitId: uuid('unit_id')
+    .notNull()
+    .references(() => units.id, { onDelete: 'cascade' }),
+  storageKey: text('storage_key').notNull(),
+  uploadedBy: uuid('uploaded_by')
+    .notNull()
+    .references(() => users.id),
+  sortOrder: smallint('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

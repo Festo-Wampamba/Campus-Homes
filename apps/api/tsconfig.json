@@ -3,6 +3,11 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
+    // node10/baseUrl are deprecated (removed in TS 7.0) but switching to
+    // node16/nodenext would require explicit .js extensions on every
+    // relative import across apps/api/src — a large, separate migration.
+    // Silencing per the compiler's own suggested remedy until that's done.
+    "ignoreDeprecations": "5.0",
     "outDir": "dist",
     "baseUrl": ".",
     "emitDecoratorMetadata": true,

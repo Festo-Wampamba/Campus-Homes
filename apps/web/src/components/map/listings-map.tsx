@@ -20,8 +20,13 @@ export interface MapMarker {
 
 // §20 resolved: MapLibre + OSM raster tiles. Attribution is mandatory under
 // the OSM tile usage policy; swap tile servers via NEXT_PUBLIC_TILE_URL.
+// `||`, not `??` — a blank `.env.local` placeholder (NEXT_PUBLIC_TILE_URL=)
+// is an empty string, not undefined/null, so `??` would silently keep it
+// and MapLibre would request tiles from "" (resolves to the current page,
+// which isn't a PNG — throws "source image could not be decoded" for every
+// tile). Same footgun apps/api's loadEnv() already treats as unset.
 const TILE_URL =
-  process.env.NEXT_PUBLIC_TILE_URL ??
+  process.env.NEXT_PUBLIC_TILE_URL ||
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 const OSM_STYLE: maplibregl.StyleSpecification = {
@@ -58,12 +63,18 @@ export function ListingsMap({
   onSelect,
   onBoundsChange,
   className,
+  initialCenter = INITIAL_CENTER,
+  initialZoom = INITIAL_ZOOM,
 }: {
   markers: MapMarker[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onBoundsChange: (bounds: MapBounds) => void;
   className?: string;
+  // Lets a caller open the map centered on a specific campus (browse-by-
+  // university) instead of the Makerere default — read once, at mount.
+  initialCenter?: [number, number];
+  initialZoom?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -75,20 +86,31 @@ export function ListingsMap({
     onSelectRef.current = onSelect;
     onBoundsChangeRef.current = onBoundsChange;
   });
+  // Read once at mount, deliberately not kept in sync — the map shouldn't
+  // re-center out from under a user who has already panned it.
+  const initialCenterRef = useRef(initialCenter);
+  const initialZoomRef = useRef(initialZoom);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: OSM_STYLE,
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
+      center: initialCenterRef.current,
+      zoom: initialZoomRef.current,
       // OSM tile policy requires always-visible attribution — no compact toggle
       attributionControl: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
     map.addControl(new maplibregl.AttributionControl({ compact: false }));
-    map.on("load", () => onBoundsChangeRef.current(boundsOf(map)));
+    // Bounds come from the camera transform (center/zoom/container size),
+    // available the instant the map is constructed — they don't need tiles
+    // to have finished downloading. Search must never depend on tile-load
+    // success: MapLibre's "load" event specifically waits for the initial
+    // viewport's tiles, so gating the first search on it means one slow or
+    // blocked OSM request (ad-blocker, flaky network) permanently stalls
+    // the results list even though the listings API is fine.
+    onBoundsChangeRef.current(boundsOf(map));
     let timer: ReturnType<typeof setTimeout>;
     map.on("moveend", () => {
       clearTimeout(timer);

@@ -1,0 +1,1 @@
+ALTER TABLE "verification_visits" ADD COLUMN "photo_storage_keys" jsonb;

@@ -9,7 +9,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { docType, propertyStatus, propertyType, visitResult } from './enums';
+import { docType, propertyStatus, propertyType, university, visitResult } from './enums';
 import { landlords, opsStaff, users } from './identity';
 
 export const semesters = pgTable('semesters', {
@@ -35,6 +35,24 @@ export const properties = pgTable('properties', {
   gpsLon: numeric('gps_lon', { precision: 10, scale: 7 }),
   type: propertyType('type').notNull().default('hostel'),
   status: propertyStatus('status').notNull().default('pending_kyc'),
+  // Which university this property serves — landlord-declared at submission,
+  // drives "browse by university" counts and search. Reuses the same enum
+  // as students.university for a shared vocabulary; 'other' is the overflow.
+  catchment: university('catchment').notNull(),
+  // Landlord's intended room-category pricing at submission time — informational
+  // only, pre-fills the Ops publish form. Never authoritative: the live price
+  // lives on `units`, which only Ops can write (RLS, 0001).
+  proposedRoomCategories: jsonb('proposed_room_categories'),
+  // Landlord-declared amenities (wifi, parking, water_supply, ...) —
+  // informational only, same "proposal" status as proposedRoomCategories:
+  // pre-fills the Ops publish form, never authoritative. The live amenities
+  // list lives on `listing_versions.amenities`, which only Ops can write.
+  proposedAmenities: jsonb('proposed_amenities'),
+  // Landlord-uploaded cover photo (Cloudinary public ID, same upload path as
+  // property documents) — shown on property cards/list rows and in the
+  // detail dialog. Distinct from listing_photos, which are Ops-captured
+  // during verification and only exist once a listing is published.
+  coverPhotoKey: text('cover_photo_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -71,6 +89,13 @@ export const verificationVisits = pgTable(
     // The 6-component checklist. Shape validated by shared Zod schema at the API
     // boundary; completeness enforced by DB trigger before a listing verifies.
     checklist: jsonb('checklist').notNull().default({}),
+    // Cloudinary public IDs, uploaded at sync time (inspection-form.tsx
+    // captures the files offline; sync-manager.ts uploads them once back
+    // online, same deferred-network pattern as the rest of Inspection Mode).
+    // Staged here, not inserted into listing_photos directly — that table
+    // needs a listing_version_id, which doesn't exist until publish time
+    // (ops.service.ts publishListing() promotes them then).
+    photoStorageKeys: jsonb('photo_storage_keys'),
     clientIdempotencyKey: text('client_idempotency_key').notNull(),
     result: visitResult('result').notNull().default('pending'),
     failureReason: text('failure_reason'),

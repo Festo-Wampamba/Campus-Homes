@@ -13,6 +13,12 @@ export interface InspectionDraft {
   result: "passed" | "failed" | null;
   failureReason: string;
   syncStatus: SyncStatus;
+  // Captured offline (IndexedDB stores File objects natively via structured
+  // clone) but not yet uploaded — sync-manager.ts uploads these to Cloudinary
+  // once the device is back online, moving each into photoStorageKeys so a
+  // retried sync never re-uploads an already-uploaded photo.
+  photos: File[];
+  photoStorageKeys: string[];
 }
 
 const DB_NAME = "campushomes-ops";

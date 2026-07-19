@@ -5,6 +5,7 @@ import {
   KYC_STATUSES,
   LISTING_STATUSES,
   PROPERTY_STATUSES,
+  ROOM_CATEGORIES,
   STRIKE_REASONS,
   VISIT_RESULTS,
 } from './enums.js';
@@ -31,27 +32,38 @@ export const syncVisitSchema = z.object({
   completedAt: z.iso.datetime(),
   result: z.enum(VISIT_RESULTS.filter((r) => r !== 'pending') as ['passed', 'failed']),
   failureReason: z.string().max(1000).optional(),
+  // Cloudinary public IDs — captured offline in Inspection Mode, uploaded by
+  // sync-manager.ts once the device is back online (same deferred-network
+  // pattern as the sync itself). Staged on the visit; promoted into
+  // listing_photos at publish time once a listing_version exists.
+  photoStorageKeys: z.array(z.string()).max(20).default([]),
 });
 export type SyncVisitInput = z.infer<typeof syncVisitSchema>;
 
 // Ops-lead listing publish (§9 flow 3): one transaction inserts the immutable
 // version snapshot and flips the listing to verified.
+// There's no single flat price: each room category (single/double/...) is
+// priced independently, so the version snapshot's headline price is derived
+// server-side as the cheapest category, not entered directly by Ops.
 export const publishListingSchema = z.object({
   listingId: uuid,
-  pricePerTermUgx: ugxAmount,
   amenities: z.record(z.string(), z.boolean()),
   description: z.string().max(5000).optional(),
   // Bed-level units go live with the version. Ops-created: RLS only lets ops
   // insert units, so they ride the publish payload rather than the draft.
+  // At least one unit is required — a verified listing needs real inventory
+  // to reserve, and price only exists at the unit/category level now.
   units: z
     .array(
       z.object({
         label: z.string().min(1).max(100),
         capacity: z.number().int().min(1).max(20).default(1),
+        roomCategory: z.enum(ROOM_CATEGORIES),
+        pricePerTermUgx: ugxAmount,
       }),
     )
-    .max(200)
-    .default([]),
+    .min(1)
+    .max(200),
 });
 export type PublishListingInput = z.infer<typeof publishListingSchema>;
 

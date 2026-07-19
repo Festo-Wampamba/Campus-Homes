@@ -1,4 +1,5 @@
 import type {
+  Campus,
   OpsInspector,
   OpsLandlordKycRow,
   OpsPropertyListing,
@@ -33,4 +34,8 @@ export function getPropertyListings(propertyId: string): Promise<OpsPropertyList
 
 export function getKycQueue(): Promise<OpsLandlordKycRow[]> {
   return apiServer<OpsLandlordKycRow[]>("/ops/landlords/kyc-queue").then((rows) => rows ?? []);
+}
+
+export function getCampuses(): Promise<Campus[]> {
+  return apiServer<Campus[]>("/listings/campuses").then((rows) => rows ?? []);
 }
