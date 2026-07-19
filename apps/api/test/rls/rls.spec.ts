@@ -374,6 +374,27 @@ describe('rbac (0003): roles/permissions/assignments are service-only', () => {
     expect(rows).toHaveLength(0);
   });
 
+  it('a landlord cannot read the roles table', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM roles').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord cannot read role_permissions', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM role_permissions').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord cannot read approval_requests', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM approval_requests').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   it('a landlord cannot insert a role assignment for themselves', async () => {
     await expect(
       asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>

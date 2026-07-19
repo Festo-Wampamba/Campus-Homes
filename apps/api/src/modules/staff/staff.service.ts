@@ -104,7 +104,9 @@ export class StaffService {
       ) {
         throw new ForbiddenException('Only a Super Admin can deactivate a Super Admin');
       }
-      const covered = targetAssignments.some((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId));
+      const covered =
+        targetAssignments.length > 0 &&
+        targetAssignments.every((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId));
       if (!covered) {
         throw new ForbiddenException('Cannot deactivate a staff member outside your own scope');
       }
