@@ -220,6 +220,60 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
     chip kept showing after a cancel because it was gated on local
     `paymentStatus` state alone; now also gated on `reservation.status === 'held'`.
 
+- **Frontend Phase 6 (done): Chat** — per-reservation student↔landlord
+  messaging, REST history + Soketi live updates degrading to a 4s poll.
+  Key facts:
+  - **Gap found and closed: Pusher private channels need a server-side auth
+    endpoint.** `private-thread-{threadId}` is a *private* channel —
+    `pusher-js` refuses to subscribe without a signed handshake, and nothing
+    in `apps/api` did this before. Added `POST /chat/pusher/auth`
+    (`ChatController`/`ChatService.authorizeChannel`): regex-validates the
+    channel name *before* any DB call, then does an RLS-scoped
+    `chat_threads` lookup (same policy `messages()` already relies on) to
+    confirm the caller is a participant, then delegates to
+    `RealtimeAdapter.authorizeChannel()` (new interface method — local HMAC
+    signing via the `pusher` package, no network call; `NoopRealtime`
+    returns `null` → 503 when Soketi isn't configured). Covered by
+    `apps/api/test/services/chat-pusher-auth.spec.ts` (participant/
+    non-participant/malformed-channel/Soketi-unconfigured, 4 tests) — the
+    one place a bug could leak another thread's live messages.
+  - **Gap found and closed: no landlord-side reservations view existed.**
+    `GET /reservations/landlord-inbox` was already live on the backend but
+    unused by the frontend. Added `(landlord)/landlord/reservations/`
+    (mirrors the student reservations-list minimalism — bare status rows,
+    no listing join) as the landlord's chat entry point.
+  - Chat UI: `MessageButton` (both portals) calls
+    `POST /chat/threads/:reservationId` (idempotent — unique index on
+    `reservation_id`) then routes to `?thread=<id>`; `ChatInbox`
+    (thread list + message pane + composer) is one shared component mounted
+    at `/messages` (student, bare route) and `/landlord/messages` (landlord,
+    nested under `landlord/` — route groups add no path segment, the exact
+    mistake that 404'd once already in Phase 3 onboarding).
+  - `useThreadMessages` hook: always fetches history first: if
+    `NEXT_PUBLIC_SOKETI_HOST`/`_KEY` are both set, subscribes via
+    `pusher-js` with a `channelAuthorization.customHandler` posting JSON to
+    `/chat/pusher/auth` (not the default form-encoded `authEndpoint` —
+    needed cookie-credentialed `api()`, matching Better Auth's session
+    model); otherwise polls every 4s. Both env vars are unset locally
+    (Soketi still unprovisioned, per FRONTEND.md §10) — poll path is what
+    actually runs today.
+  - QA'd live end-to-end: real phone-OTP signup for a landlord and a
+    student (OTP read from the `verifications` table — Africa's Talking
+    sandbox doesn't deliver to fake numbers), landlord promoted to
+    `role='landlord'`/`kyc_status='verified'` directly in the docker DB
+    (same precedent as Phase 3 — no self-serve landlord signup exists yet,
+    see below), a listing published through the real `OpsService.publishListing()`
+    path, then a real reserve → message → reply → poll-delivery round trip
+    confirmed in the browser (message sent from one tab appeared in the
+    other, already-open and idle, without a reload — the specific poll
+    behavior a fresh-navigation check can't distinguish from initial fetch).
+  - One real bug caught only by the full `pnpm lint` gate (not by
+    typecheck, which the task-level review had run): `react-hooks/set-state-in-effect`
+    on a synchronous `setMessages([])` in the hook's `!threadId` branch.
+    Fixed by deriving the empty case in the return statement
+    (`messages: threadId ? messages : []`) instead of resetting state
+    inside the effect.
+
 ## Resolved (was brief §20 open item)
 
 **MapLibre GL + OSM raster tiles — decided by Festo 2026-07-08.** No Mapbox, no map

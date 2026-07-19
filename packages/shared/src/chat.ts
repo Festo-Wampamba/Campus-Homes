@@ -7,6 +7,12 @@ export const sendMessageSchema = z.object({
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
+export const pusherAuthSchema = z.object({
+  socket_id: z.string().min(1),
+  channel_name: z.string().min(1),
+});
+export type PusherAuthInput = z.infer<typeof pusherAuthSchema>;
+
 export const chatMessageSchema = z.object({
   id: uuid,
   threadId: uuid,

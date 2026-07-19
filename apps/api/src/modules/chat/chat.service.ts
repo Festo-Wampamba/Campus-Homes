@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { desc, eq } from 'drizzle-orm';
 
@@ -107,5 +108,32 @@ export class ChatService {
     return this.rlsDb.run(ctx, (db) =>
       db.select().from(chatThreads).orderBy(desc(chatThreads.lastMessageAt)),
     );
+  }
+
+  private static readonly THREAD_CHANNEL_RE = /^private-thread-([0-9a-f-]{36})$/i;
+
+  /** Signs a pusher-js private-channel subscription. Only a thread
+   * participant (or ops, per RLS) may subscribe to that thread's channel —
+   * the regex + RLS-scoped lookup together reject both malformed channel
+   * names and channels for threads the caller isn't part of. */
+  authorizeChannel(ctx: RlsContext, socketId: string, channelName: string) {
+    const match = ChatService.THREAD_CHANNEL_RE.exec(channelName);
+    if (!match?.[1]) {
+      throw new ForbiddenException('Invalid channel');
+    }
+    const threadId = match[1];
+    return this.rlsDb.run(ctx, async (db) => {
+      const thread = await db.query.chatThreads.findFirst({
+        where: eq(chatThreads.id, threadId),
+      });
+      if (!thread) {
+        throw new ForbiddenException('Not a participant');
+      }
+      const auth = this.realtime.authorizeChannel(socketId, channelName);
+      if (!auth) {
+        throw new ServiceUnavailableException('Realtime not configured');
+      }
+      return auth;
+    });
   }
 }

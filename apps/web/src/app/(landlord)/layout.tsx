@@ -13,7 +13,11 @@ export default async function LandlordLayout({
     <PortalShell
       portalLabel="Landlord"
       user={session.user}
-      nav={[{ label: "Dashboard", href: "/landlord" }]}
+      nav={[
+        { label: "Dashboard", href: "/landlord" },
+        { label: "Reservations", href: "/landlord/reservations" },
+        { label: "Messages", href: "/landlord/messages" },
+      ]}
     >
       {children}
     </PortalShell>

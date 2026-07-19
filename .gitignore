@@ -23,3 +23,9 @@ OwnResourceFolder/
 
 # generated tool output (graphify knowledge-graph artifacts)
 graphify-out/
+
+# subagent-driven-development scratch state (progress ledger, task briefs)
+.superpowers/
+
+# local git worktrees
+.worktrees/
