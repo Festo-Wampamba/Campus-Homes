@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Camera, X } from "lucide-react";
 import {
   VERIFICATION_CHECKLIST_COMPONENTS,
   type VerificationChecklistComponent,
@@ -13,6 +14,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
 import { getDraft, putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
 import { syncQueuedDrafts } from "@/lib/ops/sync-manager";
+
+/** Local blob preview for a not-yet-uploaded File — captured offline, so
+ * there's no storage URL to point an <img> at yet. Revokes its object URL
+ * on unmount so removing/replacing photos doesn't leak them. */
+function PhotoThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [url] = useState(() => URL.createObjectURL(file));
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return (
+    <div className="group relative">
+      {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview, not a storage URL */}
+      <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+      <button
+        type="button"
+        aria-label="Remove photo"
+        onClick={onRemove}
+        className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+      >
+        <X aria-hidden className="size-3" />
+      </button>
+    </div>
+  );
+}
 
 const COMPONENT_LABEL: Record<VerificationChecklistComponent, string> = {
   location_gps: "Location & GPS",
@@ -41,6 +64,8 @@ function newDraft(visitId: string): InspectionDraft {
     result: null,
     failureReason: "",
     syncStatus: "draft",
+    photos: [],
+    photoStorageKeys: [],
   };
 }
 
@@ -124,6 +149,14 @@ export function InspectionForm({ visitId }: { visitId: string }) {
         [component]: { ...currentDraft.checklist[component], ...patch },
       },
     });
+  }
+
+  function addPhotos(files: File[]) {
+    persist({ ...currentDraft, photos: [...currentDraft.photos, ...files] });
+  }
+
+  function removePhoto(index: number) {
+    persist({ ...currentDraft, photos: currentDraft.photos.filter((_, i) => i !== index) });
   }
 
   const allAnswered = VERIFICATION_CHECKLIST_COMPONENTS.every(
@@ -217,6 +250,40 @@ export function InspectionForm({ visitId }: { visitId: string }) {
                 value={entry.notes}
                 onChange={(e) => setComponent(component, { notes: e.target.value })}
               />
+              {component === "photos" && (
+                <div className="space-y-2">
+                  {draft.photos.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                      {draft.photos.map((file, i) => (
+                        <PhotoThumb
+                          key={`${file.name}-${file.lastModified}-${i}`}
+                          file={file}
+                          onRemove={() => removePhoto(i)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-teal-700">
+                    <Camera aria-hidden className="size-4" />
+                    Take/add photos
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.target.value = "";
+                        if (files.length > 0) addPhotos(files);
+                      }}
+                    />
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Uploaded automatically once this device is back online.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         );

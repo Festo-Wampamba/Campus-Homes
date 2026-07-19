@@ -20,12 +20,19 @@ const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
 const ops = new OpsService(rlsDb, audit);
-const reservationsService = new ReservationsService(rlsDb, audit, new StubPayments(), null, null);
+const reservationsService = new ReservationsService(
+  rlsDb,
+  audit,
+  new StubPayments('http://localhost:3000'),
+  null,
+  null,
+);
 
 let student1: string;
 let student2: string;
 let landlord1: string;
 let opsLead: string;
+let inspectorId: string;
 let listingId: string;
 let unitId: string;
 
@@ -63,14 +70,14 @@ beforeAll(async () => {
   opsLead = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000004', 'ops_lead', 'active') RETURNING id`,
   );
-  const inspector = await seed(
+  inspectorId = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000005', 'ops_inspector', 'active') RETURNING id`,
   );
   await pool.query(`INSERT INTO students (user_id, university) VALUES ($1), ($2)`.replace('($1), ($2)', `($1, 'MUK'), ($2, 'MUK')`), [student1, student2]);
   await pool.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'LL One')`, [landlord1]);
   await pool.query(
     `INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`,
-    [opsLead, inspector],
+    [opsLead, inspectorId],
   );
 
   const semester = await seed(
@@ -78,15 +85,15 @@ beforeAll(async () => {
      VALUES ('Sem 1 26/27', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
   );
   const property = await seed(
-    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon)
-     VALUES ($1, 'Test Hostel', 'Wandegeya', 'active', 0.33, 32.57) RETURNING id`,
+    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+     VALUES ($1, 'Test Hostel', 'Wandegeya', 'active', 0.33, 32.57, 'MUK') RETURNING id`,
     [landlord1],
   );
   await pool.query(
     `INSERT INTO verification_visits
        (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at, completed_at)
      VALUES ($1, $2, $3, 'seed-visit-key-0001', 'passed', $4, now(), now())`,
-    [property, inspector, JSON.stringify(FULL_CHECKLIST), opsLead],
+    [property, inspectorId, JSON.stringify(FULL_CHECKLIST), opsLead],
   );
   listingId = await seed(
     `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'pending_verification') RETURNING id`,
@@ -96,10 +103,9 @@ beforeAll(async () => {
   // Publish through the real ops path: version snapshot + verified flip + unit.
   const published = await ops.publishListing(leadCtx(), {
     listingId,
-    pricePerTermUgx: 800_000,
     amenities: { water: true, power: true },
     description: 'Test listing',
-    units: [{ label: 'Room 1A', capacity: 1 }],
+    units: [{ label: 'Room 1A', capacity: 1, roomCategory: 'single', pricePerTermUgx: 800_000 }],
   });
   expect(published.listing.status).toBe('verified');
   const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
@@ -119,6 +125,66 @@ describe('listing publish (ops path)', () => {
       [listingId],
     );
     expect(res.rows[0].version_number).toBe(1);
+  });
+
+  it("promotes the approving visit's staged photos into listing_photos", async () => {
+    const semester2 = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Sem 2 26/27', '2027-01-05', '2027-05-15', '2027-04-15') RETURNING id`,
+    );
+    const property2 = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+       VALUES ($1, 'Photo Test Hostel', 'Kikoni', 'active', 0.335, 32.58, 'MUK') RETURNING id`,
+      [landlord1],
+    );
+    await pool.query(
+      `INSERT INTO verification_visits
+         (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by,
+          approved_at, completed_at, visit_gps_lat, visit_gps_lon, photo_storage_keys)
+       VALUES ($1, $2, $3, 'seed-visit-key-0002', 'passed', $4, now(), now(), 0.335, 32.58, $5)`,
+      [
+        property2,
+        inspectorId,
+        JSON.stringify(FULL_CHECKLIST),
+        opsLead,
+        JSON.stringify(['photo-key-1', 'photo-key-2']),
+      ],
+    );
+    const listing2 = await seed(
+      `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'pending_verification') RETURNING id`,
+      [property2, semester2],
+    );
+
+    const published2 = await ops.publishListing(leadCtx(), {
+      listingId: listing2,
+      amenities: {},
+      units: [{ label: 'Room 1', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 }],
+    });
+
+    const photos = await pool.query(
+      `SELECT storage_key, captured_by, is_primary, sort_order, gps_lat, gps_lon
+       FROM listing_photos WHERE listing_version_id = $1 ORDER BY sort_order`,
+      [published2.version.id],
+    );
+    expect(photos.rows.map((r) => r.storage_key)).toEqual(['photo-key-1', 'photo-key-2']);
+    expect(photos.rows.every((r) => r.captured_by === inspectorId)).toBe(true);
+    expect(photos.rows[0].is_primary).toBe(true);
+    expect(photos.rows[1].is_primary).toBe(false);
+    expect(photos.rows[0].gps_lat).toBe('0.3350000');
+  });
+
+  it('publishing a listing with no staged photos leaves listing_photos empty (no crash)', async () => {
+    // The very first describe's listingId/version — beforeAll seeded that
+    // visit with no photo_storage_keys at all (column left null).
+    const version = await pool.query(
+      `SELECT current_version_id FROM listings WHERE id = $1`,
+      [listingId],
+    );
+    const photos = await pool.query(
+      `SELECT id FROM listing_photos WHERE listing_version_id = $1`,
+      [version.rows[0].current_version_id],
+    );
+    expect(photos.rows).toHaveLength(0);
   });
 });
 
@@ -205,8 +271,8 @@ describe('reservation hold state machine', () => {
   it('refunds instead of activating when the webhook lands on an expired hold', async () => {
     // Free the unit, then build an already-expired hold directly.
     await pool.query(
-      `INSERT INTO units (listing_id, label, capacity, available_for_semester_id)
-       SELECT listing_id, 'Room 2B', 1, available_for_semester_id FROM units WHERE id = $1`,
+      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
+       SELECT listing_id, 'Room 2B', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
       [unitId],
     );
     const unit2 = (
@@ -246,8 +312,8 @@ describe('reservation hold state machine', () => {
 
   it('lets a student cancel their own held reservation', async () => {
     await pool.query(
-      `INSERT INTO units (listing_id, label, capacity, available_for_semester_id)
-       SELECT listing_id, 'Room 3C', 1, available_for_semester_id FROM units WHERE id = $1`,
+      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
+       SELECT listing_id, 'Room 3C', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
       [unitId],
     );
     const unit3 = (
@@ -294,6 +360,7 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
         startedAt: new Date(Date.now() - 3600_000).toISOString(),
         completedAt: new Date().toISOString(),
         result: 'passed',
+        photoStorageKeys: [],
       },
     );
     expect(visit.result).toBe('passed');
@@ -311,6 +378,7 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
         result: 'failed',
+        photoStorageKeys: [],
       },
     );
     expect({ id: replay.id, result: replay.result, lat: replay.visitGpsLat }).toEqual({

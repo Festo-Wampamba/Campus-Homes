@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -148,6 +149,7 @@ export function SignInForm() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const roleLabel = ROLES.find((r) => r.id === role)?.label ?? "";
 
@@ -160,15 +162,18 @@ export function SignInForm() {
     router.refresh();
   }
 
+  const isStaffRole = role === "admin" || role === "ops";
+
   function continueFromLanding() {
     if (!role) return;
     setError(null);
-    setScreen(role === "admin" || role === "ops" ? "staff" : "phone");
+    setScreen(isStaffRole ? "staff" : "phone");
   }
 
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setPending(true);
     const { error } = await authClient.phoneNumber.sendOtp({
       phoneNumber: toE164(phone),
@@ -177,6 +182,9 @@ export function SignInForm() {
     if (error) {
       setError(error.message ?? "We couldn't send the code — try again.");
       return;
+    }
+    if (process.env.NODE_ENV !== "production") {
+      setNotice("Local dev mode: check the backend terminal for the OTP code.");
     }
     setScreen("otp");
   }
@@ -193,6 +201,18 @@ export function SignInForm() {
       setPending(false);
       setError(error.message ?? "That code didn't match — try again.");
       return;
+    }
+    if (role === "landlord") {
+      // Phone-OTP signup always defaults role: 'student' (auth.config.ts) —
+      // picking this tile is the only signal of landlord intent, so flip the
+      // role now. A 409 here just means they're already a landlord (a
+      // returning sign-in); routeBySession() below reads the real role
+      // either way, so it's safe to ignore.
+      try {
+        await api("/landlords/apply", { method: "POST" });
+      } catch (err) {
+        if (!(err instanceof ApiError)) throw err;
+      }
     }
     await routeBySession();
   }
@@ -213,6 +233,11 @@ export function SignInForm() {
   return (
     <Card className="w-full max-w-sm shadow-md">
       <CardContent className="p-6 sm:p-8">
+        {notice && (
+          <div className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
+            {notice}
+          </div>
+        )}
         {screen === "landing" && (
           <>
             <div className="mb-6 flex flex-col items-center gap-1.5">
@@ -307,6 +332,18 @@ export function SignInForm() {
               <Button type="submit" disabled={pending} className="w-full">
                 {pending ? "Sending code…" : "Send SMS code"}
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setScreen("staff");
+                }}
+              >
+                Sign in with email instead
+              </Button>
             </form>
             <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
               By continuing you agree to our Terms & Data Handling under the
@@ -351,14 +388,14 @@ export function SignInForm() {
 
         {screen === "staff" && (
           <>
-            <BackLink onClick={() => setScreen("landing")}>
-              Choose a different role
+            <BackLink onClick={() => setScreen(isStaffRole ? "landing" : "phone")}>
+              {isStaffRole ? "Choose a different role" : "Use SMS code instead"}
             </BackLink>
             <h1 className="mb-1 font-display text-lg font-bold text-foreground">
-              Internal sign in
+              {isStaffRole ? "Internal sign in" : "Sign in with email"}
             </h1>
             <p className="mb-4 text-sm text-muted-foreground">
-              For Operations & Admin staff only
+              {isStaffRole ? "For Operations & Admin staff only" : "For an existing CampusHomes account"}
             </p>
             <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-accent px-3 py-2 text-sm font-semibold text-teal-700">
               Signing in as {roleLabel}

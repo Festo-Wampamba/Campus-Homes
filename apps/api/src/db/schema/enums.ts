@@ -17,6 +17,7 @@ import {
   REFUND_STATUSES,
   REPUTATION_SUBJECT_TYPES,
   RESERVATION_STATUSES,
+  ROOM_CATEGORIES,
   STRIKE_REASONS,
   STUDENT_FLAG_REASONS,
   TOKEN_TYPES,
@@ -39,6 +40,7 @@ export const propertyStatus = pgEnum('property_status', PROPERTY_STATUSES);
 export const docType = pgEnum('doc_type', DOC_TYPES);
 export const visitResult = pgEnum('visit_result', VISIT_RESULTS);
 export const listingStatus = pgEnum('listing_status', LISTING_STATUSES);
+export const roomCategory = pgEnum('room_category', ROOM_CATEGORIES);
 export const reservationStatus = pgEnum('reservation_status', RESERVATION_STATUSES);
 export const paymentProvider = pgEnum('payment_provider', PAYMENT_PROVIDERS);
 export const paymentMethod = pgEnum('payment_method', PAYMENT_METHODS);
