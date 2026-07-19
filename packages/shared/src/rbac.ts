@@ -7,7 +7,7 @@ const grantRoleFieldsSchema = z.object({
   roleKey: z.enum(STAFF_ROLE_KEYS),
   scopeType: z.enum(['platform_wide', 'catchment']),
   scopeId: z.enum(CATCHMENTS).optional(),
-  validUntil: z.string().datetime().optional(),
+  validUntil: z.iso.datetime().optional(),
 });
 
 export const grantRoleSchema = grantRoleFieldsSchema
@@ -21,7 +21,7 @@ export type GrantRoleInput = z.infer<typeof grantRoleSchema>;
 export const inviteStaffSchema = grantRoleFieldsSchema
   .extend({
     name: z.string().min(1).max(200),
-    email: z.string().email().optional(),
+    email: z.email().optional(),
     phone: ugPhone.optional(),
     reason: z.string().min(1).max(500),
   })
