@@ -8,3 +8,4 @@ export * from './reservation.js';
 export * from './ops.js';
 export * from './chat.js';
 export * from './notification.js';
+export * from './rbac.js';
