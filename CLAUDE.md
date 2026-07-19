@@ -319,6 +319,20 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
   - Executed via superpowers:subagent-driven-development in
     `.worktrees/rbac-foundation-phase-a` (branch `rbac-foundation-phase-a`);
     ledger at `.superpowers/sdd/progress.md` in that worktree.
+  - **Known Phase A→B gap, accepted deliberately (final whole-branch review,
+    confirmed by Festo 2026-07-19):** `staff.deactivate`, `roles.assign`,
+    `roles.revoke` are seeded `requires_step_up = true`, so
+    `PermissionsGuard` 501s all three unconditionally — nobody, not even
+    `super_admin`, can call them until Phase B ships real MFA
+    reverification. Meanwhile `POST /admin/staff/invite` (`staff.invite`,
+    not step-up-gated) internally calls the same `grantRole` logic, making
+    invite the only *live* way to grant any role — including
+    `super_admin` — with no step-up barrier today. This is accepted as-is:
+    invite still enforces scope + the `roles.manage_super_admin` tier
+    gate, and no real MFA exists this phase regardless, so no path has a
+    working step-up barrier yet. Revisit when Phase B lands MFA — either
+    gate invite the same way, or accept invite as the intentionally
+    softer onboarding path.
   - **Admin Dashboard frontend (Phase C) is not started** — separate
     spec/plan, per the design doc's explicit scope boundary. Nothing in
     `apps/web` consumes the StaffModule API yet.
