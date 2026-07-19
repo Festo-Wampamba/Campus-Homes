@@ -61,7 +61,6 @@ ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_role_i
 ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_assigned_by_users_id_fk" FOREIGN KEY ("assigned_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_revoked_by_users_id_fk" FOREIGN KEY ("revoked_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "user_role_assignments_active_uk" ON "user_role_assignments" USING btree ("user_id","role_id","scope_type","scope_id") WHERE revoked_at IS NULL;
-
 -- ── RLS: RBAC tables are service-role only; fine-grained enforcement is the
 -- application-layer PermissionsGuard, same posture as accounts/verifications
 -- (0002) — see docs/superpowers/specs/2026-07-19-rbac-foundation-design.md

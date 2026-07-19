@@ -13,6 +13,7 @@
     "db:migrate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate",
     "db:studio": "node --env-file=.env node_modules/drizzle-kit/bin.cjs studio",
     "db:check": "node --env-file=.env node_modules/drizzle-kit/bin.cjs check",
+    "db:seed": "node --env-file=.env ./scripts/seed-dev.cjs",
     "lint": "eslint src test"
   },
   "dependencies": {

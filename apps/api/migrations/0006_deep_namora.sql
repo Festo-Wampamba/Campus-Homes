@@ -1,0 +1,1 @@
+ALTER TABLE "properties" ADD COLUMN "proposed_amenities" jsonb;

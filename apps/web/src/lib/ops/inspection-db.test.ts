@@ -19,6 +19,8 @@ function makeDraft(overrides: Partial<InspectionDraft> = {}): InspectionDraft {
     result: null,
     failureReason: "",
     syncStatus: "draft",
+    photos: [],
+    photoStorageKeys: [],
     ...overrides,
   };
 }

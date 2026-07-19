@@ -1,22 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Property, RoomCategory } from "@campushomes/shared";
 
+import {
+  emptyRoomCategoryRow,
+  RoomCategoryRows,
+  type RoomCategoryRow,
+} from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-
-const AMENITY_OPTIONS: Array<{ key: string; label: string }> = [
-  { key: "water_supply", label: "Water supply" },
-  { key: "power_backup", label: "Power backup" },
-  { key: "wifi", label: "Wi-Fi" },
-  { key: "security_guard", label: "Security guard" },
-  { key: "parking", label: "Parking" },
-  { key: "furnished", label: "Furnished" },
-];
+import { AMENITY_OPTIONS, ROOM_CATEGORY_DEFAULT_CAPACITY, roomCategoryLabel } from "@/lib/format";
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -29,29 +26,68 @@ function errorMessage(err: unknown, fallback: string): string {
 
 export function PublishListingForm({ listingId }: { listingId: string }) {
   const router = useRouter();
-  const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [amenities, setAmenities] = useState<Record<string, boolean>>({});
-  const [unitLabels, setUnitLabels] = useState("");
+  const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([
+    emptyRoomCategoryRow(),
+  ]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pre-fill from the landlord's proposed room categories (submitted at
+  // onboarding) so Ops confirms/adjusts real inspection numbers instead of
+  // typing every listing from a blank form.
+  useEffect(() => {
+    let cancelled = false;
+    api<{ property: Property }>(`/ops/listings/${listingId}`)
+      .then(({ property }) => {
+        if (cancelled || !property.proposedRoomCategories?.length) return;
+        setRoomCategoryRows(
+          property.proposedRoomCategories.map((p) => ({
+            key: `prefill-${p.category}-${p.pricePerTermUgx}-${Math.random()}`,
+            category: p.category,
+            roomCount: String(p.roomCount),
+            pricePerTermUgx: String(p.pricePerTermUgx),
+          })),
+        );
+      })
+      .catch(() => {
+        // Prefill is a convenience, not a requirement — the form still works blank.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listingId]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!price) return;
     setError(null);
+
+    const validRows = roomCategoryRows.filter(
+      (row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0,
+    );
+    if (validRows.length === 0) {
+      setError("Add at least one room type with a room count and price.");
+      return;
+    }
+
     setPending(true);
     try {
-      const units = unitLabels
-        .split("\n")
-        .map((label) => label.trim())
-        .filter(Boolean)
-        .map((label) => ({ label, capacity: 1 }));
+      const units = validRows.flatMap((row) => {
+        const category = row.category as RoomCategory;
+        const count = Number(row.roomCount);
+        const price = Number(row.pricePerTermUgx);
+        return Array.from({ length: count }, (_, i) => ({
+          label: `${roomCategoryLabel(category)} ${i + 1}`,
+          capacity: ROOM_CATEGORY_DEFAULT_CAPACITY[category] ?? 1,
+          roomCategory: category,
+          pricePerTermUgx: price,
+        }));
+      });
       await api("/ops/listings/publish", {
         method: "POST",
         body: JSON.stringify({
           listingId,
-          pricePerTermUgx: Number(price),
           amenities,
           description: description || undefined,
           units,
@@ -68,14 +104,15 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="price">Price per term (UGX)</Label>
-        <Input
-          id="price"
-          type="number"
-          min={1}
-          required
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
+        <Label>Room types & pricing</Label>
+        <p className="text-xs text-muted-foreground">
+          Each room type is published as that many individual units at that
+          price — confirm these against what you saw on the inspection visit.
+        </p>
+        <RoomCategoryRows
+          rows={roomCategoryRows}
+          onChange={setRoomCategoryRows}
+          idPrefix="publish-room"
         />
       </div>
       <div className="space-y-1.5">
@@ -101,15 +138,6 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           id="description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="units">Units (one label per line, e.g. &quot;Room 1A&quot;)</Label>
-        <Textarea
-          id="units"
-          value={unitLabels}
-          onChange={(e) => setUnitLabels(e.target.value)}
-          placeholder={"Room 1A\nRoom 1B"}
         />
       </div>
       <Button type="submit" disabled={pending} className="w-full">

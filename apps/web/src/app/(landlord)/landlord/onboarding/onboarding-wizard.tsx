@@ -2,8 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { DOC_TYPES, type DocType, type LandlordProfile, type Property } from "@campushomes/shared";
+import {
+  DOC_TYPES,
+  UNIVERSITIES,
+  type DocType,
+  type LandlordProfile,
+  type Property,
+  type University,
+} from "@campushomes/shared";
 
+import { RoomCategoryRows, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +27,14 @@ const DOC_LABELS: Record<DocType, string> = {
   tenancy: "Tenancy agreement",
   authorization: "Landlord authorization letter",
   other: "Other supporting document",
+};
+
+const UNIVERSITY_LABELS: Record<University, string> = {
+  MUK: "Makerere University",
+  MUBS: "Makerere University Business School",
+  KIU: "Kampala International University",
+  KYU: "Kyambogo University",
+  other: "Other / not listed",
 };
 
 const STEP_INDEX: Record<Step, number> = { legal: 1, "id-doc": 2, property: 3 };
@@ -57,8 +73,10 @@ export function OnboardingWizard({
   const [idFile, setIdFile] = useState<File | null>(null);
   const [propertyName, setPropertyName] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
+  const [catchment, setCatchment] = useState<University>("MUK");
   const [docType, setDocType] = useState<DocType>("title_deed");
   const [docFile, setDocFile] = useState<File | null>(null);
+  const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,9 +123,16 @@ export function OnboardingWizard({
     setError(null);
     setPending(true);
     try {
+      const proposedRoomCategories = roomCategoryRows
+        .filter((row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0)
+        .map((row) => ({
+          category: row.category,
+          roomCount: Number(row.roomCount),
+          pricePerTermUgx: Number(row.pricePerTermUgx),
+        }));
       const property = await api<Property>("/listings/properties", {
         method: "POST",
-        body: JSON.stringify({ name: propertyName, streetAddress }),
+        body: JSON.stringify({ name: propertyName, streetAddress, catchment, proposedRoomCategories }),
       });
       const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
       const { publicId } = await uploadToCloudinary(docFile, sig);
@@ -124,7 +149,7 @@ export function OnboardingWizard({
   }
 
   return (
-    <Card className="w-full max-w-md shadow-md">
+    <Card className={cn("w-full shadow-md", step === "property" ? "max-w-xl" : "max-w-md")}>
       <CardContent className="p-6 sm:p-8">
         {step === "legal" && (
           <>
@@ -205,6 +230,37 @@ export function OnboardingWizard({
                   value={streetAddress}
                   onChange={(e) => setStreetAddress(e.target.value)}
                   placeholder="Street, area, city"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="catchment">Nearest university</Label>
+                <select
+                  id="catchment"
+                  value={catchment}
+                  onChange={(e) => setCatchment(e.target.value as University)}
+                  className={cn(
+                    "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
+                    "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
+                  )}
+                >
+                  {UNIVERSITIES.map((code) => (
+                    <option key={code} value={code}>
+                      {UNIVERSITY_LABELS[code]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Room types & pricing (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Tell us what you have in mind — e.g. 30 singles at UGX
+                  300,000, 40 doubles at UGX 700,000. Our team confirms exact
+                  pricing and room counts during the verification visit.
+                </p>
+                <RoomCategoryRows
+                  rows={roomCategoryRows}
+                  onChange={setRoomCategoryRows}
+                  idPrefix="onboarding-room"
                 />
               </div>
               <div className="space-y-1.5">

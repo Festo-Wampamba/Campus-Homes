@@ -1,9 +1,12 @@
+import crypto from 'node:crypto';
+
 import {
   BadRequestException,
   Body,
   Controller,
   Headers,
   HttpCode,
+  NotFoundException,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -54,6 +57,30 @@ export class WebhookController {
       status: data.status === 'successful' ? 'successful' : 'failed',
       paymentMethod: data.payment_type,
       raw: body as Record<string, unknown>,
+    });
+  }
+
+  /** Backs the stub checkout page (payments.adapter.ts StubPayments) — lets
+   * the reserve → pay → fulfilled flow be exercised end-to-end in a browser
+   * when no real Flutterwave account is configured yet. Reuses the exact
+   * same applyPaymentWebhook() a real webhook hits; never reachable in
+   * production (StubPayments itself never runs there either — reservations.module.ts
+   * throws at boot without a real key — this is defense in depth). */
+  @Post('dev-simulate')
+  @HttpCode(200)
+  devSimulate(@Body() body: { txRef?: string; outcome?: 'successful' | 'failed' }) {
+    if (loadEnv().NODE_ENV === 'production') {
+      throw new NotFoundException();
+    }
+    if (!body.txRef || (body.outcome !== 'successful' && body.outcome !== 'failed')) {
+      throw new BadRequestException('txRef and outcome are required');
+    }
+    return this.reservationsService.applyPaymentWebhook({
+      txRef: body.txRef,
+      providerTxnId: `stub-${crypto.randomUUID()}`,
+      status: body.outcome,
+      paymentMethod: 'mobilemoneyug',
+      raw: { simulated: true },
     });
   }
 }

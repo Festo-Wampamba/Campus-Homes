@@ -89,8 +89,8 @@ beforeAll(async () => {
      VALUES ('Chat Test Sem', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
   );
   const property = await seed(
-    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon)
-     VALUES ($1, 'Chat Test Hostel', 'Wandegeya', 'active', 0.33, 32.57) RETURNING id`,
+    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+     VALUES ($1, 'Chat Test Hostel', 'Wandegeya', 'active', 0.33, 32.57, 'MUK') RETURNING id`,
     [landlord1],
   );
   await pool.query(
@@ -108,10 +108,9 @@ beforeAll(async () => {
     { userId: opsLead, role: 'ops_lead' },
     {
       listingId,
-      pricePerTermUgx: 800_000,
       amenities: { water: true, power: true },
       description: 'Chat test listing',
-      units: [{ label: 'Room 1A', capacity: 1 }],
+      units: [{ label: 'Room 1A', capacity: 1, roomCategory: 'single', pricePerTermUgx: 800_000 }],
     },
   );
   const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);

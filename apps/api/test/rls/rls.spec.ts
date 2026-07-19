@@ -18,9 +18,12 @@ let property2: string; // owned by landlord2, draft listing only
 let listing1: string; // verified
 let listing2: string; // draft
 let unit1: string;
+let unit2: string; // owned by landlord2, on the draft listing (listing2)
 let version1: string;
 let reservation1: string; // student1's held reservation on unit1
 let payment1: string;
+let unitPhoto1: string; // on unit1 (verified listing, landlord1)
+let unitPhoto2: string; // on unit2 (draft listing, landlord2)
 
 const FULL_CHECKLIST = JSON.stringify(
   Object.fromEntries(
@@ -41,7 +44,7 @@ beforeAll(async () => {
   await pool.query(
     `TRUNCATE users, students, landlords, ops_staff, semesters, properties,
      property_documents, verification_visits, listings, listing_versions,
-     units, reservations, payments, refunds, move_ins, reviews,
+     units, unit_photos, reservations, payments, refunds, move_ins, reviews,
      landlord_strikes, student_flags, audit_log CASCADE`,
   );
 
@@ -65,13 +68,13 @@ beforeAll(async () => {
   );
 
   property1 = await seed(
-    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon)
-     VALUES ($1, 'Hostel One', 'Wandegeya', 'active', 0.3345678, 32.5678901) RETURNING id`,
+    `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+     VALUES ($1, 'Hostel One', 'Wandegeya', 'active', 0.3345678, 32.5678901, 'MUK') RETURNING id`,
     [landlord1],
   );
   property2 = await seed(
-    `INSERT INTO properties (landlord_id, name, street_address, status)
-     VALUES ($1, 'Hostel Two', 'Kikoni', 'active') RETURNING id`,
+    `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+     VALUES ($1, 'Hostel Two', 'Kikoni', 'active', 'MUK') RETURNING id`,
     [landlord2],
   );
 
@@ -101,9 +104,22 @@ beforeAll(async () => {
     [listing1, opsLead],
   );
   unit1 = await seed(
-    `INSERT INTO units (listing_id, label, available_for_semester_id)
-     VALUES ($1, 'Room 1A', $2) RETURNING id`,
+    `INSERT INTO units (listing_id, label, room_category, price_per_term_ugx, available_for_semester_id)
+     VALUES ($1, 'Room 1A', 'single', 800000, $2) RETURNING id`,
     [listing1, semester],
+  );
+  unit2 = await seed(
+    `INSERT INTO units (listing_id, label, room_category, price_per_term_ugx, available_for_semester_id)
+     VALUES ($1, 'Room 2A', 'single', 700000, $2) RETURNING id`,
+    [listing2, semester],
+  );
+  unitPhoto1 = await seed(
+    `INSERT INTO unit_photos (unit_id, storage_key, uploaded_by) VALUES ($1, 'room1-photo', $2) RETURNING id`,
+    [unit1, landlord1],
+  );
+  unitPhoto2 = await seed(
+    `INSERT INTO unit_photos (unit_id, storage_key, uploaded_by) VALUES ($1, 'room2-photo', $2) RETURNING id`,
+    [unit2, landlord2],
   );
 
   reservation1 = await seed(
@@ -274,6 +290,66 @@ describe('reviews', () => {
         ),
       ),
     ).rejects.toThrow(/row-level security|fulfilled/i);
+  });
+});
+
+describe('unit_photos isolation (0008)', () => {
+  // Each asIdentity() call is its own transaction, always rolled back
+  // (helpers.ts) — an INSERT in one test is invisible to the next, so
+  // read/delete assertions exercise the beforeAll-seeded unitPhoto1/2
+  // (seed() runs as the superuser, outside RLS, and actually persists)
+  // rather than depending on another test's now-rolled-back write.
+  it('a landlord can add a photo to their own room', async () => {
+    const inserted = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      (
+        await c.query(
+          `INSERT INTO unit_photos (unit_id, storage_key, uploaded_by)
+           VALUES ($1, 'room1-photo-2', $2) RETURNING id`,
+          [unit1, landlord1],
+        )
+      ).rows,
+    );
+    expect(inserted).toHaveLength(1);
+  });
+
+  it("a landlord cannot add a photo to another landlord's room", async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(
+          `INSERT INTO unit_photos (unit_id, storage_key, uploaded_by)
+           VALUES ($1, 'attack-photo', $2)`,
+          [unit2, landlord1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it("the public sees a verified listing's room photos", async () => {
+    const rows = await asIdentity({}, async (c) =>
+      (await c.query('SELECT id FROM unit_photos WHERE id = $1', [unitPhoto1])).rows,
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("the public cannot see a draft listing's room photos", async () => {
+    const rows = await asIdentity({}, async (c) =>
+      (await c.query('SELECT id FROM unit_photos WHERE id = $1', [unitPhoto2])).rows,
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord can delete a photo on their own room', async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`DELETE FROM unit_photos WHERE id = $1`, [unitPhoto1]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it("a landlord cannot delete another landlord's room photo", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`DELETE FROM unit_photos WHERE id = $1`, [unitPhoto2]),
+    );
+    expect(res.rowCount).toBe(0);
   });
 });
 

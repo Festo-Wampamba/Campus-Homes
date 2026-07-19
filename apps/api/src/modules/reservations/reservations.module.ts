@@ -31,7 +31,7 @@ import { WebhookController } from './webhook.controller';
         if (env.NODE_ENV === 'production') {
           throw new Error('ReservationsModule requires FLUTTERWAVE_SECRET_KEY in production');
         }
-        return new StubPayments();
+        return new StubPayments(env.WEB_ORIGIN);
       },
     },
     {

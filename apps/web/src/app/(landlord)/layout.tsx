@@ -1,5 +1,7 @@
+import { Building2, CalendarCheck, MessageCircle, User } from "lucide-react";
+
 import { requireRole } from "@/lib/session";
-import { PortalShell } from "@/components/shell/portal-shell";
+import { SidebarShell } from "@/components/shell/sidebar-shell";
 
 // Layout only gates on role — kyc_status lives on the landlords table, not
 // the session, so the "verified except onboarding routes" gate (brief §13)
@@ -10,16 +12,17 @@ export default async function LandlordLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const session = await requireRole(["landlord"]);
   return (
-    <PortalShell
+    <SidebarShell
       portalLabel="Landlord"
       user={session.user}
       nav={[
-        { label: "Dashboard", href: "/landlord" },
-        { label: "Reservations", href: "/landlord/reservations" },
-        { label: "Messages", href: "/landlord/messages" },
+        { label: "My properties", href: "/landlord", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
+        { label: "Reservations", href: "/landlord/reservations", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
+        { label: "Messages", href: "/landlord/messages", icon: <MessageCircle aria-hidden className="size-4 shrink-0" /> },
+        { label: "Profile", href: "/landlord/profile", icon: <User aria-hidden className="size-4 shrink-0" /> },
       ]}
     >
       {children}
-    </PortalShell>
+    </SidebarShell>
   );
 }

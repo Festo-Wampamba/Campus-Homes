@@ -2,7 +2,16 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } fro
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
-import { IssueStrikeDto, PublishListingDto, ScheduleVisitDto, SyncVisitDto } from './ops.dto';
+import type { University } from '@campushomes/shared';
+
+import {
+  IssueStrikeDto,
+  OpsKycDecisionDto,
+  PublishListingDto,
+  ScheduleVisitDto,
+  SetCampusPhotoDto,
+  SyncVisitDto,
+} from './ops.dto';
 import { OpsService } from './ops.service';
 
 @Controller('ops')
@@ -40,6 +49,12 @@ export class OpsController {
     return this.ops.propertyListings(rlsCtx(req), id);
   }
 
+  @Get('listings/:id')
+  @Roles('ops_lead', 'admin')
+  listingForPublish(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ops.listingForPublish(rlsCtx(req), id);
+  }
+
   @Post('visits')
   @Roles('ops_lead', 'admin')
   scheduleVisit(@Req() req: AuthenticatedRequest, @Body() body: ScheduleVisitDto) {
@@ -65,9 +80,35 @@ export class OpsController {
     return this.ops.publishListing(rlsCtx(req), body);
   }
 
+  @Post('campuses/:university/photo')
+  @Roles('ops_lead', 'admin')
+  setCampusPhoto(
+    @Req() req: AuthenticatedRequest,
+    @Param('university') university: string,
+    @Body() body: SetCampusPhotoDto,
+  ) {
+    return this.ops.setCampusPhoto(rlsCtx(req), university as University, body.storageKey);
+  }
+
   @Post('strikes')
   @Roles('ops_lead', 'admin')
   issueStrike(@Req() req: AuthenticatedRequest, @Body() body: IssueStrikeDto) {
     return this.ops.issueStrike(rlsCtx(req), body);
+  }
+
+  @Get('landlords/kyc-queue')
+  @Roles('ops_lead', 'admin')
+  kycQueue(@Req() req: AuthenticatedRequest) {
+    return this.ops.kycQueue(rlsCtx(req));
+  }
+
+  @Post('landlords/:userId/kyc')
+  @Roles('ops_lead', 'admin')
+  decideKyc(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() body: OpsKycDecisionDto,
+  ) {
+    return this.ops.decideKyc(rlsCtx(req), userId, body);
   }
 }
