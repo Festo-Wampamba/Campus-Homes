@@ -75,15 +75,31 @@ export class StaffService {
     );
   }
 
-  deactivate(targetUserId: string) {
+  async deactivate(actorCtx: RlsContext, actorAssignments: RoleAssignment[], targetUserId: string) {
+    if (actorCtx.userId === targetUserId) {
+      throw new ForbiddenException('Cannot deactivate yourself');
+    }
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId));
+      if (!target) throw new NotFoundException('Staff member not found');
+
+      const targetAssignments = await db
+        .select({ scopeType: userRoleAssignments.scopeType, scopeId: userRoleAssignments.scopeId })
+        .from(userRoleAssignments)
+        .where(and(eq(userRoleAssignments.userId, targetUserId), isNull(userRoleAssignments.revokedAt)));
+      const covered = targetAssignments.some((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId));
+      if (!covered) {
+        throw new ForbiddenException('Cannot deactivate a staff member outside your own scope');
+      }
+
       const [row] = await db
         .update(users)
         .set({ status: 'suspended' })
         .where(eq(users.id, targetUserId))
         .returning();
-      if (!row) throw new NotFoundException('Staff member not found');
-      return row;
+      const updated = row!; // target existence already confirmed above
+      await this.audit.record(actorCtx, 'staff.deactivate', 'user', targetUserId, {});
+      return updated;
     });
   }
 
@@ -138,8 +154,17 @@ export class StaffService {
     });
   }
 
-  revokeRole(actorCtx: RlsContext, assignmentId: string) {
+  revokeRole(actorCtx: RlsContext, actorAssignments: RoleAssignment[], assignmentId: string) {
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const [target] = await db
+        .select({ scopeType: userRoleAssignments.scopeType, scopeId: userRoleAssignments.scopeId })
+        .from(userRoleAssignments)
+        .where(and(eq(userRoleAssignments.id, assignmentId), isNull(userRoleAssignments.revokedAt)));
+      if (!target) throw new NotFoundException('Active role assignment not found');
+      if (!hasCoveringScope(actorAssignments, target.scopeType, target.scopeId)) {
+        throw new ForbiddenException('Cannot revoke a role assignment outside your own scope');
+      }
+
       const [row] = await db
         .update(userRoleAssignments)
         .set({ revokedAt: new Date(), revokedBy: actorCtx.userId })

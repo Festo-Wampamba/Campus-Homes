@@ -30,8 +30,8 @@ export class StaffController {
 
   @Patch(':id/deactivate')
   @RequirePermission('staff.deactivate')
-  deactivate(@Param('id', ParseUUIDPipe) id: string) {
-    return this.staffService.deactivate(id);
+  deactivate(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.staffService.deactivate(rlsCtx(req), req.assignments, id);
   }
 
   @Post(':id/roles')
@@ -43,6 +43,6 @@ export class StaffController {
   @Delete(':id/roles/:assignmentId')
   @RequirePermission('roles.revoke')
   revokeRole(@Req() req: PermissionedRequest, @Param('assignmentId', ParseUUIDPipe) assignmentId: string) {
-    return this.staffService.revokeRole(rlsCtx(req), assignmentId);
+    return this.staffService.revokeRole(rlsCtx(req), req.assignments, assignmentId);
   }
 }

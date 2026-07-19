@@ -158,8 +158,47 @@ describe('StaffService.invite + revokeRole round trip', () => {
       `SELECT id FROM user_role_assignments WHERE user_id = $1 AND revoked_at IS NULL`,
       [user.id],
     );
-    const revoked = await staff.revokeRole(superAdminCtx(), rows[0].id as string);
+    const revoked = await staff.revokeRole(
+      superAdminCtx(),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      rows[0].id as string,
+    );
     expect(revoked.revokedAt).not.toBeNull();
+  });
+});
+
+describe('StaffService.deactivate — separation of duty', () => {
+  it('blocks an actor from deactivating themselves', async () => {
+    await expect(
+      staff.deactivate(superAdminCtx(), [{ scopeType: 'platform_wide', scopeId: null }], superAdmin),
+    ).rejects.toThrow('Cannot deactivate yourself');
+  });
+
+  it("blocks deactivating a staff member outside the actor's own scope", async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target5') RETURNING id`,
+      ['+256700000309'],
+    );
+    await staff.grantRole(
+      superAdminCtx(),
+      new Set(['roles.assign']),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      target,
+      { roleKey: 'ops_lead', scopeType: 'catchment', scopeId: 'MUK', reason: 'seed' },
+    );
+    await expect(
+      staff.deactivate(platformAdminCtx(), [{ scopeType: 'catchment', scopeId: 'MUBS' }], target),
+    ).rejects.toThrow('Cannot deactivate a staff member outside your own scope');
+  });
+
+  it('fails closed when the target has zero active role assignments', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target6') RETURNING id`,
+      ['+256700000310'],
+    );
+    await expect(
+      staff.deactivate(superAdminCtx(), [{ scopeType: 'catchment', scopeId: 'MUK' }], target),
+    ).rejects.toThrow('Cannot deactivate a staff member outside your own scope');
   });
 });
 
@@ -169,7 +208,18 @@ describe('StaffService.deactivate and list', () => {
       `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target4') RETURNING id`,
       ['+256700000308'],
     );
-    const updated = await staff.deactivate(target);
+    await staff.grantRole(
+      superAdminCtx(),
+      new Set(['roles.assign']),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      target,
+      { roleKey: 'ops_lead', scopeType: 'platform_wide', reason: 'seed' },
+    );
+    const updated = await staff.deactivate(
+      superAdminCtx(),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      target,
+    );
     expect(updated.status).toBe('suspended');
   });
 
