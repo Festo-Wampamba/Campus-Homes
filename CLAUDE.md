@@ -274,6 +274,72 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
     (`messages: threadId ? messages : []`) instead of resetting state
     inside the effect.
 
+- **RBAC Foundation (Phase A) (done):** data-driven fine-grained authorization
+  layer on top of the existing 5-value `app.user_role` enum — plan:
+  `docs/superpowers/plans/2026-07-19-rbac-foundation.md`, spec:
+  `docs/superpowers/specs/2026-07-19-rbac-foundation-design.md`. Migration
+  `0003_rbac.sql` adds `roles`/`permissions`/`role_permissions`/
+  `user_role_assignments`/`approval_requests` — all `svc_all` RLS (service_role
+  only, same posture as `accounts`/`verifications`), seeded with 7 staff roles
+  and a 63-permission catalog. RLS suite now 27 tests (was 22).
+  - 7 staff roles map onto the existing `app.user_role` enum via
+    `ROLE_TO_DB_ROLE` in `staff.service.ts`: `ops_lead`/`ops_inspector` keep
+    their own dedicated enum values, the other 5 (`super_admin`,
+    `platform_admin`, `finance_admin`, `support_admin`, `auditor`) collapse
+    to `admin`. Fine-grained gating is `PermissionsGuard`
+    (`src/modules/auth/permissions.ts`), not the enum.
+  - `PermissionsGuard`/`@RequirePermission()` does a **per-request DB
+    lookup** (`loadPermissions`), not session-baked — revocation is
+    immediate. Step-up-gated permissions (`requiresStepUp` on the
+    permission row) fail closed (`501 NotImplementedException`) until a
+    later phase wires real MFA reverification.
+  - `StaffModule` (`src/modules/staff/`) exposes `/api/v1/admin/staff/*`
+    (invite/list/deactivate/assign-role/revoke-role) and
+    `/api/v1/admin/audit-log` — first real consumer of the RBAC layer.
+    `approval_requests` table exists with no consumer yet (deferred).
+  - **Security gap found and closed mid-build, deviating from the plan
+    text:** the plan's own Step 3 code for `deactivate`/`revokeRole` had no
+    actor-scope check (unlike `grantRole`, which correctly calls
+    `hasCoveringScope`) and no self-deactivation guard — a
+    `platform_admin` holding `staff.deactivate` could deactivate *any*
+    staff account platform-wide, including a `super_admin`. Flagged by an
+    automated security review, confirmed against the plan text, escalated
+    to the user (per subagent-driven-development's "plan-mandated finding
+    = human decides" rule) — approved to fix now. Two rounds: Fix 1 added
+    `hasCoveringScope` checks + self-block, but a `platform_wide` actor
+    assignment covers everything unconditionally in `hasCoveringScope`, so
+    a `platform_admin` without `roles.manage_super_admin` could still
+    reach a `super_admin` target — task reviewer caught this as a Critical
+    finding. Fix 2 added a role-tier gate mirroring `grantRole`'s existing
+    `roles.manage_super_admin` check, independent of scope, on both
+    `deactivate` and `revokeRole`. Both now: block self-target, fail
+    closed if the target has zero active role assignments, require
+    covering scope, and require `roles.manage_super_admin` whenever the
+    target holds `super_admin` — regardless of the actor's own scope.
+  - Executed via superpowers:subagent-driven-development in
+    `.worktrees/rbac-foundation-phase-a` (branch `rbac-foundation-phase-a`);
+    ledger at `.superpowers/sdd/progress.md` in that worktree.
+  - **Known Phase A→B gap, accepted deliberately (final whole-branch review,
+    confirmed by Festo 2026-07-19):** `staff.deactivate`, `roles.assign`,
+    `roles.revoke` are seeded `requires_step_up = true`, so
+    `PermissionsGuard` 501s all three unconditionally — nobody, not even
+    `super_admin`, can call them until Phase B ships real MFA
+    reverification. Meanwhile `POST /admin/staff/invite` (`staff.invite`,
+    not step-up-gated) internally calls the same `grantRole` logic, making
+    invite the only *live* way to grant any role — including
+    `super_admin` — with no step-up barrier today. This is accepted as-is:
+    invite still enforces scope + the `roles.manage_super_admin` tier
+    gate, and no real MFA exists this phase regardless, so no path has a
+    working step-up barrier yet. Revisit when Phase B lands MFA — either
+    gate invite the same way, or accept invite as the intentionally
+    softer onboarding path.
+  - **Admin Dashboard frontend (Phase C) is not started** — separate
+    spec/plan, per the design doc's explicit scope boundary. Nothing in
+    `apps/web` consumes the StaffModule API yet.
+  - RLS suite: 27 tests. Service suites: `rbac-permissions.spec.ts` (6),
+    `rbac-staff.spec.ts` (15). `apps/api` total: 70 tests, all green.
+    `pnpm drizzle-kit check` stays at "Everything's fine".
+
 ## Resolved (was brief §20 open item)
 
 **MapLibre GL + OSM raster tiles — decided by Festo 2026-07-08.** No Mapbox, no map

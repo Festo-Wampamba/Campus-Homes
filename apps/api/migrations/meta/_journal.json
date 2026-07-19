@@ -71,6 +71,13 @@
       "when": 1784436398274,
       "tag": "0009_dark_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784474049210,
+      "tag": "0011_rbac",
+      "breakpoints": true
     }
   ]
 }

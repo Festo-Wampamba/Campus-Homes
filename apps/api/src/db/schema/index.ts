@@ -7,3 +7,4 @@ export * from './saved-listing';
 export * from './reservation';
 export * from './trust';
 export * from './comms';
+export * from './rbac';

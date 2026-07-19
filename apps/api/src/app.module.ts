@@ -14,6 +14,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OpsModule } from './modules/ops/ops.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
+import { StaffModule } from './modules/staff/staff.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     ChatModule,
     JobsModule,
     UploadsModule,
+    StaffModule,
   ],
   controllers: [HealthController],
   providers: [

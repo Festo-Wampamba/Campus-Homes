@@ -5,6 +5,20 @@
 export const USER_ROLES = ['student', 'landlord', 'ops_inspector', 'ops_lead', 'admin'] as const;
 export const USER_STATUSES = ['active', 'suspended', 'pending'] as const;
 
+// Fine-grained staff roles for the RBAC layer — distinct from USER_ROLES.
+// These map onto users.role via a fixed table (apps/api/src/modules/staff/
+// staff.service.ts ROLE_TO_DB_ROLE); they don't replace the DB enum.
+export const STAFF_ROLE_KEYS = [
+  'super_admin',
+  'platform_admin',
+  'ops_lead',
+  'ops_inspector',
+  'finance_admin',
+  'support_admin',
+  'auditor',
+] as const;
+export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
+
 export const UNIVERSITIES = ['MUK', 'MUBS', 'KIU', 'KYU', 'other'] as const;
 export const OPS_TEAMS = ['inspector', 'lead'] as const;
 export const CATCHMENTS = ['MUK', 'MUBS', 'KIU', 'KYU', 'all'] as const;
