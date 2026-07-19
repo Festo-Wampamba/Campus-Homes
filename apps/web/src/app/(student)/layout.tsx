@@ -13,6 +13,8 @@ export default async function StudentLayout({
         { label: "Find housing", href: "/search" },
         { label: "My reservations", href: "/reservations" },
         { label: "Messages", href: "/messages" },
+        { label: "Favourites", href: "/saved" },
+        { label: "Recently viewed", href: "/recently-viewed" },
       ]}
     >
       {children}

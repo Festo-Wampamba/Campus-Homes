@@ -1,8 +1,17 @@
 import Link from "next/link";
 
+import { getServerSession } from "@/lib/session";
+import { AccountMenu } from "@/components/shell/account-menu";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 
-function SiteHeader() {
+// Session-aware even on the marketing pages — a signed-in student browsing
+// home/search/listing-detail must see that they're signed in, not just the
+// portal pages (session.ts's getServerSession() is safe to call from any
+// server component, same helper the portal layouts already use).
+async function SiteHeader() {
+  const session = await getServerSession();
+
   return (
     <header className="sticky top-0 z-(--z-sticky) border-b border-border bg-background/95 backdrop-blur-sm">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
@@ -22,12 +31,17 @@ function SiteHeader() {
           >
             For landlords
           </Link>
-          <Link
-            href="/sign-in"
-            className="inline-flex h-9 items-center whitespace-nowrap rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700 sm:px-4"
-          >
-            Sign in
-          </Link>
+          <ThemeToggle />
+          {session ? (
+            <AccountMenu user={session.user} />
+          ) : (
+            <Link
+              href="/sign-in"
+              className="inline-flex h-9 items-center whitespace-nowrap rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700 sm:px-4"
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
       </div>
     </header>

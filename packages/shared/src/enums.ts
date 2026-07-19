@@ -16,6 +16,11 @@ export const PROPERTY_TYPES = ['hostel'] as const;
 export const PROPERTY_STATUSES = ['pending_kyc', 'active', 'suspended'] as const;
 export const DOC_TYPES = ['title_deed', 'tenancy', 'authorization', 'other'] as const;
 
+// A listing's inventory is priced per room type, not as one flat price — a
+// hostel can offer several categories at once (e.g. 30 singles at one price,
+// 40 doubles at another), each backed by any number of individual units.
+export const ROOM_CATEGORIES = ['single', 'double', 'triple', 'quad', 'other'] as const;
+
 export const VISIT_RESULTS = ['pending', 'passed', 'failed'] as const;
 export const LISTING_STATUSES = [
   'draft',
@@ -77,6 +82,7 @@ export type KycStatus = (typeof KYC_STATUSES)[number];
 export type PropertyType = (typeof PROPERTY_TYPES)[number];
 export type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
 export type DocType = (typeof DOC_TYPES)[number];
+export type RoomCategory = (typeof ROOM_CATEGORIES)[number];
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];

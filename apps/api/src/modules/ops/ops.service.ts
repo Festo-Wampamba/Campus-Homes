@@ -9,25 +9,43 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 
 import type {
   IssueStrikeInput,
+  OpsKycDecisionInput,
   PublishListingInput,
   ScheduleVisitInput,
   SyncVisitInput,
+  University,
 } from '@campushomes/shared';
 
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import {
+  campusPhotos,
   landlordStrikes,
+  landlords,
+  listingPhotos,
   listingVersions,
   listings,
   opsStaff,
+  properties,
   semesters,
   units,
   users,
   verificationVisits,
 } from '../../db/schema';
 import { AuditService } from './audit.service';
+
+/** Promoting a visit's staged photos into listing_photos at publish time is
+ * a system operation, not a fresh "ops uploads a photo" action — the
+ * original inspector captured them, but the ops_lead publishing wasn't the
+ * one who ran the upload. listing_photos_ops_insert (0001) requires
+ * `captured_by = app_user_id()`, which would force mis-attributing the
+ * photos to whichever lead happens to publish; service_role sidesteps that
+ * so `captured_by` stays the real inspector's id. */
+const SERVICE_CTX: RlsContext = {
+  userId: '00000000-0000-0000-0000-000000000000',
+  role: 'service_role',
+};
 
 @Injectable()
 export class OpsService {
@@ -160,6 +178,7 @@ export class OpsService {
           result: input.result,
           failureReason: input.failureReason,
           clientIdempotencyKey: input.clientIdempotencyKey,
+          photoStorageKeys: input.photoStorageKeys,
         })
         .where(eq(verificationVisits.id, input.visitId))
         .returning();
@@ -195,8 +214,11 @@ export class OpsService {
 
   /** Listing publish (§9 flow 3): one transaction inserts the immutable
    * version snapshot, points the listing at it and flips status to verified.
-   * The 6-component DB trigger independently guards the flip. */
+   * The 6-component DB trigger independently guards the flip. Each unit
+   * carries its own room-category price now — the version's headline price
+   * is derived as the cheapest category, not entered directly by Ops. */
   async publishListing(ctx: RlsContext, input: PublishListingInput) {
+    const startingPriceUgx = Math.min(...input.units.map((u) => u.pricePerTermUgx));
     const published = await this.rlsDb.run(ctx, async (db) => {
       const listing = await db.query.listings.findFirst({
         where: eq(listings.id, input.listingId),
@@ -207,6 +229,15 @@ export class OpsService {
       if (listing.status === 'verified') {
         throw new ConflictException('Listing is already verified');
       }
+      // The visit whose photos (staged at sync time) get promoted below —
+      // the most recently approved, passed visit for this property.
+      const approvedVisit = await db.query.verificationVisits.findFirst({
+        where: and(
+          eq(verificationVisits.propertyId, listing.propertyId),
+          eq(verificationVisits.result, 'passed'),
+        ),
+        orderBy: (v, ops) => [ops.desc(v.approvedAt)],
+      });
       const [{ next }] = (
         await db.execute(
           sql`SELECT COALESCE(MAX(version_number), 0) + 1 AS next
@@ -220,7 +251,7 @@ export class OpsService {
         .values({
           listingId: input.listingId,
           versionNumber: Number(next),
-          pricePerTermUgx: input.pricePerTermUgx,
+          pricePerTermUgx: startingPriceUgx,
           amenities: input.amenities,
           description: input.description,
           verifiedAt: new Date(),
@@ -247,23 +278,129 @@ export class OpsService {
         .returning(),
       );
 
-      if (input.units.length > 0) {
-        await db.insert(units).values(
-          input.units.map((u) => ({
-            listingId: input.listingId,
-            label: u.label,
-            capacity: u.capacity,
-            availableForSemesterId: listing.semesterId,
-          })),
-        );
-      }
-      return { listing: updated, version };
+      await db.insert(units).values(
+        input.units.map((u) => ({
+          listingId: input.listingId,
+          label: u.label,
+          capacity: u.capacity,
+          roomCategory: u.roomCategory,
+          pricePerTermUgx: u.pricePerTermUgx,
+          availableForSemesterId: listing.semesterId,
+        })),
+      );
+      return { listing: updated, version, approvedVisit };
     });
     await this.audit.record(ctx, 'listing.publish', 'listing', input.listingId, {
       versionId: published.version.id,
-      priceUgx: input.pricePerTermUgx,
+      priceUgx: startingPriceUgx,
     });
+
+    // Promote the visit's staged photos (uploaded at sync time) now that a
+    // listing_version — the FK they attach to — finally exists. A visit with
+    // no photos staged, or missing GPS (shouldn't happen: the inspection form
+    // requires GPS before a visit can even be submitted), is skipped rather
+    // than blocking the publish itself on it.
+    const visit = published.approvedVisit;
+    const photoKeys = (visit?.photoStorageKeys ?? []) as string[];
+    const gpsLat = visit?.visitGpsLat;
+    const gpsLon = visit?.visitGpsLon;
+    if (visit && photoKeys.length > 0 && gpsLat != null && gpsLon != null) {
+      await this.rlsDb.run(SERVICE_CTX, (db) =>
+        db.insert(listingPhotos).values(
+          photoKeys.map((storageKey, i) => ({
+            listingVersionId: published.version.id,
+            storageKey,
+            capturedBy: visit.inspectorId,
+            gpsLat,
+            gpsLon,
+            capturedAt: visit.completedAt ?? new Date(),
+            isPrimary: i === 0,
+            sortOrder: i,
+          })),
+        ),
+      );
+    }
+
     return published;
+  }
+
+  /** Listing + its property for the publish form — lets Ops pre-fill room
+   * categories from the landlord's proposal instead of typing from scratch. */
+  async listingForPublish(ctx: RlsContext, listingId: string) {
+    return this.rlsDb.run(ctx, async (db) => {
+      const listing = await db.query.listings.findFirst({
+        where: eq(listings.id, listingId),
+      });
+      if (!listing) {
+        throw new NotFoundException('Listing not found');
+      }
+      const [property] = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.id, listing.propertyId));
+      return { listing, property };
+    });
+  }
+
+  /** Landlords awaiting KYC review, oldest first. landlords_read already
+   * grants app_is_lead() a read, same as users_read — no service_role
+   * needed, unlike the write below. */
+  kycQueue(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT l.user_id, l.legal_name, l.kyc_status, l.id_doc_storage_key, l.created_at,
+                u.name, u.phone, u.email
+         FROM landlords l
+         JOIN users u ON u.id = l.user_id
+         WHERE l.kyc_status = 'pending'
+         ORDER BY l.created_at ASC`,
+      );
+      return res.rows as unknown[];
+    });
+  }
+
+  /** Approve/reject a landlord's KYC. landlords has no ops UPDATE policy
+   * (only the owner's own "while pending" edit and svc_all) so this runs as
+   * service_role, same as the audit trail it writes to. */
+  async decideKyc(ctx: RlsContext, landlordUserId: string, input: OpsKycDecisionInput) {
+    const landlord = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+      const [row] = await db
+        .update(landlords)
+        .set({
+          kycStatus: input.decision,
+          kycReviewedBy: ctx.userId,
+          kycReviewedAt: new Date(),
+        })
+        .where(eq(landlords.userId, landlordUserId))
+        .returning();
+      if (!row) {
+        throw new NotFoundException('Landlord not found');
+      }
+      return row;
+    });
+    await this.audit.record(ctx, 'landlord.kyc_decision', 'landlord', landlordUserId, {
+      decision: input.decision,
+    });
+    return landlord;
+  }
+
+  /** Upsert — Ops can replace a campus's landing-page photo any time.
+   * Not audit-logged: audit_log.target_id is a uuid and campus_photos has no
+   * uuid key to point at (its PK is the university code itself) — this is
+   * decorative content, not a §17 money/strike/verification mutation. */
+  setCampusPhoto(ctx: RlsContext, university: University, storageKey: string) {
+    return this.rlsDb.run(ctx, async (db) =>
+      firstRow(
+        await db
+          .insert(campusPhotos)
+          .values({ university, storageKey, uploadedBy: ctx.userId })
+          .onConflictDoUpdate({
+            target: campusPhotos.university,
+            set: { storageKey, uploadedBy: ctx.userId, uploadedAt: new Date() },
+          })
+          .returning(),
+      ),
+    );
   }
 
   async issueStrike(ctx: RlsContext, input: IssueStrikeInput) {

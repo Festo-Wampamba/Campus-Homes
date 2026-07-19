@@ -1,9 +1,14 @@
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
-// Listing photos are stored as Cloudinary public IDs (`storage_key`).
-// Returns null when the cloud name isn't configured yet — callers render a
-// placeholder instead of a broken image.
+// Listing photos are normally stored as Cloudinary public IDs (`storage_key`),
+// but seed/demo data stores plain hotlinked sample-photo URLs instead (no
+// Cloudinary account needed for local dev) — pass those through unchanged.
+// Returns null when neither applies (no cloud name configured yet) — callers
+// render a placeholder instead of a broken image.
 export function listingPhotoUrl(storageKey: string, width = 800): string | null {
+  if (storageKey.startsWith("http://") || storageKey.startsWith("https://")) {
+    return storageKey;
+  }
   if (!CLOUD_NAME) return null;
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/c_fill,w_${width},q_auto,f_auto/${storageKey}`;
 }

@@ -56,13 +56,20 @@ export class FlutterwavePayments implements PaymentsAdapter {
   }
 }
 
-/** Dev/test stand-in while the gateway account is pending (TECH.md). Returns a
- * fake checkout URL; webhook flow is exercised by posting the payload manually. */
+/** Dev/test stand-in while the gateway account is pending (TECH.md). Points
+ * at our own frontend's stub checkout page (a real, clickable route — not a
+ * fake external domain that just 404s the DNS lookup) so the whole reserve
+ * flow, including "paying", is actually testable end-to-end in a browser.
+ * That page posts to POST /webhooks/dev-simulate, which reuses the exact
+ * same applyPaymentWebhook() a real Flutterwave webhook would hit. */
 export class StubPayments implements PaymentsAdapter {
+  constructor(private readonly webOrigin: string) {}
+
   initiate(input: InitiatePaymentInput): Promise<InitiatePaymentResult> {
-    return Promise.resolve({
-      checkoutUrl: `https://checkout.stub.local/pay/${input.txRef}`,
-    });
+    const url = new URL(`/dev/checkout/${input.txRef}`, this.webOrigin);
+    url.searchParams.set('amount', String(input.amountUgx));
+    url.searchParams.set('redirect', input.redirectUrl);
+    return Promise.resolve({ checkoutUrl: url.toString() });
   }
 
   refund(providerTxnId: string): Promise<{ providerRefundId: string }> {

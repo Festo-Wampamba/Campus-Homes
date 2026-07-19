@@ -40,7 +40,22 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${openSans.variable} ${poppins.variable} h-full`}
+      // The no-FOUC script below adds `.dark` to this element before React
+      // hydrates (it must run pre-paint to avoid a light-then-dark flash),
+      // so the class list legitimately differs from what was server-rendered
+      // — expected, not a bug, so don't let React warn about it.
+      suppressHydrationWarning
     >
+      <head>
+        {/* Applies the persisted theme before first paint — avoids a
+            light-then-dark flash. Kept in sync with ThemeToggle. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()",
+          }}
+        />
+      </head>
       <body className="flex min-h-full flex-col">
         <NextIntlClientProvider>
           <Providers>{children}</Providers>

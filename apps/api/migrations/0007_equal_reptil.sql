@@ -1,0 +1,1 @@
+ALTER TABLE "properties" ADD COLUMN "cover_photo_key" text;

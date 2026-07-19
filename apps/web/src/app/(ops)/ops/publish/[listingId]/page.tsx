@@ -13,7 +13,7 @@ export default async function PublishListingPage({
   return (
     <>
       <h1 className="text-2xl">Publish listing</h1>
-      <div className="mt-6 max-w-lg">
+      <div className="mt-6 max-w-2xl">
         <PublishListingForm listingId={listingId} />
       </div>
     </>
