@@ -344,3 +344,59 @@ describe('auth infra (0002): accounts / verifications / sessions are service-onl
     expect(res.rowCount).toBe(1);
   });
 });
+
+describe('rbac (0003): roles/permissions/assignments are service-only', () => {
+  let opsLeadRoleId: string;
+  let superAdminRoleId: string;
+  let assignmentId: string;
+
+  beforeAll(async () => {
+    opsLeadRoleId = await seed(`SELECT id FROM roles WHERE key = 'ops_lead'`);
+    superAdminRoleId = await seed(`SELECT id FROM roles WHERE key = 'super_admin'`);
+    assignmentId = await seed(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+       VALUES ($1, $2, 'catchment', 'MUK', $1, 'rls test fixture') RETURNING id`,
+      [opsLead, opsLeadRoleId],
+    );
+  });
+
+  it('a landlord cannot read role assignments', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM user_role_assignments').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('an admin-mapped identity cannot read the permission catalog directly', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'admin' }, async (c) =>
+      c.query('SELECT * FROM permissions').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord cannot insert a role assignment for themselves', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(
+          `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+           VALUES ($1, $2, 'platform_wide', $1, 'self-grant attempt')`,
+          [landlord1, superAdminRoleId],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads role assignments', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM user_role_assignments').then((r) => r.rows),
+    );
+    expect(rows.map((r) => r.id)).toContain(assignmentId);
+  });
+
+  it('service_role can revoke a role assignment', async () => {
+    const res = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`UPDATE user_role_assignments SET revoked_at = now() WHERE id = $1`, [assignmentId]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+});
