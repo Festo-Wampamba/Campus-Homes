@@ -75,7 +75,12 @@ export class StaffService {
     );
   }
 
-  async deactivate(actorCtx: RlsContext, actorAssignments: RoleAssignment[], targetUserId: string) {
+  async deactivate(
+    actorCtx: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    targetUserId: string,
+  ) {
     if (actorCtx.userId === targetUserId) {
       throw new ForbiddenException('Cannot deactivate yourself');
     }
@@ -84,9 +89,21 @@ export class StaffService {
       if (!target) throw new NotFoundException('Staff member not found');
 
       const targetAssignments = await db
-        .select({ scopeType: userRoleAssignments.scopeType, scopeId: userRoleAssignments.scopeId })
+        .select({
+          scopeType: userRoleAssignments.scopeType,
+          scopeId: userRoleAssignments.scopeId,
+          roleKey: roles.key,
+        })
         .from(userRoleAssignments)
+        .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
         .where(and(eq(userRoleAssignments.userId, targetUserId), isNull(userRoleAssignments.revokedAt)));
+
+      if (
+        targetAssignments.some((a) => a.roleKey === 'super_admin') &&
+        !actorPermissions.has('roles.manage_super_admin')
+      ) {
+        throw new ForbiddenException('Only a Super Admin can deactivate a Super Admin');
+      }
       const covered = targetAssignments.some((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId));
       if (!covered) {
         throw new ForbiddenException('Cannot deactivate a staff member outside your own scope');
@@ -154,13 +171,26 @@ export class StaffService {
     });
   }
 
-  revokeRole(actorCtx: RlsContext, actorAssignments: RoleAssignment[], assignmentId: string) {
+  revokeRole(
+    actorCtx: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    assignmentId: string,
+  ) {
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
       const [target] = await db
-        .select({ scopeType: userRoleAssignments.scopeType, scopeId: userRoleAssignments.scopeId })
+        .select({
+          scopeType: userRoleAssignments.scopeType,
+          scopeId: userRoleAssignments.scopeId,
+          roleKey: roles.key,
+        })
         .from(userRoleAssignments)
+        .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
         .where(and(eq(userRoleAssignments.id, assignmentId), isNull(userRoleAssignments.revokedAt)));
       if (!target) throw new NotFoundException('Active role assignment not found');
+      if (target.roleKey === 'super_admin' && !actorPermissions.has('roles.manage_super_admin')) {
+        throw new ForbiddenException('Only a Super Admin can revoke a Super Admin role assignment');
+      }
       if (!hasCoveringScope(actorAssignments, target.scopeType, target.scopeId)) {
         throw new ForbiddenException('Cannot revoke a role assignment outside your own scope');
       }

@@ -160,6 +160,7 @@ describe('StaffService.invite + revokeRole round trip', () => {
     );
     const revoked = await staff.revokeRole(
       superAdminCtx(),
+      new Set(['roles.revoke']),
       [{ scopeType: 'platform_wide', scopeId: null }],
       rows[0].id as string,
     );
@@ -170,7 +171,12 @@ describe('StaffService.invite + revokeRole round trip', () => {
 describe('StaffService.deactivate — separation of duty', () => {
   it('blocks an actor from deactivating themselves', async () => {
     await expect(
-      staff.deactivate(superAdminCtx(), [{ scopeType: 'platform_wide', scopeId: null }], superAdmin),
+      staff.deactivate(
+        superAdminCtx(),
+        new Set(['staff.deactivate']),
+        [{ scopeType: 'platform_wide', scopeId: null }],
+        superAdmin,
+      ),
     ).rejects.toThrow('Cannot deactivate yourself');
   });
 
@@ -187,7 +193,12 @@ describe('StaffService.deactivate — separation of duty', () => {
       { roleKey: 'ops_lead', scopeType: 'catchment', scopeId: 'MUK', reason: 'seed' },
     );
     await expect(
-      staff.deactivate(platformAdminCtx(), [{ scopeType: 'catchment', scopeId: 'MUBS' }], target),
+      staff.deactivate(
+        platformAdminCtx(),
+        new Set(['staff.deactivate']),
+        [{ scopeType: 'catchment', scopeId: 'MUBS' }],
+        target,
+      ),
     ).rejects.toThrow('Cannot deactivate a staff member outside your own scope');
   });
 
@@ -197,8 +208,55 @@ describe('StaffService.deactivate — separation of duty', () => {
       ['+256700000310'],
     );
     await expect(
-      staff.deactivate(superAdminCtx(), [{ scopeType: 'catchment', scopeId: 'MUK' }], target),
+      staff.deactivate(
+        superAdminCtx(),
+        new Set(['staff.deactivate']),
+        [{ scopeType: 'catchment', scopeId: 'MUK' }],
+        target,
+      ),
     ).rejects.toThrow('Cannot deactivate a staff member outside your own scope');
+  });
+
+  it('blocks a platform_wide actor without roles.manage_super_admin from deactivating a Super Admin', async () => {
+    const superAdminRoleId = await seed(`SELECT id FROM roles WHERE key = 'super_admin'`);
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Target7') RETURNING id`,
+      ['+256700000311'],
+    );
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+       VALUES ($1, $2, 'platform_wide', $3, 'seed')`,
+      [target, superAdminRoleId, superAdmin],
+    );
+    await expect(
+      staff.deactivate(
+        platformAdminCtx(),
+        new Set(['staff.deactivate']),
+        [{ scopeType: 'platform_wide', scopeId: null }],
+        target,
+      ),
+    ).rejects.toThrow('Only a Super Admin can deactivate a Super Admin');
+  });
+
+  it('blocks a platform_wide actor without roles.manage_super_admin from revoking a Super Admin role assignment', async () => {
+    const superAdminRoleId = await seed(`SELECT id FROM roles WHERE key = 'super_admin'`);
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Target8') RETURNING id`,
+      ['+256700000312'],
+    );
+    const assignmentId = await seed(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+       VALUES ($1, $2, 'platform_wide', $3, 'seed') RETURNING id`,
+      [target, superAdminRoleId, superAdmin],
+    );
+    await expect(
+      staff.revokeRole(
+        platformAdminCtx(),
+        new Set(['roles.revoke']),
+        [{ scopeType: 'platform_wide', scopeId: null }],
+        assignmentId,
+      ),
+    ).rejects.toThrow('Only a Super Admin can revoke a Super Admin role assignment');
   });
 });
 
@@ -217,6 +275,7 @@ describe('StaffService.deactivate and list', () => {
     );
     const updated = await staff.deactivate(
       superAdminCtx(),
+      new Set(['staff.deactivate']),
       [{ scopeType: 'platform_wide', scopeId: null }],
       target,
     );
