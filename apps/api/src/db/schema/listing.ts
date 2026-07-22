@@ -91,6 +91,12 @@ export const units = pgTable('units', {
   availableForSemesterId: uuid('available_for_semester_id')
     .notNull()
     .references(() => semesters.id),
+  operationalStatus: text('operational_status').notNull().default('available'),
+  buildingName: text('building_name'),
+  floorLabel: text('floor_label'),
+  electricityMeterType: text('electricity_meter_type'),
+  amenities: jsonb('amenities').notNull().default({}),
+  notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

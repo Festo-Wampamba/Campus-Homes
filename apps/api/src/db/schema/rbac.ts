@@ -73,6 +73,25 @@ export const userRoleAssignments = pgTable(
   ],
 );
 
+export const userPermissionGrants = pgTable('user_permission_grants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  permissionId: uuid('permission_id')
+    .notNull()
+    .references(() => permissions.id, { onDelete: 'cascade' }),
+  scopeType: text('scope_type').notNull().default('platform_wide'),
+  scopeId: text('scope_id'),
+  validFrom: timestamp('valid_from', { withTimezone: true }).notNull().defaultNow(),
+  validUntil: timestamp('valid_until', { withTimezone: true }),
+  grantedBy: uuid('granted_by').notNull().references(() => users.id),
+  reason: text('reason').notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokedBy: uuid('revoked_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Schema only, no consumer yet in this phase — see design doc "Explicitly deferred".
 export const approvalRequests = pgTable('approval_requests', {
   id: uuid('id').primaryKey().defaultRandom(),

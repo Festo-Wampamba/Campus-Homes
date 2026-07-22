@@ -78,6 +78,34 @@
       "when": 1784474049210,
       "tag": "0011_rbac",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784535189987,
+      "tag": "0012_role_permission_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784541600000,
+      "tag": "0013_admin_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784552400000,
+      "tag": "0014_admin_user_semesters",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784556000000,
+      "tag": "0015_semester_archiving",
+      "breakpoints": true
     }
   ]
 }

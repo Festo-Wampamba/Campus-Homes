@@ -395,16 +395,14 @@ export class ListingsService {
    * still render, which a join FROM properties would silently drop. */
   campuses() {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      const [counts, photos] = await Promise.all([
-        client.query(
+      const counts = await client.query(
           `SELECT p.catchment AS university,
                   COUNT(*) FILTER (WHERE l.status = 'verified') AS hostel_count
            FROM properties p
            LEFT JOIN listings l ON l.property_id = p.id
            GROUP BY p.catchment`,
-        ),
-        client.query(`SELECT university, storage_key AS photo_storage_key FROM campus_photos`),
-      ]);
+        );
+      const photos = await client.query(`SELECT university, storage_key AS photo_storage_key FROM campus_photos`);
       const photoByUniversity = new Map(
         (photos.rows as { university: string; photo_storage_key: string }[]).map((p) => [
           p.university,

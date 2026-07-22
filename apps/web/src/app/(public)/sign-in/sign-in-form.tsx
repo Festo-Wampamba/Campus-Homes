@@ -21,7 +21,7 @@ const HOME_BY_ROLE: Record<string, string> = {
   landlord: "/landlord",
   ops_inspector: "/ops",
   ops_lead: "/ops",
-  admin: "/ops",
+  admin: "/admin",
 };
 
 const ROLES: {
@@ -65,6 +65,26 @@ const ROLES: {
 function toE164(input: string): string {
   const digits = input.replace(/[^\d]/g, "");
   return `+256${digits.replace(/^0/, "")}`;
+}
+
+type AuthFailure = {
+  status?: number;
+  code?: string;
+  message?: string;
+};
+
+function staffAuthFailureMessage(failure: unknown): string {
+  const error = failure as AuthFailure | null;
+  if (error?.status === 401 || error?.code === "INVALID_EMAIL_OR_PASSWORD") {
+    return "Email or password is incorrect.";
+  }
+  if (error?.status && error.status >= 500) {
+    return "Authentication is temporarily unavailable. Please try again shortly.";
+  }
+  if (failure instanceof TypeError) {
+    return "Cannot reach the CampusHomes API on port 4000. Start the local services and try again.";
+  }
+  return error?.message ?? "Sign-in failed. Please try again.";
 }
 
 function OtpBoxes({
@@ -221,13 +241,18 @@ export function SignInForm() {
     e.preventDefault();
     setError(null);
     setPending(true);
-    const { error } = await authClient.signIn.email({ email, password });
-    if (error) {
+    try {
+      const { error } = await authClient.signIn.email({ email, password });
+      if (error) {
+        setError(staffAuthFailureMessage(error));
+        return;
+      }
+      await routeBySession();
+    } catch (error) {
+      setError(staffAuthFailureMessage(error));
+    } finally {
       setPending(false);
-      setError(error.message ?? "Sign-in failed — check your details.");
-      return;
     }
-    await routeBySession();
   }
 
   return (

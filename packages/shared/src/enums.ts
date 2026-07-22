@@ -2,7 +2,15 @@
 // Drizzle pgEnum definitions and Zod schemas both derive from these arrays,
 // so a value can never exist in the DB without existing in validation, or vice versa.
 
-export const USER_ROLES = ['student', 'landlord', 'ops_inspector', 'ops_lead', 'admin'] as const;
+export const USER_ROLES = [
+  'student',
+  'landlord',
+  'custodian',
+  'property_worker',
+  'ops_inspector',
+  'ops_lead',
+  'admin',
+] as const;
 export const USER_STATUSES = ['active', 'suspended', 'pending'] as const;
 
 // Fine-grained staff roles for the RBAC layer — distinct from USER_ROLES.
@@ -19,6 +27,38 @@ export const STAFF_ROLE_KEYS = [
 ] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
+export const PROPERTY_ROLE_KEYS = ['landlord', 'custodian', 'property_worker', 'student'] as const;
+export type PropertyRoleKey = (typeof PROPERTY_ROLE_KEYS)[number];
+export const ASSIGNABLE_ROLE_KEYS = [...STAFF_ROLE_KEYS, ...PROPERTY_ROLE_KEYS] as const;
+export type AssignableRoleKey = (typeof ASSIGNABLE_ROLE_KEYS)[number];
+
+export const PROPERTY_MEMBERSHIP_ROLES = [
+  'landlord',
+  'custodian',
+  'property_worker',
+  'resident_student',
+] as const;
+export const WORKER_TYPES = [
+  'cleaner',
+  'security_officer',
+  'maintenance_worker',
+  'general_worker',
+] as const;
+export const PROPERTY_OPERATIONAL_STATUSES = [
+  'open',
+  'temporarily_closed',
+  'under_renovation',
+  'emergency_closure',
+] as const;
+export const UNIT_OPERATIONAL_STATUSES = [
+  'available',
+  'held',
+  'occupied',
+  'vacant',
+  'under_maintenance',
+  'blocked',
+] as const;
+
 export const UNIVERSITIES = ['MUK', 'MUBS', 'KIU', 'KYU', 'other'] as const;
 export const OPS_TEAMS = ['inspector', 'lead'] as const;
 export const CATCHMENTS = ['MUK', 'MUBS', 'KIU', 'KYU', 'all'] as const;
@@ -26,14 +66,32 @@ export const CATCHMENTS = ['MUK', 'MUBS', 'KIU', 'KYU', 'all'] as const;
 export const KYC_STATUSES = ['pending', 'verified', 'rejected'] as const;
 export const TOKEN_TYPES = ['phone_otp', 'step_up_otp'] as const;
 
-export const PROPERTY_TYPES = ['hostel'] as const;
+export const PROPERTY_TYPES = [
+  'hostel',
+  'apartment',
+  'hall',
+  'boarding_house',
+  'shared_house',
+  'studio',
+  'other',
+] as const;
 export const PROPERTY_STATUSES = ['pending_kyc', 'active', 'suspended'] as const;
 export const DOC_TYPES = ['title_deed', 'tenancy', 'authorization', 'other'] as const;
 
 // A listing's inventory is priced per room type, not as one flat price — a
 // hostel can offer several categories at once (e.g. 30 singles at one price,
 // 40 doubles at another), each backed by any number of individual units.
-export const ROOM_CATEGORIES = ['single', 'double', 'triple', 'quad', 'other'] as const;
+export const ROOM_CATEGORIES = [
+  'single',
+  'double',
+  'triple',
+  'quad',
+  'studio',
+  'self_contained',
+  'bedsitter',
+  'dormitory',
+  'other',
+] as const;
 
 export const VISIT_RESULTS = ['pending', 'passed', 'failed'] as const;
 export const LISTING_STATUSES = [
@@ -91,6 +149,10 @@ export const VERIFICATION_CHECKLIST_COMPONENTS = [
 
 export type UserRole = (typeof USER_ROLES)[number];
 export type UserStatus = (typeof USER_STATUSES)[number];
+export type PropertyMembershipRole = (typeof PROPERTY_MEMBERSHIP_ROLES)[number];
+export type WorkerType = (typeof WORKER_TYPES)[number];
+export type PropertyOperationalStatus = (typeof PROPERTY_OPERATIONAL_STATUSES)[number];
+export type UnitOperationalStatus = (typeof UNIT_OPERATIONAL_STATUSES)[number];
 export type University = (typeof UNIVERSITIES)[number];
 export type KycStatus = (typeof KYC_STATUSES)[number];
 export type PropertyType = (typeof PROPERTY_TYPES)[number];

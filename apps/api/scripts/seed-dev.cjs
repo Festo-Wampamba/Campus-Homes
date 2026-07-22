@@ -124,10 +124,10 @@ async function main() {
 
     const adminId = await insertUser(client, {
       phone: '+256700000005',
-      email: 'admin@campushomes.ug',
+      email: 'festo@campushomes.com',
       role: 'admin',
       status: 'active',
-      name: 'Admin One',
+      name: 'Festo',
     });
 
     // Email+password sign-in for every role, not just staff — same
@@ -135,9 +135,17 @@ async function main() {
     // verifies against the real emailAndPassword sign-in path
     // (auth.config.ts). Phone-OTP sign-in still works too (dev OTPs print to
     // this server's console — messaging.adapter.ts ConsoleMessaging).
-    for (const userId of [studentId, landlordId, opsLeadId, inspectorId, adminId]) {
+    for (const userId of [studentId, landlordId, opsLeadId, inspectorId]) {
       await insertCredentialAccount(client, userId, DEV_PASSWORD);
     }
+    await insertCredentialAccount(client, adminId, 'admin');
+
+    await client.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+       SELECT $1, id, 'platform_wide', $1, 'Local development super-admin owner'
+       FROM roles WHERE key = 'super_admin'`,
+      [adminId],
+    );
 
     await client.query(
       `INSERT INTO students (user_id, university, year_of_study) VALUES ($1, 'MUK', 2)`,
@@ -613,15 +621,15 @@ async function main() {
     }, null, 2));
 
     console.log(`
-Sign in at /sign-in with any of these — password is the same for all:
+Sign in at /sign-in with these local-development accounts:
 
-  Password: ${DEV_PASSWORD}
+  Student/landlord/ops password: ${DEV_PASSWORD}
 
   Student        student1@campushomes.ug     (or phone +256700000001 via OTP)
   Landlord       landlord1@campushomes.ug    (or phone +256700000002 via OTP)
   Ops lead       opslead@campushomes.ug
   Ops inspector  inspector@campushomes.ug
-  Admin          admin@campushomes.ug
+  Super Admin    festo@campushomes.com       (password: admin)
 
 Phone-OTP still works too — dev OTP codes print to this terminal
 (messaging.adapter.ts ConsoleMessaging), no real SMS sent.

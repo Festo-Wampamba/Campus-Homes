@@ -17,6 +17,7 @@ const rlsDb = new RlsDb(pool);
 
 let superAdmin: string;
 let plainOpsLead: string;
+let directGrantUser: string;
 
 async function seed(sql: string, params: unknown[] = []): Promise<string> {
   const res = await pool.query(sql, params);
@@ -34,12 +35,22 @@ beforeAll(async () => {
     `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'No Assignment') RETURNING id`,
     ['+256700000202'],
   );
+  directGrantUser = await seed(
+    `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Direct Grant') RETURNING id`,
+    ['+256700000203'],
+  );
 
   const superAdminRoleId = await seed(`SELECT id FROM roles WHERE key = 'super_admin'`);
   await pool.query(
     `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
      VALUES ($1, $2, 'platform_wide', $1, 'seed')`,
     [superAdmin, superAdminRoleId],
+  );
+  await pool.query(
+    `INSERT INTO user_permission_grants (user_id, permission_id, scope_type, scope_id, granted_by, reason)
+     SELECT $1, id, 'property', $2, $3, 'test direct grant'
+     FROM permissions WHERE key = 'users.update'`,
+    [directGrantUser, '11111111-1111-1111-1111-111111111111', superAdmin],
   );
 });
 
@@ -62,6 +73,15 @@ describe('loadPermissions', () => {
     const { permissions } = await loadPermissions(rlsDb, plainOpsLead);
     expect(permissions.size).toBe(0);
   });
+
+  it('loads direct user grants with their exact scope', async () => {
+    const { permissions, assignments } = await loadPermissions(rlsDb, directGrantUser);
+    expect(permissions.has('users.update')).toBe(true);
+    expect(assignments).toContainEqual({
+      scopeType: 'property',
+      scopeId: '11111111-1111-1111-1111-111111111111',
+    });
+  });
 });
 
 describe('hasCoveringScope', () => {
@@ -75,5 +95,13 @@ describe('hasCoveringScope', () => {
 
   it('a catchment assignment for one catchment does not cover a different catchment', () => {
     expect(hasCoveringScope([{ scopeType: 'catchment', scopeId: 'MUK' }], 'catchment', 'MUBS')).toBe(false);
+  });
+
+  it('catchment:all does not grant access to every property', () => {
+    expect(hasCoveringScope([{ scopeType: 'catchment', scopeId: 'all' }], 'property', 'property-a')).toBe(false);
+  });
+
+  it('one property assignment does not cover another property', () => {
+    expect(hasCoveringScope([{ scopeType: 'property', scopeId: 'property-a' }], 'property', 'property-b')).toBe(false);
   });
 });

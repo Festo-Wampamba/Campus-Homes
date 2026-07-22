@@ -1,8 +1,10 @@
+import { sql } from 'drizzle-orm';
 import {
   date,
   jsonb,
   numeric,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -15,9 +17,14 @@ import { landlords, opsStaff, users } from './identity';
 export const semesters = pgTable('semesters', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(), // e.g. "Semester 1 2026/27"
+  university: university('university'),
+  semesterType: text('semester_type'),
+  academicYear: text('academic_year'),
+  customName: text('custom_name'),
   startsOn: date('starts_on').notNull(),
   endsOn: date('ends_on').notNull(),
   reVerificationWindowStartsOn: date('re_verification_window_starts_on').notNull(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -53,8 +60,58 @@ export const properties = pgTable('properties', {
   // detail dialog. Distinct from listing_photos, which are Ops-captured
   // during verification and only exist once a listing is published.
   coverPhotoKey: text('cover_photo_key'),
+  description: text('description'),
+  operationalStatus: text('operational_status').notNull().default('open'),
+  amenities: jsonb('amenities').notNull().default({}),
+  utilities: jsonb('utilities').notNull().default({}),
+  houseRules: jsonb('house_rules').notNull().default([]),
+  contactPhone: text('contact_phone'),
+  contactEmail: text('contact_email'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const propertyMedia = pgTable('property_media', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id')
+    .notNull()
+    .references(() => properties.id, { onDelete: 'cascade' }),
+  storageKey: text('storage_key').notNull(),
+  mediaType: text('media_type').notNull().default('image'),
+  caption: text('caption'),
+  sortOrder: smallint('sort_order').notNull().default(0),
+  uploadedBy: uuid('uploaded_by')
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const propertyMemberships = pgTable(
+  'property_memberships',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    propertyId: uuid('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    workerType: text('worker_type'),
+    status: text('status').notNull().default('active'),
+    assignedBy: uuid('assigned_by').notNull().references(() => users.id),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull().defaultNow(),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedBy: uuid('revoked_by').references(() => users.id),
+    revocationReason: text('revocation_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('property_memberships_active_uk')
+      .on(t.userId, t.propertyId, t.role)
+      .where(sql`revoked_at IS NULL`),
+  ],
+);
 
 export const propertyDocuments = pgTable('property_documents', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -6,7 +6,12 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm --filter @campushomes/api dev",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:api": "pnpm --filter @campushomes/api dev",
+    "dev:web": "pnpm --filter @campushomes/web dev",
+    "local:setup": "node ./scripts/dev.mjs --setup",
+    "local:up": "docker compose -f apps/api/docker-compose.local.yml up -d --wait",
+    "local:down": "docker compose -f apps/api/docker-compose.local.yml stop",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
