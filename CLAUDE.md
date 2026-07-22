@@ -333,9 +333,21 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
     working step-up barrier yet. Revisit when Phase B lands MFA — either
     gate invite the same way, or accept invite as the intentionally
     softer onboarding path.
-  - **Admin Dashboard frontend (Phase C) is not started** — separate
-    spec/plan, per the design doc's explicit scope boundary. Nothing in
-    `apps/web` consumes the StaffModule API yet.
+  - **Thin admin portal (Phase C-lite, done 2026-07-19):** first `apps/web`
+    consumer of the StaffModule API. `(admin)/admin/` route group — layout
+    `requireRole(["admin"])` + SidebarShell "Admin"; `/admin` staff table +
+    invite dialog (all 7 RBAC roles, platform_wide/catchment scope,
+    `POST /admin/staff/invite`); `/admin/audit-log` (latest 100). Sign-in
+    redirect for role=admin changed `/ops` → `/admin`; ops portal still
+    admits admin (sidebar links back to it). Deliberately NO assign/revoke/
+    deactivate UI — those endpoints 501 until Phase B MFA; one static note
+    instead of dead buttons. Known gap recorded, not fixed: invite creates
+    the users row + role assignment but NO credential account — invited
+    staff can't sign in until a password is seeded (email/password sign-up
+    is disabled). Full Phase C (resource controls) still unstarted.
+  - Local dev admin login (docker test DB only, seeded via one-off scratch
+    script, not committed): `festo@campushomes.ug` / `admin1` — role=admin,
+    super_admin RBAC assignment platform_wide.
   - RLS suite: 27 tests. Service suites: `rbac-permissions.spec.ts` (6),
     `rbac-staff.spec.ts` (15). `apps/api` total: 70 tests, all green.
     `pnpm drizzle-kit check` stays at "Everything's fine".

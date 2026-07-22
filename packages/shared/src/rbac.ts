@@ -34,3 +34,8 @@ export const inviteStaffSchema = grantRoleFieldsSchema
     path: ['email'],
   });
 export type InviteStaffInput = z.infer<typeof inviteStaffSchema>;
+
+export const updateRolePermissionsSchema = z.object({
+  permissionKeys: z.array(z.string().min(1).max(100)).max(200),
+});
+export type UpdateRolePermissionsInput = z.infer<typeof updateRolePermissionsSchema>;

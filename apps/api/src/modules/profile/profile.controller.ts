@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -49,10 +50,22 @@ export class ProfileController {
 
   @Post('profile')
   @Roles('student')
-  createProfile(@Req() req: AuthenticatedRequest, @Body() body: CreateStudentProfileDto) {
+  async createProfile(@Req() req: AuthenticatedRequest, @Body() body: CreateStudentProfileDto) {
     const ctx = rlsCtx(req);
     // RLS (students_self_insert) independently requires user_id = caller AND
     // role = student — this just satisfies the NOT NULL/PK shape.
+    const registrationsOpen = await this.rlsDb.run(
+      { userId: ctx.userId, role: 'service_role' },
+      async (_db, client) => {
+        const existing = await client.query('SELECT 1 FROM students WHERE user_id = $1', [ctx.userId]);
+        if (existing.rowCount) return true;
+        return (await client.query<{ enabled: boolean }>(`
+          SELECT coalesce((value #>> '{}')::boolean, true) AS enabled
+          FROM platform_settings WHERE key = 'registrations_open'
+        `)).rows[0]?.enabled ?? true;
+      },
+    );
+    if (!registrationsOpen) throw new ForbiddenException('New student registrations are temporarily closed');
     return this.rlsDb.run(ctx, async (db) => {
       const [row] = await db
         .insert(students)

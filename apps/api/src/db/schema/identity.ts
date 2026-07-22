@@ -1,4 +1,4 @@
-import { boolean, pgTable, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, pgTable, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { catchment, kycStatus, opsTeam, tokenType, university, userRole, userStatus } from './enums';
 
@@ -14,6 +14,17 @@ export const users = pgTable('users', {
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
   phoneVerified: boolean('phone_verified').notNull().default(false),
+  dateOfBirth: date('date_of_birth'),
+  gender: text('gender'),
+  nationality: text('nationality'),
+  address: text('address'),
+  emergencyContactName: text('emergency_contact_name'),
+  emergencyContactPhone: text('emergency_contact_phone'),
+  notes: text('notes'),
+  // Admin "delete" is deliberately recoverable: identity and audit history
+  // remain intact while all sessions and active access grants are revoked.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  deletionReason: text('deletion_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,4 +1,5 @@
-# PostGIS-enabled Postgres for local dev + RLS tests only — production is NeonDB.
+# Disposable PostGIS database for automated tests only. Test helpers truncate
+# its tables, so application development must use docker-compose.local.yml.
 services:
   db:
     image: postgis/postgis:17-3.5-alpine

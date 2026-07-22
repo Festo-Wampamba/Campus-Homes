@@ -21,7 +21,7 @@ import { moveIns, payments, refunds, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
 import { HOLD_EXPIRY_QUEUE, PAYMENTS } from './reservations.tokens';
 
-const HOLD_HOURS = 72;
+const DEFAULT_HOLD_HOURS = 72;
 
 const SERVICE = (userId: string): RlsContext => ({ userId, role: 'service_role' });
 
@@ -106,6 +106,16 @@ export class ReservationsService {
           throw new ForbiddenException('Complete your student profile before reserving a room');
         }
 
+        const policyRows = await client.query<{ key: string; value: unknown }>(`
+          SELECT key, value FROM platform_settings
+          WHERE key IN ('reservation_hold_hours', 'reservation_fee_ugx')
+        `);
+        const policy = Object.fromEntries(policyRows.rows.map((row) => [row.key, row.value]));
+        const configuredHoldHours = Number(policy.reservation_hold_hours ?? DEFAULT_HOLD_HOURS);
+        const configuredFeeUgx = Number(policy.reservation_fee_ugx ?? RESERVATION_FEE_UGX);
+        const holdHours = Number.isFinite(configuredHoldHours) ? configuredHoldHours : DEFAULT_HOLD_HOURS;
+        const feeUgx = Number.isFinite(configuredFeeUgx) ? configuredFeeUgx : RESERVATION_FEE_UGX;
+
         const now = new Date();
         const reservation = firstRow(
           await db
@@ -115,9 +125,9 @@ export class ReservationsService {
               unitId: input.unitId,
               listingVersionId,
               status: 'held',
-              feeAmountUgx: RESERVATION_FEE_UGX,
+              feeAmountUgx: feeUgx,
               holdStartsAt: now,
-              holdExpiresAt: new Date(now.getTime() + HOLD_HOURS * 3600_000),
+              holdExpiresAt: new Date(now.getTime() + holdHours * 3600_000),
               idempotencyKey: input.idempotencyKey,
             })
             .returning()
@@ -136,7 +146,7 @@ export class ReservationsService {
             .insert(payments)
             .values({
               reservationId: reservation.id,
-              amountUgx: RESERVATION_FEE_UGX,
+              amountUgx: feeUgx,
               // Actual method is chosen on the provider's checkout page; the
               // webhook overwrites this with what the student really used.
               paymentMethod: 'mtn_momo',
@@ -148,6 +158,8 @@ export class ReservationsService {
           reservation,
           payment,
           phone: (unitRes.rows[0].phone as string | null) ?? null,
+          holdHours,
+          feeUgx,
           replayed: false as const,
         };
       });
@@ -174,13 +186,13 @@ export class ReservationsService {
         await this.holdExpiryQueue.add(
           'hold_expiry',
           { reservationId: result.reservation.id },
-          { delay: HOLD_HOURS * 3600_000, jobId: `hold-expiry-${result.reservation.id}` },
+          { delay: result.holdHours * 3600_000, jobId: `hold-expiry-${result.reservation.id}` },
         );
       }
 
       await this.audit.record(ctx, 'reservation.hold', 'reservation', result.reservation.id, {
         unitId: input.unitId,
-        feeUgx: RESERVATION_FEE_UGX,
+        feeUgx: result.feeUgx,
       });
 
       return { ...result, checkoutUrl };

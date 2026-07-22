@@ -7,6 +7,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().default(4000),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).optional(),
+  // Local development uses an isolated Redis with BullMQ's required
+  // no-eviction policy, even when REDIS_URL points at a managed deployment.
+  DEV_REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
   BETTER_AUTH_API_KEY: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.string().min(1).optional(),
@@ -16,6 +19,8 @@ const envSchema = z.object({
   AFRICASTALKING_API_KEY: z.string().min(1).optional(),
   CLOUDINARY_URL: z.string().min(1).optional(),
   SENTRY_DSN: z.string().optional(),
+  POWER_BI_PUSH_URL: z.string().url().optional(),
+  POWER_BI_API_TOKEN: z.string().min(1).optional(),
   // Base URL clients are redirected back to after Flutterwave checkout.
   PAYMENT_REDIRECT_URL: z.string().min(1).default('http://localhost:3000/reservations'),
   // The web app's origin — CORS allowlist + Better Auth trustedOrigins.

@@ -21,7 +21,12 @@ export class LandlordsService {
   // work on the caller's very next request — getServerSession() re-reads the
   // user row live, no session caching to invalidate.
   apply(ctx: RlsContext) {
-    return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+    return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db, client) => {
+      const open = (await client.query<{ enabled: boolean }>(`
+        SELECT coalesce((value #>> '{}')::boolean, true) AS enabled
+        FROM platform_settings WHERE key = 'registrations_open'
+      `)).rows[0]?.enabled ?? true;
+      if (!open) throw new ForbiddenException('New landlord registrations are temporarily closed');
       const [row] = await db
         .update(users)
         .set({ role: 'landlord' })

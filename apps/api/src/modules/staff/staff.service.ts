@@ -41,8 +41,11 @@ export class StaffService {
     actorAssignments: RoleAssignment[],
     input: InviteStaffInput,
   ) {
+    this.assertGrantAllowed(actorPermissions, actorAssignments, input);
     const dbRole = ROLE_TO_DB_ROLE[input.roleKey];
-    const user = await this.rlsDb.run(SERVICE_CTX, async (db) => {
+    const result = await this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const [role] = await db.select().from(roles).where(eq(roles.key, input.roleKey));
+      if (!role) throw new NotFoundException(`Unknown role ${input.roleKey}`);
       const [row] = await db
         .insert(users)
         .values({
@@ -53,10 +56,28 @@ export class StaffService {
           status: 'pending',
         })
         .returning();
-      return row!; // plain insert, no onConflict — always returns exactly one row
+      const user = row!;
+      const [assignment] = await db
+        .insert(userRoleAssignments)
+        .values({
+          userId: user.id,
+          roleId: role.id,
+          scopeType: input.scopeType,
+          scopeId: input.scopeId ?? null,
+          assignedBy: actorCtx.userId,
+          reason: input.reason,
+          validUntil: input.validUntil ? new Date(input.validUntil) : null,
+        })
+        .returning();
+      return { user, assignment: assignment! };
     });
-    await this.grantRole(actorCtx, actorPermissions, actorAssignments, user.id, input);
-    return user;
+    await this.audit.record(actorCtx, 'staff.invite', 'user', result.user.id, {
+      roleKey: input.roleKey,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId ?? null,
+      assignmentId: result.assignment.id,
+    });
+    return result.user;
   }
 
   list() {
@@ -132,14 +153,10 @@ export class StaffService {
     if (actorCtx.userId === targetUserId) {
       throw new ForbiddenException('Cannot assign yourself a role');
     }
-    if (input.roleKey === 'super_admin' && !actorPermissions.has('roles.manage_super_admin')) {
-      throw new ForbiddenException('Only a Super Admin can grant the super_admin role');
-    }
-    if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
-      throw new ForbiddenException('Cannot grant a role outside your own scope');
-    }
-
+    this.assertGrantAllowed(actorPermissions, actorAssignments, input);
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId));
+      if (!target) throw new NotFoundException('Staff member not found');
       const [role] = await db.select().from(roles).where(eq(roles.key, input.roleKey));
       if (!role) throw new NotFoundException(`Unknown role ${input.roleKey}`);
 
@@ -160,7 +177,7 @@ export class StaffService {
           validUntil: input.validUntil ? new Date(input.validUntil) : null,
         })
         .returning();
-      const assignment = insertedAssignment!; // plain insert, no onConflict — always returns exactly one row
+      const assignment = insertedAssignment!;
 
       await this.audit.record(actorCtx, 'roles.assign', 'user_role_assignment', assignment.id, {
         targetUserId,
@@ -171,6 +188,19 @@ export class StaffService {
       });
       return assignment;
     });
+  }
+
+  private assertGrantAllowed(
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    input: GrantRoleInput | InviteStaffInput,
+  ) {
+    if (input.roleKey === 'super_admin' && !actorPermissions.has('roles.manage_super_admin')) {
+      throw new ForbiddenException('Only a Super Admin can grant the super_admin role');
+    }
+    if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
+      throw new ForbiddenException('Cannot grant a role outside your own scope');
+    }
   }
 
   revokeRole(

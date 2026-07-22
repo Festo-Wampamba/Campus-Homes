@@ -11,6 +11,39 @@ export class ApiError extends Error {
   }
 }
 
+type ApiErrorBody = {
+  message?: unknown;
+  error?: unknown;
+  errors?: unknown;
+};
+
+function issueMessage(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (!value || typeof value !== "object") return null;
+  const issue = value as { message?: unknown; path?: unknown };
+  if (typeof issue.message !== "string" || !issue.message.trim()) return null;
+  const path = Array.isArray(issue.path) ? issue.path.map(String).join(" → ") : "";
+  return path ? `${path}: ${issue.message}` : issue.message;
+}
+
+/** Extracts actionable Nest/Zod/conflict detail instead of hiding every 4xx. */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback;
+  const body = error.body as ApiErrorBody | null;
+  if (!body || typeof body !== "object") return `${fallback} (API ${error.status})`;
+
+  const errors = Array.isArray(body.errors) ? body.errors : [];
+  const detailed = errors.map(issueMessage).filter((message): message is string => Boolean(message));
+  if (detailed.length) return detailed.join(" ");
+
+  const messages = Array.isArray(body.message) ? body.message : [body.message];
+  const actionable = messages.map(issueMessage).filter((message): message is string => Boolean(message));
+  if (actionable.length && !actionable.every((message) => message === "Validation failed")) {
+    return actionable.join(" ");
+  }
+  return `${fallback} (API ${error.status})`;
+}
+
 // One thin wrapper (FRONTEND.md §5). Request/response shapes come from
 // @campushomes/shared — never hand-write them (brief §14).
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

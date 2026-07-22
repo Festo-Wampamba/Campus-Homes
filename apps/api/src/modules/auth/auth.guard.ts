@@ -29,6 +29,9 @@ export class AuthGuard implements CanActivate {
     if (!session) {
       throw new UnauthorizedException();
     }
+    if (session.user.status !== 'active') {
+      throw new UnauthorizedException('This account is not active');
+    }
     req.session = session;
     return true;
   }
