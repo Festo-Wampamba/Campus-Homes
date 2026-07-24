@@ -6,6 +6,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -13,15 +14,23 @@ import {
 import { createZodDto } from 'nestjs-zod';
 import { and, eq } from 'drizzle-orm';
 
-import { createStudentProfileSchema, saveListingSchema } from '@campushomes/shared';
+import {
+  createStudentProfileSchema,
+  saveListingSchema,
+  updateSelfParticularsSchema,
+  updateStudentProfileSchema,
+} from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
-import { savedListings, students } from '../../db/schema';
+import { savedListings, students, users } from '../../db/schema';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ListingsService } from '../listings/listings.service';
+import { updateSelfParticulars } from './particulars';
 
 class CreateStudentProfileDto extends createZodDto(createStudentProfileSchema) {}
+class UpdateStudentProfileDto extends createZodDto(updateStudentProfileSchema) {}
+class UpdateSelfParticularsDto extends createZodDto(updateSelfParticularsSchema) {}
 class SaveListingDto extends createZodDto(saveListingSchema) {}
 
 /**
@@ -43,8 +52,22 @@ export class ProfileController {
   me(@Req() req: AuthenticatedRequest) {
     const ctx = rlsCtx(req);
     return this.rlsDb.run(ctx, async (db) => {
-      const [row] = await db.select().from(students).where(eq(students.userId, ctx.userId));
-      return row ?? null;
+      const [student] = await db.select().from(students).where(eq(students.userId, ctx.userId));
+      if (!student) return null;
+      // users_read lets a caller read their own row — no service_role needed.
+      const [particulars] = await db
+        .select({
+          name: users.name,
+          dateOfBirth: users.dateOfBirth,
+          gender: users.gender,
+          nationality: users.nationality,
+          address: users.address,
+          emergencyContactName: users.emergencyContactName,
+          emergencyContactPhone: users.emergencyContactPhone,
+        })
+        .from(users)
+        .where(eq(users.id, ctx.userId));
+      return { ...student, ...particulars };
     });
   }
 
@@ -74,6 +97,26 @@ export class ProfileController {
         .returning();
       return row ?? { alreadyExists: true };
     });
+  }
+
+  @Patch('profile')
+  @Roles('student')
+  updateProfile(@Req() req: AuthenticatedRequest, @Body() body: UpdateStudentProfileDto) {
+    const ctx = rlsCtx(req);
+    return this.rlsDb.run(ctx, async (db) => {
+      const [row] = await db
+        .update(students)
+        .set({ ...(body.university !== undefined ? { university: body.university } : {}), ...(body.yearOfStudy !== undefined ? { yearOfStudy: body.yearOfStudy } : {}) })
+        .where(eq(students.userId, ctx.userId))
+        .returning();
+      return row ?? null;
+    });
+  }
+
+  @Patch('particulars')
+  @Roles('student')
+  updateParticulars(@Req() req: AuthenticatedRequest, @Body() body: UpdateSelfParticularsDto) {
+    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body);
   }
 
   @Get('saved-listings')

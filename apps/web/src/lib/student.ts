@@ -1,7 +1,7 @@
-import type { StudentProfile } from "@campushomes/shared";
+import type { StudentProfileWithParticulars } from "@campushomes/shared";
 
 import { apiServer } from "@/lib/server-api";
 
-export function getStudentProfile(): Promise<StudentProfile | null> {
-  return apiServer<StudentProfile>("/students/me");
+export function getStudentProfile(): Promise<StudentProfileWithParticulars | null> {
+  return apiServer<StudentProfileWithParticulars>("/students/me");
 }

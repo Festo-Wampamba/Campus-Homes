@@ -352,6 +352,106 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
     `rbac-staff.spec.ts` (15). `apps/api` total: 70 tests, all green.
     `pnpm drizzle-kit check` stays at "Everything's fine".
 
+- **Pan-African phone, form-required markers, profile editability, personal
+  calendar (2026-07-24):**
+  - `packages/shared/src/phone.ts`: `AFRICAN_COUNTRIES` (54 AU/UN dial codes)
+    plus an `africanPhone` schema (any listed dial code, 6-10 national digits
+    — deliberately not locked to one country's exact format) replaces
+    Uganda-only `ugPhone` on the admin user/staff-invite `phone` fields.
+    `ugPhone`/`normalizeUgPhone` still exist and still gate the phone-OTP
+    sign-in/signup flow (`auth.ts` schemas) — **deliberately left
+    Uganda-only**, since OTP delivery runs on an Africa's Talking sandbox
+    scoped to UG; widening that is an SMS-infra/cost decision, not a
+    validation tweak. `PhoneField` (`components/phone-field.tsx`) is the
+    country-select + number widget wired into the admin user editor, staff
+    invite, and both self-service "my profile" particulars forms.
+  - Root cause of the confusing "phone: Enter a Ugandan mobile number…"
+    error (admin Edit User modal): not a messaging bug — the schema was
+    validating every country's number against Uganda's regex alone.
+    Country-aware validation replaces the single fixed message.
+  - `AdminField`/`Label` both grew a `required` prop (red asterisk) —
+    applied wherever the paired input already carries a native `required`
+    attribute, across the admin console, sign-in, ops visit/strike forms,
+    and landlord onboarding/property forms.
+  - Admin "Add property" semester bug: catchment defaulted to a hardcoded
+    `"MUK"` regardless of the selected landlord, so a landlord with no MUK
+    semester saw a dead "No applicable semesters" field on open.
+    `properties-manager.tsx` now derives the default catchment from that
+    landlord's own existing properties, falling back to whichever catchment
+    actually has a semester configured — never a blind MUK default.
+  - Self-service particulars: `users` still has no self-UPDATE RLS policy
+    (role/status escalation risk), so `PATCH /students/particulars` and
+    `PATCH /landlords/particulars` (`modules/profile/particulars.ts`, shared
+    by both controllers so the field allowlist can't drift) run as
+    service_role, hand-picking only name/DOB/gender/nationality/address/
+    emergency-contact — never role, status, email, or phone. Student
+    `/profile` no longer redirects away once a profile exists (the original
+    bug — "not editable"); it now shows a full edit form gated only on an
+    explicit `next` param from the reserve-flow redirect. Landlord profile
+    gained the same particulars section below the existing KYC-gated
+    legal-name/ID-doc block.
+  - New `calendar_events` table (migration `0016_calendar_events.sql`,
+    hand-written — see gotcha below) + RLS (`calendar_events_self`:
+    `user_id = app_user_id()`, `svc_all` bypass). Personal task/reminder
+    calendar, **not** wired to the `calendar.manage_owned`/
+    `manage_assigned`/`read_own` permission keys already seeded in 0013
+    (those anticipate a shared per-property crew calendar — bigger scope,
+    deferred). Any authenticated role gets their own calendar: `CalendarModule`
+    (`/api/v1/calendar`, list/create/patch/delete, no `@Roles()` — RLS alone
+    scopes it), month-grid + upcoming-list UI (`components/calendar/
+    calendar-view.tsx`) mounted at `/calendar` (student) and
+    `/landlord/calendar`. RLS suite: 7 new tests (34 total).
+  - **Gotcha for the next migration:** `drizzle-kit generate` is currently
+    unsafe to run — the snapshot chain has a gap (`migrations/meta/` has no
+    `0012`–`0015_snapshot.json`, only `0011_snapshot.json` then a stale
+    `0016`), so `generate` diffs against the 0011 schema state and tries to
+    recreate every table/column added since (property_media, semesters
+    columns, users particulars columns, etc.) as if new. 0013-0016 were all
+    hand-written directly against Postgres + the journal for this reason;
+    `drizzle-kit check` still reports "Everything's fine" (it only checks
+    journal consistency, not a live diff), so that invariant holds, but
+    trusting `generate`'s output without diffing it first will corrupt a
+    future migration.
+  - Verified: shared package builds, `apps/api` typecheck/lint/test all
+    green (102/102, up from 70), `apps/web` typecheck/lint green. One
+    pre-existing unrelated failure not touched: `src/modules/ai/*` has 8
+    lint errors and one typecheck error (untracked WIP predating this
+    session).
+
+- **Admin activities board (2026-07-24):** shared staff calendar the admin
+  sidebar was missing — create/assign/track platform activities across the
+  whole ops/admin team, distinct from the personal `calendar_events`
+  (student/landlord, ownership-scoped) shipped earlier the same day.
+  - Migration `0017_activities.sql`: two new permission keys,
+    `activities.manage` and `activities.read` — deliberately **not** the
+    `calendar.manage_owned`/`manage_assigned`/`read_own` catalog seeded in
+    0013 (those are property-ownership scoped for landlord/custodian/
+    property_worker and don't fit "assign to any staff member"). Granted
+    `activities.manage` to super_admin/platform_admin/ops_lead,
+    `activities.read` to all 7 staff roles. New `activities` table
+    (title/description/type/status/starts_at/ends_at/all_day/assigned_to/
+    created_by) is **svc_all-only RLS** — same posture as `roles`/
+    `staff`-adjacent tables, not owner-scoped like `calendar_events`;
+    `PermissionsGuard` is the real gate, service_role does the write after
+    it passes. RLS suite: +4 tests (106 total, was 102).
+  - Backend: `AdminActivitiesController`/`AdminActivitiesService`
+    (`apps/api/src/modules/staff/`, registered in the existing
+    `StaffModule` alongside the other `admin-*` controllers) —
+    `/api/v1/admin/activities` CRUD plus `/admin/activities/assignees`,
+    which reuses `StaffService.list()` rather than duplicating the staff
+    roster query.
+  - Frontend: `(admin)/admin/activities/` — new sidebar nav item (gated on
+    `activities.manage`/`activities.read`, same `any`-permission pattern as
+    every other admin nav item), month-grid calendar UI
+    (`activities-manager.tsx`, styled to match the admin console rather
+    than reusing the portal `CalendarView`'s dark-card look) with
+    create/edit/assign/status and a read-only mode for `activities.read`
+    -only roles (auditor, finance_admin, support_admin, ops_inspector).
+  - Verified: shared/api/web typecheck all green, `apps/api` test 106/106,
+    `apps/web` test 13/13, `drizzle-kit check` still "Everything's fine".
+    Lint clean on every touched file; the only lint failures are the
+    pre-existing untouched `src/modules/ai/*` errors noted above.
+
 ## Resolved (was brief §20 open item)
 
 **MapLibre GL + OSM raster tiles — decided by Festo 2026-07-08.** No Mapbox, no map
