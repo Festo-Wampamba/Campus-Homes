@@ -160,7 +160,7 @@ export function OnboardingWizard({
             />
             <form onSubmit={submitLegalName} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="legalName">Legal name</Label>
+                <Label htmlFor="legalName" required>Legal name</Label>
                 <Input
                   id="legalName"
                   required
@@ -186,7 +186,7 @@ export function OnboardingWizard({
             />
             <form onSubmit={submitIdDoc} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="idFile">ID document</Label>
+                <Label htmlFor="idFile" required>ID document</Label>
                 <Input
                   id="idFile"
                   type="file"
@@ -211,7 +211,7 @@ export function OnboardingWizard({
             />
             <form onSubmit={submitProperty} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="propertyName">Property name</Label>
+                <Label htmlFor="propertyName" required>Property name</Label>
                 <Input
                   id="propertyName"
                   required
@@ -222,7 +222,7 @@ export function OnboardingWizard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="streetAddress">Street address</Label>
+                <Label htmlFor="streetAddress" required>Street address</Label>
                 <Input
                   id="streetAddress"
                   required
@@ -282,7 +282,7 @@ export function OnboardingWizard({
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="docFile">Document file</Label>
+                <Label htmlFor="docFile" required>Document file</Label>
                 <Input
                   id="docFile"
                   type="file"

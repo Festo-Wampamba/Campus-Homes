@@ -12,10 +12,11 @@ import {
   USER_STATUSES,
   WORKER_TYPES,
 } from './enums.js';
-import { ugPhone, uuid } from './common.js';
+import { uuid } from './common.js';
+import { africanPhone } from './phone.js';
 
 const optionalEmail = z.union([z.email(), z.literal('')]).optional();
-const optionalPhone = z.union([ugPhone, z.literal('')]).optional();
+const optionalPhone = z.union([africanPhone, z.literal('')]).optional();
 
 export const adminUserParticularsSchema = z.object({
   dateOfBirth: z.iso.date().nullable().optional(),

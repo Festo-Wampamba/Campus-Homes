@@ -158,7 +158,7 @@ function PropertyForm({
       <DialogBody className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="property-name">Property name</Label>
+            <Label htmlFor="property-name" required>Property name</Label>
             <Input
               id="property-name"
               required
@@ -169,7 +169,7 @@ function PropertyForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="property-address">Street address</Label>
+            <Label htmlFor="property-address" required>Street address</Label>
             <Input
               id="property-address"
               required

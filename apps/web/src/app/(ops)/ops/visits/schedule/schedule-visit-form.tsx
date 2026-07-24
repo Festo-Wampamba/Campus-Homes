@@ -57,7 +57,7 @@ export function ScheduleVisitForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="inspector">Inspector</Label>
+        <Label htmlFor="inspector" required>Inspector</Label>
         <select
           id="inspector"
           required
@@ -79,7 +79,7 @@ export function ScheduleVisitForm({
         </select>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="scheduledAt">Scheduled for</Label>
+        <Label htmlFor="scheduledAt" required>Scheduled for</Label>
         <Input
           id="scheduledAt"
           type="datetime-local"

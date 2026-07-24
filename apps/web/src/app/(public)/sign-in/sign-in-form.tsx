@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Wordmark } from "@/components/shell/wordmark";
 import { cn } from "@/lib/utils";
 
@@ -336,7 +337,7 @@ export function SignInForm() {
             </p>
             <form onSubmit={sendOtp} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone number</Label>
+                <Label htmlFor="phone" required>Phone number</Label>
                 <div className="flex">
                   <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-base text-muted-foreground">
                     +256
@@ -427,7 +428,7 @@ export function SignInForm() {
             </div>
             <form onSubmit={staffSignIn} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" required>Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -438,10 +439,9 @@ export function SignInForm() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input
+                <Label htmlFor="password" required>Password</Label>
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   required
                   value={password}
