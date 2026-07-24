@@ -15,6 +15,8 @@ export default async function StudentLayout({
         { label: "Messages", href: "/messages" },
         { label: "Favourites", href: "/saved" },
         { label: "Recently viewed", href: "/recently-viewed" },
+        { label: "Calendar", href: "/calendar" },
+        { label: "Profile", href: "/profile" },
       ]}
     >
       {children}

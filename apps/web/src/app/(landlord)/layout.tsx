@@ -1,4 +1,4 @@
-import { Building2, CalendarCheck, MessageCircle, User } from "lucide-react";
+import { Building2, Calendar, CalendarCheck, MessageCircle, User } from "lucide-react";
 
 import { requireRole } from "@/lib/session";
 import { SidebarShell } from "@/components/shell/sidebar-shell";
@@ -19,6 +19,7 @@ export default async function LandlordLayout({
         { label: "My properties", href: "/landlord", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
         { label: "Reservations", href: "/landlord/reservations", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
         { label: "Messages", href: "/landlord/messages", icon: <MessageCircle aria-hidden className="size-4 shrink-0" /> },
+        { label: "Calendar", href: "/landlord/calendar", icon: <Calendar aria-hidden className="size-4 shrink-0" /> },
         { label: "Profile", href: "/landlord/profile", icon: <User aria-hidden className="size-4 shrink-0" /> },
       ]}
     >

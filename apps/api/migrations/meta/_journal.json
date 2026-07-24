@@ -106,6 +106,20 @@
       "when": 1784556000000,
       "tag": "0015_semester_archiving",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784849207611,
+      "tag": "0016_calendar_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784879466225,
+      "tag": "0017_activities",
+      "breakpoints": true
     }
   ]
 }

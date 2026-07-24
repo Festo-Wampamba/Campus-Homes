@@ -1,5 +1,6 @@
 export * from './enums.js';
 export * from './common.js';
+export * from './phone.js';
 export * from './auth.js';
 export * from './user.js';
 export * from './property.js';
@@ -13,3 +14,5 @@ export * from './chat.js';
 export * from './notification.js';
 export * from './rbac.js';
 export * from './admin.js';
+export * from './calendar.js';
+export * from './activities.js';

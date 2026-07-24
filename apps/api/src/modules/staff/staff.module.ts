@@ -13,6 +13,8 @@ import { AdminConfigController } from './admin-config.controller';
 import { AdminConfigService } from './admin-config.service';
 import { AdminExportsController } from './admin-exports.controller';
 import { AdminExportsService } from './admin-exports.service';
+import { AdminActivitiesController } from './admin-activities.controller';
+import { AdminActivitiesService } from './admin-activities.service';
 import { StaffController } from './staff.controller';
 import { StaffService } from './staff.service';
 
@@ -26,6 +28,7 @@ import { StaffService } from './staff.service';
     AdminPropertiesController,
     AdminConfigController,
     AdminExportsController,
+    AdminActivitiesController,
   ],
   providers: [
     StaffService,
@@ -34,6 +37,7 @@ import { StaffService } from './staff.service';
     AdminPropertiesService,
     AdminConfigService,
     AdminExportsService,
+    AdminActivitiesService,
   ],
 })
 export class StaffModule {}
