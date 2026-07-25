@@ -41,8 +41,22 @@ export class LandlordsService {
 
   me(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (db) => {
-      const [row] = await db.select().from(landlords).where(eq(landlords.userId, ctx.userId));
-      return row ?? null;
+      const [landlord] = await db.select().from(landlords).where(eq(landlords.userId, ctx.userId));
+      if (!landlord) return null;
+      // users_read lets a caller read their own row — no service_role needed.
+      const [particulars] = await db
+        .select({
+          name: users.name,
+          dateOfBirth: users.dateOfBirth,
+          gender: users.gender,
+          nationality: users.nationality,
+          address: users.address,
+          emergencyContactName: users.emergencyContactName,
+          emergencyContactPhone: users.emergencyContactPhone,
+        })
+        .from(users)
+        .where(eq(users.id, ctx.userId));
+      return { ...landlord, ...particulars };
     });
   }
 

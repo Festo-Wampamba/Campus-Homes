@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneField } from "@/components/phone-field";
 
 const ROLE_LABELS: Record<StaffRoleKey, string> = {
   super_admin: "Super Admin",
@@ -88,7 +89,7 @@ export function InviteStaffForm() {
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="invite-name">Full name</Label>
+              <Label htmlFor="invite-name" required>Full name</Label>
               <Input
                 id="invite-name"
                 value={name}
@@ -98,7 +99,7 @@ export function InviteStaffForm() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="invite-email">Email</Label>
+                <Label htmlFor="invite-email">Email (optional)</Label>
                 <Input
                   id="invite-email"
                   type="email"
@@ -106,16 +107,12 @@ export function InviteStaffForm() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="invite-phone">Phone (optional)</Label>
-                <Input
-                  id="invite-phone"
-                  type="tel"
-                  placeholder="+2567…"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
+              <PhoneField
+                id="invite-phone"
+                label="Phone (optional)"
+                value={phone}
+                onChange={setPhone}
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -164,7 +161,7 @@ export function InviteStaffForm() {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label htmlFor="invite-reason">Reason</Label>
+              <Label htmlFor="invite-reason" required>Reason</Label>
               <Input
                 id="invite-reason"
                 value={reason}

@@ -15,6 +15,7 @@ const NAV: (AdminNavItem & { any: string[] })[] = [
   { label: "Properties", href: "/admin/properties", icon: "properties", group: "Operations", any: ["properties.read"] },
   { label: "Verifications", href: "/admin/verifications", icon: "verifications", group: "Operations", any: ["visits.read", "landlords.read"] },
   { label: "Reservations", href: "/admin/reservations", icon: "reservations", group: "Operations", any: ["reservations.read"] },
+  { label: "Activities", href: "/admin/activities", icon: "activities", group: "Operations", any: ["activities.manage", "activities.read"] },
   { label: "Payments", href: "/admin/payments", icon: "payments", group: "Operations", any: ["payments.read"] },
   { label: "Disputes & trust", href: "/admin/cases", icon: "cases", group: "Operations", any: ["disputes.read", "refunds.read", "strikes.read"] },
   { label: "Reports", href: "/admin/reports", icon: "reports", group: "Operations", any: ["analytics.read"] },

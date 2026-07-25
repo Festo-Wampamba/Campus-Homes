@@ -1,9 +1,9 @@
-import type { LandlordProfile, LandlordReservationView, Property } from "@campushomes/shared";
+import type { LandlordProfileWithParticulars, LandlordReservationView, Property } from "@campushomes/shared";
 
 import { apiServer } from "@/lib/server-api";
 
-export function getLandlordProfile(): Promise<LandlordProfile | null> {
-  return apiServer<LandlordProfile>("/landlords/me");
+export function getLandlordProfile(): Promise<LandlordProfileWithParticulars | null> {
+  return apiServer<LandlordProfileWithParticulars>("/landlords/me");
 }
 
 export function getMyProperties(): Promise<Property[]> {

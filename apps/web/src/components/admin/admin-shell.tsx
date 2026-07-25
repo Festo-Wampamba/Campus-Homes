@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bell,
   Building2,
+  CalendarClock,
   CalendarDays,
   ChevronDown,
   CircleDollarSign,
@@ -18,12 +19,13 @@ import {
   ShieldCheck,
   Tickets,
   UserCog,
+  UserRound,
   Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { SessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,7 @@ const ICONS = {
   properties: Building2,
   verifications: ClipboardCheck,
   reservations: CalendarDays,
+  activities: CalendarClock,
   payments: CircleDollarSign,
   cases: Tickets,
   reports: BarChart3,
@@ -118,8 +121,26 @@ export function AdminShell({ children, nav, user, roleLabel }: { children: React
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const matches = useMemo(() => nav.filter((item) => `${item.label} ${item.group}`.toLowerCase().includes(query.toLowerCase())), [nav, query]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!userMenuRef.current?.contains(event.target as Node)) setUserMenuOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [userMenuOpen]);
 
   return (
     <div className="min-h-screen bg-[#f4f7f9] text-slate-950 dark:bg-background dark:text-foreground">
@@ -140,10 +161,30 @@ export function AdminShell({ children, nav, user, roleLabel }: { children: React
           <div className="ml-auto flex items-center gap-2">
             <Link href="/admin/audit-log" aria-label="Review recent activity" className="relative grid size-10 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 dark:text-muted-foreground dark:hover:bg-muted"><Bell aria-hidden className="size-4.5" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-coral-500" /></Link>
             <div className="hidden h-8 w-px bg-slate-200 sm:block dark:bg-border" />
-            <div className="hidden min-w-0 items-center gap-2 sm:flex">
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user.name)}</span>
-              <span className="min-w-0"><span className="block max-w-32 truncate text-xs font-bold">{user.name || user.email}</span><span className="block text-[10px] text-slate-500 dark:text-muted-foreground">{roleLabel}</span></span>
-              <ChevronDown aria-hidden className="size-3.5 text-slate-400" />
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen((open) => !open)}
+                className="flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-muted"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user.name)}</span>
+                <span className="hidden min-w-0 text-left sm:block"><span className="block max-w-32 truncate text-xs font-bold">{user.name || user.email}</span><span className="block text-[10px] text-slate-500 dark:text-muted-foreground">{roleLabel}</span></span>
+                <ChevronDown aria-hidden className={cn("size-3.5 text-slate-400 transition-transform", userMenuOpen && "rotate-180")} />
+              </button>
+              {userMenuOpen && (
+                <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
+                  <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
+                    <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">{user.name || user.email}</p>
+                    <p className="truncate text-[11px] text-slate-500 dark:text-muted-foreground">{roleLabel}</p>
+                  </div>
+                  <Link role="menuitem" href="/admin/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
+                    <UserRound aria-hidden className="size-4 text-slate-400" />
+                    Profile settings
+                  </Link>
+                </div>
+              )}
             </div>
             <SignOutButton />
           </div>

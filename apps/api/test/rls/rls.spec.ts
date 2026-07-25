@@ -497,3 +497,116 @@ describe('rbac (0003): roles/permissions/assignments are service-only', () => {
     expect(res.rowCount).toBe(1);
   });
 });
+
+describe('calendar_events (0016): personal calendar, owner-only', () => {
+  let event1: string; // owned by student1
+
+  beforeAll(async () => {
+    event1 = await seed(
+      `INSERT INTO calendar_events (user_id, title, starts_at) VALUES ($1, 'Pay rent', now()) RETURNING id`,
+      [student1],
+    );
+  });
+
+  it('a user can insert their own calendar event', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c
+        .query(
+          `INSERT INTO calendar_events (user_id, title, starts_at) VALUES ($1, 'Visit day', now()) RETURNING id`,
+          [student1],
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a user cannot insert a calendar event for someone else', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'student' }, async (c) =>
+        c.query(`INSERT INTO calendar_events (user_id, title, starts_at) VALUES ($1, 'Sneaky', now())`, [
+          student2,
+        ]),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('the owner reads their own event', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM calendar_events WHERE id = $1', [event1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("another user cannot read someone else's calendar event", async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM calendar_events WHERE id = $1', [event1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("another user's UPDATE affects zero rows instead of leaking or erroring", async () => {
+    const res = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c.query(`UPDATE calendar_events SET done = true WHERE id = $1`, [event1]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it('the owner can mark their own event done', async () => {
+    const res = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE calendar_events SET done = true WHERE id = $1`, [event1]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it('service_role reads across all users', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM calendar_events WHERE id = $1', [event1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe('activities (0017): staff ops board is service-only', () => {
+  let activity1: string;
+
+  beforeAll(async () => {
+    activity1 = await seed(
+      `INSERT INTO activities (title, starts_at, created_by, assigned_to)
+       VALUES ('Landlord KYC review', now(), $1, $1) RETURNING id`,
+      [opsLead],
+    );
+  });
+
+  it('a landlord cannot read activities', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM activities').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('an ops_lead cannot insert an activity directly (app-layer write only)', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(`INSERT INTO activities (title, starts_at, created_by) VALUES ('Sneaky', now(), $1)`, [opsLead]),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads across all activities', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM activities WHERE id = $1', [activity1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('service_role can update and delete an activity', async () => {
+    const update = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`UPDATE activities SET status = 'done' WHERE id = $1`, [activity1]),
+    );
+    expect(update.rowCount).toBe(1);
+    const del = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`DELETE FROM activities WHERE id = $1`, [activity1]),
+    );
+    expect(del.rowCount).toBe(1);
+  });
+});

@@ -5,6 +5,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { DbModule } from './db/db.module';
 import { RedisModule } from './db/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CalendarModule } from './modules/calendar/calendar.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { HealthController } from './modules/health/health.controller';
 import { JobsModule } from './modules/jobs/jobs.module';
@@ -32,6 +33,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     JobsModule,
     UploadsModule,
     StaffModule,
+    CalendarModule,
   ],
   controllers: [HealthController],
   providers: [

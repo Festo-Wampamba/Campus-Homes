@@ -59,7 +59,7 @@ export function IssueStrikeForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="landlordId">Landlord ID</Label>
+        <Label htmlFor="landlordId" required>Landlord ID</Label>
         <Input
           id="landlordId"
           required
@@ -68,7 +68,7 @@ export function IssueStrikeForm() {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="reason">Reason</Label>
+        <Label htmlFor="reason" required>Reason</Label>
         <select
           id="reason"
           required

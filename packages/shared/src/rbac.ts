@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ugPhone } from './common.js';
+import { africanPhone } from './phone.js';
 import { CATCHMENTS, STAFF_ROLE_KEYS } from './enums.js';
 
 const grantRoleFieldsSchema = z.object({
@@ -22,7 +22,7 @@ export const inviteStaffSchema = grantRoleFieldsSchema
   .extend({
     name: z.string().min(1).max(200),
     email: z.email().optional(),
-    phone: ugPhone.optional(),
+    phone: africanPhone.optional(),
     reason: z.string().min(1).max(500),
   })
   .refine((v) => v.scopeType === 'platform_wide' || v.scopeId !== undefined, {

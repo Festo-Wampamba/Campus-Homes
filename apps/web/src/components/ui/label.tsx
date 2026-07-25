@@ -1,6 +1,11 @@
 import { cn } from "@/lib/utils";
 
-function Label({ className, ...props }: React.ComponentProps<"label">) {
+function Label({
+  className,
+  required,
+  children,
+  ...props
+}: React.ComponentProps<"label"> & { required?: boolean }) {
   return (
     <label
       className={cn(
@@ -8,7 +13,14 @@ function Label({ className, ...props }: React.ComponentProps<"label">) {
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {required && (
+        <span aria-hidden className="ml-0.5 text-red-600">
+          *
+        </span>
+      )}
+    </label>
   );
 }
 

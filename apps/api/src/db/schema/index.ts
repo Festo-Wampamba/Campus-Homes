@@ -9,3 +9,5 @@ export * from './trust';
 export * from './comms';
 export * from './rbac';
 export * from './admin';
+export * from './calendar';
+export * from './activities';
