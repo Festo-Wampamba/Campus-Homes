@@ -17,6 +17,15 @@ const envSchema = z.object({
   FLUTTERWAVE_SECRET_KEY: z.string().min(1).optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().min(1).optional(),
   AFRICASTALKING_API_KEY: z.string().min(1).optional(),
+  // Escape hatch for a staging deploy that has no real payment/SMS provider
+  // yet: lets the stub adapters run under NODE_ENV=production instead of
+  // failing boot. Compared against the exact string 'true' rather than
+  // z.coerce.boolean() — coercion treats the string 'false' as true, which
+  // would silently disarm the guard. Anything else, typo included, stays off.
+  ALLOW_STUB_INTEGRATIONS: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
   CLOUDINARY_URL: z.string().min(1).optional(),
   SENTRY_DSN: z.string().optional(),
   POWER_BI_PUSH_URL: z.string().url().optional(),

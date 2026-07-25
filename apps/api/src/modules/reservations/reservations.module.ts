@@ -8,6 +8,7 @@ import {
   type PaymentsAdapter,
 } from '../../adapters/payments.adapter';
 import { loadEnv } from '../../config/env';
+import { assertStubAllowed } from '../../config/integration-guard';
 import { REDIS } from '../../db/redis.module';
 import { AuthModule } from '../auth/auth.module';
 import { OpsModule } from '../ops/ops.module';
@@ -28,9 +29,7 @@ import { WebhookController } from './webhook.controller';
         if (env.FLUTTERWAVE_SECRET_KEY) {
           return new FlutterwavePayments(env.FLUTTERWAVE_SECRET_KEY);
         }
-        if (env.NODE_ENV === 'production') {
-          throw new Error('ReservationsModule requires FLUTTERWAVE_SECRET_KEY in production');
-        }
+        assertStubAllowed(env, 'FLUTTERWAVE_SECRET_KEY', 'ReservationsModule');
         return new StubPayments(env.WEB_ORIGIN);
       },
     },

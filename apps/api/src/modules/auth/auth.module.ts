@@ -7,6 +7,7 @@ import {
   type MessagingAdapter,
 } from '../../adapters/messaging.adapter';
 import { loadEnv } from '../../config/env';
+import { assertStubAllowed } from '../../config/integration-guard';
 import { createDb } from '../../db/client';
 import { createAuth } from './auth.config';
 import { AuthGuard } from './auth.guard';
@@ -21,9 +22,7 @@ import { AUTH, MESSAGING } from './auth.tokens';
         if (env.AFRICASTALKING_API_KEY) {
           return new AfricasTalkingMessaging(env.AFRICASTALKING_API_KEY, env.AFRICASTALKING_USERNAME);
         }
-        if (env.NODE_ENV === 'production') {
-          throw new Error('AuthModule requires AFRICASTALKING_API_KEY in production');
-        }
+        assertStubAllowed(env, 'AFRICASTALKING_API_KEY', 'AuthModule');
         return new ConsoleMessaging();
       },
     },
