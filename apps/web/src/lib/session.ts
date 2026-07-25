@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@campushomes/shared";
 
+import { API_TIMEOUT_MS } from "./api";
+
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 export type { UserRole };
@@ -29,11 +31,13 @@ export async function getServerSession(): Promise<Session | null> {
     const res = await fetch(`${BASE}/api/auth/get-session`, {
       headers: { cookie },
       cache: "no-store",
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     return ((await res.json()) as Session | null) ?? null;
   } catch {
-    // API unreachable — treat as signed out rather than crashing the shell
+    // API unreachable or hung — treat as signed out rather than crashing the
+    // shell. Fails closed: a timed-out guard redirects to sign-in.
     return null;
   }
 }
