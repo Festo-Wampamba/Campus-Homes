@@ -44,12 +44,20 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
   return `${fallback} (API ${error.status})`;
 }
 
+// A hung API must reject, not stall. An unreachable host refuses fast, but a
+// host that accepts the connection and never replies (Render holds the socket
+// open while a service crash-loops) leaves fetch pending forever — which in a
+// server component burns the whole function timeout and 504s the page instead
+// of hitting the caller's catch. Generous enough for a slow mobile POST.
+export const API_TIMEOUT_MS = 15_000;
+
 // One thin wrapper (FRONTEND.md §5). Request/response shapes come from
 // @campushomes/shared — never hand-write them (brief §14).
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}/api/v1${path}`, {
     ...init,
     credentials: "include",
+    signal: init?.signal ?? AbortSignal.timeout(API_TIMEOUT_MS),
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) {
