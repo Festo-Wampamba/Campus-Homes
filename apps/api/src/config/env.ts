@@ -14,6 +14,13 @@ const envSchema = z.object({
   BETTER_AUTH_API_KEY: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.string().min(1).optional(),
   AFRICASTALKING_USERNAME: z.string().min(1).default('sandbox'),
+  // Product launch gate. Payments are deliberately off unless the deployment
+  // opts in with the exact string `true`; missing, false, and misspelled values
+  // all preserve the Phase 1 no-money posture.
+  PAYMENTS_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
   FLUTTERWAVE_SECRET_KEY: z.string().min(1).optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().min(1).optional(),
   AFRICASTALKING_API_KEY: z.string().min(1).optional(),
@@ -33,7 +40,7 @@ const envSchema = z.object({
   // Base URL clients are redirected back to after Flutterwave checkout.
   PAYMENT_REDIRECT_URL: z.string().min(1).default('http://localhost:3000/reservations'),
   // The web app's origin — CORS allowlist + Better Auth trustedOrigins.
-  // Set to the Vercel URL in production (FRONTEND.md §9).
+  // Set to the public frontend URL for the current deployment environment.
   WEB_ORIGIN: z.string().min(1).default('http://localhost:3000'),
   SOKETI_HOST: z.string().min(1).optional(),
   SOKETI_PORT: z.coerce.number().int().default(443),

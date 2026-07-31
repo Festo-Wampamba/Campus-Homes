@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 
+const PAYMENTS_ENABLED = process.env.NEXT_PUBLIC_PAYMENTS_ENABLED === "true";
+
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     const body = err.body as { message?: string | string[] } | null;
@@ -17,6 +19,8 @@ function errorMessage(err: unknown, fallback: string): string {
 export function ReserveButton({ unitId }: { unitId: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!PAYMENTS_ENABLED) return null;
 
   async function reserve() {
     setError(null);

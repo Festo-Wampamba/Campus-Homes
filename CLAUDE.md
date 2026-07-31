@@ -21,6 +21,24 @@ Redis/BullMQ · Cloudinary (schema doc says "R2" — brief overrides, Cloudinary
 Flutterwave · Africa's Talking · Soketi · Sentry · **Node 24** (local: `nvm use 24`;
 system node is 22 — always run pnpm under Node 24).
 
+## Phase 1 MVP scope decision (2026-07-30)
+
+- These are **product launch phases**, separate from the historical
+  "Frontend Phase 1–6" implementation headings later in this file.
+- **Real-money payments are Phase 2.** Phase 1 launches verification,
+  discovery, landlord/property onboarding, Ops/admin workflows, profiles, and
+  communication without activating Flutterwave checkout.
+- The reservation/payment schema, adapter, webhook, jobs, and UI already built
+  remain in the codebase; they are dormant foundation, not Phase 1 launch scope.
+- `StubPayments` remains local/test infrastructure only. Before exposing a
+  Phase 1 production deployment, add a server-enforced
+  `PAYMENTS_ENABLED=false` switch that hides payment entry points and rejects
+  hold/payment initiation. Do not use `ALLOW_STUB_INTEGRATIONS=true` to present
+  fake checkout to public users.
+- Phase 2 must finish real provider transaction/amount verification, refund
+  execution/reconciliation, and live-reservation occupancy guarantees before
+  accepting money.
+
 ## Repo layout
 
 - `apps/api` — NestJS 11 backend (the "backend folder"). Deploys to Render.

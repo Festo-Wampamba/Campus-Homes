@@ -16,6 +16,7 @@ async function bootstrap() {
   // parser would consume it first, so parsing is disabled here and re-added
   // right after the auth route (registration order keeps /api/auth unparsed).
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.enableShutdownHooks();
   // Cookie-based auth from the web app (different origin even on localhost:
   // 3000 vs 4000) — credentials require an explicit origin, never '*'.
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
@@ -50,7 +51,7 @@ async function bootstrap() {
     }
   });
   app.setGlobalPrefix('api/v1');
-  await app.listen(env.PORT);
+  await app.listen(env.PORT, '0.0.0.0');
 }
 
 void bootstrap();

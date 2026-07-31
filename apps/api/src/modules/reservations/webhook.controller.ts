@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 
 import { loadEnv } from '../../config/env';
+import { assertPaymentsEnabled } from '../../config/payment-guard';
 import { ReservationsService } from './reservations.service';
 
 interface FlutterwaveWebhookBody {
@@ -30,7 +31,8 @@ interface FlutterwaveWebhookBody {
  * Always 200 on handled duplicates so their retry loop stops. */
 @Controller('webhooks')
 export class WebhookController {
-  private readonly webhookHash = loadEnv().FLUTTERWAVE_WEBHOOK_HASH;
+  private readonly env = loadEnv();
+  private readonly webhookHash = this.env.FLUTTERWAVE_WEBHOOK_HASH;
 
   constructor(private readonly reservationsService: ReservationsService) {}
 
@@ -40,6 +42,7 @@ export class WebhookController {
     @Headers('verif-hash') verifHash: string | undefined,
     @Body() body: FlutterwaveWebhookBody,
   ) {
+    assertPaymentsEnabled(this.env);
     if (!this.webhookHash) {
       // Gateway not configured yet (TECH.md: payments deferred) — reject all.
       throw new UnauthorizedException('Webhook not configured');

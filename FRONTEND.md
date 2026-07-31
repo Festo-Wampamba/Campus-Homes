@@ -154,10 +154,13 @@ bug here can annoy users but can't leak data.
 3. **(landlord) onboarding + property submission** — phone-OTP sign-in →
    profile → `POST /listings/properties` (+ document metadata after Cloudinary
    upload). Client-side MIME/size checks are convenience only.
-4. **(student) reservation flow** — the highest-stakes screen (§9 flow 4):
+4. **(student) reservation flow (Phase 2)** — the implementation foundation is
+   built, but it is not part of the Phase 1 public MVP. When Phase 2 activates,
    generate `idempotencyKey` client-side (`crypto.randomUUID()`), POST the
-   hold, redirect to `checkoutUrl`, then poll `/reservations/:id/payment-status`
-   on return. Backend for this is **live** — build against it, no mocks.
+   hold, redirect to `checkoutUrl`, then poll
+   `/reservations/:id/payment-status` on return. Until then, hide payment entry
+   points and rely on the backend `PAYMENTS_ENABLED=false` guard; do not expose
+   the stub checkout to public users.
 5. **(ops) queue + scheduler + offline Inspection Mode** — the technically
    distinct piece: every checklist edit writes to IndexedDB immediately; a sync
    worker drains to `POST /ops/visits/sync` when connectivity returns. The
@@ -195,7 +198,7 @@ bug here can annoy users but can't leak data.
 | Item | Blocks | Where it's tracked |
 |---|---|---|
 | ~~Mapbox vs MapLibre (§20)~~ | — | resolved: MapLibre + OSM tiles (free); `NEXT_PUBLIC_TILE_URL` optional override |
-| Flutterwave account (payments deferred) | end-to-end checkout redirect (stub URL works meanwhile) | TECH.md |
+| Flutterwave Phase 2 activation | real checkout, transaction verification, refunds, reconciliation, and removal of the Phase 1 payment guard | TECH.md |
 | Soketi provisioning | live chat pushes (chat itself works) | TECH.md |
 | VAPID keys | Web Push delivery (subscription capture works) | TECH.md |
 | ~~Cloudinary signed-upload endpoint~~ | — | built: `POST /uploads/sign` (authed) returns `{ cloudName, apiKey, timestamp, folder, signature }` for direct browser→Cloudinary upload |

@@ -1,12 +1,23 @@
 # CampusHomes
 
-Verified student-housing reservation marketplace for Kampala, Uganda,
-starting with Makerere University. A landlord lists a property, CampusHomes'
-own field agents physically verify it against a 6-component checklist, the
-listing goes live with a **Verified** badge, and a student pays a fixed
-5,000 UGX fee to hold the unit for 72 hours before moving in. Rent and
-leases happen off-platform — **verification is the product**; everything
-else in this codebase serves it.
+Verified student-housing marketplace for Kampala, Uganda, starting with
+Makerere University. A landlord lists a property, CampusHomes' own field
+agents physically verify it against a 6-component checklist, and the listing
+goes live with a **Verified** badge. Rent and leases happen off-platform —
+**verification is the product**; everything else in this codebase serves it.
+
+**Phase 1 MVP scope:** discovery, verification, landlord/property onboarding,
+operations, administration, profiles, and communication. Real-money checkout
+is inactive. The built reservation/payment foundation remains available for
+development, but the 5,000 UGX, 72-hour paid hold launches in Phase 2 only.
+These are product launch phases, not the historical frontend implementation
+phase numbers recorded in `CLAUDE.md`.
+
+**Primary domain:** [campushomes.co.ug](https://campushomes.co.ug)
+
+**Deployment panel:** Dokploy on a hardened Contabo VPS. Staging is served from
+`staging.campushomes.co.ug` and `api-staging.campushomes.co.ug` before the
+primary domain is cut over.
 
 ## Contents
 
@@ -35,11 +46,11 @@ else in this codebase serves it.
 Three role-gated audiences, one shared component language, plus a public
 pre-login discovery surface:
 
-- **Students** — search verified listings on a map, place a reservation
-  hold, pay via Flutterwave (mobile money or card), message the landlord,
-  confirm move-in, leave a structured review. Primarily mid/low-end Android
-  phones on patchy mobile data — the product is designed for that pocket
-  first, not as an afterthought.
+- **Students** — search verified listings on a map, save options, and message
+  landlords. Phase 2 adds paid reservation holds, Flutterwave checkout,
+  move-in confirmation, and reviews. Primarily mid/low-end Android phones on
+  patchy mobile data — the product is designed for that pocket first, not as
+  an afterthought.
 - **Landlords** — onboard once with KYC (legal name + government ID
   upload), list properties and room-type inventory, respond to a
   reservation inbox and chat with prospective tenants. Three verified
@@ -56,11 +67,17 @@ pre-login discovery surface:
   and property administration, exports/reporting, integrations, and an
   append-only audit log.
 
-The core loop end to end:
+The Phase 1 MVP loop:
 
 ```
 landlord lists  →  Ops verifies (6-component checklist)  →  listing → verified
-      →  student places 72h hold  →  Flutterwave payment  →  fulfilled
+      →  student discovers/saves listing  →  student contacts landlord
+```
+
+The Phase 2 extension:
+
+```
+student places 72h hold  →  Flutterwave payment  →  fulfilled
       →  move-in confirmed (student / landlord / ops)  →  student review
 ```
 
@@ -78,7 +95,7 @@ landlord lists  →  Ops verifies (6-component checklist)  →  listing → veri
 | Auth | Better Auth 1.6 — phone OTP (students/landlords) + email/password (staff) |
 | Background jobs | BullMQ 5, in-process inside the Nest app, backed by Upstash Redis (`ioredis` pinned to `5.10.1` — BullMQ requires exact match) |
 | Media | Cloudinary, direct-to-cloud signed uploads |
-| Payments | Flutterwave (webhook-verified, idempotent) — currently deferred to a later phase; `StubPayments` adapter covers local dev |
+| Payments | Flutterwave foundation is built but inactive for the Phase 1 MVP; production activation, checkout, refunds, and reconciliation are Phase 2. `StubPayments` is development-only |
 | SMS / OTP | Africa's Talking |
 | Realtime | Soketi (Pusher-protocol) for chat; degrades to a 4s poll when unconfigured |
 | Errors | Sentry (EU data region) |
@@ -122,7 +139,7 @@ pgEnums and frontend form validation both derive from it).
 ## Repo layout
 
 ```
-apps/api               NestJS 11 backend ("the backend folder"). Deploys to Render.
+apps/api               NestJS 11 backend. Deploys as a Docker image through Dokploy.
   src/db/schema/        Drizzle table definitions (12 files, 43 tables)
   src/db/rls-context.ts withRlsContext() — binds app.user_id / app.user_role per request
   src/modules/           One folder per domain module (see API surface below)
@@ -130,7 +147,7 @@ apps/api               NestJS 11 backend ("the backend folder"). Deploys to Rend
   migrations/            Forward-only SQL migrations (0000–0015)
   test/rls/              RLS proof suite — runs as the real app_user DB role
   test/services/         Service-level unit/integration tests
-apps/web                Next.js 16 frontend. Deploys to Vercel.
+apps/web                Next.js 16 frontend. Deploys as a standalone Docker image through Dokploy.
   src/app/(public)/      Search, map, listing detail, sign-in — pre-login
   src/app/(student)/     Reservations, profile, chat
   src/app/(landlord)/    Onboarding, listings, reservations, chat
@@ -209,19 +226,24 @@ packages/config           Shared tsconfig / eslint / prettier.
 | `BETTER_AUTH_API_KEY` | Better Auth dashboard API key |
 | `BETTER_AUTH_URL` | Base URL Better Auth issues callbacks against (`http://localhost:4000` locally) |
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | Bootstrap super-admin credentials for `admin:reset` |
-| `FLUTTERWAVE_SECRET_KEY` | Payment provider secret (unset = `StubPayments` adapter used) |
-| `FLUTTERWAVE_WEBHOOK_HASH` | `verif-hash` header value Flutterwave sends — compared by equality, not HMAC-of-body |
+| `PAYMENTS_ENABLED` | Phase launch gate. Only the exact value `true` enables payment initiation; missing or `false` keeps Phase 1 money-free |
+| `ALLOW_STUB_INTEGRATIONS` | Explicit staging-only opt-in for missing SMS/realtime providers. Keep `false` for public production |
+| `FLUTTERWAVE_SECRET_KEY` | Phase 2 payment provider secret; omit during Phase 1 |
+| `FLUTTERWAVE_WEBHOOK_HASH` | Phase 2 `verif-hash` header value Flutterwave sends; omit during Phase 1 |
 | `AFRICASTALKING_API_KEY` / `AFRICASTALKING_USERNAME` | SMS/OTP provider (`sandbox` username for the AT sandbox) |
 | `CLOUDINARY_URL` | Image storage — powers `POST /uploads/sign` |
 | `SENTRY_DSN` | Error tracking |
 | `POWER_BI_PUSH_URL` / `POWER_BI_API_TOKEN` | Reporting export destination |
 | `WEB_ORIGIN` | Frontend origin for CORS + Better Auth trusted origins |
+| `PAYMENT_REDIRECT_URL` | Frontend reservation return URL; retained for Phase 2 even while payments are disabled |
+| `SOKETI_HOST` / `SOKETI_PORT` / `SOKETI_APP_ID` / `SOKETI_KEY` / `SOKETI_SECRET` | Optional realtime provider; REST polling remains available when staging explicitly permits stubs |
 | `PORT` | API listen port (default `4000`) |
 
-`apps/web/.env.local` needs `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` (photo
-rendering), `NEXT_PUBLIC_TILE_URL` (optional, defaults to
-`tile.openstreetmap.org`), and `NEXT_PUBLIC_SOKETI_HOST` /
-`NEXT_PUBLIC_SOKETI_KEY` (optional — chat falls back to polling when unset).
+`apps/web/.env.local` needs `NEXT_PUBLIC_API_BASE_URL`,
+`NEXT_PUBLIC_PAYMENTS_ENABLED`, and `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`.
+`NEXT_PUBLIC_TILE_URL`, `NEXT_PUBLIC_SOKETI_HOST`, and
+`NEXT_PUBLIC_SOKETI_KEY` are optional. `NEXT_PUBLIC_*` values are browser
+configuration, not server secrets, and are compiled into the Next.js bundle.
 Full list in [FRONTEND.md](./FRONTEND.md) §3.
 
 Never commit `.env` / `.env.local` — both are covered by a `protect-files`
@@ -425,22 +447,155 @@ integration or debugging a missing credential. Summary:
 | Service | Purpose | Status |
 | --- | --- | --- |
 | Neon | Postgres + PostGIS | ✅ live |
-| Upstash | Redis (BullMQ, hold locks) | ✅ live |
+| Upstash | Redis (BullMQ, hold locks) | ✅ live; eviction disabled for queue safety |
 | Cloudinary | Image storage | ✅ live |
 | Sentry | Error tracking | ✅ credentials live, Nest SDK wiring pending |
 | Africa's Talking | SMS/OTP | ✅ sandbox live |
-| Flutterwave | Payments | ⏸️ deferred by choice — Uganda confirmed supported, `StubPayments` covers dev |
+| Flutterwave | Payments | ⏸️ Phase 2 — no real-money checkout in the Phase 1 MVP; `StubPayments` is development-only |
 | Soketi | Realtime chat push | ❌ unprovisioned — chat persists via REST, live push activates once configured |
 
 ## Deployment
 
-- **`apps/api`** deploys to **Render**.
-- **`apps/web`** deploys to **Vercel**.
-- Set `WEB_ORIGIN` on the API to the deployed frontend origin (CORS +
-  Better Auth `trustedOrigins`).
-- Every adapter module factory (Messaging, Payments, Realtime) **throws in
-  production** if its required secret is missing — there is no silent stub
-  fallback outside development.
+CampusHomes is self-hosted on a Contabo Cloud VPS 6 running Ubuntu 24.04 and
+Dokploy. Dokploy builds two independent applications from this monorepo and
+Traefik routes their domains internally; application ports are never published
+directly to the internet.
+
+### Infrastructure and security baseline
+
+- SSH accepts the dedicated CampusHomes ED25519 key for the non-root `festo`
+  account only. Root login, password login, keyboard-interactive login, empty
+  passwords, and X11 forwarding are disabled.
+- Contabo's edge firewall and host UFW accept only TCP `22`, `80`, and `443`;
+  everything else is denied. Dokploy's former public port `3000` is removed.
+- CrowdSec analyzes Linux/OpenSSH logs and its nftables firewall bouncer applies
+  decisions for IPv4 and IPv6.
+- Dokploy is available only through `https://deploy.campushomes.co.ug`, protected
+  by HTTPS and account 2FA.
+- Cloudflare terminates visitor TLS with **Full (strict)** origin validation.
+- Upstash eviction is disabled so BullMQ delayed jobs and locks cannot be
+  discarded under memory pressure.
+- Ubuntu unattended security upgrades are enabled.
+
+### Branch and release flow
+
+Changes start on a short-lived branch, pass lint, type checks, tests, and image
+builds, then enter `main` through a reviewed pull request. Dokploy staging
+tracks `main` with automatic deployment. Production also uses `main`, but its
+automatic deployment remains OFF so a tested revision is promoted manually.
+The existing `development`, `preview`, `feature`, and `sam` branches are not
+production deployment sources. The primary domains are attached only after
+staging has passed smoke tests; production is never used as the development
+environment.
+
+### Secure GitHub connection and project creation
+
+1. In Dokploy, open the Git/provider settings and create a **GitHub App**.
+   Install it on the `Festo-Wampamba` account with access to **only** the
+   `Campus-Homes` repository. Do not paste a personal access token, SSH private
+   key, or GitHub password into an application environment field.
+2. In **Projects**, create `Campus Homes` with two environments: `staging` and
+   `production`. Create the staging applications first; production stays empty
+   until staging passes.
+3. For each staging application, choose the installed GitHub App, repository
+   `Festo-Wampamba/Campus-Homes`, and branch `main`. Enable automatic deployment
+   only for staging.
+4. Use the Dockerfile paths and internal ports below. Secrets go in the API
+   application's **Environment** section; only the listed `NEXT_PUBLIC_*`
+   values go in the web application's **Build Time Arguments** section.
+5. Leave Advanced/Published Ports empty. The domain's Container Port tells
+   Traefik where to route internally and does not expose that port publicly.
+
+### Dokploy applications
+
+Create both applications with build type **Dockerfile**, repository context
+`.` and no Advanced/Published Ports:
+
+| Application | Dockerfile | Internal port | Staging domain | Health path |
+| --- | --- | ---: | --- | --- |
+| `campushomes-api-staging` | `apps/api/Dockerfile` | `4000` | `api-staging.campushomes.co.ug` | `/api/v1/health` |
+| `campushomes-web-staging` | `apps/web/Dockerfile` | `3000` | `staging.campushomes.co.ug` | `/` |
+
+Both domains use path `/`, HTTPS enabled, and a Let's Encrypt certificate.
+Keep new Cloudflare records DNS-only until the origin certificate is issued;
+then proxy them through Cloudflare.
+
+API runtime environment for staging:
+
+```dotenv
+NODE_ENV=production
+PORT=4000
+DATABASE_URL=<NEON_STAGING_APP_CONNECTION_STRING>
+REDIS_URL=<UPSTASH_READ_WRITE_TLS_CONNECTION_STRING>
+BETTER_AUTH_SECRET=<GENERATED_32_PLUS_CHARACTER_SECRET>
+BETTER_AUTH_URL=https://api-staging.campushomes.co.ug
+WEB_ORIGIN=https://staging.campushomes.co.ug
+PAYMENTS_ENABLED=false
+ALLOW_STUB_INTEGRATIONS=true
+CLOUDINARY_URL=<CLOUDINARY_DEDICATED_KEY_URL>
+PAYMENT_REDIRECT_URL=https://staging.campushomes.co.ug/reservations
+```
+
+`ALLOW_STUB_INTEGRATIONS=true` is acceptable only on staging while Africa's
+Talking or Soketi is absent. Public production must use real integrations or
+explicitly disable their user-facing features and set this value to `false`.
+Flutterwave variables are deliberately absent during Phase 1.
+
+Web Docker build arguments for staging:
+
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=https://api-staging.campushomes.co.ug
+NEXT_PUBLIC_PAYMENTS_ENABLED=false
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=<CLOUDINARY_CLOUD_NAME>
+NEXT_PUBLIC_TILE_URL=
+NEXT_PUBLIC_SOKETI_HOST=
+NEXT_PUBLIC_SOKETI_KEY=
+```
+
+### Obtaining deployment values safely
+
+- **`DATABASE_URL`** — in Neon, select the staging branch and the dedicated API
+  login role that inherits `app_user`, then copy its pooled Postgres connection
+  string. The runtime API must not use the database owner because owner access
+  bypasses the RLS boundary. Use the owner connection only from a trusted local
+  terminal to apply migrations, then unset it.
+- **`REDIS_URL`** — in the Upstash `campus-homes` database, open **Details /
+  Connect** and copy the read-write Redis connection string for the `default`
+  user. It begins with `rediss://`; do not use the REST URL or a read-only user.
+- **`BETTER_AUTH_SECRET`** — generate it locally with
+  `openssl rand -base64 48`. Store the result only in Dokploy's API environment;
+  never put it in Git, GitHub Actions output, screenshots, or chat.
+- **`CLOUDINARY_URL`** — use the dedicated `campushomes` API key from the
+  Cloudinary console. Its form is
+  `cloudinary://<api_key>:<api_secret>@<cloud_name>` and it belongs only in the
+  API runtime environment.
+- **`NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`** — the non-secret Cloudinary cloud name
+  shown on the Cloudinary dashboard. This public identifier may be supplied as
+  a web build argument; never expose the API secret to Next.js.
+
+Dokploy environment values are the source of truth for deployed containers.
+Never commit `.env`, `.env.local`, provider tokens, database passwords, or
+private keys.
+
+### Database migration and cutover
+
+Apply forward-only migrations to the Neon staging branch from a trusted local
+terminal before the first API deployment. Read the owner URL without placing it
+in shell history:
+
+```bash
+cd apps/api
+read -rsp "Neon staging owner URL: " DATABASE_URL && echo
+export DATABASE_URL
+node node_modules/drizzle-kit/bin.cjs migrate
+unset DATABASE_URL
+```
+
+Deploy the API first and verify `/api/v1/health`, then deploy the web app and
+test authentication, search, Cloudinary uploads, chat fallback, role-gated
+portals, and the absence of payment controls. Only after those checks pass
+should `api.campushomes.co.ug` and `campushomes.co.ug` be attached to the
+production applications.
 
 ## Contributing / conventions
 

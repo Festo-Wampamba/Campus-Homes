@@ -3,6 +3,7 @@ import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 
 import {
+  DisabledPayments,
   FlutterwavePayments,
   StubPayments,
   type PaymentsAdapter,
@@ -26,6 +27,9 @@ import { WebhookController } from './webhook.controller';
       provide: PAYMENTS,
       useFactory: (): PaymentsAdapter => {
         const env = loadEnv();
+        if (!env.PAYMENTS_ENABLED) {
+          return new DisabledPayments();
+        }
         if (env.FLUTTERWAVE_SECRET_KEY) {
           return new FlutterwavePayments(env.FLUTTERWAVE_SECRET_KEY);
         }
