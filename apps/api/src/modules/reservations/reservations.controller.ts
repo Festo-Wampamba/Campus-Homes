@@ -13,6 +13,7 @@ import { createZodDto } from 'nestjs-zod';
 import { createHoldSchema } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
+import { assertPaymentsEnabled } from '../../config/payment-guard';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ReservationsService } from './reservations.service';
@@ -22,13 +23,15 @@ class CreateHoldDto extends createZodDto(createHoldSchema) {}
 @Controller('reservations')
 @UseGuards(AuthGuard, RolesGuard)
 export class ReservationsController {
-  private readonly redirectUrl = loadEnv().PAYMENT_REDIRECT_URL;
+  private readonly env = loadEnv();
+  private readonly redirectUrl = this.env.PAYMENT_REDIRECT_URL;
 
   constructor(private readonly reservationsService: ReservationsService) {}
 
   @Post('holds')
   @Roles('student')
   createHold(@Req() req: AuthenticatedRequest, @Body() body: CreateHoldDto) {
+    assertPaymentsEnabled(this.env);
     return this.reservationsService.createHold(rlsCtx(req), body, this.redirectUrl);
   }
 

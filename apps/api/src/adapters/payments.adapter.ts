@@ -17,6 +17,19 @@ export interface PaymentsAdapter {
   refund(providerTxnId: string, amountUgx: number): Promise<{ providerRefundId: string }>;
 }
 
+/** Defense in depth for the Phase 1 deployment. Route guards reject payment
+ * traffic first; this adapter ensures an accidental internal call still
+ * cannot contact a provider or return a fake checkout URL. */
+export class DisabledPayments implements PaymentsAdapter {
+  initiate(): Promise<InitiatePaymentResult> {
+    return Promise.reject(new Error('Payments are disabled'));
+  }
+
+  refund(): Promise<{ providerRefundId: string }> {
+    return Promise.reject(new Error('Payments are disabled'));
+  }
+}
+
 /** Flutterwave standard checkout (v3). */
 export class FlutterwavePayments implements PaymentsAdapter {
   constructor(private readonly secretKey: string) {}

@@ -10,8 +10,8 @@ Three role-gated audiences in Kampala, Uganda, starting with Makerere University
 
 - **Students** — hunting for verified hostels/rentals near campus, mostly on
   mid/low-end Android phones over patchy mobile data. Job: find a trustworthy
-  room fast, place a 5,000 UGX 72-hour reservation hold, move in. High stakes,
-  low patience, thumb-first usage.
+  room fast and contact the right landlord. Paid reservation holds arrive in
+  Phase 2. High stakes, low patience, thumb-first usage.
 - **Landlords** — property owners listing hostels. Often older, less
   tech-fluent; onboard once (KYC + ID upload), then check a reservation inbox.
   Job: get verified, get tenants, protect reputation.
@@ -24,12 +24,12 @@ Plus a public pre-login discovery/marketing surface (search + listing detail).
 
 ## Product Purpose
 
-CampusHomes is a verified student-housing reservation marketplace. Core loop:
-landlord lists → Ops physically verifies → listing goes live → student pays a
-fixed reservation fee to hold a unit 72 hours → moves in → leaves a structured
-review. Rent and leases happen off-platform. Success = students trust the
-"Verified" badge enough to pay before seeing the room, and Ops keeps that
-badge honest. Verification is the product; everything else serves it.
+CampusHomes is a verified student-housing marketplace. The Phase 1 MVP loop is:
+landlord lists → Ops physically verifies → listing goes live → student discovers
+the verified property and contacts the landlord. Rent and leases happen
+off-platform. Phase 2 activates the already-designed 5,000 UGX, 72-hour
+reservation-hold and payment flow, followed by move-in confirmation and reviews.
+Verification is the product; everything else serves it.
 
 ## Brand Personality
 
@@ -60,9 +60,10 @@ and photography, not from playfulness in the UI chrome.
 2. **Built for the Kampala pocket.** Mid-range Android, intermittent data,
    sunlight-readable. Fast first paint, generous touch targets, offline states
    designed — never an afterthought spinner.
-3. **Money moments are calm.** The reservation-hold flow (the only payment on
-   the platform) is deliberately quiet: one action per screen, explicit
-   amounts, visible state (held / paid / expired), no urgency theatrics.
+3. **Money moments are calm.** When payments activate in Phase 2, the
+   reservation-hold flow (the only payment on the platform) is deliberately
+   quiet: one action per screen, explicit amounts, visible state (held / paid /
+   expired), no urgency theatrics.
 4. **Same vocabulary, three portals.** Student, Landlord, and Ops share one
    component language; portals differ by density and navigation, not by
    dialect. A button, form control, or status chip looks identical everywhere.

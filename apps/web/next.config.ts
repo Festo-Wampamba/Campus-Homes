@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import path from "node:path";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  // The web app imports workspace packages outside apps/web. Include the
+  // monorepo root in Next's file tracing so the standalone image contains
+  // every runtime file those packages need.
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "res.cloudinary.com" },
