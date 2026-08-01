@@ -6,6 +6,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
   DATABASE_URL: z.string().min(1),
+  // Better Auth needs a direct Neon connection because its restricted RLS
+  // context is supplied as a PostgreSQL startup option. Neon's pooled
+  // PgBouncer endpoint rejects custom startup options.
+  AUTH_DATABASE_URL: z.string().min(1).optional(),
   REDIS_URL: z.string().min(1).optional(),
   // Local development uses an isolated Redis with BullMQ's required
   // no-eviction policy, even when REDIS_URL points at a managed deployment.

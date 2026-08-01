@@ -10,6 +10,7 @@ import { loadEnv } from '../../config/env';
 import { assertStubAllowed } from '../../config/integration-guard';
 import { createDb } from '../../db/client';
 import { createAuth } from './auth.config';
+import { resolveAuthDatabaseUrl } from './auth-database';
 import { AuthGuard } from './auth.guard';
 import { AUTH, MESSAGING } from './auth.tokens';
 
@@ -31,14 +32,13 @@ import { AUTH, MESSAGING } from './auth.tokens';
       inject: [MESSAGING],
       useFactory: (messaging: MessagingAdapter) => {
         const env = loadEnv();
-        // Dedicated service-context pool for Better Auth only. Every one of
-        // its queries is pre-auth identity bootstrapping (user lookup by
-        // phone/email, OTP verify, session validate), so the RLS context is
-        // service_role — set as a connection-startup GUC, so it can never be
-        // client-derived and never leaks: this pool is not exported and no
-        // request-scoped code touches it.
+        // Dedicated direct service-context pool for Better Auth only. Every
+        // query is pre-auth identity bootstrapping (user lookup by phone/email,
+        // OTP verify, session validate), so the RLS context is service_role.
+        // Neon PgBouncer rejects custom startup options, hence this separate
+        // direct URL while the rest of the API continues using DATABASE_URL.
         const pool = new Pool({
-          connectionString: env.DATABASE_URL,
+          connectionString: resolveAuthDatabaseUrl(env),
           max: 5,
           options: '-c app.user_role=service_role',
         });
