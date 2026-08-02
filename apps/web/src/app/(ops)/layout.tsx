@@ -1,7 +1,7 @@
 import { ClipboardCheck, ClipboardList, Image as ImageIcon, ShieldAlert, UserCheck } from "lucide-react";
 
 import { requireRole } from "@/lib/session";
-import { SidebarShell } from "@/components/shell/sidebar-shell";
+import { AppShell } from "@/components/shell/app-shell";
 import { SyncStatusIndicator } from "@/components/ops/sync-status-indicator";
 
 export default async function OpsLayout({
@@ -11,9 +11,10 @@ export default async function OpsLayout({
   const isInspector = session.user.role === "ops_inspector";
 
   return (
-    <SidebarShell
+    <AppShell
       portalLabel={isInspector ? "Ops · Inspector" : "Ops · Lead"}
       user={session.user}
+      homeHref={isInspector ? "/ops/inspect" : "/ops"}
       nav={
         isInspector
           ? [{ label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> }]
@@ -27,6 +28,6 @@ export default async function OpsLayout({
       headerExtra={isInspector ? <SyncStatusIndicator /> : undefined}
     >
       {children}
-    </SidebarShell>
+    </AppShell>
   );
 }

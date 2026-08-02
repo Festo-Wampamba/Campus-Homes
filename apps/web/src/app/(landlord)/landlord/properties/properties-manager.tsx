@@ -68,7 +68,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
   const [viewing, setViewing] = useState<Property | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
-  const [view, setView] = useState<ViewMode>("list");
+  const [view, setView] = useState<ViewMode>("grid");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

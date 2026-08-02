@@ -7,8 +7,11 @@ import { useMemo, useState } from "react";
 
 import { AdminField, AdminModal, adminFieldClass, adminTextareaClass } from "@/components/admin/admin-modal";
 import { StatusBadge } from "@/components/admin/admin-ui";
+import { PaginationControls } from "@/components/pagination-controls";
+import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { api, apiErrorMessage } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
+import { usePagination } from "@/lib/use-pagination";
 
 type PropertyRow = Record<string, unknown> & { id: string; name: string; landlordName: string; catchment: string; type: string; status: string; operationalStatus: string; unitCount: number; availableUnits: number; imageCount: number };
 type Landlord = { id: string; name: string; email?: string | null; role: string };
@@ -27,6 +30,7 @@ const fieldButton = "inline-flex h-9 items-center justify-center gap-2 rounded-l
 export function PropertiesManager({ rows, landlords, semesters, permissions }: { rows: PropertyRow[]; landlords: Landlord[]; semesters: Semester[]; permissions: string[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<ViewMode>("grid");
   const [mode, setMode] = useState<"create" | "edit" | "detail" | null>(null);
   const [selected, setSelected] = useState<PropertyRow | null>(null);
   const [detail, setDetail] = useState<PropertyDetail | null>(null);
@@ -38,6 +42,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const filtered = useMemo(() => rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query.toLowerCase())), [rows, query]);
+  const { page, setPage, totalPages, pageItems, total, pageSize } = usePagination(filtered, 10);
   const applicableSemesters = useMemo(() => semesters.filter((semester) => !semester.university || semester.university === form.catchment), [semesters, form.catchment]);
   const canCreate = permissions.includes("properties.create");
   const canUpdate = permissions.includes("properties.update");
@@ -133,9 +138,64 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     catch { setNotice("Media could not be removed."); } finally { setPending(false); }
   }
 
+  function rowActions(row: PropertyRow) {
+    return <div className="flex gap-1">
+      <button aria-label="View property inventory" title="View inventory" onClick={() => load(row, "detail")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><Building2 className="size-4" /></button>
+      {canUpdate && <button aria-label="Edit property" title="Edit property" onClick={() => load(row, "edit")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 dark:border-border dark:text-slate-300 dark:hover:border-violet-800 dark:hover:bg-violet-950 dark:hover:text-violet-200"><Pencil className="size-4" /></button>}
+    </div>;
+  }
+
   return <>
-    <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row dark:border-border"><label className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className={`${adminFieldClass} pl-9`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search property, landlord, catchment, type, status…" /></label>{canCreate && <button type="button" onClick={startCreate} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700"><Plus className="size-4" />Add property</button>}</div>
-    <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-xs"><thead className="bg-slate-50 text-slate-500 dark:bg-muted"><tr>{["Property", "Owner", "Type", "Catchment", "Verification", "Operations", "Units", "Available", "Media", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-bold uppercase tracking-[.06em]">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{filtered.map((row) => <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-muted/30"><td className="px-4 py-3.5 font-bold">{row.name}</td><td className="px-4 py-3.5">{row.landlordName}</td><td className="px-4 py-3.5 capitalize">{row.type?.replaceAll("_", " ")}</td><td className="px-4 py-3.5">{row.catchment}</td><td className="px-4 py-3.5"><StatusBadge value={row.status} /></td><td className="px-4 py-3.5"><StatusBadge value={row.operationalStatus} /></td><td className="px-4 py-3.5 font-bold">{row.unitCount ?? 0}</td><td className="px-4 py-3.5">{row.availableUnits ?? 0}</td><td className="px-4 py-3.5">{row.imageCount ?? 0}</td><td className="px-4 py-3.5"><div className="flex gap-1"><button aria-label="View property inventory" title="View inventory" onClick={() => load(row, "detail")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><Building2 className="size-4" /></button>{canUpdate && <button aria-label="Edit property" title="Edit property" onClick={() => load(row, "edit")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 dark:border-border dark:text-slate-300 dark:hover:border-violet-800 dark:hover:bg-violet-950 dark:hover:text-violet-200"><Pencil className="size-4" /></button>}</div></td></tr>)}</tbody></table>{!filtered.length && <p className="py-14 text-center text-sm text-slate-500">No properties match this search.</p>}</div>
+    <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-center dark:border-border">
+      <label className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className={`${adminFieldClass} pl-9`} value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search property, landlord, catchment, type, status…" /></label>
+      <div className="flex gap-2">
+        <ViewToggle view={view} onChange={setView} />
+        {canCreate && <button type="button" onClick={startCreate} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700"><Plus className="size-4" />Add property</button>}
+      </div>
+    </div>
+
+    {view === "list" && (
+      <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-xs"><thead className="bg-slate-50 text-slate-500 dark:bg-muted"><tr>{["Property", "Owner", "Type", "Catchment", "Verification", "Operations", "Units", "Available", "Media", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-bold uppercase tracking-[.06em]">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{pageItems.map((row) =><tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-muted/30"><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.name}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.landlordName}</td><td className="px-4 py-3.5 capitalize dark:text-muted-foreground">{row.type?.replaceAll("_", " ")}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.catchment}</td><td className="px-4 py-3.5"><StatusBadge value={row.status} /></td><td className="px-4 py-3.5"><StatusBadge value={row.operationalStatus} /></td><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.unitCount ?? 0}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.availableUnits ?? 0}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.imageCount ?? 0}</td><td className="px-4 py-3.5">{rowActions(row)}</td></tr>)}</tbody></table>{!filtered.length && <p className="py-14 text-center text-sm text-slate-500">No properties match this search.</p>}</div>
+    )}
+
+    {view === "rows" && (
+      <div className="divide-y divide-slate-100 dark:divide-border">
+        {pageItems.map((row) =><div key={row.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 hover:bg-slate-50 dark:hover:bg-muted/30">
+          <div className="min-w-0 flex-1">
+            <p className="font-bold dark:text-foreground">{row.name}</p>
+            <p className="text-[11px] text-slate-500 dark:text-muted-foreground">{row.landlordName} · <span className="capitalize">{row.type?.replaceAll("_", " ")}</span> · {row.catchment} · {row.unitCount ?? 0} units ({row.availableUnits ?? 0} available)</p>
+          </div>
+          <StatusBadge value={row.status} />
+          <StatusBadge value={row.operationalStatus} />
+          {rowActions(row)}
+        </div>)}
+        {!filtered.length && <p className="py-14 text-center text-sm text-slate-500">No properties match this search.</p>}
+      </div>
+    )}
+
+    {view === "grid" && (
+      <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+        {pageItems.map((row) =><div key={row.id} className="rounded-lg border border-slate-200 p-3.5 dark:border-border">
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-bold dark:text-foreground">{row.name}</p>
+              <p className="truncate text-[11px] text-slate-500 dark:text-muted-foreground">{row.landlordName}</p>
+            </div>
+            <StatusBadge value={row.status} />
+          </div>
+          <dl className="mb-3 space-y-1 text-xs">
+            <div className="flex justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Type</dt><dd className="capitalize text-slate-600 dark:text-muted-foreground">{row.type?.replaceAll("_", " ")}</dd></div>
+            <div className="flex justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Catchment</dt><dd className="text-slate-600 dark:text-muted-foreground">{row.catchment}</dd></div>
+            <div className="flex items-center justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Operations</dt><dd><StatusBadge value={row.operationalStatus} /></dd></div>
+            <div className="flex justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Units</dt><dd className="text-slate-600 dark:text-muted-foreground">{row.unitCount ?? 0} ({row.availableUnits ?? 0} available)</dd></div>
+          </dl>
+          {rowActions(row)}
+        </div>)}
+        {!filtered.length && <p className="col-span-full py-14 text-center text-sm text-slate-500">No properties match this search.</p>}
+      </div>
+    )}
+
+    <PaginationControls page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
 
     <AdminModal open={mode === "create" || mode === "edit"} onClose={close} title={mode === "create" ? "Add a property" : `Update ${selected?.name ?? "property"}`} description="Create the property record, operational utilities, media, and room inventory without changing Ops-controlled verification or publication status." wide>
       <form onSubmit={save} className="space-y-6 p-5"><div className="grid gap-4 md:grid-cols-3"><AdminField label="Landlord / owner" required><select required className={adminFieldClass} value={form.landlordId} onChange={(e) => setLandlord(e.target.value)}><option value="">Select owner</option>{landlords.map((landlord) => <option key={landlord.id} value={landlord.id}>{landlord.name} · {landlord.email}</option>)}</select></AdminField><AdminField label="Property name" required><input required className={adminFieldClass} placeholder="Makerere View Hostel" value={form.name} onChange={(e) => setField("name", e.target.value)} /></AdminField><AdminField label="Property type"><select className={adminFieldClass} value={form.type} onChange={(e) => setField("type", e.target.value)}>{TYPES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField><div className="md:col-span-2"><AdminField label="Street address" required><input required className={adminFieldClass} placeholder="Plot 12, Makerere Hill Road" value={form.streetAddress} onChange={(e) => setField("streetAddress", e.target.value)} /></AdminField></div><AdminField label="University catchment"><select className={adminFieldClass} value={form.catchment} onChange={(e) => setCatchment(e.target.value)}>{CATCHMENTS.map((item) => <option key={item}>{item}</option>)}</select></AdminField><AdminField label="Operational status"><select className={adminFieldClass} value={form.operationalStatus} onChange={(e) => setField("operationalStatus", e.target.value)}>{["open", "temporarily_closed", "under_renovation", "emergency_closure"].map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField><AdminField label="Contact phone"><input type="tel" inputMode="tel" className={adminFieldClass} placeholder="+256 771 234 567" value={form.contactPhone} onChange={(e) => setField("contactPhone", e.target.value)} /></AdminField><AdminField label="Contact email"><input type="email" className={adminFieldClass} placeholder="manager@example.com" value={form.contactEmail} onChange={(e) => setField("contactEmail", e.target.value)} /></AdminField></div><AdminField label="Description"><textarea className={adminTextareaClass} placeholder="Describe the location, rooms, access, and notable facilities…" value={form.description} onChange={(e) => setField("description", e.target.value)} /></AdminField>

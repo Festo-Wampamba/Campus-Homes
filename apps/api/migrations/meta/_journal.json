@@ -120,6 +120,13 @@
       "when": 1784879466225,
       "tag": "0017_activities",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785652104497,
+      "tag": "0018_ledger",
+      "breakpoints": true
     }
   ]
 }

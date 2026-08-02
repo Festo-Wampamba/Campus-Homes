@@ -470,6 +470,34 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
     Lint clean on every touched file; the only lint failures are the
     pre-existing untouched `src/modules/ai/*` errors noted above.
 
+- **RBAC scope-check gap in the live admin console, closed (2026-08-02):**
+  verifying the already-built RBAC system (11 roles, 142-permission catalog,
+  `roles-manager.tsx` + `users-manager.tsx`) surfaced that `AdminUsersService`
+  (`src/modules/staff/admin-users.service.ts`, backing `/admin/users/*` — the
+  endpoint the live Users console actually calls) never got the
+  `hasCoveringScope` fix that `StaffService` (`/admin/staff/*`) already has
+  from the original RBAC Foundation incident. `assignRole`/`revokeRole`/
+  `grantPermissions` had no scope check at all, and `revokePermission` didn't
+  even receive the actor's permissions/assignments — so anyone holding
+  `roles.assign`/`roles.revoke`/`users.permissions_manage` could grant or
+  revoke any role/permission at any scope for any user, regardless of their
+  own assignment's scope (short of the already-separately-gated `super_admin`
+  role and `roles.manage_super_admin` permission). Fixed by porting the same
+  `hasCoveringScope` check into all four methods, threading `req.assignments`
+  through `AdminUsersController`, and adding a self-target guard to
+  `assignRole`/`grantPermissions` (`StaffService.grantRole` already had this;
+  `AdminUsersService` didn't). New `test/services/admin-users-rbac.spec.ts`
+  (13 tests) covers scope enforcement and grant/revoke round trips via
+  `loadPermissions`, mirroring `rbac-staff.spec.ts`. Also found: the docker
+  test DB persists across sessions and can drift behind new migrations
+  silently (missing `users.deleted_at` caused early failures) — run
+  `db:migrate` against it if service-layer tests throw unexpected "column
+  does not exist" errors. Also found: `better-auth/crypto` is ESM-only and
+  Jest has no transform pattern for it — nothing had imported it in a test
+  before, `jest.mock('better-auth/crypto', ...)` in the spec file sidesteps
+  it without touching the shared jest config. RLS/service suites: 134/134
+  passing (was 106 last recorded).
+
 ## Resolved (was brief §20 open item)
 
 **MapLibre GL + OSM raster tiles — decided by Festo 2026-07-08.** No Mapbox, no map

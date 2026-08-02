@@ -15,15 +15,6 @@ export class LandlordsController {
     private readonly rlsDb: RlsDb,
   ) {}
 
-  // Student -> landlord role flip (the onboarding wizard's INSERT then works
-  // under RLS's own landlords_self_insert policy, no further service path
-  // needed).
-  @Post('apply')
-  @Roles('student')
-  apply(@Req() req: AuthenticatedRequest) {
-    return this.landlords.apply(rlsCtx(req));
-  }
-
   @Get('me')
   @Roles('landlord')
   me(@Req() req: AuthenticatedRequest) {

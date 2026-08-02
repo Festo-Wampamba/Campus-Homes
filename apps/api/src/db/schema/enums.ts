@@ -3,6 +3,7 @@ import {
   CATCHMENTS,
   DOC_TYPES,
   KYC_STATUSES,
+  LEDGER_ACCOUNT_TYPES,
   LISTING_STATUSES,
   MOVE_IN_CONFIRMER_ROLES,
   NOTIFICATION_CHANNELS,
@@ -53,3 +54,4 @@ export const studentFlagReason = pgEnum('student_flag_reason', STUDENT_FLAG_REAS
 export const reputationSubjectType = pgEnum('reputation_subject_type', REPUTATION_SUBJECT_TYPES);
 export const notificationChannel = pgEnum('notification_channel', NOTIFICATION_CHANNELS);
 export const notificationStatus = pgEnum('notification_status', NOTIFICATION_STATUSES);
+export const ledgerAccountType = pgEnum('ledger_account_type', LEDGER_ACCOUNT_TYPES);

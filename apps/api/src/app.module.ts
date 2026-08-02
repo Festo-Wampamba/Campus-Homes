@@ -7,6 +7,7 @@ import { RedisModule } from './db/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { FinanceModule } from './modules/finance/finance.module';
 import { HealthController } from './modules/health/health.controller';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { LandlordsModule } from './modules/landlords/landlords.module';
@@ -27,6 +28,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     LandlordsModule,
     OpsModule,
     ProfileModule,
+    FinanceModule,
     ReservationsModule,
     NotificationsModule,
     ChatModule,

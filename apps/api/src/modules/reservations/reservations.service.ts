@@ -18,6 +18,7 @@ import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
 import { moveIns, payments, refunds, reservations } from '../../db/schema';
+import { LedgerService } from '../finance/ledger.service';
 import { AuditService } from '../ops/audit.service';
 import { HOLD_EXPIRY_QUEUE, PAYMENTS } from './reservations.tokens';
 
@@ -49,6 +50,7 @@ export class ReservationsService {
     @Inject(PAYMENTS) private readonly paymentsAdapter: PaymentsAdapter,
     @Optional() @Inject(REDIS) private readonly redis: Redis | null,
     @Optional() @Inject(HOLD_EXPIRY_QUEUE) private readonly holdExpiryQueue: Queue | null,
+    private readonly ledger: LedgerService,
   ) {}
 
   /** Redis lock (optimization) → DB transaction (guarantee: the partial unique
@@ -262,17 +264,40 @@ export class ReservationsService {
           })
           .where(eq(payments.id, payment.id));
 
+        await this.ledger.postAutoEntry(db, {
+          memo: `Hold fee received — reservation ${reservation.id}`,
+          reservationId: reservation.id,
+          paymentId: payment.id,
+          lines: [
+            { accountCode: '1000', debitUgx: payment.amountUgx },
+            { accountCode: '4000', creditUgx: payment.amountUgx },
+          ],
+        });
+
         const holdExpired =
           reservation.status === 'expired' ||
           (reservation.holdExpiresAt !== null && reservation.holdExpiresAt < new Date());
 
         if (holdExpired) {
           // Money arrived for a dead hold — refund, never activate (§9 flow 4).
-          await db.insert(refunds).values({
-            paymentId: payment.id,
+          const [refund] = await db
+            .insert(refunds)
+            .values({
+              paymentId: payment.id,
+              reservationId: reservation.id,
+              reason: 'cooling_off',
+              amountUgx: payment.amountUgx,
+            })
+            .returning();
+          await this.ledger.postAutoEntry(db, {
+            memo: `Refund — expired hold paid anyway, reservation ${reservation.id}`,
             reservationId: reservation.id,
-            reason: 'cooling_off',
-            amountUgx: payment.amountUgx,
+            paymentId: payment.id,
+            refundId: refund?.id,
+            lines: [
+              { accountCode: '4900', debitUgx: payment.amountUgx },
+              { accountCode: '1000', creditUgx: payment.amountUgx },
+            ],
           });
           await db
             .update(reservations)
@@ -313,11 +338,24 @@ export class ReservationsService {
         .from(payments)
         .where(eq(payments.reservationId, reservationId));
       if (payment?.status === 'succeeded') {
-        await db.insert(refunds).values({
-          paymentId: payment.id,
+        const [refund] = await db
+          .insert(refunds)
+          .values({
+            paymentId: payment.id,
+            reservationId,
+            reason: 'student_cancel',
+            amountUgx: payment.amountUgx,
+          })
+          .returning();
+        await this.ledger.postAutoEntry(db, {
+          memo: `Refund — student cancelled, reservation ${reservationId}`,
           reservationId,
-          reason: 'student_cancel',
-          amountUgx: payment.amountUgx,
+          paymentId: payment.id,
+          refundId: refund?.id,
+          lines: [
+            { accountCode: '4900', debitUgx: payment.amountUgx },
+            { accountCode: '1000', creditUgx: payment.amountUgx },
+          ],
         });
         return 'cancelled_with_refund';
       }

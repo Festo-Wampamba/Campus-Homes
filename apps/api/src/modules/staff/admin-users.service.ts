@@ -17,6 +17,7 @@ import type {
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
+import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
 
 const SERVICE_CTX: RlsContext = {
@@ -94,18 +95,37 @@ export class AdminUsersService {
             [user.id, input.legalName],
           );
         }
+        if (input.accountType === 'ops_inspector' || input.accountType === 'ops_lead') {
+          // Without this row the user has the right `users.role` but is
+          // invisible to every ops_staff-joined query — OpsService.listInspectors
+          // (the schedule-visit dropdown), queue(), and myVisits() all silently
+          // show nothing for them until someone notices and backfills this by hand.
+          await client.query(
+            `INSERT INTO ops_staff (user_id, team) VALUES ($1, $2::ops_team)`,
+            [user.id, input.accountType === 'ops_lead' ? 'lead' : 'inspector'],
+          );
+        }
 
-        // Student and landlord baseline roles are self-scoped. Custodians and
-        // property workers receive no implicit role here: their access must be
-        // assigned against a specific property by assignRole().
-        if (['student', 'landlord'].includes(input.accountType)) {
+        // Student and landlord baseline roles are self-scoped. Ops staff are
+        // platform-wide operational roles (matching the "assign role" UI's own
+        // default for these two role keys), not owners of a self-scoped
+        // resource. Custodians and property workers receive no implicit role
+        // here: their access must be assigned against a specific property by
+        // assignRole().
+        const baselineScope: Record<string, string> = {
+          student: 'own',
+          landlord: 'own',
+          ops_inspector: 'platform_wide',
+          ops_lead: 'platform_wide',
+        };
+        if (input.accountType in baselineScope) {
           await client.query(`
             INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
             SELECT $1, id, $2, $3, 'Initial account role assigned by Super Admin'
             FROM roles WHERE key = $4
           `, [
             user.id,
-            'own',
+            baselineScope[input.accountType],
             actor.userId,
             input.accountType,
           ]);
@@ -313,11 +333,18 @@ export class AdminUsersService {
   async assignRole(
     actor: RlsContext,
     actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
     userId: string,
     input: AdminRoleAssignmentInput,
   ) {
+    if (actor.userId === userId) {
+      throw new ForbiddenException('Cannot assign yourself a role');
+    }
     if (input.roleKey === 'super_admin' && !actorPermissions.has('roles.manage_super_admin')) {
       throw new ForbiddenException('Only a Super Admin can grant the Super Admin role');
+    }
+    if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
+      throw new ForbiddenException('Cannot assign a role outside your own scope');
     }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await client.query('BEGIN');
@@ -370,6 +397,7 @@ export class AdminUsersService {
   async revokeRole(
     actor: RlsContext,
     actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
     userId: string,
     assignmentId: string,
   ) {
@@ -387,6 +415,9 @@ export class AdminUsersService {
             throw new ForbiddenException('Only a Super Admin can revoke this role');
           }
           if (actor.userId === userId) throw new ForbiddenException('You cannot revoke your own Super Admin role');
+        }
+        if (!hasCoveringScope(actorAssignments, assignment.scopeType, assignment.scopeId)) {
+          throw new ForbiddenException('Cannot revoke a role assignment outside your own scope');
         }
         await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE id = $1', [assignmentId, actor.userId]);
         if (assignment.scopeType === 'property' && assignment.scopeId) {
@@ -411,11 +442,18 @@ export class AdminUsersService {
   async grantPermissions(
     actor: RlsContext,
     actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
     userId: string,
     input: AdminPermissionGrantInput,
   ) {
+    if (actor.userId === userId) {
+      throw new ForbiddenException('Cannot grant yourself a permission');
+    }
     if (input.permissionKeys.includes('roles.manage_super_admin') && !actorPermissions.has('roles.manage_super_admin')) {
       throw new ForbiddenException('Only a Super Admin can grant Super Admin management');
+    }
+    if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
+      throw new ForbiddenException('Cannot grant a permission outside your own scope');
     }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await client.query('BEGIN');
@@ -458,13 +496,37 @@ export class AdminUsersService {
     return { grants: result };
   }
 
-  async revokePermission(actor: RlsContext, userId: string, grantId: string) {
+  async revokePermission(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+    grantId: string,
+  ) {
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      const row = (await client.query(`
-        UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $3
-        WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING id
-      `, [grantId, userId, actor.userId])).rows[0];
-      if (!row) throw new NotFoundException('Active permission grant not found');
+      await client.query('BEGIN');
+      try {
+        const grant = (await client.query<{ permissionKey: string; scopeType: string; scopeId: string | null }>(`
+          SELECT p.key AS "permissionKey", upg.scope_type AS "scopeType", upg.scope_id AS "scopeId"
+          FROM user_permission_grants upg JOIN permissions p ON p.id = upg.permission_id
+          WHERE upg.id = $1 AND upg.user_id = $2 AND upg.revoked_at IS NULL FOR UPDATE
+        `, [grantId, userId])).rows[0];
+        if (!grant) throw new NotFoundException('Active permission grant not found');
+        if (grant.permissionKey === 'roles.manage_super_admin' && !actorPermissions.has('roles.manage_super_admin')) {
+          throw new ForbiddenException('Only a Super Admin can revoke Super Admin management');
+        }
+        if (!hasCoveringScope(actorAssignments, grant.scopeType, grant.scopeId)) {
+          throw new ForbiddenException('Cannot revoke a permission grant outside your own scope');
+        }
+        await client.query(
+          'UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $2 WHERE id = $1',
+          [grantId, actor.userId],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
       return { id: grantId, revoked: true };
     });
     await this.audit.record(actor, 'users.permissions_revoke', 'user_permission_grant', grantId, { targetUserId: userId });
