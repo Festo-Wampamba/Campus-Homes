@@ -7,6 +7,8 @@ describe("homeForAuthenticatedRole", () => {
     ["ops_inspector", "/ops"],
     ["ops_lead", "/ops"],
     ["admin", "/admin"],
+    ["custodian", "/"],
+    ["property_worker", "/"],
   ])("routes %s sessions to %s", (role, expected) => {
     expect(homeForAuthenticatedRole(role)).toBe(expected);
   });
