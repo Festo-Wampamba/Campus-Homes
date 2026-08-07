@@ -100,28 +100,28 @@ export function SearchClient() {
   }
 
   return (
-    <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,26rem)_1fr]">
+    <div className="flex flex-col bg-background lg:grid lg:grid-cols-[minmax(0,32rem)_1fr]">
       <ListingsMap
         markers={markers}
         selectedId={selectedId}
         onSelect={selectFromMap}
         onBoundsChange={(b) => setBounds(roundBounds(b))}
-        className="h-[45vh] w-full lg:order-2 lg:h-[calc(100vh-3.5rem)] lg:sticky lg:top-14"
+        className="h-[42vh] w-full lg:sticky lg:top-16 lg:order-2 lg:h-[calc(100vh-4rem)]"
         initialCenter={campus ? [campus.lon, campus.lat] : undefined}
       />
       <section
         aria-label="Search results"
-        className="flex flex-col gap-3 px-4 py-5 sm:px-6 lg:order-1 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto"
+        className="flex flex-col gap-4 border-r border-border px-4 py-6 sm:px-6 lg:order-1 lg:h-[calc(100vh-4rem)] lg:overflow-y-auto lg:px-7"
       >
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 self-start text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1.5 self-start rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-300 hover:border-teal-700 hover:text-teal-700"
         >
           <ArrowLeft aria-hidden className="size-4" />
           Home
         </Link>
         <div className="flex items-baseline justify-between gap-3">
-          <h1 className="text-xl">
+          <h1 className="text-2xl tracking-tight">
             {campus ? `Near ${campus.name}` : "Verified places here"}
           </h1>
           <p aria-live="polite" className="text-sm text-muted-foreground">
@@ -133,7 +133,7 @@ export function SearchClient() {
           physical inspection.
         </p>
 
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-teal-50 p-3 shadow-xs sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative flex-1 sm:min-w-40">
             <SearchIcon
               aria-hidden
@@ -255,12 +255,12 @@ function ResultCard({
       ref={ref}
       onMouseEnter={onHover}
       className={cn(
-        "rounded-lg border border-border bg-card p-3 shadow-xs transition-shadow duration-150 hover:shadow-md",
+        "rounded-xl border border-border bg-card p-3 shadow-xs transition duration-300 hover:-translate-y-0.5 hover:border-teal-700/40 hover:shadow-md",
         selected && "border-teal-600 ring-1 ring-teal-600",
       )}
     >
       <Link href={`/listings/${row.id}`} className="group flex gap-3">
-        <div className="relative size-24 shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-teal-700 to-teal-900">
+        <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-teal-700 to-teal-900">
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a thumbnail
             <img

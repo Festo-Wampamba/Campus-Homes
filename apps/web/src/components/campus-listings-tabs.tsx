@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowRight, Building2 } from "lucide-react";
-import Link from "next/link";
-
+import { ArrowRightIcon, HomeIcon } from "@radix-ui/react-icons";
 import type { Campus, ListingSearchResult } from "@campushomes/shared";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 
+import { FeaturedCard } from "@/components/featured-card";
 import { CAMPUS_LOCATIONS } from "@/lib/campuses";
 import { cn } from "@/lib/utils";
-import { FeaturedCard } from "@/components/featured-card";
 
 const CAMPUSES = Object.values(CAMPUS_LOCATIONS);
 
@@ -19,70 +18,76 @@ export function CampusListingsTabs({
   campuses: Campus[];
   listings: ListingSearchResult[];
 }) {
-  const campusByCode = new Map(campuses.map((c) => [c.university, c]));
+  const campusByCode = new Map(campuses.map((campus) => [campus.university, campus]));
   const [active, setActive] = useState<string>("all");
 
-  // Grouped on the authoritative properties.catchment field (row.university),
-  // the same field /listings/campuses derives hostel_count from — not a
-  // geo-distance guess, so a catchment="other" property (no nearby campus
-  // tile at all) correctly appears only under "All", never misfiled into a
-  // wrong tab.
   const grouped = useMemo(() => {
-    const map = new Map<string, ListingSearchResult[]>();
-    for (const row of listings) {
-      map.set(row.university, [...(map.get(row.university) ?? []), row]);
+    const rows = new Map<string, ListingSearchResult[]>();
+    for (const listing of listings) {
+      rows.set(listing.university, [...(rows.get(listing.university) ?? []), listing]);
     }
-    return map;
+    return rows;
   }, [listings]);
 
   const visible = (active === "all" ? listings : (grouped.get(active) ?? [])).slice(0, 6);
+  const searchHref = active === "all" ? "/search" : `/search?campus=${active}`;
 
   return (
     <div>
-      {/* Plain filter buttons, not an ARIA tablist — this doesn't implement
-          the roving-tabindex/arrow-key keyboard model role="tab" promises,
-          so it stays honest about what it is (same aria-pressed toggle
-          pattern already used for the sign-in mode switch). */}
-      <div className="flex flex-wrap gap-2 border-b border-border pb-4" aria-label="Filter by university">
+      <div className="scrollbar-hide flex gap-2 overflow-x-auto border-b border-border pb-4" aria-label="Filter by university">
         <FilterButton active={active === "all"} onClick={() => setActive("all")}>
           All universities
         </FilterButton>
         {CAMPUSES.map((campus) => {
           const count = campusByCode.get(campus.code)?.hostel_count ?? grouped.get(campus.code)?.length ?? 0;
           return (
-            <FilterButton key={campus.code} active={active === campus.code} onClick={() => setActive(campus.code)}>
+            <FilterButton
+              key={campus.code}
+              active={active === campus.code}
+              onClick={() => setActive(campus.code)}
+            >
               {campus.code}
-              {count > 0 && <span className="ml-1 text-muted-foreground">({count})</span>}
+              {count > 0 && <span className="ml-1 opacity-65">{count}</span>}
             </FilterButton>
           );
         })}
       </div>
 
       {visible.length > 0 ? (
-        <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((row) => (
-            <FeaturedCard key={row.id} row={row} />
+        <ul className="mt-8 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map((listing) => (
+            <FeaturedCard key={listing.id} row={listing} />
           ))}
         </ul>
       ) : (
-        <div className="mt-8 flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-14 text-center">
-          <Building2 aria-hidden className="size-8 text-muted-foreground" />
-          <p className="max-w-sm text-sm text-muted-foreground">
-            New verified hostels are going live as our inspectors confirm
-            them. Check the search map — new listings appear there first.
-          </p>
+        <div className="mt-8 grid overflow-hidden rounded-[1.25rem] border border-border bg-teal-50 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="p-7 sm:p-9">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-white text-teal-700 shadow-xs">
+              <HomeIcon className="size-5" />
+            </span>
+            <h3 className="mt-5 text-xl">Fresh inspections are in progress.</h3>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              No filler listings are shown here. New hostels appear as soon as an inspector confirms every required check.
+            </p>
+          </div>
+          <Link
+            href={searchHref}
+            className="group m-5 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-900 px-5 text-sm font-bold text-white transition duration-300 hover:bg-teal-700 active:scale-[0.98] sm:m-8"
+          >
+            Open the live map
+            <ArrowRightIcon className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+          </Link>
         </div>
       )}
 
-      <div className="mt-8 flex justify-end">
-        <Link
-          href={active === "all" ? "/search" : `/search?campus=${active}`}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-700 transition-colors hover:text-teal-900"
-        >
-          See all on the map
-          <ArrowRight aria-hidden className="size-4" />
-        </Link>
-      </div>
+      {visible.length > 0 && (
+        <div className="mt-9 flex justify-end">
+          <Link href={searchHref} className="text-link group">
+            See all on the map
+            <ArrowRightIcon className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -102,10 +107,10 @@ function FilterButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 items-center rounded-full px-3.5 text-sm font-semibold transition-colors duration-150",
+        "inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm font-bold transition duration-300 active:scale-[0.98]",
         active
-          ? "bg-teal-600 text-white"
-          : "bg-muted text-muted-foreground hover:bg-teal-50 hover:text-teal-700",
+          ? "border-teal-900 bg-teal-900 text-white"
+          : "border-border bg-background text-muted-foreground hover:border-teal-700 hover:text-teal-700",
       )}
     >
       {children}

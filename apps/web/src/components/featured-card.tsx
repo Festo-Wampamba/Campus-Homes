@@ -1,81 +1,64 @@
-import Link from "next/link";
-import { Building2, MapPin } from "lucide-react";
-
+import { ArrowTopRightIcon, HomeIcon, SewingPinIcon } from "@radix-ui/react-icons";
 import type { ListingSearchResult } from "@campushomes/shared";
+import Link from "next/link";
 
+import { VerifiedBadge } from "@/components/verified-badge";
 import { listingPhotoUrl } from "@/lib/cloudinary";
 import { formatPriceRange, humanizeKey, roomSizeLabel } from "@/lib/format";
-import { VerifiedBadge } from "@/components/verified-badge";
 
 function FeaturedCard({ row }: { row: ListingSearchResult }) {
   const amenities = Object.entries(row.amenities)
-    .filter(([, has]) => has)
+    .filter(([, available]) => available)
     .map(([key]) => humanizeKey(key))
-    .slice(0, 3);
-  const initial = row.name.charAt(0).toUpperCase();
-  const photoUrl = row.photo_storage_key ? listingPhotoUrl(row.photo_storage_key, 500) : null;
-  const rooms = roomSizeLabel(row);
+    .slice(0, 2);
+  const photoUrl = row.photo_storage_key ? listingPhotoUrl(row.photo_storage_key, 700) : null;
+  const roomSummary = roomSizeLabel(row);
 
   return (
-    <li>
-      <Link
-        href={`/listings/${row.id}`}
-        className="group block h-full overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
-      >
-        <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 to-teal-900">
+    <li className="min-w-0">
+      <Link href={`/listings/${row.id}`} className="group block h-full">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-teal-900">
           {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a card thumbnail
+            // eslint-disable-next-line @next/next/no-img-element -- listing photo hosts can vary in local demo data
             <img
               src={photoUrl}
               alt={row.name}
-              className="size-full object-cover"
+              className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.045]"
               loading="lazy"
             />
           ) : (
-            <>
-              <span
-                aria-hidden
-                className="font-display text-6xl font-bold text-white/15 select-none"
-              >
-                {initial}
-              </span>
-              <Building2
-                aria-hidden
-                className="absolute size-8 text-white/70"
-                strokeWidth={1.5}
-              />
-            </>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[linear-gradient(145deg,var(--teal-700),var(--teal-900))] text-white/70">
+              <HomeIcon className="size-9" />
+              <span className="mt-3 text-xs font-semibold">Inspection photos pending</span>
+            </div>
           )}
-          <VerifiedBadge size="sm" className="absolute top-3 left-3" />
+          <div className="absolute inset-0 bg-linear-to-t from-teal-900/38 via-transparent to-transparent" />
+          <VerifiedBadge size="sm" className="absolute top-3 left-3 shadow-sm" />
+          <span className="absolute right-3 bottom-3 flex size-9 items-center justify-center rounded-full border border-white/30 bg-white/88 text-teal-900 opacity-0 backdrop-blur-sm transition duration-300 group-hover:translate-x-0 group-hover:opacity-100 sm:translate-x-2">
+            <ArrowTopRightIcon className="size-4" />
+          </span>
         </div>
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-lg leading-snug group-hover:text-teal-700">
-              {row.name}
-            </h3>
-          </div>
-          <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin aria-hidden className="size-3.5 shrink-0" />
+
+        <div className="pt-4">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-coral-600">
+            <SewingPinIcon className="size-3.5" />
             {row.street_address}
           </p>
-          {rooms && <p className="mt-2 text-sm text-muted-foreground">{rooms}</p>}
-          {amenities.length > 0 && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {amenities.join(" · ")}
-            </p>
-          )}
-          <p className="tabular mt-3 font-display text-lg font-semibold text-foreground">
-            {row.room_categories.length > 1 && (
-              <span className="mr-1 text-sm font-normal text-muted-foreground">From</span>
-            )}
-            {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
-            <span className="text-sm font-normal text-muted-foreground"> / semester</span>
+          <h3 className="mt-2 line-clamp-1 text-lg leading-snug transition-colors duration-300 group-hover:text-teal-700">
+            {row.name}
+          </h3>
+          <p className="mt-1.5 line-clamp-1 text-sm text-muted-foreground">
+            {[roomSummary, ...amenities].filter(Boolean).join(" · ")}
           </p>
-          {row.room_categories.length > 1 && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {row.room_categories.length} room types
+          <div className="mt-4 flex items-end justify-between gap-3 border-t border-border pt-3">
+            <p className="tabular font-display text-lg font-semibold text-foreground">
+              {row.room_categories.length > 1 && (
+                <span className="mr-1 text-xs font-semibold text-muted-foreground">From</span>
+              )}
+              {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
             </p>
-          )}
+            <span className="text-xs text-muted-foreground">per semester</span>
+          </div>
         </div>
       </Link>
     </li>

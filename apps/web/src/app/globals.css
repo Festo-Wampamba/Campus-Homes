@@ -171,6 +171,7 @@
   }
   body {
     @apply bg-background text-foreground font-sans text-base antialiased;
+    overflow-x: clip;
   }
   h1,
   h2,
@@ -204,6 +205,18 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .eyebrow {
+    @apply text-xs font-bold tracking-[0.16em] text-coral-600 uppercase;
+  }
+
+  .text-link {
+    @apply inline-flex items-center gap-2 text-sm font-bold text-teal-700 transition-colors duration-300 hover:text-teal-900;
+  }
+
+  .marketing-reveal {
+    animation: marketing-reveal 700ms var(--ease-out-quart) both;
+  }
 }
 
 @layer components {
@@ -217,5 +230,27 @@
   .map-pin:hover,
   .map-pin[data-selected="true"] {
     background: var(--coral-600);
+  }
+}
+
+@keyframes marketing-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
