@@ -12,22 +12,6 @@ import { FeaturedCard } from "@/components/featured-card";
 
 const CAMPUSES = Object.values(CAMPUS_LOCATIONS);
 
-// Nearest-campus-by-distance, not a real catchment boundary — search results
-// have no campus field to filter on directly (they're bounding-box results
-// across the whole launch catchment), and at this scale (a few km apart,
-// inside one city) squared distance between plain lat/lon is close enough to
-// sort listings under the right tab without pulling in a geo library.
-export function nearestCampusCode(lat: number, lon: number): string | null {
-  let best: { code: string; dist: number } | null = null;
-  for (const campus of CAMPUSES) {
-    const dLat = lat - campus.lat;
-    const dLon = lon - campus.lon;
-    const dist = dLat * dLat + dLon * dLon;
-    if (!best || dist < best.dist) best = { code: campus.code, dist };
-  }
-  return best?.code ?? null;
-}
-
 export function CampusListingsTabs({
   campuses,
   listings,
@@ -38,12 +22,15 @@ export function CampusListingsTabs({
   const campusByCode = new Map(campuses.map((c) => [c.university, c]));
   const [active, setActive] = useState<string>("all");
 
+  // Grouped on the authoritative properties.catchment field (row.university),
+  // the same field /listings/campuses derives hostel_count from — not a
+  // geo-distance guess, so a catchment="other" property (no nearby campus
+  // tile at all) correctly appears only under "All", never misfiled into a
+  // wrong tab.
   const grouped = useMemo(() => {
     const map = new Map<string, ListingSearchResult[]>();
     for (const row of listings) {
-      const code = nearestCampusCode(row.gps_lat, row.gps_lon);
-      if (!code) continue;
-      map.set(code, [...(map.get(code) ?? []), row]);
+      map.set(row.university, [...(map.get(row.university) ?? []), row]);
     }
     return map;
   }, [listings]);
@@ -52,17 +39,21 @@ export function CampusListingsTabs({
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 border-b border-border pb-4" role="tablist" aria-label="Filter by university">
-        <TabButton active={active === "all"} onClick={() => setActive("all")}>
+      {/* Plain filter buttons, not an ARIA tablist — this doesn't implement
+          the roving-tabindex/arrow-key keyboard model role="tab" promises,
+          so it stays honest about what it is (same aria-pressed toggle
+          pattern already used for the sign-in mode switch). */}
+      <div className="flex flex-wrap gap-2 border-b border-border pb-4" aria-label="Filter by university">
+        <FilterButton active={active === "all"} onClick={() => setActive("all")}>
           All universities
-        </TabButton>
+        </FilterButton>
         {CAMPUSES.map((campus) => {
           const count = campusByCode.get(campus.code)?.hostel_count ?? grouped.get(campus.code)?.length ?? 0;
           return (
-            <TabButton key={campus.code} active={active === campus.code} onClick={() => setActive(campus.code)}>
+            <FilterButton key={campus.code} active={active === campus.code} onClick={() => setActive(campus.code)}>
               {campus.code}
               {count > 0 && <span className="ml-1 text-muted-foreground">({count})</span>}
-            </TabButton>
+            </FilterButton>
           );
         })}
       </div>
@@ -96,7 +87,7 @@ export function CampusListingsTabs({
   );
 }
 
-function TabButton({
+function FilterButton({
   active,
   onClick,
   children,
@@ -108,8 +99,7 @@ function TabButton({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
         "inline-flex h-9 items-center rounded-full px-3.5 text-sm font-semibold transition-colors duration-150",

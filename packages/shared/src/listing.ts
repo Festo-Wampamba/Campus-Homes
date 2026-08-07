@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { LISTING_STATUSES, ROOM_CATEGORIES, VERIFICATION_CHECKLIST_COMPONENTS } from './enums.js';
+import { LISTING_STATUSES, ROOM_CATEGORIES, UNIVERSITIES, VERIFICATION_CHECKLIST_COMPONENTS } from './enums.js';
 import { ugxAmount, uuid } from './common.js';
 
 // One entry per checklist component; a listing can only be verified when all 6 pass.
@@ -81,6 +81,9 @@ export const listingSearchResultSchema = z.object({
   street_address: z.string(),
   gps_lat: z.coerce.number(),
   gps_lon: z.coerce.number(),
+  // Authoritative catchment (properties.catchment) — the same field
+  // /listings/campuses counts hostel_count from. Not inferred from GPS.
+  university: z.enum(UNIVERSITIES),
   // Primary inspection photo (nullable — a card falls back to a placeholder
   // tile when a listing has none) and the room-size spread across its units,
   // so a search result never implies "one room, one price".
