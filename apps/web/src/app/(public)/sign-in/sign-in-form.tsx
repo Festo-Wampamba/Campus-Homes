@@ -12,18 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Wordmark } from "@/components/shell/wordmark";
+import { homeForAuthenticatedRole } from "@/lib/auth-routing";
 import { cn } from "@/lib/utils";
 
 type Role = "student" | "landlord" | "admin" | "ops";
 type Screen = "landing" | "phone" | "otp" | "staff";
-
-const HOME_BY_ROLE: Record<string, string> = {
-  student: "/",
-  landlord: "/landlord",
-  ops_inspector: "/ops",
-  ops_lead: "/ops",
-  admin: "/admin",
-};
 
 const ROLES: {
   id: Role;
@@ -175,11 +168,12 @@ export function SignInForm() {
   const roleLabel = ROLES.find((r) => r.id === role)?.label ?? "";
 
   async function routeBySession() {
-    const { data } = await authClient.getSession();
+    const { data, error } = await authClient.getSession();
+    if (error) throw error;
     const sessionRole = data?.user
       ? (data.user as { role?: string }).role
       : undefined;
-    router.push(HOME_BY_ROLE[sessionRole ?? "student"] ?? "/");
+    router.replace(homeForAuthenticatedRole(sessionRole));
     router.refresh();
   }
 
@@ -235,7 +229,16 @@ export function SignInForm() {
         if (!(err instanceof ApiError)) throw err;
       }
     }
-    await routeBySession();
+    try {
+      await routeBySession();
+    } catch (error) {
+      setPending(false);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Sign-in succeeded, but the secure session could not be verified. Please try again.",
+      );
+    }
   }
 
   async function staffSignIn(e: React.FormEvent) {

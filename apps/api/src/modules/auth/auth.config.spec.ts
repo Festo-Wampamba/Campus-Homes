@@ -34,6 +34,7 @@ describe('createAuth cookie scope', () => {
     expect(jest.mocked(betterAuth)).toHaveBeenCalledWith(
       expect.objectContaining({
         advanced: expect.objectContaining({
+          cookiePrefix: 'campushomes-auth-v2',
           useSecureCookies: true,
           crossSubDomainCookies: {
             enabled: true,
