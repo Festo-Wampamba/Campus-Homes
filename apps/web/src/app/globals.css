@@ -193,6 +193,17 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Keeps an element scrollable (overflow-y-auto) without showing a
+     scrollbar track — e.g. the admin sidebar nav, which should scroll when
+     there are enough links but never show a visible scroll line. */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer components {

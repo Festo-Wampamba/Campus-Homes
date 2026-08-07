@@ -123,6 +123,9 @@ export const REFUND_REASONS = [
 export const REFUND_STATUSES = ['pending', 'processed', 'failed'] as const;
 export const MOVE_IN_CONFIRMER_ROLES = ['student', 'landlord', 'ops'] as const;
 
+// Chart-of-accounts classification for the finance ledger (double-entry).
+export const LEDGER_ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'revenue', 'expense'] as const;
+
 export const STRIKE_REASONS = [
   'no_show',
   'price_mismatch',
@@ -165,3 +168,4 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type VerificationChecklistComponent = (typeof VERIFICATION_CHECKLIST_COMPONENTS)[number];
 export type VisitResult = (typeof VISIT_RESULTS)[number];
 export type StrikeReason = (typeof STRIKE_REASONS)[number];
+export type LedgerAccountType = (typeof LEDGER_ACCOUNT_TYPES)[number];

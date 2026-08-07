@@ -12,6 +12,7 @@ import { loadEnv } from '../../config/env';
 import { assertStubAllowed } from '../../config/integration-guard';
 import { REDIS } from '../../db/redis.module';
 import { AuthModule } from '../auth/auth.module';
+import { FinanceModule } from '../finance/finance.module';
 import { OpsModule } from '../ops/ops.module';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
@@ -19,7 +20,7 @@ import { HOLD_EXPIRY_QUEUE, HOLD_EXPIRY_QUEUE_NAME, PAYMENTS } from './reservati
 import { WebhookController } from './webhook.controller';
 
 @Module({
-  imports: [AuthModule, OpsModule],
+  imports: [AuthModule, OpsModule, FinanceModule],
   controllers: [ReservationsController, WebhookController],
   providers: [
     ReservationsService,

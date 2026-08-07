@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Camera, LocateFixed, X } from "lucide-react";
 import {
   VERIFICATION_CHECKLIST_COMPONENTS,
   type VerificationChecklistComponent,
@@ -14,6 +14,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
 import { getDraft, putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
 import { syncQueuedDrafts } from "@/lib/ops/sync-manager";
+
+function subscribeToConnectivity(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+/** Same useSyncExternalStore pattern as SyncStatusIndicator — avoids a
+ * hydration mismatch (server can't know connectivity) and the
+ * cascading-render lint rule a plain effect+setState would trip. */
+function useOnline(): boolean {
+  return useSyncExternalStore(subscribeToConnectivity, () => navigator.onLine, () => true);
+}
 
 /** Local blob preview for a not-yet-uploaded File — captured offline, so
  * there's no storage URL to point an <img> at yet. Revokes its object URL
@@ -74,7 +90,19 @@ const numberFieldClass =
 
 export function InspectionForm({ visitId }: { visitId: string }) {
   const [draft, setDraft] = useState<InspectionDraft | null>(null);
+  // getCurrentPosition's success callback can fire many seconds after
+  // scanGps() was called — long enough for checklist/notes/photo edits to
+  // land in between. Read the latest draft through this ref instead of the
+  // closure's snapshot so applying the GPS fix doesn't discard them.
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<"idle" | "scanning" | "error">("idle");
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const online = useOnline();
 
   useEffect(() => {
     let cancelled = false;
@@ -87,21 +115,6 @@ export function InspectionForm({ visitId }: { visitId: string }) {
       const created = newDraft(visitId);
       await putDraft(created);
       if (!cancelled) setDraft(created);
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (cancelled) return;
-            setDraft((prev) =>
-              prev
-                ? { ...prev, visitGpsLat: pos.coords.latitude, visitGpsLon: pos.coords.longitude }
-                : prev,
-            );
-          },
-          () => {
-            // Permission denied or unavailable — the manual fields below cover it.
-          },
-        );
-      }
     });
     return () => {
       cancelled = true;
@@ -179,45 +192,111 @@ export function InspectionForm({ visitId }: { visitId: string }) {
     };
     await putDraft(completed);
     setDraft(completed);
-    void syncQueuedDrafts();
+    await syncQueuedDrafts();
+    const refreshed = await getDraft(visitId);
+    if (refreshed) setDraft(refreshed);
+  }
+
+  async function retrySync() {
+    setRetrying(true);
+    // syncQueuedDrafts() deliberately skips "failed" drafts on its own
+    // (they're terminal for the automatic 30s loop) — requeue this one
+    // explicitly so the manual "Try again" button actually retries it
+    // instead of silently re-reading the same failed draft back.
+    if (currentDraft.syncStatus === "failed") {
+      await putDraft({ ...currentDraft, syncStatus: "queued" });
+    }
+    await syncQueuedDrafts();
+    const refreshed = await getDraft(visitId);
+    if (refreshed) setDraft(refreshed);
+    setRetrying(false);
+  }
+
+  function scanGps() {
+    if (!navigator.geolocation) {
+      setGpsStatus("error");
+      setGpsError("Geolocation isn't available on this device.");
+      return;
+    }
+    setGpsStatus("scanning");
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        persist({
+          ...(draftRef.current ?? currentDraft),
+          visitGpsLat: pos.coords.latitude,
+          visitGpsLon: pos.coords.longitude,
+        });
+        setGpsStatus("idle");
+      },
+      (err) => {
+        setGpsStatus("error");
+        setGpsError(
+          err.code === err.PERMISSION_DENIED
+            ? "Location access was denied — allow it in your browser settings, or enter coordinates manually below."
+            : "Couldn't get your location — try again, or enter coordinates manually below.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15_000 },
+    );
   }
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="gps-lat">GPS latitude</Label>
-          <input
-            id="gps-lat"
-            type="number"
-            step="any"
-            value={draft.visitGpsLat ?? ""}
-            onChange={(e) =>
-              persist({
-                ...draft,
-                visitGpsLat: e.target.value === "" ? null : Number(e.target.value),
-              })
-            }
-            className={numberFieldClass}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="gps-lon">GPS longitude</Label>
-          <input
-            id="gps-lon"
-            type="number"
-            step="any"
-            value={draft.visitGpsLon ?? ""}
-            onChange={(e) =>
-              persist({
-                ...draft,
-                visitGpsLon: e.target.value === "" ? null : Number(e.target.value),
-              })
-            }
-            className={numberFieldClass}
-          />
-        </div>
-      </div>
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-semibold text-foreground">Visit location</p>
+            <Button type="button" size="sm" onClick={scanGps} disabled={gpsStatus === "scanning"} className="gap-1.5">
+              <LocateFixed aria-hidden className="size-4" />
+              {gpsStatus === "scanning" ? "Scanning…" : draft.visitGpsLat !== null ? "Rescan GPS" : "Scan GPS location"}
+            </Button>
+          </div>
+          {draft.visitGpsLat !== null && draft.visitGpsLon !== null && gpsStatus !== "error" && (
+            <p className="text-sm text-success">
+              Captured: {draft.visitGpsLat.toFixed(6)}, {draft.visitGpsLon.toFixed(6)}
+            </p>
+          )}
+          {gpsStatus === "error" && gpsError && <p className="text-sm text-destructive">{gpsError}</p>}
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium text-muted-foreground">Enter coordinates manually instead</summary>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="gps-lat">GPS latitude</Label>
+                <input
+                  id="gps-lat"
+                  type="number"
+                  step="any"
+                  value={draft.visitGpsLat ?? ""}
+                  onChange={(e) =>
+                    persist({
+                      ...draft,
+                      visitGpsLat: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                  className={numberFieldClass}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="gps-lon">GPS longitude</Label>
+                <input
+                  id="gps-lon"
+                  type="number"
+                  step="any"
+                  value={draft.visitGpsLon ?? ""}
+                  onChange={(e) =>
+                    persist({
+                      ...draft,
+                      visitGpsLon: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                  className={numberFieldClass}
+                />
+              </div>
+            </div>
+          </details>
+        </CardContent>
+      </Card>
 
       {VERIFICATION_CHECKLIST_COMPONENTS.map((component) => {
         const entry = draft.checklist[component];
@@ -321,10 +400,35 @@ export function InspectionForm({ visitId }: { visitId: string }) {
       <Button type="button" disabled={!canSubmit} onClick={submit} className="w-full">
         Submit checklist
       </Button>
-      {draft.syncStatus === "queued" && (
+      {draft.syncStatus === "queued" && !online && (
         <p role="status" className="text-sm text-warning">
           Saved on this device — will sync automatically when back online.
         </p>
+      )}
+      {draft.syncStatus === "queued" && online && (
+        <div className="rounded-md border border-warning/30 bg-warning-subtle p-3">
+          <p role="status" className="text-sm text-warning">
+            Saved on this device — still waiting to sync.
+          </p>
+          <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={retrying} onClick={retrySync}>
+            {retrying ? "Retrying…" : "Retry sync now"}
+          </Button>
+        </div>
+      )}
+      {draft.syncStatus === "syncing" && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Syncing…
+        </p>
+      )}
+      {draft.syncStatus === "failed" && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
+          <p role="status" className="text-sm text-destructive">
+            Couldn&apos;t submit this checklist. Contact your lead if this keeps happening.
+          </p>
+          <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={retrying} onClick={retrySync}>
+            {retrying ? "Retrying…" : "Try again"}
+          </Button>
+        </div>
       )}
     </div>
   );

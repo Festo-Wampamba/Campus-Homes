@@ -12,11 +12,13 @@ export const authClient = createAuthClient({
   fetchOptions: { credentials: "include" },
   plugins: [
     phoneNumberClient(),
-    // role/status are server-set additionalFields (input: false on the API)
+    // role/status are server-set additionalFields (input: false on the API);
+    // required: false here too, so client calls like signUp.email don't need
+    // to (and can't meaningfully) pass them.
     inferAdditionalFields({
       user: {
-        role: { type: "string" },
-        status: { type: "string" },
+        role: { type: "string", required: false },
+        status: { type: "string", required: false },
       },
     }),
   ],

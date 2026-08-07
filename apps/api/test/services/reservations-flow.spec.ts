@@ -7,6 +7,7 @@ import { Pool } from 'pg';
 
 import { StubPayments } from '../../src/adapters/payments.adapter';
 import { RlsDb } from '../../src/db/db.module';
+import { LedgerService } from '../../src/modules/finance/ledger.service';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
@@ -20,12 +21,14 @@ const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
 const ops = new OpsService(rlsDb, audit);
+const ledger = new LedgerService();
 const reservationsService = new ReservationsService(
   rlsDb,
   audit,
   new StubPayments('http://localhost:3000'),
   null,
   null,
+  ledger,
 );
 
 let student1: string;
@@ -243,6 +246,22 @@ describe('reservation hold state machine', () => {
     expect(outcome).toEqual({ applied: true, outcome: 'fulfilled' });
   });
 
+  it('posts a balanced hold-fee revenue journal entry alongside the succeeded payment', async () => {
+    const rows = await pool.query(
+      `SELECT a.code, jl.debit_ugx AS "debitUgx", jl.credit_ugx AS "creditUgx"
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       JOIN ledger_accounts a ON a.id = jl.account_id
+       JOIN payments p ON p.id = je.payment_id
+       WHERE p.provider_txn_id = 'fw-txn-1001'
+       ORDER BY a.code`,
+    );
+    expect(rows.rows).toEqual([
+      { code: '1000', debitUgx: 5000, creditUgx: 0 },
+      { code: '4000', debitUgx: 0, creditUgx: 5000 },
+    ]);
+  });
+
   it('ignores a duplicate webhook for the same transaction', async () => {
     const payment = await pool.query(
       `SELECT p.provider_ref FROM payments p
@@ -308,6 +327,23 @@ describe('reservation hold state machine', () => {
        WHERE p.provider_txn_id = 'fw-txn-2002'`,
     );
     expect(res.rows[0].reason).toBe('cooling_off');
+  });
+
+  it('posts a balanced refund journal entry for the expired-hold payment, linked to the refund row', async () => {
+    const rows = await pool.query(
+      `SELECT a.code, jl.debit_ugx AS "debitUgx", jl.credit_ugx AS "creditUgx"
+       FROM journal_lines jl
+       JOIN ledger_accounts a ON a.id = jl.account_id
+       JOIN journal_entries je ON je.id = jl.entry_id
+       JOIN refunds rf ON rf.id = je.refund_id
+       JOIN payments p ON p.id = rf.payment_id
+       WHERE p.provider_txn_id = 'fw-txn-2002'
+       ORDER BY a.code`,
+    );
+    expect(rows.rows).toEqual([
+      { code: '1000', debitUgx: 0, creditUgx: 5000 },
+      { code: '4900', debitUgx: 5000, creditUgx: 0 },
+    ]);
   });
 
   it('lets a student cancel their own held reservation', async () => {

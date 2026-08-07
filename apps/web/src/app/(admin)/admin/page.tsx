@@ -3,6 +3,7 @@ import { Activity, Building2, CalendarCheck2, CircleDollarSign, Clock3, RefreshC
 import Link from "next/link";
 
 import { Freshness, PageHeader, SectionCard, StatCard, StatusBadge } from "@/components/admin/admin-ui";
+import { GrowthChart } from "@/components/admin/growth-chart";
 import { apiServer } from "@/lib/server-api";
 
 export const metadata: Metadata = { title: "Super Admin Overview" };
@@ -22,11 +23,6 @@ function change(current: number, previous: number) {
 
 function ugx(value: number) {
   return new Intl.NumberFormat("en-UG", { notation: "compact", maximumFractionDigits: 1 }).format(value) + " UGX";
-}
-
-function GrowthChart({ rows }: { rows: Overview["growth"] }) {
-  const max = Math.max(1, ...rows.flatMap((row) => [row.users, row.reservations]));
-  return <div className="p-4 sm:p-5"><div className="mb-4 flex gap-5 text-[11px] font-semibold text-slate-500"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-teal-600" />Users</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-coral-500" />Reservations</span></div><div className="grid h-48 grid-cols-6 items-end gap-3 border-b border-slate-200 dark:border-border">{rows.map((row) => <div key={row.month} className="flex h-full min-w-0 flex-col justify-end"><div className="flex flex-1 items-end justify-center gap-1"><span title={`${row.users} users`} className="w-3 max-w-[34%] rounded-t bg-teal-600 transition-[height] duration-300" style={{ height: `${Math.max(row.users ? 4 : 0, row.users / max * 100)}%` }} /><span title={`${row.reservations} reservations`} className="w-3 max-w-[34%] rounded-t bg-coral-500 transition-[height] duration-300" style={{ height: `${Math.max(row.reservations ? 4 : 0, row.reservations / max * 100)}%` }} /></div><span className="py-2 text-center text-[10px] font-semibold text-slate-500">{row.month}</span></div>)}</div></div>;
 }
 
 export default async function AdminOverviewPage() {

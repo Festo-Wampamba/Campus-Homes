@@ -1,7 +1,20 @@
-import { Building2, Calendar, CalendarCheck, MessageCircle, User } from "lucide-react";
+import {
+  BarChart3,
+  BedDouble,
+  Building2,
+  Calendar,
+  CalendarCheck,
+  HelpCircle,
+  LayoutDashboard,
+  MessageCircle,
+  Star,
+  User,
+  Users,
+  Wallet,
+} from "lucide-react";
 
 import { requireRole } from "@/lib/session";
-import { SidebarShell } from "@/components/shell/sidebar-shell";
+import { AppShell } from "@/components/shell/app-shell";
 
 // Layout only gates on role — kyc_status lives on the landlords table, not
 // the session, so the "verified except onboarding routes" gate (brief §13)
@@ -12,18 +25,26 @@ export default async function LandlordLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const session = await requireRole(["landlord"]);
   return (
-    <SidebarShell
+    <AppShell
       portalLabel="Landlord"
       user={session.user}
+      homeHref="/landlord"
       nav={[
-        { label: "My properties", href: "/landlord", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
-        { label: "Reservations", href: "/landlord/reservations", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
+        { label: "Dashboard", href: "/landlord", icon: <LayoutDashboard aria-hidden className="size-4 shrink-0" /> },
+        { label: "My Properties", href: "/landlord/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
+        { label: "Rooms", href: "/landlord/rooms", icon: <BedDouble aria-hidden className="size-4 shrink-0" /> },
+        { label: "Tenants", href: "/landlord/tenants", icon: <Users aria-hidden className="size-4 shrink-0" /> },
+        { label: "Bookings", href: "/landlord/bookings", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
+        { label: "Payments & Earnings", href: "/landlord/payments", icon: <Wallet aria-hidden className="size-4 shrink-0" /> },
         { label: "Messages", href: "/landlord/messages", icon: <MessageCircle aria-hidden className="size-4 shrink-0" /> },
         { label: "Calendar", href: "/landlord/calendar", icon: <Calendar aria-hidden className="size-4 shrink-0" /> },
-        { label: "Profile", href: "/landlord/profile", icon: <User aria-hidden className="size-4 shrink-0" /> },
+        { label: "Reviews", href: "/landlord/reviews", icon: <Star aria-hidden className="size-4 shrink-0" /> },
+        { label: "Reports & Analytics", href: "/landlord/reports", icon: <BarChart3 aria-hidden className="size-4 shrink-0" /> },
+        { label: "Support & Help", href: "/landlord/support", icon: <HelpCircle aria-hidden className="size-4 shrink-0" /> },
+        { label: "Account Settings", href: "/landlord/profile", icon: <User aria-hidden className="size-4 shrink-0" /> },
       ]}
     >
       {children}
-    </SidebarShell>
+    </AppShell>
   );
 }

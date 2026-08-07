@@ -106,6 +106,16 @@ async function main() {
       name: 'Landlord One',
     });
 
+    // Second landlord, deliberately left pending — gives the admin/ops KYC
+    // review screens a real row to act on, not just verified ones.
+    const landlord2Id = await insertUser(client, {
+      phone: '+256700000012',
+      email: 'landlord2@campushomes.ug',
+      role: 'landlord',
+      status: 'active',
+      name: 'Landlord Two',
+    });
+
     const opsLeadId = await insertUser(client, {
       phone: '+256700000003',
       email: 'opslead@campushomes.ug',
@@ -130,22 +140,98 @@ async function main() {
       name: 'Festo',
     });
 
+    // The remaining 4 of the 7 RBAC staff roles (StaffRoleKey /
+    // ROLE_TO_DB_ROLE in staff.service.ts) — all collapse to users.role =
+    // 'admin' at the DB-enum level; PermissionsGuard is what actually tells
+    // them apart, via the user_role_assignments row each gets below.
+    const platformAdminId = await insertUser(client, {
+      phone: '+256700000006',
+      email: 'platformadmin@campushomes.ug',
+      role: 'admin',
+      status: 'active',
+      name: 'Platform Admin',
+    });
+    const financeAdminId = await insertUser(client, {
+      phone: '+256700000007',
+      email: 'financeadmin@campushomes.ug',
+      role: 'admin',
+      status: 'active',
+      name: 'Finance Admin',
+    });
+    const supportAdminId = await insertUser(client, {
+      phone: '+256700000008',
+      email: 'supportadmin@campushomes.ug',
+      role: 'admin',
+      status: 'active',
+      name: 'Support Admin',
+    });
+    const auditorId = await insertUser(client, {
+      phone: '+256700000009',
+      email: 'auditor@campushomes.ug',
+      role: 'admin',
+      status: 'active',
+      name: 'Auditor',
+    });
+
+    // Property-scoped roles (custodian / property_worker) — distinct
+    // user_role enum values (not admin-collapsed), granted per-property via
+    // property_memberships once the first property exists further down.
+    const custodianId = await insertUser(client, {
+      phone: '+256700000010',
+      email: 'custodian@campushomes.ug',
+      role: 'custodian',
+      status: 'active',
+      name: 'Custodian One',
+    });
+    const propertyWorkerId = await insertUser(client, {
+      phone: '+256700000011',
+      email: 'propertyworker@campushomes.ug',
+      role: 'property_worker',
+      status: 'active',
+      name: 'Property Worker One',
+    });
+
     // Email+password sign-in for every role, not just staff — same
     // DEV_PASSWORD for all, hashed through Better Auth's own hasher so it
     // verifies against the real emailAndPassword sign-in path
     // (auth.config.ts). Phone-OTP sign-in still works too (dev OTPs print to
     // this server's console — messaging.adapter.ts ConsoleMessaging).
-    for (const userId of [studentId, landlordId, opsLeadId, inspectorId]) {
+    for (const userId of [
+      studentId,
+      landlordId,
+      landlord2Id,
+      opsLeadId,
+      inspectorId,
+      platformAdminId,
+      financeAdminId,
+      supportAdminId,
+      auditorId,
+      custodianId,
+      propertyWorkerId,
+    ]) {
       await insertCredentialAccount(client, userId, DEV_PASSWORD);
     }
     await insertCredentialAccount(client, adminId, 'admin');
 
-    await client.query(
-      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
-       SELECT $1, id, 'platform_wide', $1, 'Local development super-admin owner'
-       FROM roles WHERE key = 'super_admin'`,
-      [adminId],
-    );
+    // Platform-wide RBAC role assignments — one per staff role, so
+    // PermissionsGuard (fine-grained /admin/* routes) recognises each
+    // account as that role, not just the coarser users.role enum.
+    async function assignRole(userId, roleKey, scopeType, scopeId, reason) {
+      await client.query(
+        `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+         SELECT $1, id, $2, $3, $4, $5
+         FROM roles WHERE key = $6`,
+        [userId, scopeType, scopeId, adminId, reason, roleKey],
+      );
+    }
+
+    await assignRole(adminId, 'super_admin', 'platform_wide', null, 'Local development super-admin owner');
+    await assignRole(platformAdminId, 'platform_admin', 'platform_wide', null, 'Local development RBAC coverage');
+    await assignRole(financeAdminId, 'finance_admin', 'platform_wide', null, 'Local development RBAC coverage');
+    await assignRole(supportAdminId, 'support_admin', 'platform_wide', null, 'Local development RBAC coverage');
+    await assignRole(auditorId, 'auditor', 'platform_wide', null, 'Local development RBAC coverage');
+    await assignRole(opsLeadId, 'ops_lead', 'platform_wide', null, 'Local development RBAC coverage');
+    await assignRole(inspectorId, 'ops_inspector', 'platform_wide', null, 'Local development RBAC coverage');
 
     await client.query(
       `INSERT INTO students (user_id, university, year_of_study) VALUES ($1, 'MUK', 2)`,
@@ -153,8 +239,10 @@ async function main() {
     );
 
     await client.query(
-      `INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'Landlord One', 'verified')`,
-      [landlordId],
+      `INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES
+        ($1, 'Landlord One', 'verified'),
+        ($2, 'Landlord Two Properties Ltd', 'pending')`,
+      [landlordId, landlord2Id],
     );
 
     await client.query(
@@ -595,6 +683,26 @@ async function main() {
       createdListings.push({ propertyId, listingId, versionId, name: spec.name });
     }
 
+    // Custodian / property worker are property-scoped, not platform-wide —
+    // assign both to the first seeded property (Test Hostel) so their
+    // portals/permissions have a real property to act on.
+    const firstPropertyId = createdListings[0].propertyId;
+    await client.query(
+      `INSERT INTO property_memberships (user_id, property_id, role, worker_type, assigned_by)
+       VALUES
+        ($1, $3, 'custodian', NULL, $4),
+        ($2, $3, 'property_worker', 'cleaner', $4)`,
+      [custodianId, propertyWorkerId, firstPropertyId, landlordId],
+    );
+    await assignRole(custodianId, 'custodian', 'property', firstPropertyId, 'Local development RBAC coverage');
+    await assignRole(
+      propertyWorkerId,
+      'property_worker',
+      'property',
+      firstPropertyId,
+      'Local development RBAC coverage',
+    );
+
     // One tile photo per real catchment — demonstrates the "browse by
     // university" section end-to-end for all four campuses, not just MUK.
     for (const uni of ['MUK', 'MUBS', 'KIU', 'KYU']) {
@@ -612,9 +720,16 @@ async function main() {
       created: {
         studentId,
         landlordId,
+        landlord2Id,
         opsLeadId,
         inspectorId,
         adminId,
+        platformAdminId,
+        financeAdminId,
+        supportAdminId,
+        auditorId,
+        custodianId,
+        propertyWorkerId,
         semesterId,
         listings: createdListings,
       },
@@ -623,13 +738,20 @@ async function main() {
     console.log(`
 Sign in at /sign-in with these local-development accounts:
 
-  Student/landlord/ops password: ${DEV_PASSWORD}
+  Everyone except Super Admin shares: ${DEV_PASSWORD}
 
-  Student        student1@campushomes.ug     (or phone +256700000001 via OTP)
-  Landlord       landlord1@campushomes.ug    (or phone +256700000002 via OTP)
-  Ops lead       opslead@campushomes.ug
-  Ops inspector  inspector@campushomes.ug
-  Super Admin    festo@campushomes.com       (password: admin)
+  Student           student1@campushomes.ug       (or phone +256700000001 via OTP)
+  Landlord          landlord1@campushomes.ug      (kyc verified)
+  Landlord          landlord2@campushomes.ug      (kyc pending)
+  Ops lead          opslead@campushomes.ug
+  Ops inspector     inspector@campushomes.ug
+  Platform Admin    platformadmin@campushomes.ug
+  Finance Admin     financeadmin@campushomes.ug
+  Support Admin     supportadmin@campushomes.ug
+  Auditor           auditor@campushomes.ug
+  Custodian         custodian@campushomes.ug      (Test Hostel)
+  Property Worker   propertyworker@campushomes.ug (Test Hostel, cleaner)
+  Super Admin       festo@campushomes.com         (password: admin)
 
 Phone-OTP still works too — dev OTP codes print to this terminal
 (messaging.adapter.ts ConsoleMessaging), no real SMS sent.

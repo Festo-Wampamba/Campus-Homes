@@ -30,6 +30,7 @@ import { CAMPUS_LOCATIONS } from "@/lib/campuses";
 import { listingPhotoUrl } from "@/lib/cloudinary";
 import { formatPriceRange, humanizeKey, roomSizeLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { HomeSearch } from "@/components/home-search";
 import { VerifiedBadge } from "@/components/verified-badge";
 
 const CAMPUSES = Object.values(CAMPUS_LOCATIONS);
@@ -200,21 +201,14 @@ export default async function HomePage() {
               Find one near your university, reserve it with a 72-hour hold,
               and move in with confidence.
             </p>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/search"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-coral-500 px-6 font-semibold text-teal-900 shadow-md transition-colors duration-150 hover:bg-coral-600 hover:text-white"
-              >
-                <Search aria-hidden className="size-4" strokeWidth={2.5} />
-                Find housing near campus
-              </Link>
-              <Link
-                href="/sign-in"
-                className="inline-flex h-11 items-center justify-center rounded-md border border-white/30 px-6 font-semibold text-white transition-colors duration-150 hover:bg-white/10"
-              >
-                Sign in with your phone
-              </Link>
-            </div>
+            <HomeSearch />
+
+            <Link
+              href="/sign-in"
+              className="mt-4 inline-flex items-center text-sm font-semibold text-white/80 underline-offset-4 transition-colors duration-150 hover:text-white hover:underline"
+            >
+              Already have an account? Sign in with your phone
+            </Link>
 
             {/* Real numbers, not decoration — the stat is only shown once
                 there's live data to back it (PRODUCT.md principle 5: never
@@ -514,10 +508,10 @@ export default async function HomePage() {
               </p>
             </div>
             <Link
-              href="/sign-in"
+              href="mailto:hello@campushomes.ug?subject=Landlord%20listing%20request"
               className="inline-flex h-11 shrink-0 items-center rounded-md bg-white px-5 font-semibold text-teal-900 shadow-xs transition-colors duration-150 hover:bg-teal-50"
             >
-              List your property
+              Request to get listed
             </Link>
           </div>
         </div>

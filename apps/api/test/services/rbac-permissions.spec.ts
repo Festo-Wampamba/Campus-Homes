@@ -69,6 +69,16 @@ describe('loadPermissions', () => {
     expect(stepUpRequired.has('refunds.approve')).toBe(true);
   });
 
+  it('grants finance.read and finance.manage (0018), neither requiring step-up', async () => {
+    const { permissions, stepUpRequired } = await loadPermissions(rlsDb, superAdmin);
+    expect(permissions.has('finance.read')).toBe(true);
+    expect(permissions.has('finance.manage')).toBe(true);
+    // Deliberate: every requires_step_up permission currently 501s (no MFA
+    // yet, RBAC Foundation Phase A→B gap) — marking finance.manage step-up
+    // would make manual ledger entries unusable today.
+    expect(stepUpRequired.has('finance.manage')).toBe(false);
+  });
+
   it('returns no permissions for a user with no active assignment', async () => {
     const { permissions } = await loadPermissions(rlsDb, plainOpsLead);
     expect(permissions.size).toBe(0);

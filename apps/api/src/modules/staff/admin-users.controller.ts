@@ -69,7 +69,7 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: AdminRoleAssignmentDto,
   ) {
-    return this.users.assignRole(rlsCtx(req), req.permissions, id, body);
+    return this.users.assignRole(rlsCtx(req), req.permissions, req.assignments, id, body);
   }
 
   @Delete(':id/roles/:assignmentId')
@@ -79,7 +79,7 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('assignmentId', ParseUUIDPipe) assignmentId: string,
   ) {
-    return this.users.revokeRole(rlsCtx(req), req.permissions, id, assignmentId);
+    return this.users.revokeRole(rlsCtx(req), req.permissions, req.assignments, id, assignmentId);
   }
 
   @Post(':id/permissions')
@@ -89,7 +89,7 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: AdminPermissionGrantDto,
   ) {
-    return this.users.grantPermissions(rlsCtx(req), req.permissions, id, body);
+    return this.users.grantPermissions(rlsCtx(req), req.permissions, req.assignments, id, body);
   }
 
   @Delete(':id/permissions/:grantId')
@@ -99,6 +99,6 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('grantId', ParseUUIDPipe) grantId: string,
   ) {
-    return this.users.revokePermission(rlsCtx(req), id, grantId);
+    return this.users.revokePermission(rlsCtx(req), req.permissions, req.assignments, id, grantId);
   }
 }

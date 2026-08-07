@@ -610,3 +610,118 @@ describe('activities (0017): staff ops board is service-only', () => {
     expect(del.rowCount).toBe(1);
   });
 });
+
+describe('ledger (0018): finance chart of accounts + journal is service-only', () => {
+  let cashAccountId: string;
+  let revenueAccountId: string;
+  let entry1: string;
+
+  beforeAll(async () => {
+    cashAccountId = await seed(`SELECT id FROM ledger_accounts WHERE code = '1000'`);
+    revenueAccountId = await seed(`SELECT id FROM ledger_accounts WHERE code = '4000'`);
+    entry1 = await seed(
+      `INSERT INTO journal_entries (memo, source_type) VALUES ('Seed balanced entry', 'manual') RETURNING id`,
+    );
+    // Both lines in one statement: the balance trigger is DEFERRED to the
+    // statement's own implicit commit (seed() has no explicit transaction),
+    // so two separate INSERTs would each individually look unbalanced.
+    await seed(
+      `INSERT INTO journal_lines (entry_id, account_id, debit_ugx, credit_ugx) VALUES ($1, $2, 1000, 0), ($1, $3, 0, 1000)`,
+      [entry1, cashAccountId, revenueAccountId],
+    );
+  });
+
+  it('a landlord cannot read ledger_accounts, journal_entries, or journal_lines', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) => ({
+      accounts: (await c.query('SELECT * FROM ledger_accounts')).rows,
+      entries: (await c.query('SELECT * FROM journal_entries')).rows,
+      lines: (await c.query('SELECT * FROM journal_lines')).rows,
+    }));
+    expect(rows.accounts).toHaveLength(0);
+    expect(rows.entries).toHaveLength(0);
+    expect(rows.lines).toHaveLength(0);
+  });
+
+  it('a non-service role cannot insert a journal line directly (app-layer write only)', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(`INSERT INTO journal_lines (entry_id, account_id, debit_ugx) VALUES ($1, $2, 500)`, [
+          entry1,
+          cashAccountId,
+        ]),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads across all three tables', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM journal_lines WHERE entry_id = $1', [entry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(2);
+  });
+
+  it('service_role can update ledger_accounts (e.g. deactivate a non-system account)', async () => {
+    const update = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`UPDATE ledger_accounts SET is_active = false WHERE id = $1`, [cashAccountId]),
+    );
+    expect(update.rowCount).toBe(1);
+  });
+
+  it('the app role cannot UPDATE or DELETE journal_entries even as service_role (append-only)', async () => {
+    await expect(
+      asIdentity({ role: 'service_role' }, async (c) =>
+        c.query(`UPDATE journal_entries SET memo = 'tampered' WHERE id = $1`, [entry1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      asIdentity({ role: 'service_role' }, async (c) => c.query(`DELETE FROM journal_entries WHERE id = $1`, [entry1])),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('the app role cannot UPDATE or DELETE journal_lines even as service_role (append-only)', async () => {
+    await expect(
+      asIdentity({ role: 'service_role' }, async (c) =>
+        c.query(`UPDATE journal_lines SET debit_ugx = 1 WHERE entry_id = $1`, [entry1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      asIdentity({ role: 'service_role' }, async (c) => c.query(`DELETE FROM journal_lines WHERE entry_id = $1`, [entry1])),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('an unbalanced journal entry is rejected by the deferred balance trigger', async () => {
+    await expect(
+      asIdentity({ role: 'service_role' }, async (c) => {
+        const [unbalanced] = (
+          await c.query(`INSERT INTO journal_entries (memo, source_type) VALUES ('Unbalanced', 'manual') RETURNING id`)
+        ).rows;
+        await c.query(`INSERT INTO journal_lines (entry_id, account_id, debit_ugx) VALUES ($1, $2, 700)`, [
+          unbalanced.id,
+          cashAccountId,
+        ]);
+        // The trigger is DEFERRABLE INITIALLY DEFERRED — it only fires at
+        // COMMIT, but asIdentity() always rolls back. Force the check now.
+        await c.query('SET CONSTRAINTS journal_lines_balanced IMMEDIATE');
+      }),
+    ).rejects.toThrow(/not balanced/i);
+  });
+
+  it('a balanced journal entry passes the deferred balance trigger', async () => {
+    await expect(
+      asIdentity({ role: 'service_role' }, async (c) => {
+        const [balanced] = (
+          await c.query(`INSERT INTO journal_entries (memo, source_type) VALUES ('Balanced', 'manual') RETURNING id`)
+        ).rows;
+        await c.query(`INSERT INTO journal_lines (entry_id, account_id, debit_ugx) VALUES ($1, $2, 400)`, [
+          balanced.id,
+          cashAccountId,
+        ]);
+        await c.query(`INSERT INTO journal_lines (entry_id, account_id, credit_ugx) VALUES ($1, $2, 400)`, [
+          balanced.id,
+          revenueAccountId,
+        ]);
+        await c.query('SET CONSTRAINTS journal_lines_balanced IMMEDIATE');
+      }),
+    ).resolves.not.toThrow();
+  });
+});

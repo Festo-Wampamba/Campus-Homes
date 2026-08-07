@@ -12,9 +12,13 @@ import { accounts, sessions, users, verifications } from '../../db/schema';
 
 /**
  * Better Auth instance factory (brief §6 AuthModule):
- * - phone-OTP sign-in/sign-up for students & landlords
- * - email/password for Ops/Admin — sign-up disabled, those users are seeded
- *   through service paths only
+ * - One clean sign-in page, no role picker: self-serve sign-up (phone-OTP
+ *   or email/password) always creates a `student` (additionalFields
+ *   default below) — there is no self-serve path to any other role.
+ * - Landlord/Ops/Admin/Finance accounts are admin-provisioned only (admin
+ *   console "Add user"); they sign in through the same email/password
+ *   flow, and the app routes them by whatever role their session actually
+ *   carries — never by anything the client asserts at sign-in time.
  * - sessions persisted in NeonDB (`sessions` table)
  *
  * `db` must be the dedicated service-context pool (see AuthModule): every
@@ -64,7 +68,7 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
         status: { type: 'string', required: false, defaultValue: 'pending', input: false },
       },
     },
-    emailAndPassword: { enabled: true, disableSignUp: true },
+    emailAndPassword: { enabled: true, disableSignUp: false },
     plugins: [
       phoneNumber({
         sendOTP: async ({ phoneNumber: phone, code }) => {

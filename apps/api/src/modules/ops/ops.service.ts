@@ -54,8 +54,11 @@ export class OpsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** Verification queue: properties whose latest visit is still pending (or
-   * that have no visit yet), with SLA age. Ops-only read. */
+  /** Verification queue: properties with no visit yet, a visit still in
+   * progress, or a passed visit awaiting the lead's approval. Ops-only read.
+   * A visit that's `passed` but not yet `approved_at` must stay in the queue
+   * — that's the lead's own action item — so this can't just filter on
+   * `result = 'pending'` alone. */
   queue(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
@@ -68,7 +71,9 @@ export class OpsService {
            WHERE vv.property_id = p.id
            ORDER BY vv.created_at DESC LIMIT 1
          ) v ON true
-         WHERE v.id IS NULL OR v.result = 'pending'
+         WHERE v.id IS NULL
+            OR v.result = 'pending'
+            OR (v.result = 'passed' AND v.approved_at IS NULL)
          ORDER BY p.created_at ASC`,
       );
       return res.rows as unknown[];
@@ -194,6 +199,12 @@ export class OpsService {
     return visit;
   }
 
+  // Promotes the visit's captured GPS onto the property record — the
+  // properties.gps_lat/gps_lon comment in shared says "set by Ops during
+  // verification, never by the landlord", but nothing ever wrote it before
+  // this; without it, properties.gps_point (the generated PostGIS column
+  // student search filters on) stays null and the listing can never surface
+  // in a bounding-box search no matter how it's published.
   async approveVisit(ctx: RlsContext, visitId: string) {
     const visit = await this.rlsDb.run(ctx, async (db) => {
       const [row] = await db
@@ -203,6 +214,12 @@ export class OpsService {
         .returning();
       if (!row) {
         throw new NotFoundException('Visit not found');
+      }
+      if (row.visitGpsLat != null && row.visitGpsLon != null) {
+        await db
+          .update(properties)
+          .set({ gpsLat: row.visitGpsLat, gpsLon: row.visitGpsLon })
+          .where(eq(properties.id, row.propertyId));
       }
       return row;
     });

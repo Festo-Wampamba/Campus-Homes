@@ -18,8 +18,16 @@ function ageTone(ageHours: number): "success" | "warning" | "destructive" {
   return "success";
 }
 
+function visitStageLabel(row: OpsQueueRow): string | null {
+  if (row.visit_id === null) return null;
+  if (row.result === "passed") return "Awaiting your approval";
+  if (row.result === "pending") return row.scheduled_at ? "Visit scheduled" : "Not yet scheduled";
+  return null;
+}
+
 function QueueRow({ row }: { row: OpsQueueRow }) {
   const hasVisit = row.visit_id !== null;
+  const stageLabel = visitStageLabel(row);
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -28,6 +36,11 @@ function QueueRow({ row }: { row: OpsQueueRow }) {
           <p className="text-sm text-muted-foreground">{row.street_address}</p>
         </div>
         <div className="flex items-center gap-3">
+          {stageLabel && (
+            <StatusChip tone={row.result === "passed" ? "warning" : "neutral"}>
+              {stageLabel}
+            </StatusChip>
+          )}
           <StatusChip tone={ageTone(row.age_hours)}>{Math.round(row.age_hours)}h old</StatusChip>
           <Link
             href={

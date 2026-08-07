@@ -49,8 +49,9 @@ export function SearchClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const cardRefs = useRef(new Map<string, HTMLElement>());
 
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
+  const initialQ = searchParams.get("q") ?? "";
+  const [q, setQ] = useState(initialQ);
+  const [debouncedQ, setDebouncedQ] = useState(initialQ);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [minCapacity, setMinCapacity] = useState("");
