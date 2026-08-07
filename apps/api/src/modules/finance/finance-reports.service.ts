@@ -42,7 +42,10 @@ export class FinanceReportsService {
             WHERE je.entry_date BETWEEN $1 AND $2
             GROUP BY jl.account_id
           ) t ON t.account_id = a.id
-          WHERE a.account_type IN ('revenue', 'expense') AND a.is_active
+          -- Deactivation blocks future postings only; an account with entries
+          -- in this period stays in the report even if since deactivated,
+          -- or the balance-sheet accounting equation stops holding.
+          WHERE a.account_type IN ('revenue', 'expense') AND (a.is_active OR t.account_id IS NOT NULL)
           ORDER BY a.code
         `,
         [from, to],
@@ -82,7 +85,7 @@ export class FinanceReportsService {
             WHERE je.entry_date <= $1
             GROUP BY jl.account_id
           ) t ON t.account_id = a.id
-          WHERE a.account_type IN ('asset', 'liability', 'equity') AND a.is_active
+          WHERE a.account_type IN ('asset', 'liability', 'equity') AND (a.is_active OR t.account_id IS NOT NULL)
           ORDER BY a.code
         `,
         [asOf],

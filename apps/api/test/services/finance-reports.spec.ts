@@ -69,6 +69,31 @@ beforeAll(async () => {
     [expense, 3000, 0],
     [payable, 0, 3000],
   ]);
+
+  // Deactivation-after-posting fixture, dated April so it can't shift the
+  // Jan/Feb assertions above (profitLoss is range-bound; balanceSheet is
+  // cumulative-as-of, so April entries stay invisible to the Feb asOf too).
+  async function createAccount(code: string, name: string, accountType: string): Promise<string> {
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO ledger_accounts (code, name, account_type, is_active) VALUES ($1, $2, $3, true) RETURNING id`,
+      [code, name, accountType],
+    );
+    return rows[0]!.id;
+  }
+  const deactivatedExpense = await createAccount('5901', 'Test Deactivated Expense', 'expense');
+  const deactivatedAsset = await createAccount('1901', 'Test Deactivated Asset', 'asset');
+  await postEntry('2020-04-05', 'test expense on later-deactivated account', [
+    [deactivatedExpense, 1500, 0],
+    [payable, 0, 1500],
+  ]);
+  await postEntry('2020-04-06', 'test asset on later-deactivated account', [
+    [deactivatedAsset, 700, 0],
+    [payable, 0, 700],
+  ]);
+  await pool.query(`UPDATE ledger_accounts SET is_active = false WHERE id IN ($1, $2)`, [
+    deactivatedExpense,
+    deactivatedAsset,
+  ]);
 });
 
 describe('FinanceReportsService.profitLoss', () => {
@@ -81,6 +106,13 @@ describe('FinanceReportsService.profitLoss', () => {
     expect(report.totalRevenueUgx).toBe(11000); // 13000 - 2000
     expect(report.totalExpensesUgx).toBe(3000);
     expect(report.netIncomeUgx).toBe(8000);
+  });
+
+  it('still reports an account that was deactivated after entries were posted in the period', async () => {
+    const report = await reports.profitLoss('2020-04-01', '2020-04-30');
+    const byCode = Object.fromEntries(report.expenses.map((r) => [r.accountCode, r.amountUgx]));
+    expect(byCode['5901']).toBe(1500);
+    expect(report.totalExpensesUgx).toBe(1500);
   });
 });
 
@@ -97,6 +129,17 @@ describe('FinanceReportsService.balanceSheet', () => {
     // profitLoss() computes for the same period, not a real journal balance.
     expect(retainedEarnings?.amountUgx).toBe(8000);
 
+    expect(sheet.assetsTotalUgx).toBe(sheet.liabilitiesTotalUgx + sheet.equityTotalUgx);
+    expect(sheet.meta.balanced).toBe(true);
+  });
+
+  it('stays balanced when an asset account was deactivated after its balancing entry posted', async () => {
+    // Without the fix, the deactivated asset line drops out of `assets`
+    // while its balancing credit to the still-active payable account stays
+    // in `liabilities` — assetsTotal no longer equals liabilities + equity.
+    const sheet = await reports.balanceSheet('2020-04-30');
+    const deactivatedLine = sheet.assets.find((a) => a.accountCode === '1901');
+    expect(deactivatedLine?.amountUgx).toBe(700);
     expect(sheet.assetsTotalUgx).toBe(sheet.liabilitiesTotalUgx + sheet.equityTotalUgx);
     expect(sheet.meta.balanced).toBe(true);
   });

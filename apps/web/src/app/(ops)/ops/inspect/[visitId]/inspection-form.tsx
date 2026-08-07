@@ -90,6 +90,14 @@ const numberFieldClass =
 
 export function InspectionForm({ visitId }: { visitId: string }) {
   const [draft, setDraft] = useState<InspectionDraft | null>(null);
+  // getCurrentPosition's success callback can fire many seconds after
+  // scanGps() was called — long enough for checklist/notes/photo edits to
+  // land in between. Read the latest draft through this ref instead of the
+  // closure's snapshot so applying the GPS fix doesn't discard them.
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [gpsStatus, setGpsStatus] = useState<"idle" | "scanning" | "error">("idle");
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -191,6 +199,13 @@ export function InspectionForm({ visitId }: { visitId: string }) {
 
   async function retrySync() {
     setRetrying(true);
+    // syncQueuedDrafts() deliberately skips "failed" drafts on its own
+    // (they're terminal for the automatic 30s loop) — requeue this one
+    // explicitly so the manual "Try again" button actually retries it
+    // instead of silently re-reading the same failed draft back.
+    if (currentDraft.syncStatus === "failed") {
+      await putDraft({ ...currentDraft, syncStatus: "queued" });
+    }
     await syncQueuedDrafts();
     const refreshed = await getDraft(visitId);
     if (refreshed) setDraft(refreshed);
@@ -207,7 +222,11 @@ export function InspectionForm({ visitId }: { visitId: string }) {
     setGpsError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        persist({ ...currentDraft, visitGpsLat: pos.coords.latitude, visitGpsLon: pos.coords.longitude });
+        persist({
+          ...(draftRef.current ?? currentDraft),
+          visitGpsLat: pos.coords.latitude,
+          visitGpsLon: pos.coords.longitude,
+        });
         setGpsStatus("idle");
       },
       (err) => {

@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { inArray } from 'drizzle-orm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import type { Db } from '../../db/client';
 import { journalEntries, journalLines, ledgerAccounts } from '../../db/schema';
@@ -55,6 +55,19 @@ export class LedgerService {
     db: Db,
     opts: { memo: string; entryDate: string; createdBy: string; lines: LineInput[] },
   ): Promise<string> {
+    // 3000 (Retained Earnings) is synthetic — reports compute it from
+    // cumulative net income and ignore its real journal balance (see
+    // FinanceReportsService.balanceSheet), so a direct posting here would
+    // silently vanish from the balance sheet while its opposite line stays
+    // visible, throwing the accounting equation out of balance.
+    const accountIds = [...new Set(opts.lines.map((line) => line.accountId))];
+    const synthetic = await db
+      .select({ code: ledgerAccounts.code })
+      .from(ledgerAccounts)
+      .where(and(inArray(ledgerAccounts.id, accountIds), eq(ledgerAccounts.code, '3000')));
+    if (synthetic.length > 0) {
+      throw new BadRequestException('Retained Earnings (3000) is synthetic and cannot be posted to directly');
+    }
     return this.insertEntry(db, {
       memo: opts.memo,
       entryDate: opts.entryDate,
