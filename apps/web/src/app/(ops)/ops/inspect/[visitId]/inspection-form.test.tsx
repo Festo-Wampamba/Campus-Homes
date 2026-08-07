@@ -122,7 +122,9 @@ describe("InspectionForm", () => {
     act(() => {
       tryAgain?.click();
     });
-    await waitFor(() => fetchMock.mock.calls.length > 0);
+    await waitFor(() => !container.textContent?.includes("Retrying…"));
+
+    expect(fetchMock).toHaveBeenCalled();
     expect(container.textContent).not.toContain("Couldn't submit this checklist");
   });
 });

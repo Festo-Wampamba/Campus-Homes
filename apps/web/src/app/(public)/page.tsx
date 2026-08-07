@@ -1,8 +1,6 @@
 import Link from "next/link";
 import {
-  ArrowRight,
   BadgeCheck,
-  Building2,
   Camera,
   Handshake,
   KeyRound,
@@ -21,19 +19,15 @@ import {
   testimonialSchema,
   VERIFICATION_CHECKLIST_COMPONENTS,
   type Campus,
-  type ListingSearchResult,
   type Testimonial,
 } from "@campushomes/shared";
 
 import { api } from "@/lib/api";
-import { CAMPUS_LOCATIONS } from "@/lib/campuses";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatPriceRange, humanizeKey, roomSizeLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CampusListingsTabs } from "@/components/campus-listings-tabs";
 import { HomeSearch } from "@/components/home-search";
 import { VerifiedBadge } from "@/components/verified-badge";
-
-const CAMPUSES = Object.values(CAMPUS_LOCATIONS);
 
 // Human labels for the same enum the DB trigger enforces — if a component is
 // added in shared, this page fails to compile until it gets a label.
@@ -181,7 +175,6 @@ export default async function HomePage() {
     getTestimonials(),
   ]);
   const showcased = featured.slice(0, 6);
-  const campusByCode = new Map(campusData.map((c) => [c.university, c]));
 
   return (
     <>
@@ -272,93 +265,25 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Browse by university — a direct route in, not just a generic
-          search box. Each tile opens /search pre-centered on that campus. */}
-      <section aria-labelledby="campuses-heading" className="border-b border-border">
-        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-          <h2 id="campuses-heading" className="text-xl">
-            Browse by university
-          </h2>
-          <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {CAMPUSES.map((campus) => {
-              const data = campusByCode.get(campus.code);
-              const photoUrl = data?.photo_storage_key
-                ? listingPhotoUrl(data.photo_storage_key, 400)
-                : null;
-              const hostelCount = data?.hostel_count ?? 0;
-              return (
-                <li key={campus.code}>
-                  <Link
-                    href={`/search?campus=${campus.code}`}
-                    className="group block h-full overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:border-teal-600 hover:shadow-md"
-                  >
-                    <div className="relative flex h-24 items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 to-teal-900">
-                      {photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- campus tile thumbnail, arbitrary-origin storage URL
-                        <img src={photoUrl} alt="" className="size-full object-cover" />
-                      ) : (
-                        <MapPin aria-hidden className="size-6 text-white/70" strokeWidth={1.5} />
-                      )}
-                    </div>
-                    <div className="p-4">
-                      <p className="font-semibold group-hover:text-teal-700">{campus.code}</p>
-                      <p className="text-sm text-muted-foreground">{campus.name}</p>
-                      <p className="mt-2 text-xs font-semibold text-teal-700">
-                        {hostelCount} {hostelCount === 1 ? "hostel" : "hostels"}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </section>
-
-      {/* Featured hostels — real, live, verified rows; a guest sees exactly
-          what a signed-in student would find in search. */}
+      {/* Verified hostels, filterable by university — a direct route in
+          (not a generic search box) that lands on the same real, live rows
+          a signed-in student would find in search. Replaces two separate
+          sections (a browse-by-university tile grid and a flat featured
+          grid) with one tabbed block. */}
       <section aria-labelledby="featured-heading" className="border-b border-border">
         <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="max-w-xl">
-              <h2 id="featured-heading" className="text-2xl">
-                Verified hostels, live right now
-              </h2>
-              <p className="mt-3 text-md text-muted-foreground">
-                No filler listings — every card below is a real, inspected
-                hostel a student could reserve today.
-              </p>
-            </div>
-            <Link
-              href="/search"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-700 transition-colors hover:text-teal-900"
-            >
-              See all on the map
-              <ArrowRight aria-hidden className="size-4" />
-            </Link>
+          <div className="max-w-xl">
+            <h2 id="featured-heading" className="text-2xl">
+              Verified hostels, live right now
+            </h2>
+            <p className="mt-3 text-md text-muted-foreground">
+              No filler listings — every card below is a real, inspected
+              hostel a student could reserve today.
+            </p>
           </div>
-
-          {showcased.length > 0 ? (
-            <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {showcased.map((row) => (
-                <FeaturedCard key={row.id} row={row} />
-              ))}
-            </ul>
-          ) : (
-            <div className="mt-8 flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-14 text-center">
-              <Building2 aria-hidden className="size-8 text-muted-foreground" />
-              <p className="max-w-sm text-sm text-muted-foreground">
-                New verified hostels are going live as our inspectors confirm
-                them. Check the search map — new listings appear there first.
-              </p>
-              <Link
-                href="/search"
-                className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
-              >
-                Open the search map
-              </Link>
-            </div>
-          )}
+          <div className="mt-8">
+            <CampusListingsTabs campuses={campusData} listings={featured} />
+          </div>
         </div>
       </section>
 
@@ -516,81 +441,25 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Closing CTA — reuses teal-900 (the hero's own darkest brand token,
+          already used for the site footer) rather than introducing a new
+          dark neutral outside DESIGN.md's locked ramp. */}
+      <section className="bg-teal-900 text-white">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-4 px-4 py-14 text-center sm:px-6 sm:py-20">
+          <h2 className="text-2xl text-white">Ready to find your room?</h2>
+          <p className="max-w-md text-base text-white/80">
+            Every listing here has already passed a physical inspection —
+            start your search near campus.
+          </p>
+          <Link
+            href="/search"
+            className="mt-2 inline-flex h-11 items-center rounded-md bg-white px-6 font-semibold text-teal-900 shadow-xs transition-colors duration-150 hover:bg-teal-50"
+          >
+            Start your search
+          </Link>
+        </div>
+      </section>
     </>
-  );
-}
-
-function FeaturedCard({ row }: { row: ListingSearchResult }) {
-  const amenities = Object.entries(row.amenities)
-    .filter(([, has]) => has)
-    .map(([key]) => humanizeKey(key))
-    .slice(0, 3);
-  const initial = row.name.charAt(0).toUpperCase();
-  const photoUrl = row.photo_storage_key ? listingPhotoUrl(row.photo_storage_key, 500) : null;
-  const rooms = roomSizeLabel(row);
-
-  return (
-    <li>
-      <Link
-        href={`/listings/${row.id}`}
-        className="group block h-full overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
-      >
-        <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 to-teal-900">
-          {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a card thumbnail
-            <img
-              src={photoUrl}
-              alt={row.name}
-              className="size-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <>
-              <span
-                aria-hidden
-                className="font-display text-6xl font-bold text-white/15 select-none"
-              >
-                {initial}
-              </span>
-              <Building2
-                aria-hidden
-                className="absolute size-8 text-white/70"
-                strokeWidth={1.5}
-              />
-            </>
-          )}
-          <VerifiedBadge size="sm" className="absolute top-3 left-3" />
-        </div>
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-lg leading-snug group-hover:text-teal-700">
-              {row.name}
-            </h3>
-          </div>
-          <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin aria-hidden className="size-3.5 shrink-0" />
-            {row.street_address}
-          </p>
-          {rooms && <p className="mt-2 text-sm text-muted-foreground">{rooms}</p>}
-          {amenities.length > 0 && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {amenities.join(" · ")}
-            </p>
-          )}
-          <p className="tabular mt-3 font-display text-lg font-semibold text-foreground">
-            {row.room_categories.length > 1 && (
-              <span className="mr-1 text-sm font-normal text-muted-foreground">From</span>
-            )}
-            {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
-            <span className="text-sm font-normal text-muted-foreground"> / semester</span>
-          </p>
-          {row.room_categories.length > 1 && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {row.room_categories.length} room types
-            </p>
-          )}
-        </div>
-      </Link>
-    </li>
   );
 }
