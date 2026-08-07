@@ -41,7 +41,25 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
       schema: { user: users, session: sessions, account: accounts, verification: verifications },
     }),
     // Better Auth's default ids are not UUIDs; our columns are uuid.
-    advanced: { database: { generateId: () => crypto.randomUUID() } },
+    advanced: {
+      database: { generateId: () => crypto.randomUUID() },
+      ...(env.AUTH_COOKIE_DOMAIN
+        ? {
+            // The API sets the session cookie, but Next.js layout guards run
+            // on the sibling web host and must receive that same cookie.
+            // Secure cookies keep this production-only scope HTTPS-bound.
+            // Version the deployed cookie namespace so host-only cookies from
+            // releases before cross-subdomain sharing can never shadow the
+            // current session. Bump this only for an intentional auth reset.
+            cookiePrefix: 'campushomes-auth-v2',
+            useSecureCookies: true,
+            crossSubDomainCookies: {
+              enabled: true,
+              domain: env.AUTH_COOKIE_DOMAIN,
+            },
+          }
+        : {}),
+    },
     user: {
       additionalFields: {
         // input: false — clients can never set their own role/status; the

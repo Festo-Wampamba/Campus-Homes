@@ -225,6 +225,7 @@ packages/config           Shared tsconfig / eslint / prettier.
 | `BETTER_AUTH_SECRET` | Better Auth session/token signing secret |
 | `BETTER_AUTH_API_KEY` | Better Auth dashboard API key |
 | `BETTER_AUTH_URL` | Base URL Better Auth issues callbacks against (`http://localhost:4000` locally) |
+| `AUTH_COOKIE_DOMAIN` | Optional shared parent domain for sibling web/API hosts; set `.campushomes.co.ug` in deployed environments and omit locally |
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | Bootstrap super-admin credentials for `admin:reset` |
 | `PAYMENTS_ENABLED` | Phase launch gate. Only the exact value `true` enables payment initiation; missing or `false` keeps Phase 1 money-free |
 | `ALLOW_STUB_INTEGRATIONS` | Explicit staging-only opt-in for missing SMS/realtime providers. Keep `false` for public production |
@@ -529,6 +530,7 @@ DATABASE_URL=<NEON_STAGING_APP_CONNECTION_STRING>
 REDIS_URL=<UPSTASH_READ_WRITE_TLS_CONNECTION_STRING>
 BETTER_AUTH_SECRET=<GENERATED_32_PLUS_CHARACTER_SECRET>
 BETTER_AUTH_URL=https://api-staging.campushomes.co.ug
+AUTH_COOKIE_DOMAIN=.campushomes.co.ug
 WEB_ORIGIN=https://staging.campushomes.co.ug
 PAYMENTS_ENABLED=false
 ALLOW_STUB_INTEGRATIONS=true

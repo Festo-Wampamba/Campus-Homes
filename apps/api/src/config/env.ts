@@ -17,6 +17,12 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
   BETTER_AUTH_API_KEY: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.string().min(1).optional(),
+  // Required when the browser-facing web app and Better Auth API use sibling
+  // subdomains. Omit locally so development cookies remain host-only.
+  AUTH_COOKIE_DOMAIN: z
+    .string()
+    .regex(/^(?:\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i)
+    .optional(),
   AFRICASTALKING_USERNAME: z.string().min(1).default('sandbox'),
   // Product launch gate. Payments are deliberately off unless the deployment
   // opts in with the exact string `true`; missing, false, and misspelled values
