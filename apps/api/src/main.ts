@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { RequestMethod } from '@nestjs/common';
 import { toNodeHandler } from 'better-auth/node';
 import { json, urlencoded } from 'express';
 import type { Express, NextFunction, Request, Response } from 'express';
@@ -23,11 +24,6 @@ async function bootstrap() {
   const auth = app.get<Auth>(AUTH);
   const http = app.getHttpAdapter().getInstance() as Express;
   http.all('/api/auth/{*any}', toNodeHandler(auth));
-  // Keep the service root useful when an operator opens the Dokploy domain
-  // directly. Health/readiness still lives at /api/v1/health.
-  http.get('/', (_req: Request, res: Response) => {
-    res.json({ service: 'campushomes-api', status: 'online', health: '/api/v1/health' });
-  });
   app.use(json());
   app.use(urlencoded({ extended: true }));
   const rlsDb = app.get(RlsDb);
@@ -55,7 +51,11 @@ async function bootstrap() {
       return next();
     }
   });
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    // Keep the service root useful when an operator opens the Dokploy domain
+    // directly. Health/readiness still lives at /api/v1/health.
+    exclude: [{ path: '/', method: RequestMethod.GET }],
+  });
   await app.listen(env.PORT, '0.0.0.0');
 }
 
