@@ -34,7 +34,7 @@ function Wordmark({
         <RoofMark className="h-3" />
         <span
           className={cn(
-            "font-display text-xl font-bold tracking-tight",
+            "font-brand text-xl font-bold tracking-tight",
             onDark ? "text-white" : "text-teal-700",
           )}
         >
@@ -42,7 +42,7 @@ function Wordmark({
         </span>
         <span
           className={cn(
-            "font-display text-[11px] font-semibold uppercase tracking-wide",
+            "font-brand-script text-[1.05rem] font-semibold",
             // coral-500 is ~2.5:1 on white — too light for 11px text (WCAG AA
             // needs 4.5:1); darkened here only, coral-500 stays for onDark.
             onDark ? "text-coral-500" : "text-[oklch(0.57_0.13_22)]",
@@ -57,7 +57,7 @@ function Wordmark({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 font-display text-lg font-bold",
+        "inline-flex items-center gap-1.5 font-brand text-lg font-bold",
         onDark ? "text-white" : "text-teal-700",
         className,
       )}

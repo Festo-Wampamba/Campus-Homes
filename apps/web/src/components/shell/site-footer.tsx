@@ -1,7 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 
 import { CAMPUS_LOCATIONS } from "@/lib/campuses";
-import { Wordmark } from "@/components/shell/wordmark";
 
 const CAMPUSES = Object.values(CAMPUS_LOCATIONS);
 
@@ -18,7 +18,14 @@ function SiteFooter() {
       <div className="mx-auto w-full max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8 lg:pt-20">
         <div className="grid gap-12 border-b border-white/10 pb-14 md:grid-cols-[1.35fr_0.65fr_1fr_0.8fr]">
           <div className="max-w-sm">
-            <Wordmark onDark />
+            <Image
+              src="/images/branding/campushomes-brandmark.webp"
+              alt="CampusHomes — Live, Learn, Succeed"
+              width={180}
+              height={172}
+              className="h-24 w-auto object-contain object-left sm:h-28"
+              priority={false}
+            />
             <p className="mt-5 text-sm leading-6 text-white/62">
               Physically verified student housing near Uganda&apos;s universities.
               Search clearly, hold a room for 72 hours, and move in knowing what

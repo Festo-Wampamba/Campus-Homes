@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getServerSession } from "@/lib/session";
 import { AccountMenu } from "@/components/shell/account-menu";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 
 // Session-aware even on the marketing pages — a signed-in student browsing
@@ -36,6 +37,7 @@ async function SiteHeader() {
           >
             List a property
           </Link>
+          <ThemeToggle />
           {session ? (
             <AccountMenu user={session.user} />
           ) : (

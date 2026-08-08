@@ -23,6 +23,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       aria-label="Toggle theme"
+      className="text-white/75 hover:bg-white/10 hover:text-white"
       onClick={toggleTheme}
     >
       <Sun aria-hidden className="size-4 dark:hidden" />

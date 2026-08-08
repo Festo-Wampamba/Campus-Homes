@@ -122,10 +122,13 @@
   --color-coral-600: var(--coral-600);
   --color-coral-500: var(--coral-500);
 
-  /* Poppins carries headings/display, Open Sans carries body/UI/data */
+  /* Poppins carries headings/display, Open Sans carries body/UI/data. The
+     brand pair is reserved for the identity lockup and editorial moments. */
   --font-sans: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-poppins), var(--font-open-sans), ui-sans-serif,
     system-ui, sans-serif;
+  --font-brand: var(--font-corben), Georgia, serif;
+  --font-brand-script: var(--font-cormorant-upright), Georgia, serif;
 
   /* fixed product scale, ratio ≈1.2 (DESIGN.md) — 15px UI base, 16px prose */
   --text-xs: 0.75rem;
