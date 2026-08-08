@@ -73,25 +73,25 @@ const CAMPUS_CARDS = [
     code: "MUK",
     name: "Makerere University",
     area: "Wandegeya · Kikoni · Makerere",
-    image: "/images/campushomes/makerere-campus.webp",
+    image: "/images/campushomes/makerere-campus-hd-v2.webp",
   },
   {
     code: "MUBS",
     name: "Makerere Business School",
     area: "Nakawa · Bugolobi · Banda",
-    image: "/images/campushomes/student-lounge.webp",
+    image: "/images/campushomes/student-lounge-hd-v2.webp",
   },
   {
     code: "KIU",
     name: "Kampala International University",
     area: "Kansanga · Kabalagala · Muyenga",
-    image: "/images/campushomes/student-room.webp",
+    image: "/images/campushomes/student-room-hd-v2.webp",
   },
   {
     code: "KYU",
     name: "Kyambogo University",
     area: "Kyambogo · Banda · Ntinda",
-    image: "/images/campushomes/hero-hostel.webp",
+    image: "/images/campushomes/hero-hostel-hd-v2.webp",
   },
 ] as const;
 
@@ -174,7 +174,7 @@ export default async function HomePage() {
       <section className="relative isolate overflow-hidden bg-[oklch(0.205_0.026_195)] text-white">
         <div className="absolute inset-y-0 right-0 hidden w-[56%] lg:block">
           <Image
-            src="/images/campushomes/hero-hostel.webp"
+            src="/images/campushomes/hero-hostel-hd-v2.webp"
             alt="Students arriving at a hostel in Kampala"
             fill
             priority
@@ -220,7 +220,7 @@ export default async function HomePage() {
 
           <div className="relative mt-10 min-h-72 overflow-hidden rounded-[1.5rem] border border-white/12 lg:hidden">
             <Image
-              src="/images/campushomes/hero-hostel.webp"
+              src="/images/campushomes/hero-hostel-hd-v2.webp"
               alt="Students arriving at a hostel in Kampala"
               fill
               priority
@@ -302,7 +302,7 @@ export default async function HomePage() {
         <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-14">
           <div className="relative min-h-72 overflow-hidden rounded-[1.5rem] lg:min-h-[25rem]">
             <Image
-              src="/images/campushomes/student-lounge.webp"
+              src="/images/campushomes/student-lounge-hd-v2.webp"
               alt="Students studying together in a hostel lounge"
               fill
               sizes="(min-width: 1024px) 52vw, 100vw"
@@ -515,7 +515,7 @@ export default async function HomePage() {
             </div>
             <div className="relative min-h-72 lg:min-h-[31rem]">
               <Image
-                src="/images/campushomes/student-room.webp"
+                src="/images/campushomes/student-room-hd-v2.webp"
                 alt="A furnished student hostel room in Kampala"
                 fill
                 sizes="(min-width: 1024px) 48vw, 100vw"
