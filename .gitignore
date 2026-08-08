@@ -33,3 +33,4 @@ graphify-out/
 
 # Claude Code local machine settings (personal permission overrides)
 .claude/settings.local.json
+.gstack/

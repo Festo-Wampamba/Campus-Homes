@@ -767,8 +767,8 @@ Phone-OTP still works too — dev OTP codes print to this terminal
 
 async function insertUser(client, { phone, email, role, status, name }) {
   const res = await client.query(
-    `INSERT INTO users (phone, email, role, status, name)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO users (phone, email, role, status, name, email_verified)
+     VALUES ($1, $2, $3, $4, $5, true)
      RETURNING id`,
     [phone, email, role, status, name],
   );

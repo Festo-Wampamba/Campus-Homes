@@ -37,7 +37,7 @@ async function SiteHeader() {
           >
             List a property
           </Link>
-          <ThemeToggle />
+          <ThemeToggle className="text-white/75 hover:bg-white/10 hover:text-white dark:text-white/80 dark:hover:bg-white/10 dark:hover:text-white" />
           {session ? (
             <AccountMenu user={session.user} />
           ) : (

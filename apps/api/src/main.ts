@@ -23,6 +23,11 @@ async function bootstrap() {
   const auth = app.get<Auth>(AUTH);
   const http = app.getHttpAdapter().getInstance() as Express;
   http.all('/api/auth/{*any}', toNodeHandler(auth));
+  // Keep the service root useful when an operator opens the Dokploy domain
+  // directly. Health/readiness still lives at /api/v1/health.
+  http.get('/', (_req: Request, res: Response) => {
+    res.json({ service: 'campushomes-api', status: 'online', health: '/api/v1/health' });
+  });
   app.use(json());
   app.use(urlencoded({ extended: true }));
   const rlsDb = app.get(RlsDb);

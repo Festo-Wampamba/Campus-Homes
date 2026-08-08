@@ -8,6 +8,8 @@ import { phoneNumber } from 'better-auth/plugins';
 import type { MessagingAdapter } from '../../adapters/messaging.adapter';
 import type { Env } from '../../config/env';
 import type { Db } from '../../db/client';
+import { assertStubAllowed } from '../../config/integration-guard';
+import { sendAuthEmail } from './auth.email';
 import { accounts, sessions, users, verifications } from '../../db/schema';
 
 /**
@@ -29,13 +31,20 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error('AuthModule requires BETTER_AUTH_SECRET');
   }
+  const hasGoogle = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  if (!hasGoogle && env.NODE_ENV === 'production') {
+    assertStubAllowed(env, 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET', 'AuthModule');
+  }
+  if (!env.RESEND_API_KEY && env.NODE_ENV === 'production') {
+    assertStubAllowed(env, 'RESEND_API_KEY', 'AuthModule');
+  }
   return betterAuth({
     baseURL: env.BETTER_AUTH_URL ?? `http://localhost:${env.PORT}`,
     basePath: '/api/auth',
     secret: env.BETTER_AUTH_SECRET,
     // The web app posts auth requests cross-origin (Vercel ↔ Render in prod,
     // :3000 ↔ :4000 locally) — Better Auth rejects them without this.
-    trustedOrigins: [env.WEB_ORIGIN],
+    trustedOrigins: [...new Set([env.WEB_ORIGIN, env.AUTH_APP_URL])],
     database: drizzleAdapter(db, {
       provider: 'pg',
       schema: { user: users, session: sessions, account: accounts, verification: verifications },
@@ -68,7 +77,39 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
         status: { type: 'string', required: false, defaultValue: 'pending', input: false },
       },
     },
-    emailAndPassword: { enabled: true, disableSignUp: false },
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: false,
+      requireEmailVerification: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendAuthEmail(env, { to: user.email, name: user.name, url, kind: 'reset-password' });
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendAuthEmail(env, { to: user.email, name: user.name, url, kind: 'verify-email' });
+      },
+    },
+    ...(hasGoogle
+      ? {
+          socialProviders: {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID!,
+              clientSecret: env.GOOGLE_CLIENT_SECRET!,
+              prompt: 'select_account',
+            },
+          },
+          account: {
+            accountLinking: {
+              enabled: true,
+              trustedProviders: ['google'],
+              disableImplicitLinking: true,
+            },
+          },
+        }
+      : {}),
     plugins: [
       phoneNumber({
         sendOTP: async ({ phoneNumber: phone, code }) => {

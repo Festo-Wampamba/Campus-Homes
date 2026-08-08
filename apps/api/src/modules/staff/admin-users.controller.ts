@@ -62,6 +62,12 @@ export class AdminUsersController {
     return this.users.softDelete(rlsCtx(req), req.permissions, id, body.reason);
   }
 
+  @Post(':id/sessions/revoke')
+  @RequirePermission('users.update')
+  revokeSessions(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.users.revokeSessions(rlsCtx(req), id);
+  }
+
   @Post(':id/roles')
   @RequirePermission('roles.assign')
   assignRole(
