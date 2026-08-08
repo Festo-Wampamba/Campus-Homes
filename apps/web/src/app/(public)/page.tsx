@@ -398,10 +398,21 @@ export default async function HomePage() {
           </h2>
 
           <ol className="mt-10 grid gap-4 lg:grid-cols-[1.2fr_0.8fr] lg:grid-rows-2">
-            <li className="group relative overflow-hidden rounded-[1.5rem] bg-coral-500 p-7 text-teal-900 sm:p-10 lg:row-span-2">
-              <span className="tabular text-sm font-bold tracking-widest">01</span>
-              <MagnifyingGlassIcon className="absolute top-8 right-8 size-14 opacity-15 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
-              <div className="mt-28 max-w-lg sm:mt-40">
+            <li className="group relative isolate overflow-hidden rounded-[1.5rem] bg-coral-500 p-7 text-teal-900 sm:p-10 lg:row-span-2">
+              <Image
+                src="/images/campushomes/student-room-card.webp"
+                alt="A bright student room with a study desk and garden view"
+                fill
+                sizes="(min-width: 1024px) 58vw, 100vw"
+                className="object-cover object-center transition-transform duration-700 group-hover:scale-[1.03]"
+              />
+              <div
+                aria-hidden
+                className="absolute inset-0 bg-[linear-gradient(90deg,rgba(240,128,128,0.98)_0%,rgba(240,128,128,0.92)_34%,rgba(240,128,128,0.58)_62%,rgba(240,128,128,0.12)_100%)]"
+              />
+              <span className="relative z-10 tabular text-sm font-bold tracking-widest">01</span>
+              <MagnifyingGlassIcon className="absolute top-8 right-8 z-10 size-14 opacity-25 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
+              <div className="relative z-10 mt-28 max-w-lg sm:mt-40">
                 <h3 className="text-2xl font-semibold sm:text-3xl">Search around your university</h3>
                 <p className="mt-4 text-base leading-7 text-teal-900/74">
                   Compare inspected hostels near MUK, MUBS, KIU and KYU by price,
