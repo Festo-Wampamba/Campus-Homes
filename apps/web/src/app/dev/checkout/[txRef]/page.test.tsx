@@ -13,12 +13,22 @@ describe("StubCheckoutPage", () => {
   const originalNodeEnv = process.env.NODE_ENV;
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      configurable: true,
+      enumerable: true,
+      value: originalNodeEnv,
+      writable: true,
+    });
     jest.clearAllMocks();
   });
 
   it("returns not found in production builds", async () => {
-    process.env.NODE_ENV = "production";
+    Object.defineProperty(process.env, "NODE_ENV", {
+      configurable: true,
+      enumerable: true,
+      value: "production",
+      writable: true,
+    });
 
     await expect(
       StubCheckoutPage({ params: Promise.resolve({ txRef: "audit-probe" }) }),
