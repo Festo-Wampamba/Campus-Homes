@@ -16,6 +16,7 @@
     "db:studio": "node --env-file=.env node_modules/drizzle-kit/bin.cjs studio",
     "db:check": "node --env-file=.env node_modules/drizzle-kit/bin.cjs check",
     "db:seed": "node --env-file=.env ./scripts/seed-dev.cjs",
+    "db:seed:year": "node --env-file=.env ./scripts/seed-landlord-year.cjs",
     "admin:reset": "node --env-file=.env ./scripts/reset-super-admin.cjs",
     "lint": "eslint src test"
   },
