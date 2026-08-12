@@ -11,6 +11,7 @@ import { StatusChip } from "@/components/status-chip";
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { formatUgx } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const ROOM_CATEGORY_LABEL: Record<string, string> = {
   single: "Single",
@@ -19,6 +20,44 @@ const ROOM_CATEGORY_LABEL: Record<string, string> = {
   quad: "Quad",
   other: "Other",
 };
+
+// ponytail: 3-entry map duplicated from properties-manager.tsx rather than
+// exported from it — that file imports this dialog, so sharing the const
+// would create a circular import.
+const PROPERTY_STATUS_LABEL: Record<string, string> = {
+  pending_kyc: "Awaiting verification",
+  active: "Active",
+  suspended: "Suspended",
+};
+
+function RoomStats({
+  total,
+  available,
+  occupied,
+  pending,
+}: {
+  total: number;
+  available: number;
+  occupied: number;
+  pending: number;
+}) {
+  const items = [
+    { label: "Total", value: total, className: "text-foreground" },
+    { label: "Available", value: available, className: "text-success" },
+    { label: "Occupied", value: occupied, className: "text-foreground" },
+    { label: "Pending", value: pending, className: "text-warning" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-2">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-baseline gap-1.5">
+          <span className={cn("text-lg font-bold tabular-nums", item.className)}>{item.value}</span>
+          <span className="text-xs text-muted-foreground">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -182,48 +221,58 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
-  if (!detail.listing) {
-    return (
-      <EmptyState
-        icon={BedDouble}
-        title="No rooms yet"
-        body="Ops adds rooms and photos once this property passes verification and is published."
-      />
-    );
-  }
+  const rooms = detail.rooms;
+  const stats = {
+    total: rooms.length,
+    available: rooms.filter((r) => r.reservationStatus === null).length,
+    occupied: rooms.filter((r) => r.reservationStatus === "fulfilled").length,
+    pending: rooms.filter(
+      (r) => r.reservationStatus === "held" || r.reservationStatus === "payment_pending",
+    ).length,
+  };
 
   return (
     <div className="space-y-6">
-      {detail.photos.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase">
-            Verification photos
-          </p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {detail.photos.map((storageKey) => {
-              const url = listingPhotoUrl(storageKey, 300);
-              return url ? (
-                // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL, same pattern as public listing detail
-                <img
-                  key={storageKey}
-                  src={url}
-                  alt=""
-                  className="aspect-square w-full rounded-md object-cover"
-                />
-              ) : null;
-            })}
-          </div>
-        </div>
-      )}
+      <RoomStats {...stats} />
 
-      {detail.rooms.length === 0 ? (
+      {!detail.listing ? (
         <EmptyState
           icon={BedDouble}
           title="No rooms yet"
-          body="Ops adds rooms once this listing is published."
+          body="Ops adds rooms and photos once this property passes verification and is published."
         />
       ) : (
-        <div className="overflow-x-auto rounded-md border border-border">
+        <>
+          {detail.photos.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase">
+                Verification photos
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {detail.photos.map((storageKey) => {
+                  const url = listingPhotoUrl(storageKey, 300);
+                  return url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL, same pattern as public listing detail
+                    <img
+                      key={storageKey}
+                      src={url}
+                      alt=""
+                      className="aspect-square w-full rounded-md object-cover"
+                    />
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
+
+          {detail.rooms.length === 0 ? (
+            <EmptyState
+              icon={BedDouble}
+              title="No rooms yet"
+              body="Ops adds rooms once this listing is published."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
               <tr>
@@ -283,6 +332,8 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -303,7 +354,7 @@ export function PropertyDetailDialog({
         <>
           <DialogHeader
             title={property.name}
-            description={property.streetAddress}
+            description={`${property.streetAddress} · ${PROPERTY_STATUS_LABEL[property.status] ?? property.status}`}
             onClose={() => onOpenChange(false)}
           />
           <DialogBody className="space-y-6">
