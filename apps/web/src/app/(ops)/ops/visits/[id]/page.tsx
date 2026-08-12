@@ -8,8 +8,9 @@ import {
 
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
-import { getPropertyListings, getVisitDetail } from "@/lib/ops";
+import { getPropertyListings, getPublishableSemesters, getVisitDetail } from "@/lib/ops";
 import { ApproveVisitButton } from "./approve-visit-button";
+import { CreateListingToPublish } from "./create-listing-to-publish";
 
 export const metadata: Metadata = { title: "Visit review" };
 
@@ -34,6 +35,12 @@ export default async function VisitDetailPage({
   }
 
   const listings = visit.approvedAt ? await getPropertyListings(visit.propertyId) : [];
+  // A landlord-onboarded property has no listing at all, so an approved visit
+  // has nothing to publish — offer to create one from the applicable semesters.
+  const publishableSemesters =
+    visit.approvedAt && listings.length === 0
+      ? await getPublishableSemesters(visit.propertyId)
+      : [];
 
   return (
     <>
@@ -97,6 +104,20 @@ export default async function VisitDetailPage({
               >
                 Publish
               </Link>
+            </CardContent>
+          </Card>
+        )}
+
+        {visit.approvedAt && visit.result === "passed" && listings.length === 0 && (
+          <Card>
+            <CardContent className="space-y-3 p-5">
+              <p className="text-sm text-muted-foreground">
+                This property has no listing yet — pick the semester to publish it for.
+              </p>
+              <CreateListingToPublish
+                propertyId={visit.propertyId}
+                semesters={publishableSemesters}
+              />
             </CardContent>
           </Card>
         )}

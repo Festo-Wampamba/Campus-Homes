@@ -3,6 +3,7 @@ import type {
   OpsInspector,
   OpsLandlordKycRow,
   OpsPropertyListing,
+  OpsPublishableSemester,
   OpsQueueRow,
   OpsVisitDetail,
   OpsVisitMine,
@@ -30,6 +31,12 @@ export function getPropertyListings(propertyId: string): Promise<OpsPropertyList
   return apiServer<OpsPropertyListing[]>(`/ops/properties/${propertyId}/listings`).then(
     (rows) => rows ?? [],
   );
+}
+
+export function getPublishableSemesters(propertyId: string): Promise<OpsPublishableSemester[]> {
+  return apiServer<OpsPublishableSemester[]>(
+    `/ops/properties/${propertyId}/publishable-semesters`,
+  ).then((rows) => rows ?? []);
 }
 
 export function getKycQueue(): Promise<OpsLandlordKycRow[]> {

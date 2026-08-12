@@ -5,6 +5,7 @@ import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import type { University } from '@campushomes/shared';
 
 import {
+  CreateOpsDraftListingDto,
   IssueStrikeDto,
   OpsKycDecisionDto,
   PublishListingDto,
@@ -53,6 +54,20 @@ export class OpsController {
   @Roles('ops_lead', 'admin')
   listingForPublish(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.listingForPublish(rlsCtx(req), id);
+  }
+
+  @Get('properties/:id/publishable-semesters')
+  @Roles('ops_lead', 'admin')
+  publishableSemesters(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ops.publishableSemesters(rlsCtx(req), id);
+  }
+
+  // Creates the draft listing a landlord-onboarded property never gets, so the
+  // lead can publish after approving a passed visit.
+  @Post('listings/draft')
+  @Roles('ops_lead', 'admin')
+  createDraftListing(@Req() req: AuthenticatedRequest, @Body() body: CreateOpsDraftListingDto) {
+    return this.ops.createDraftListing(rlsCtx(req), body);
   }
 
   @Post('visits')
