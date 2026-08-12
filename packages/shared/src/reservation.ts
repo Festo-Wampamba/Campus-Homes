@@ -25,13 +25,21 @@ export const reservationSchema = z.object({
 });
 export type Reservation = z.infer<typeof reservationSchema>;
 
-// What a landlord may see about a reservation on their unit: status only,
-// never payment detail (enforced by RLS column scoping on the API response).
+// What a landlord may see about a reservation on their unit: status +
+// creation time, never payment detail (enforced by RLS column scoping on
+// the API response). createdAt powers the landlord analytics bookings-trend
+// chart; moveInConfirmedAt lets the bookings list show a real "Moved in"
+// state instead of an always-clickable action that's a no-op most of the
+// time — both are real columns already on rows the landlord can see, not a
+// new data exposure.
 export const landlordReservationViewSchema = reservationSchema.pick({
   id: true,
   unitId: true,
   status: true,
   holdExpiresAt: true,
+}).extend({
+  createdAt: z.iso.datetime(),
+  moveInConfirmedAt: z.iso.datetime().nullable(),
 });
 export type LandlordReservationView = z.infer<typeof landlordReservationViewSchema>;
 

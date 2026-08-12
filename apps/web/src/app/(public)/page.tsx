@@ -93,7 +93,6 @@ const STEPS: { title: string; body: string; icon: LucideIcon }[] = [
 
 const TRUST_CHIPS: { label: string; icon: LucideIcon }[] = [
   { label: "6-point physical inspection", icon: ShieldCheck },
-  { label: "72-hour reservation hold", icon: Timer },
   { label: "Rent paid direct to landlord", icon: Handshake },
 ];
 
@@ -185,51 +184,86 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Hero — drenched in the brand teal; the badge introduces itself here.
-          No decorative gradient orbs (PRODUCT.md anti-references: this reads
-          as a competent institution, not a generic SaaS template) — the real
-          inspection photos below do the visual work instead. */}
-      <section className="relative overflow-hidden bg-teal-900 text-white">
-        <div className="relative mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center lg:gap-10">
-          <div className="max-w-xl">
-            <VerifiedBadge className="mb-4" />
-            <h1 className="text-2xl leading-tight font-bold text-white sm:text-3xl lg:text-4xl">
-              A room near campus you can trust, held just for you.
+      {/* Hero — capped to exactly one screen on lg+ (viewport minus the
+          h-14 header); below lg it auto-heights instead of forcing the
+          photo row to fight the copy for the same 100vh, per review. Theme-
+          aware: `.hero-aurora` is a soft teal wash with dark text in light
+          mode, and only becomes the saturated teal aurora + white text
+          under `.dark` (see globals.css) — the fixed dark-teal-always
+          version never actually respected the theme toggle. The photo row
+          is no longer `lg:block`-only (that silently hid it below 1024px,
+          which is why it wasn't showing) — it's visible from `sm` up, each
+          tile crossfading between two real listing photos (hero-crossfade)
+          on top of the float bob. All motion is pure CSS (globals.css): no
+          JS, no added bundle weight. */}
+      <section className="hero-aurora relative flex h-auto min-h-[26rem] items-center overflow-hidden text-foreground dark:text-white lg:h-[calc(100vh-3.5rem)]">
+        <div
+          aria-hidden
+          className="hero-spin-slow pointer-events-none absolute -top-16 -right-16 size-56 rotate-45 bg-teal-600/10 sm:size-72 dark:bg-coral-500/15"
+        />
+        <div
+          aria-hidden
+          className="hero-spin-slow pointer-events-none absolute -bottom-20 -left-16 size-64 rounded-full border-[3px] border-teal-600/10 [animation-direction:reverse] dark:border-white/10"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 hidden w-full bg-gradient-to-r from-black/45 via-black/10 to-transparent lg:w-[65%] dark:block"
+        />
+        <div className="relative mx-auto grid w-full max-w-6xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-center lg:gap-10">
+          <div className="max-w-2xl">
+            <VerifiedBadge className="animate-in fade-in slide-in-from-bottom-4 mb-2.5 duration-700" />
+            <h1 className="animate-in fade-in slide-in-from-bottom-4 text-3xl leading-[1.12] font-bold text-foreground delay-75 duration-700 fill-mode-both sm:text-4xl lg:text-5xl dark:text-white">
+              <span className="text-teal-700 dark:text-coral-500">Verified</span> rooms, held
+              just for you.
             </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">
-              Our team physically inspects every hostel before it goes live.
-              Find one near your university, reserve it with a 72-hour hold,
-              and move in with confidence.
+            <p className="animate-in fade-in slide-in-from-bottom-4 mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground delay-150 duration-700 fill-mode-both sm:text-base dark:text-white/85">
+              Real inspections, real photos — every hostel is physically
+              checked before it goes live. Find yours near campus and lock
+              it in with a 72-hour hold.
             </p>
-            <HomeSearch />
+            <div className="animate-in fade-in slide-in-from-bottom-4 mt-4 delay-200 duration-700 fill-mode-both">
+              <HomeSearch />
+            </div>
 
-            <Link
-              href="/sign-in"
-              className="mt-4 inline-flex items-center text-sm font-semibold text-white/80 underline-offset-4 transition-colors duration-150 hover:text-white hover:underline"
-            >
-              Already have an account? Sign in with your phone
-            </Link>
-
-            {/* Real numbers, not decoration — the stat is only shown once
-                there's live data to back it (PRODUCT.md principle 5: never
-                fake certainty the UI doesn't have). */}
-            {showcased.length > 0 && (
-              <div className="mt-7 flex items-baseline gap-2 border-t border-white/15 pt-5">
-                <span className="tabular font-display text-3xl font-bold text-white">
-                  {featured.length}
-                </span>
-                <span className="text-sm text-white/70">
-                  verified {featured.length === 1 ? "hostel" : "hostels"} ready
-                  near Makerere right now
-                </span>
+            {/* Real numbers, not decoration — every figure here is either a
+                live count or a fixed platform rule, never invented
+                (PRODUCT.md principle 5: never fake certainty the UI
+                doesn't have). */}
+            <div className="animate-in fade-in slide-in-from-bottom-4 mt-4 flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-3 delay-300 duration-700 fill-mode-both dark:border-white/15">
+              {showcased.length > 0 && (
+                <div>
+                  <p className="tabular font-display text-2xl font-bold text-foreground sm:text-3xl dark:text-white">
+                    {featured.length}+
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-muted-foreground dark:text-white/70">
+                    verified {featured.length === 1 ? "hostel" : "hostels"} near
+                    Makerere
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="tabular font-display text-2xl font-bold text-foreground sm:text-3xl dark:text-white">
+                  {CAMPUSES.length}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-muted-foreground dark:text-white/70">
+                  campuses covered
+                </p>
               </div>
-            )}
+              <div>
+                <p className="tabular font-display text-2xl font-bold text-teal-700 sm:text-3xl dark:text-coral-500">
+                  72hr
+                </p>
+                <p className="mt-1 text-xs font-semibold text-muted-foreground dark:text-white/70">
+                  hold — no rush, no double-booking
+                </p>
+              </div>
+            </div>
 
-            <ul className="mt-4 flex flex-wrap gap-2">
+            <ul className="mt-3 flex flex-wrap gap-2">
               {TRUST_CHIPS.map(({ label, icon: Icon }) => (
                 <li
                   key={label}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-900 dark:border-white/15 dark:bg-white/10 dark:text-white/90"
                 >
                   <Icon aria-hidden className="size-3.5" />
                   {label}
@@ -239,31 +273,52 @@ export default async function HomePage() {
           </div>
 
           {/* Real inspection photos, not stock art — the same rows the
-              featured section below shows. Desktop only: there isn't room
-              to do this justice next to the copy on a phone screen. */}
+              featured section below shows. Visible from `sm` up (below
+              that the tiles alone would crowd out the copy within the
+              height budget) — stacks under the copy until `lg`, where it
+              moves beside it. Each tile bobs (hero-float) and, when a
+              second photo is available for that slot, crossfades between
+              the two (hero-crossfade). */}
           {showcased.length > 0 && (
             <div
               aria-hidden
-              className="relative hidden h-72 lg:block"
+              className="animate-in fade-in zoom-in-95 relative hidden h-44 delay-300 duration-700 fill-mode-both sm:block lg:h-56"
             >
-              {showcased.slice(0, 3).map((row, i) => {
-                const url = row.photo_storage_key ? listingPhotoUrl(row.photo_storage_key, 500) : null;
-                if (!url) return null;
+              {[0, 1, 2].map((slot) => {
+                const front = showcased[slot];
+                if (!front) return null;
+                const frontUrl = front.photo_storage_key ? listingPhotoUrl(front.photo_storage_key, 500) : null;
+                if (!frontUrl) return null;
+                const back = showcased[slot + 3];
+                const backUrl = back?.photo_storage_key ? listingPhotoUrl(back.photo_storage_key, 500) : null;
                 const layout = [
-                  "top-0 left-6 size-44 rotate-[-4deg] z-30",
-                  "top-16 right-0 size-40 rotate-[3deg] z-20",
-                  "bottom-0 left-20 size-36 rotate-[6deg] z-10",
-                ][i];
+                  "top-0 left-4 size-28 rotate-[-4deg] z-30 lg:size-36",
+                  "top-8 right-0 size-24 rotate-[3deg] z-20 lg:top-10 lg:size-32",
+                  "bottom-0 left-12 size-20 rotate-[6deg] z-10 lg:left-16 lg:size-28",
+                ][slot];
                 return (
                   <div
-                    key={row.id}
+                    key={front.id}
+                    style={{ animationDelay: `${slot * 0.6}s`, animationDuration: `${5.5 + slot}s` }}
                     className={cn(
-                      "absolute overflow-hidden rounded-xl border-4 border-white/20 shadow-xl",
+                      "hero-float absolute overflow-hidden rounded-xl border-4 border-white/60 shadow-xl dark:border-white/20",
                       layout,
                     )}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a decorative thumbnail */}
-                    <img src={url} alt="" className="size-full object-cover" />
+                    <img src={frontUrl} alt="" className="size-full object-cover" />
+                    {backUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element -- see above
+                      <img
+                        src={backUrl}
+                        alt=""
+                        style={{ animationDelay: `${-4.5 + slot * 0.6}s` }}
+                        className="hero-crossfade absolute inset-0 size-full object-cover"
+                      />
+                    )}
+                    {slot === 0 && (
+                      <VerifiedBadge size="sm" className="absolute top-2 left-2 z-10" />
+                    )}
                   </div>
                 );
               })}

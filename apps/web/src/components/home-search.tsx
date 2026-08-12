@@ -45,24 +45,24 @@ export function HomeSearch() {
           e.preventDefault();
           go(value);
         }}
-        className="flex overflow-hidden rounded-md bg-white shadow-md"
+        className="flex overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5"
       >
         <div className="relative flex-1">
           <Search
             aria-hidden
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="Search by hostel name or university…"
             aria-label="Search by hostel name or university"
-            className="h-12 w-full bg-transparent pr-3 pl-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none sm:h-12 sm:text-base"
+            className="h-14 w-full bg-transparent pr-3 pl-11 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none sm:text-base"
           />
         </div>
         <button
           type="submit"
-          className="inline-flex h-12 shrink-0 items-center gap-1.5 bg-coral-500 px-5 font-semibold text-teal-900 transition-colors duration-150 hover:bg-coral-600 hover:text-white"
+          className="inline-flex h-14 shrink-0 items-center gap-1.5 bg-coral-500 px-6 font-semibold text-teal-900 transition-colors duration-150 hover:bg-coral-600 hover:text-white"
         >
           <Search aria-hidden className="size-4" strokeWidth={2.5} />
           <span className="hidden sm:inline">Search</span>
@@ -71,15 +71,18 @@ export function HomeSearch() {
 
       {POPULAR_CAMPUSES.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-white/70">Popular:</span>
+          <span className="text-xs font-semibold text-muted-foreground dark:text-white/70">
+            Popular:
+          </span>
           {POPULAR_CAMPUSES.map((campus) => (
             <button
               key={campus.code}
               type="button"
               onClick={() => router.push(`/search?campus=${campus.code}`)}
               className={cn(
-                "rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90",
-                "transition-colors duration-150 hover:bg-white/20",
+                "rounded-full border border-border bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-900",
+                "transition-colors duration-150 hover:border-teal-600/30 hover:bg-teal-100",
+                "dark:border-white/15 dark:bg-white/10 dark:text-white/90 dark:hover:border-white/30 dark:hover:bg-white/20",
               )}
             >
               {campus.code}

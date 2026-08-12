@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CalendarCheck, Clock, Plus, Wallet } from "lucide-react";
+import { ArrowRight, Building2, CalendarCheck, Clock, Plus, Wallet } from "lucide-react";
 
 import { getLandlordProfile, getLandlordReservations, getMyProperties } from "@/lib/landlord";
+import { bookingsTrend } from "@/lib/landlord-analytics";
 import { KycBanner } from "@/components/kyc-banner";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
+import { StatCard } from "@/components/landlord/analytics/stat-card";
+import { BookingsTrendChart } from "@/components/landlord/analytics/bookings-trend-chart";
 
 export const metadata: Metadata = { title: "Landlord dashboard" };
 
@@ -39,6 +42,7 @@ export default async function LandlordDashboardPage() {
   const activeBookings = reservations.filter((r) => r.status === "held" || r.status === "payment_pending");
   const occupied = reservations.filter((r) => r.status === "fulfilled");
   const recent = reservations.slice(0, 5);
+  const trend = bookingsTrend(reservations);
 
   return (
     <>
@@ -50,42 +54,10 @@ export default async function LandlordDashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <Building2 aria-hidden className="size-8 text-teal-600" />
-            <div>
-              <p className="text-2xl font-bold">{properties.length}</p>
-              <p className="text-xs text-muted-foreground">Properties</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <CalendarCheck aria-hidden className="size-8 text-teal-600" />
-            <div>
-              <p className="text-2xl font-bold">{activeBookings.length}</p>
-              <p className="text-xs text-muted-foreground">Active bookings</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <Clock aria-hidden className="size-8 text-teal-600" />
-            <div>
-              <p className="text-2xl font-bold">{occupied.length}</p>
-              <p className="text-xs text-muted-foreground">Occupied rooms</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <Wallet aria-hidden className="size-8 text-muted-foreground" />
-            <div>
-              <p className="text-2xl font-bold text-muted-foreground">—</p>
-              <p className="text-xs text-muted-foreground">Earnings (Phase 2)</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" />
+        <StatCard label="Active bookings" value={String(activeBookings.length)} icon={CalendarCheck} tone="teal" />
+        <StatCard label="Occupied rooms" value={String(occupied.length)} icon={Clock} tone="coral" />
+        <StatCard label="Earnings" value="—" detail="Arrives with Phase 2" icon={Wallet} tone="neutral" />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -97,6 +69,23 @@ export default async function LandlordDashboardPage() {
           View bookings
         </Link>
       </div>
+
+      <Card className="mt-6">
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Bookings, last 8 weeks</CardTitle>
+            <CardDescription>New reservations placed on your units.</CardDescription>
+          </div>
+          <Link
+            href="/landlord/reports"
+            className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-teal-700 hover:text-teal-900"
+          >
+            Full analytics
+            <ArrowRight aria-hidden className="size-3.5" />
+          </Link>
+        </CardHeader>
+        <BookingsTrendChart data={trend} />
+      </Card>
 
       <div className="mt-8">
         <h2 className="text-lg font-semibold">Recent bookings</h2>

@@ -219,3 +219,98 @@
     background: var(--coral-600);
   }
 }
+
+/* Hero motion — pure CSS (no JS, no added bundle weight), so it's free of
+   render-blocking cost. Aurora + float are ambient/slow on purpose (12s+);
+   fast motion here would read as gimmicky rather than lively. */
+@keyframes hero-aurora {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+@keyframes hero-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -10px;
+  }
+}
+@keyframes hero-spin-slow {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes hero-crossfade {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  95% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@layer utilities {
+  /* Lighter than the first pass on purpose (teal-900-heavy read as too
+     dark). Stays inside the teal hue range rather than animating through
+     coral-500 — the hero has coral-colored text/buttons sitting on top of
+     this at every scroll position, and a coral-on-coral phase made them
+     unreadable when reviewed live.
+
+     Light/dark is a plain `.dark` ancestor selector, not Tailwind's
+     `dark:` variant — `dark:hero-aurora` wouldn't compile since this isn't
+     a registered Tailwind utility, only a hand-written class. Light mode
+     defaults to a teal-tinted wash (dark text sits on top); `.dark`
+     overrides to the saturated teal aurora with white text.
+
+     Light mode is a warm coral wash (hue ~22-25), not a paler teal — a
+     lighter teal still read as "the same color as dark mode, just diluted"
+     on review. Coral vs. teal gives the two themes a genuinely different
+     mood instead of two lightness steps of one hue. Headline/stat accent
+     colors flip to teal in light mode to stay legible against it (see the
+     hero markup in (public)/page.tsx). */
+  .hero-aurora {
+    background-image: linear-gradient(
+      120deg,
+      oklch(0.93 0.035 25) 0%,
+      oklch(0.85 0.06 22) 50%,
+      oklch(0.93 0.035 25) 100%
+    );
+    background-size: 300% 300%;
+    animation: hero-aurora 14s ease-in-out infinite;
+  }
+  .dark .hero-aurora {
+    background-image: linear-gradient(
+      120deg,
+      var(--teal-600) 0%,
+      var(--teal-700) 55%,
+      var(--teal-600) 100%
+    );
+  }
+  .hero-float {
+    animation: hero-float 6s ease-in-out infinite;
+  }
+  .hero-spin-slow {
+    animation: hero-spin-slow 50s linear infinite;
+  }
+  .hero-crossfade {
+    animation: hero-crossfade 9s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-aurora,
+    .hero-float,
+    .hero-spin-slow,
+    .hero-crossfade {
+      animation: none;
+    }
+  }
+}

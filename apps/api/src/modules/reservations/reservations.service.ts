@@ -427,8 +427,11 @@ export class ReservationsService {
           unitId: reservations.unitId,
           status: reservations.status,
           holdExpiresAt: reservations.holdExpiresAt,
+          createdAt: reservations.createdAt,
+          moveInConfirmedAt: moveIns.confirmedAt,
         })
         .from(reservations)
+        .leftJoin(moveIns, eq(moveIns.reservationId, reservations.id))
         .orderBy(desc(reservations.createdAt)),
     );
   }
