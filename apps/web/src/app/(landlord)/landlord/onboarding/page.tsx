@@ -15,7 +15,7 @@ export default async function OnboardingPage() {
     redirect("/landlord");
   }
 
-  const initialStep = !profile ? "legal" : !profile.idDocStorageKey ? "id-doc" : "property";
+  const initialStep = !profile ? "legal" : "property";
 
   return (
     <div className="flex flex-1 items-center justify-center py-8">

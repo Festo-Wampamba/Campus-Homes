@@ -20,7 +20,7 @@ import { api, ApiError } from "@/lib/api";
 import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { cn } from "@/lib/utils";
 
-type Step = "legal" | "id-doc" | "property";
+type Step = "legal" | "property";
 
 const DOC_LABELS: Record<DocType, string> = {
   title_deed: "Title deed",
@@ -37,7 +37,7 @@ const UNIVERSITY_LABELS: Record<University, string> = {
   other: "Other / not listed",
 };
 
-const STEP_INDEX: Record<Step, number> = { legal: 1, "id-doc": 2, property: 3 };
+const STEP_INDEX: Record<Step, number> = { legal: 1, property: 2 };
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -52,7 +52,7 @@ function StepHeader({ step, title, description }: { step: Step; title: string; d
   return (
     <div className="mb-6">
       <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Step {STEP_INDEX[step]} of 3
+        Step {STEP_INDEX[step]} of 2
       </p>
       <h1 className="mb-1 font-display text-lg font-bold text-foreground">{title}</h1>
       <p className="text-sm text-muted-foreground">{description}</p>
@@ -70,7 +70,6 @@ export function OnboardingWizard({
   const router = useRouter();
   const [step, setStep] = useState<Step>(initialStep);
   const [legalName, setLegalName] = useState(initialProfile?.legalName ?? "");
-  const [idFile, setIdFile] = useState<File | null>(null);
   const [propertyName, setPropertyName] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
   const [catchment, setCatchment] = useState<University>("MUK");
@@ -89,7 +88,7 @@ export function OnboardingWizard({
         method: "POST",
         body: JSON.stringify({ legalName }),
       });
-      setStep("id-doc");
+      setStep("property");
     } catch (err) {
       setError(errorMessage(err, "Couldn't save your legal name — try again."));
     } finally {
@@ -97,29 +96,8 @@ export function OnboardingWizard({
     }
   }
 
-  async function submitIdDoc(e: React.FormEvent) {
-    e.preventDefault();
-    if (!idFile) return;
-    setError(null);
-    setPending(true);
-    try {
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
-      const { publicId } = await uploadToCloudinary(idFile, sig);
-      await api("/landlords/profile", {
-        method: "POST",
-        body: JSON.stringify({ legalName, idDocStorageKey: publicId }),
-      });
-      setStep("property");
-    } catch (err) {
-      setError(errorMessage(err, "Couldn't upload your ID document — try again."));
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function submitProperty(e: React.FormEvent) {
     e.preventDefault();
-    if (!docFile) return;
     setError(null);
     setPending(true);
     try {
@@ -134,12 +112,14 @@ export function OnboardingWizard({
         method: "POST",
         body: JSON.stringify({ name: propertyName, streetAddress, catchment, proposedRoomCategories }),
       });
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
-      const { publicId } = await uploadToCloudinary(docFile, sig);
-      await api(`/listings/properties/${property.id}/documents`, {
-        method: "POST",
-        body: JSON.stringify({ docType, storageKey: publicId }),
-      });
+      if (docFile) {
+        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+        const { publicId } = await uploadToCloudinary(docFile, sig);
+        await api(`/listings/properties/${property.id}/documents`, {
+          method: "POST",
+          body: JSON.stringify({ docType, storageKey: publicId }),
+        });
+      }
       router.push("/landlord");
       router.refresh();
     } catch (err) {
@@ -172,31 +152,6 @@ export function OnboardingWizard({
               </div>
               <Button type="submit" disabled={pending} className="w-full">
                 {pending ? "Saving…" : "Continue"}
-              </Button>
-            </form>
-          </>
-        )}
-
-        {step === "id-doc" && (
-          <>
-            <StepHeader
-              step="id-doc"
-              title="Upload your ID document"
-              description="A national ID, passport, or driving permit. Our team reviews this before your account is verified."
-            />
-            <form onSubmit={submitIdDoc} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="idFile" required>ID document</Label>
-                <Input
-                  id="idFile"
-                  type="file"
-                  required
-                  accept="image/*,.pdf"
-                  onChange={(e) => setIdFile(e.target.files?.[0] ?? null)}
-                />
-              </div>
-              <Button type="submit" disabled={pending || !idFile} className="w-full">
-                {pending ? "Uploading…" : "Upload and continue"}
               </Button>
             </form>
           </>
@@ -264,7 +219,7 @@ export function OnboardingWizard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="docType">Supporting document type</Label>
+                <Label htmlFor="docType">Supporting document type (optional)</Label>
                 <select
                   id="docType"
                   value={docType}
@@ -282,16 +237,15 @@ export function OnboardingWizard({
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="docFile" required>Document file</Label>
+                <Label htmlFor="docFile">Document file (optional)</Label>
                 <Input
                   id="docFile"
                   type="file"
-                  required
                   accept="image/*,.pdf"
                   onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
                 />
               </div>
-              <Button type="submit" disabled={pending || !docFile} className="w-full">
+              <Button type="submit" disabled={pending} className="w-full">
                 {pending ? "Submitting…" : "Submit property"}
               </Button>
             </form>
