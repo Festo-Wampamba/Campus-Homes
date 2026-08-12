@@ -251,6 +251,19 @@ export class AdminUsersService {
         }
 
         const nextType = input.accountType ?? current.accountType;
+        if (input.accountType !== undefined) {
+          if (nextType === 'ops_inspector' || nextType === 'ops_lead') {
+            await client.query(
+              `INSERT INTO ops_staff (user_id, team, active) VALUES ($1, $2::ops_team, true)
+               ON CONFLICT (user_id) DO UPDATE SET team = EXCLUDED.team, active = true`,
+              [userId, nextType === 'ops_lead' ? 'lead' : 'inspector'],
+            );
+          } else {
+            // Keep historical staff rows for existing visits and audit records,
+            // but never leave a former Ops account assignable as an inspector.
+            await client.query('UPDATE ops_staff SET active = false WHERE user_id = $1', [userId]);
+          }
+        }
         if (nextType === 'student') {
           if (current.accountType !== 'student' && (!input.university || !input.yearOfStudy)) {
             throw new BadRequestException('University and year of study are required when changing to a student account');

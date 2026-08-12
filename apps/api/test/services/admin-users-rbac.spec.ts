@@ -116,6 +116,23 @@ describe('AdminUsersService.assignRole — separation of duty', () => {
   });
 });
 
+describe('AdminUsersService.update — ops staff directory', () => {
+  it('adds a registered account promoted to inspector to the active inspector directory', async () => {
+    const registeredUser = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'student', 'active', 'Registered inspector') RETURNING id`,
+      ['+256700001314'],
+    );
+
+    await adminUsers.update(superAdminCtx(), registeredUser, { accountType: 'ops_inspector' });
+
+    const { rows } = await pool.query(
+      `SELECT team::text AS team, active FROM ops_staff WHERE user_id = $1`,
+      [registeredUser],
+    );
+    expect(rows).toEqual([{ team: 'inspector', active: true }]);
+  });
+});
+
 describe('AdminUsersService.assignRole/revokeRole — round trip', () => {
   it('a granted role is reflected by loadPermissions and disappears on revoke', async () => {
     const target = await seed(
