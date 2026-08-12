@@ -26,6 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { Wordmark } from "@/components/shell/wordmark";
 
 type NotificationRow = {
   id: string;
@@ -91,10 +92,10 @@ function Sidebar({
     <div className="flex h-full flex-col border-r border-border bg-card text-foreground">
       <div className="flex h-17 items-center gap-3 border-b border-border px-5">
         <Link href={homeHref} onClick={close} className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-600 text-sm font-bold text-white">CH</span>
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-600 text-sm font-bold text-white" aria-hidden>CH</span>
           {!collapsed && (
             <span className="min-w-0">
-              <span className="block font-display text-sm font-bold tracking-tight">CampusHomes</span>
+              <Wordmark className="text-[1.02rem]" />
               <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{portalLabel}</span>
             </span>
           )}

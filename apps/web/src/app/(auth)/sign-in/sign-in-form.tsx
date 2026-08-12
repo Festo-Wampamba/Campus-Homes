@@ -2,9 +2,9 @@
 
 import { ArrowRight, Mail, Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { authClient } from "@/lib/auth-client";
+import { appCallbackUrl, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -129,6 +129,14 @@ export function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => setResendCooldown((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -138,6 +146,7 @@ export function SignInForm() {
     setPhoneStep("number");
     setError(null);
     setNotice(null);
+    setVerificationEmail(null);
   }
 
   function switchChannel(next: Channel) {
@@ -145,6 +154,21 @@ export function SignInForm() {
     setPhoneStep("number");
     setError(null);
     setNotice(null);
+    setVerificationEmail(null);
+  }
+
+  async function signInWithGoogle() {
+    setError(null);
+    setNotice(null);
+    setPending(true);
+    const { error } = await authClient.signIn.social({
+      provider: "google",
+      callbackURL: appCallbackUrl("/auth/callback"),
+    });
+    if (error) {
+      setPending(false);
+      setError(error.message ?? "Google sign-in could not be started. Please try again.");
+    }
   }
 
   async function routeBySession() {
@@ -173,7 +197,22 @@ export function SignInForm() {
     if (process.env.NODE_ENV !== "production") {
       setNotice("Local dev mode: check the backend terminal for the OTP code.");
     }
+    setResendCooldown(30);
     setPhoneStep("otp");
+  }
+
+  async function resendOtp() {
+    if (resendCooldown > 0) return;
+    setError(null);
+    setPending(true);
+    const { error } = await authClient.phoneNumber.sendOtp({ phoneNumber: toE164(phone) });
+    setPending(false);
+    if (error) {
+      setError(error.message ?? "We couldn't resend the code — try again.");
+      return;
+    }
+    setResendCooldown(30);
+    setNotice(process.env.NODE_ENV !== "production" ? "Local dev mode: check the backend terminal for the new OTP." : "A new code is on its way.");
   }
 
   async function verifyOtp(e: React.FormEvent) {
@@ -211,7 +250,16 @@ export function SignInForm() {
           ? await authClient.signUp.email({ name, email, password })
           : await authClient.signIn.email({ email, password });
       if (error) {
-        setError(emailAuthFailureMessage(error, mode));
+        if (error.code === "EMAIL_NOT_VERIFIED") {
+          setVerificationEmail(email);
+          setError("Verify your email before signing in.");
+        } else {
+          setError(emailAuthFailureMessage(error, mode));
+        }
+        return;
+      }
+      if (mode === "sign-up") {
+        setNotice("Check your email to verify your account before signing in.");
         return;
       }
       await routeBySession();
@@ -220,6 +268,19 @@ export function SignInForm() {
     } finally {
       setPending(false);
     }
+  }
+
+  async function resendVerificationEmail() {
+    if (!verificationEmail) return;
+    setPending(true);
+    setError(null);
+    const { error } = await authClient.sendVerificationEmail({ email: verificationEmail, callbackURL: appCallbackUrl("/auth/callback") });
+    setPending(false);
+    if (error) {
+      setError(error.message ?? "We could not resend the verification email.");
+      return;
+    }
+    setNotice("A fresh verification link is on its way.");
   }
 
   return (
@@ -298,14 +359,19 @@ export function SignInForm() {
             <Button
               type="button"
               variant="secondary"
-              disabled
-              title="Coming soon"
-              className="w-full gap-1.5 text-sm opacity-60 sm:gap-2"
+              disabled={pending}
+              onClick={signInWithGoogle}
+              className="w-full gap-1.5 text-sm sm:gap-2"
             >
               <GoogleIcon />
               <span className="min-w-0 flex-1 truncate text-left">Continue with Google</span>
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Soon</span>
             </Button>
+
+            {mode === "sign-in" && (
+              <a href="/forgot-password" className="block text-center text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
+                Forgot your password?
+              </a>
+            )}
 
             <Button type="button" variant="ghost" size="sm" className="w-full gap-1.5" onClick={() => switchChannel("phone")}>
               <Smartphone aria-hidden className="size-3.5" />
@@ -355,12 +421,20 @@ export function SignInForm() {
             <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => { setCode(""); setPhoneStep("number"); setError(null); }}>
               Use a different number
             </Button>
+            <Button type="button" variant="ghost" size="sm" className="w-full" disabled={pending || resendCooldown > 0} onClick={resendOtp}>
+              {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+            </Button>
           </form>
         )}
 
         <p aria-live="polite" role="status" className="mt-3 min-h-5 text-center text-xs text-destructive">
           {error}
         </p>
+        {verificationEmail && (
+          <Button type="button" variant="ghost" size="sm" className="w-full" disabled={pending} onClick={resendVerificationEmail}>
+            Resend verification email
+          </Button>
+        )}
 
         <p className="mt-1 text-center text-[10px] leading-relaxed text-muted-foreground">
           By continuing you agree to our Terms & Data Handling under the Uganda Data Protection Act 2019

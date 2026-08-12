@@ -162,7 +162,8 @@ export class AdminUsersService {
                u.emergency_contact_phone AS "emergencyContactPhone", u.notes,
                u.created_at AS "createdAt", u.updated_at AS "updatedAt",
                s.university::text, s.year_of_study AS "yearOfStudy",
-               l.legal_name AS "legalName", l.kyc_status::text AS "kycStatus"
+               l.legal_name AS "legalName", l.kyc_status::text AS "kycStatus",
+               coalesce((SELECT array_agg(DISTINCT a.provider_id) FROM accounts a WHERE a.user_id = u.id), '{}') AS "authProviders"
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN landlords l ON l.user_id = u.id
@@ -197,6 +198,15 @@ export class AdminUsersService {
         `, [userId]);
       return { user, assignments: assignments.rows, directPermissions: directPermissions.rows, memberships: memberships.rows };
     });
+  }
+
+  async revokeSessions(actor: RlsContext, userId: string) {
+    const revoked = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const result = await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+      return result.rowCount ?? 0;
+    });
+    await this.audit.record(actor, 'users.sessions_revoke', 'user', userId, { revoked });
+    return { revoked };
   }
 
   async update(actor: RlsContext, userId: string, input: UpdateAdminUserInput) {

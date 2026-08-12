@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Open_Sans, Poppins } from "next/font/google";
+import { Corben, Cormorant_Upright, Open_Sans, Poppins } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 
 import { Providers } from "./providers";
@@ -15,6 +15,23 @@ const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin"],
   weight: ["600", "700"],
+  display: "swap",
+});
+
+// Brand typography from the CampusHomes identity board. These are scoped to
+// the wordmark and editorial accents, while Poppins/Open Sans remain the
+// high-legibility product UI pair.
+const corben = Corben({
+  variable: "--font-corben",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+});
+
+const cormorantUpright = Cormorant_Upright({
+  variable: "--font-cormorant-upright",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
   display: "swap",
 });
 
@@ -39,7 +56,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${openSans.variable} ${poppins.variable} h-full`}
+      className={`${openSans.variable} ${poppins.variable} ${corben.variable} ${cormorantUpright.variable} h-full`}
       // The no-FOUC script below adds `.dark` to this element before React
       // hydrates (it must run pre-paint to avoid a light-then-dark flash),
       // so the class list legitimately differs from what was server-rendered
@@ -47,12 +64,13 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Applies the persisted theme before first paint — avoids a
-            light-then-dark flash. Kept in sync with ThemeToggle. */}
+        {/* Light is the intentional default. Only an explicit saved dark
+            choice is applied before first paint, avoiding a light-then-dark
+            flash without letting OS preference override the product default. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()",
+              "(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark')}}catch(e){}})()",
           }}
         />
       </head>

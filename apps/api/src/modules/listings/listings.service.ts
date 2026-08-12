@@ -256,7 +256,7 @@ export class ListingsService {
       const res = await client.query(
         `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
                 lv.id AS version_id, lv.price_per_term_ugx, lv.amenities, lv.description,
-                p.name, p.street_address, p.gps_lat, p.gps_lon,
+                p.name, p.street_address, p.gps_lat, p.gps_lon, p.catchment AS university,
                 ph.storage_key AS photo_storage_key,
                 u.min_capacity, u.max_capacity, COALESCE(u.unit_count, 0) AS unit_count,
                 COALESCE(u.max_price, lv.price_per_term_ugx) AS max_price_per_term_ugx,

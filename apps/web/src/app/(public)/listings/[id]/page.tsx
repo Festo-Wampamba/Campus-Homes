@@ -74,7 +74,7 @@ export default async function ListingDetailPage({
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
       <TrackRecentlyViewed
         id={listingId}
         name={property.name}
@@ -84,8 +84,8 @@ export default async function ListingDetailPage({
       />
       <BackButton fallbackHref="/search" label="Back" />
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl">{property.name}</h1>
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <h1 className="text-3xl tracking-[-0.035em] sm:text-4xl">{property.name}</h1>
         <VerifiedBadge />
         {isStudent && (
           <div className="ml-auto">
@@ -99,12 +99,12 @@ export default async function ListingDetailPage({
           starting at the same vertical position — the reservation card is
           never scrolled below the photos, same layout logic as an
           e-commerce product image + buy box. */}
-      <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_minmax(0,22rem)] lg:items-start">
+      <div className="mt-7 grid gap-10 lg:grid-cols-[1fr_minmax(0,24rem)] lg:items-start">
         <div>
           {/* Photos — inspector-captured, EXIF-verified server-side */}
           <div className="mb-8">
             {orderedPhotos.length === 0 ? (
-              <div className="flex h-64 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <div className="flex h-72 items-center justify-center rounded-2xl bg-teal-50 text-muted-foreground">
                 <span className="inline-flex items-center gap-2 text-sm">
                   <Camera aria-hidden className="size-4" />
                   Inspection photos coming soon
@@ -119,8 +119,8 @@ export default async function ListingDetailPage({
                       key={photo.id}
                       className={
                         i === 0
-                          ? "relative h-64 overflow-hidden rounded-lg sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-96"
-                          : "relative hidden overflow-hidden rounded-lg sm:block"
+                          ? "relative h-72 overflow-hidden rounded-2xl sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-[30rem]"
+                          : "relative hidden overflow-hidden rounded-xl sm:block"
                       }
                     >
                       {url ? (
@@ -203,7 +203,7 @@ export default async function ListingDetailPage({
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/96 p-3 shadow-[0_-12px_32px_-18px_rgba(0,47,47,0.35)] backdrop-blur-xl lg:hidden">
         <MoneyCard
           session={session}
           needsProfile={needsProfile}
@@ -242,7 +242,7 @@ function MoneyCard({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "flex items-center justify-between gap-3" : "rounded-lg border border-border bg-card p-5 shadow-xs"}>
+    <div className={compact ? "flex items-center justify-between gap-3" : "rounded-2xl border border-border bg-card p-6 shadow-[0_22px_50px_-32px_rgba(0,47,47,0.35)]"}>
       <div>
         <p className="tabular font-display text-2xl font-semibold">
           {minPriceUgx !== maxPriceUgx && (
@@ -263,7 +263,7 @@ function MoneyCard({
         <Link
           href="/sign-in"
           className={cn(
-            "inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700",
+            "inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition duration-300 hover:bg-teal-700 active:scale-[0.98]",
             compact ? "shrink-0" : "mt-4 w-full",
           )}
         >
@@ -274,7 +274,7 @@ function MoneyCard({
         <Link
           href={`/profile?next=/listings/${listingId}`}
           className={cn(
-            "inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700",
+            "inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition duration-300 hover:bg-teal-700 active:scale-[0.98]",
             compact ? "shrink-0" : "mt-4 w-full",
           )}
         >

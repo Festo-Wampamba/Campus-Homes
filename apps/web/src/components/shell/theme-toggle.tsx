@@ -3,6 +3,7 @@
 import { Moon, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "theme";
 
@@ -16,13 +17,17 @@ function toggleTheme() {
   localStorage.setItem(STORAGE_KEY, next ? "dark" : "light");
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
       aria-label="Toggle theme"
+      className={cn(
+        "text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
+        className,
+      )}
       onClick={toggleTheme}
     >
       <Sun aria-hidden className="size-4 dark:hidden" />

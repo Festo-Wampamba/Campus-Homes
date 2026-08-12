@@ -16,6 +16,17 @@ convention, outside the versioned prefix).
 | Student/landlord sign-in | Phone OTP: `phoneNumber.sendOtp({ phoneNumber })` → `phoneNumber.verify({ phoneNumber, code })`. First verify auto-creates the user (role `student`). |
 | Ops/Admin sign-in | `signIn.email({ email, password })` — sign-*up* is disabled; ops users are seeded server-side. |
 | Session | Cookie-based; `getSession()` returns `{ user: { id, role, status, phone, ... }, session }`. |
+| Student Google sign-in | `signIn.social({ provider: 'google', callbackURL: '/auth/callback' })`; Google-created and linked accounts remain student-only. |
+| Email verification | Email/password sign-up sends a Resend verification link; unverified accounts can request a fresh link from the sign-in form. |
+| Password recovery | `/forgot-password` requests a Better Auth reset link; `/reset-password?token=…` completes the change. |
+
+Production auth configuration requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, and `AUTH_APP_URL` in the API environment. Register the Better Auth callback URL for every deployment:
+
+```text
+http://localhost:4000/api/auth/callback/google
+https://api-staging.campushomes.co.ug/api/auth/callback/google
+https://<production-api-host>/api/auth/callback/google
+```
 
 ### REST endpoints (`/api/v1`)
 | Method + path | Who | Purpose |

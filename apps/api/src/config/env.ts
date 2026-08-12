@@ -17,6 +17,11 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
   BETTER_AUTH_API_KEY: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  AUTH_EMAIL_FROM: z.string().min(1).default('CampusHomes <hello@campushomes.ug>'),
+  AUTH_APP_URL: z.string().url().default('http://localhost:3000'),
   // Required when the browser-facing web app and Better Auth API use sibling
   // subdomains. Omit locally so development cookies remain host-only.
   AUTH_COOKIE_DOMAIN: z

@@ -18,6 +18,7 @@ import { ProfileModule } from './modules/profile/profile.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { RootController } from './root.controller';
 
 @Module({
   imports: [
@@ -37,7 +38,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     StaffModule,
     CalendarModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, RootController],
   providers: [
     // Global: every request body/query hitting a createZodDto() DTO is
     // validated against the shared schema before any handler runs.
