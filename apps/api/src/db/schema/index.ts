@@ -12,3 +12,4 @@ export * from './admin';
 export * from './calendar';
 export * from './activities';
 export * from './ledger';
+export * from './tenant-agreement';

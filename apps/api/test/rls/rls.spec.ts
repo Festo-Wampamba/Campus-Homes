@@ -725,3 +725,165 @@ describe('ledger (0018): finance chart of accounts + journal is service-only', (
     ).resolves.not.toThrow();
   });
 });
+
+describe('tenant_agreement_templates / tenant_agreement_fields (0020): svc_all-only RLS', () => {
+  // Authorization for these two tables is entirely service-layer mediated
+  // (landlord-own / custodian-assigned / ops / public-for-filling) — see
+  // tenant-agreements.service.ts assertCanManageTemplate(). RLS itself is
+  // just "service_role only", same posture as `roles`/`activities`.
+  it('a landlord cannot read tenant_agreement_templates directly', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreement_templates').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a non-service role cannot insert a template directly', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`INSERT INTO tenant_agreement_templates (property_id, created_by) VALUES ($1, $2)`, [
+          property1,
+          landlord1,
+        ]),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role can read and write templates directly', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c
+        .query(
+          `INSERT INTO tenant_agreement_templates (property_id, created_by) VALUES ($1, $2) RETURNING id`,
+          [property1, landlord1],
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe('tenant_agreements (0020): QR-code tenant registration responses', () => {
+  let templateId: string;
+  let fieldId: string;
+  let agreement1: string; // student1's signed agreement on property1 (landlord1)
+  let custodian: string; // assigned to property1
+
+  beforeAll(async () => {
+    templateId = await seed(
+      `INSERT INTO tenant_agreement_templates (property_id, created_by) VALUES ($1, $2) RETURNING id`,
+      [property1, landlord1],
+    );
+    fieldId = await seed(
+      `INSERT INTO tenant_agreement_fields (template_id, position, field_type, label)
+       VALUES ($1, 0, 'fill_in', 'Room number') RETURNING id`,
+      [templateId],
+    );
+    agreement1 = await seed(
+      `INSERT INTO tenant_agreements (template_id, property_id, student_id, responses, signature_type, signed_name)
+       VALUES ($1, $2, $3, $4::jsonb, 'typed', 'Student One') RETURNING id`,
+      [
+        templateId,
+        property1,
+        student1,
+        JSON.stringify([{ fieldId, label: 'Room number', fieldType: 'fill_in', value: '2A' }]),
+      ],
+    );
+
+    custodian = await seedUser('custodian', '+256700000007');
+    await seed(
+      `INSERT INTO property_memberships (user_id, property_id, role, assigned_by) VALUES ($1, $2, 'custodian', $3)`,
+      [custodian, property1, landlord1],
+    );
+  });
+
+  it('a student can insert their own tenant agreement', async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c
+        .query(
+          `INSERT INTO tenant_agreements (template_id, property_id, student_id, responses, signature_type, signed_name)
+           VALUES ($1, $2, $3, '[]'::jsonb, 'typed', 'Student Two') RETURNING id`,
+          [templateId, property1, student2],
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a student cannot insert a tenant agreement for someone else', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'student' }, async (c) =>
+        c.query(
+          `INSERT INTO tenant_agreements (template_id, property_id, student_id, responses, signature_type, signed_name)
+           VALUES ($1, $2, $3, '[]'::jsonb, 'typed', 'Sneaky')`,
+          [templateId, property1, student2],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('a non-student cannot insert a tenant agreement even for themselves', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(
+          `INSERT INTO tenant_agreements (template_id, property_id, student_id, responses, signature_type, signed_name)
+           VALUES ($1, $2, $3, '[]'::jsonb, 'typed', 'Not a student')`,
+          [templateId, property1, landlord1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('the submitting student reads their own agreement', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("another student cannot read someone else's tenant agreement", async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('the property owner (landlord1) reads agreements on their own property', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("a different landlord cannot read another landlord's property agreements", async () => {
+    const rows = await asIdentity({ userId: landlord2, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('an assigned custodian reads agreements on their assigned property', async () => {
+    const rows = await asIdentity({ userId: custodian, role: 'custodian' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('ops reads across every property', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a second agreement for the same student+property is rejected (one signature per tenancy)', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'student' }, async (c) =>
+        c.query(
+          `INSERT INTO tenant_agreements (template_id, property_id, student_id, responses, signature_type, signed_name)
+           VALUES ($1, $2, $3, '[]'::jsonb, 'typed', 'Student One Again')`,
+          [templateId, property1, student1],
+        ),
+      ),
+    ).rejects.toThrow(/duplicate key|unique constraint/i);
+  });
+});
