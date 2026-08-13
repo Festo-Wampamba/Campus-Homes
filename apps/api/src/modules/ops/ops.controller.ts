@@ -37,8 +37,20 @@ export class OpsController {
     return this.ops.myVisits(rlsCtx(req));
   }
 
+  // The reviewed half of myVisits() — an inspector's own visits the lead has
+  // already approved, so an approval doesn't just vanish from their world.
+  @Get('visits/mine/history')
+  @Roles('ops_inspector')
+  myVisitHistory(@Req() req: AuthenticatedRequest) {
+    return this.ops.myVisitHistory(rlsCtx(req));
+  }
+
+  // ops_inspector included: RLS (visits_read) already scopes this to the
+  // caller's own visit or a lead, so opening the role guard doesn't widen
+  // access — it just lets an inspector read the server-truth record for a
+  // visit they can no longer see in myVisits() once it's approved.
   @Get('visits/:id')
-  @Roles('ops_lead', 'admin')
+  @Roles('ops_lead', 'admin', 'ops_inspector')
   visitDetail(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.visitDetail(rlsCtx(req), id);
   }

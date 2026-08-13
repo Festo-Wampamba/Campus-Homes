@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { Camera, LocateFixed, X } from "lucide-react";
 import {
   VERIFICATION_CHECKLIST_COMPONENTS,
+  type OpsVisitDetail,
   type VerificationChecklistComponent,
 } from "@campushomes/shared";
 
@@ -85,10 +86,45 @@ function newDraft(visitId: string): InspectionDraft {
   };
 }
 
+/** Seeds a local draft from the server's already-synced record instead of a
+ * blank one — this device has no local draft (new device, cleared storage),
+ * but the checklist was already submitted from elsewhere. Without this, the
+ * form would silently hand the inspector a fresh blank checklist under a new
+ * clientIdempotencyKey, and submitting it would overwrite the real
+ * submission (the server only rejects a resubmit once the visit is approved,
+ * not before). Marked "synced" so it renders read-only immediately. */
+function draftFromServer(visitId: string, visit: OpsVisitDetail): InspectionDraft {
+  const checklist = emptyChecklist();
+  for (const component of VERIFICATION_CHECKLIST_COMPONENTS) {
+    const entry = visit.checklist[component];
+    checklist[component] = { passed: entry?.passed ?? null, notes: entry?.notes ?? "" };
+  }
+  return {
+    visitId,
+    clientIdempotencyKey: crypto.randomUUID(),
+    checklist,
+    visitGpsLat: visit.visitGpsLat !== null ? Number(visit.visitGpsLat) : null,
+    visitGpsLon: visit.visitGpsLon !== null ? Number(visit.visitGpsLon) : null,
+    startedAt: visit.startedAt ?? new Date().toISOString(),
+    completedAt: visit.completedAt,
+    result: visit.result === "pending" ? null : visit.result,
+    failureReason: visit.failureReason ?? "",
+    syncStatus: "synced",
+    photos: [],
+    photoStorageKeys: [],
+  };
+}
+
 const numberFieldClass =
   "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs sm:h-10";
 
-export function InspectionForm({ visitId }: { visitId: string }) {
+export function InspectionForm({
+  visitId,
+  serverVisit,
+}: {
+  visitId: string;
+  serverVisit: OpsVisitDetail | null;
+}) {
   const [draft, setDraft] = useState<InspectionDraft | null>(null);
   // getCurrentPosition's success callback can fire many seconds after
   // scanGps() was called — long enough for checklist/notes/photo edits to
@@ -112,14 +148,17 @@ export function InspectionForm({ visitId }: { visitId: string }) {
         setDraft(existing);
         return;
       }
-      const created = newDraft(visitId);
+      const created =
+        serverVisit && serverVisit.result !== "pending"
+          ? draftFromServer(visitId, serverVisit)
+          : newDraft(visitId);
       await putDraft(created);
       if (!cancelled) setDraft(created);
     });
     return () => {
       cancelled = true;
     };
-  }, [visitId]);
+  }, [visitId, serverVisit]);
 
   const persist = useCallback((next: InspectionDraft) => {
     setDraft(next);

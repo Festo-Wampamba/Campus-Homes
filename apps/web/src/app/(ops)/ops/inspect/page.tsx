@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { ClipboardList } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
-import { getMyVisits } from "@/lib/ops";
-import { MyVisitsList } from "./my-visits-list";
+import { getMyVisitHistory, getMyVisits } from "@/lib/ops";
+import { MyVisitsList, ReviewedVisitsList } from "./my-visits-list";
 
 export const metadata: Metadata = { title: "My visits" };
 
 export default async function MyVisitsPage() {
-  const visits = await getMyVisits();
+  const [visits, history] = await Promise.all([getMyVisits(), getMyVisitHistory()]);
 
   return (
     <>
@@ -23,6 +23,13 @@ export default async function MyVisitsPage() {
         </div>
       ) : (
         <MyVisitsList visits={visits} />
+      )}
+
+      {history.length > 0 && (
+        <>
+          <h2 className="mt-8 text-lg font-semibold text-foreground">Reviewed</h2>
+          <ReviewedVisitsList visits={history} />
+        </>
       )}
     </>
   );

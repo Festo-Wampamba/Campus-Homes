@@ -22,6 +22,10 @@ export function getMyVisits(): Promise<OpsVisitMine[]> {
   return apiServer<OpsVisitMine[]>("/ops/visits/mine").then((rows) => rows ?? []);
 }
 
+export function getMyVisitHistory(): Promise<OpsVisitMine[]> {
+  return apiServer<OpsVisitMine[]>("/ops/visits/mine/history").then((rows) => rows ?? []);
+}
+
 export function getVisitDetail(visitId: string): Promise<OpsVisitDetail | null> {
   return apiServer<OpsVisitDetail>(`/ops/visits/${visitId}`);
 }
