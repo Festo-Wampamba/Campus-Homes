@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   ArrowRightIcon,
   CameraIcon,
-  CheckCircledIcon,
+  ChevronDownIcon,
   ClockIcon,
   DimensionsIcon,
   HomeIcon,
@@ -25,6 +25,7 @@ import {
 } from "@campushomes/shared";
 
 import { CampusListingsTabs } from "@/components/campus-listings-tabs";
+import { HomeMapPreview } from "@/components/home-map-preview";
 import { HomeSearch } from "@/components/home-search";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { api } from "@/lib/api";
@@ -67,6 +68,12 @@ const CHECKLIST_LABELS: Record<
     icon: LockClosedIcon,
   },
 };
+
+const HERO_SLIDES = [
+  "/images/campushomes/hero-hostel-hd-v2.webp",
+  "/images/campushomes/student-lounge-hd-v2.webp",
+  "/images/campushomes/student-room-hd-v2.webp",
+] as const;
 
 const CAMPUS_CARDS = [
   {
@@ -171,85 +178,116 @@ export default async function HomePage() {
 
   return (
     <>
-      <section className="relative isolate overflow-hidden bg-[oklch(0.205_0.026_195)] text-white">
-        <div className="absolute inset-y-0 right-0 hidden w-[56%] lg:block">
-          <Image
-            src="/images/campushomes/hero-hostel-hd-v2.webp"
-            alt="Students arriving at a hostel in Kampala"
-            fill
-            priority
-            sizes="56vw"
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-linear-to-r from-[oklch(0.205_0.026_195)] via-[oklch(0.205_0.026_195)]/48 to-transparent" />
-          <div className="absolute inset-0 bg-linear-to-t from-[oklch(0.205_0.026_195)]/55 via-transparent to-transparent" />
+      <section className="relative isolate flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-teal-900 text-white">
+        <div className="absolute inset-0 z-0">
+          {HERO_SLIDES.map((src, index) => (
+            <div
+              key={src}
+              className="hero-crossfade absolute inset-0 overflow-hidden"
+              style={{ animationDelay: `${(index * 9) / HERO_SLIDES.length}s` }}
+            >
+              <Image
+                src={src}
+                alt=""
+                fill
+                priority={index === 0}
+                sizes="100vw"
+                className="hero-kenburns object-cover"
+                style={{ animationDelay: `${index * -8}s` }}
+              />
+            </div>
+          ))}
+          <div className="absolute inset-0 bg-linear-to-t from-teal-900/80 via-teal-900/35 to-teal-900/45" />
+          <div className="absolute inset-0 opacity-[0.055] [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:24px_24px]" />
         </div>
 
-        <div className="absolute inset-0 opacity-[0.055] [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:24px_24px]" />
-
-        <div className="relative mx-auto grid min-h-[42rem] w-full max-w-7xl items-center px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:px-8 lg:py-24">
-          <div className="marketing-reveal max-w-2xl">
-            <div className="mb-6 flex items-center gap-3">
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center px-4 py-8 text-center sm:px-6 sm:py-10 lg:px-8">
+          <div className="marketing-reveal my-auto mx-auto flex max-w-3xl flex-col items-center [text-shadow:0_2px_16px_rgba(0,0,0,0.35)]">
+            <div className="mb-5 inline-flex items-center gap-3">
               <VerifiedBadge className="shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]" />
               <span className="text-xs font-bold tracking-[0.16em] text-white/66 uppercase">
                 Kampala&apos;s inspected student housing
               </span>
             </div>
 
-            <h1 className="max-w-[12ch] text-4xl leading-[0.98] font-bold tracking-[-0.045em] text-white sm:text-5xl lg:text-[3.85rem]">
-              Your room. Your campus. Verified.
+            <h1 className="max-w-[15ch] font-brand text-5xl leading-[1.05] text-white sm:text-5xl lg:text-5xl">
+              Your room. Your campus. <span className="text-coral-500">Verified.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/72 sm:text-lg">
+            <p className="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
               Find a hostel we have physically inspected, compare honest room
               details, and hold your choice for 72 hours before someone else does.
             </p>
 
             <HomeSearch />
-
-            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs font-semibold text-white/66">
-              <span className="inline-flex items-center gap-2">
-                <CheckCircledIcon className="size-4 text-coral-500" />
-                Six checks on every listing
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <ClockIcon className="size-4 text-coral-500" />
-                72-hour room hold
-              </span>
-            </div>
           </div>
+        </div>
 
-          <div className="relative mt-10 min-h-72 overflow-hidden rounded-[1.5rem] border border-white/12 lg:hidden">
-            <Image
-              src="/images/campushomes/hero-hostel-hd-v2.webp"
-              alt="Students arriving at a hostel in Kampala"
-              fill
-              priority
-              sizes="100vw"
-              className="object-cover"
-            />
+        <div className="relative z-10 shrink-0 border-t border-white/15 bg-teal-900/70 backdrop-blur-md">
+          <a
+            href="#featured-heading"
+            className="mx-auto -mt-5 hidden size-10 items-center justify-center rounded-full border border-white/25 bg-teal-900 text-white/90 shadow-lg transition duration-300 hover:text-white sm:flex"
+            aria-label="Scroll to featured listings"
+          >
+            <ChevronDownIcon className="size-5 animate-bounce" />
+          </a>
+          <div className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-x divide-white/15 sm:grid-cols-4">
+            {[
+              ["4", "launch universities"],
+              ["6", "inspection checks"],
+              ["72 hrs", "your room is held"],
+              ["UGX 5,000", "one-time reservation"],
+            ].map(([value, label]) => (
+              <div key={label} className="px-5 py-5 text-center sm:px-6 sm:py-6">
+                <p className="tabular font-display text-2xl font-bold text-coral-500 sm:text-3xl">
+                  {value}
+                </p>
+                <p className="mt-1 text-xs font-semibold tracking-wide text-white/80 uppercase">
+                  {label}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <section aria-label="CampusHomes facts" className="relative bg-background">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-x divide-y divide-border border-x border-b border-border bg-card sm:grid-cols-4 sm:divide-y-0">
-          {[
-            ["4", "launch universities"],
-            ["6", "inspection checks"],
-            ["72 hrs", "your room is held"],
-            ["UGX 5,000", "one-time reservation"],
-          ].map(([value, label]) => (
-            <div key={label} className="px-5 py-6 text-center sm:px-6 sm:py-8">
-              <p className="tabular font-display text-2xl font-bold tracking-tight text-teal-700 sm:text-3xl dark:text-coral-500">
-                {value}
-              </p>
-              <p className="mt-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {label}
-              </p>
-            </div>
-          ))}
+      <section aria-labelledby="featured-heading" className="bg-background">
+        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+          <div className="max-w-2xl">
+            <p className="eyebrow">Available now</p>
+            <h2 id="featured-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
+              Verified hostels near campus.
+            </h2>
+            <p className="mt-4 text-md leading-7 text-muted-foreground">
+              Every live card is backed by an inspected listing and current room data.
+            </p>
+          </div>
+          <div className="mt-9">
+            <CampusListingsTabs campuses={campusData} listings={featured} />
+          </div>
         </div>
       </section>
+
+      {featured.length > 0 && (
+        <section aria-labelledby="map-heading" className="bg-teal-50">
+          <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="eyebrow">See where you would live</p>
+                <h2 id="map-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
+                  Every pin is a verified room, not a guess.
+                </h2>
+              </div>
+              <Link href="/search" className="text-link group">
+                Open the full map
+                <ArrowRightIcon className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+              </Link>
+            </div>
+            <div className="mt-10">
+              <HomeMapPreview listings={featured} />
+            </div>
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="campus-heading" className="bg-background">
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
@@ -284,7 +322,7 @@ export default async function HomePage() {
                   sizes={index === 0 ? "(min-width: 1024px) 45vw, 100vw" : "(min-width: 1024px) 28vw, 50vw"}
                   className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.045]"
                 />
-                <div className="absolute inset-0 bg-linear-to-t from-[oklch(0.17_0.03_195)] via-[oklch(0.17_0.03_195)]/14 to-transparent" />
+                <div className="absolute inset-0 bg-linear-to-t from-teal-900/85 via-teal-900/10 to-transparent transition-opacity duration-300 group-hover:from-teal-900/70" />
                 <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-6">
                   <span className="inline-flex rounded-full border border-white/20 bg-white/12 px-2.5 py-1 text-[0.68rem] font-bold tracking-[0.14em] uppercase backdrop-blur-md">
                     {campus.code}
@@ -309,7 +347,7 @@ export default async function HomePage() {
               className="object-cover"
             />
             <div className="absolute inset-0 bg-linear-to-t from-teal-900/55 via-transparent to-transparent" />
-            <p className="absolute bottom-5 left-5 rounded-full border border-white/18 bg-[oklch(0.205_0.026_195)]/78 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
+            <p className="absolute bottom-5 left-5 rounded-full border border-white/18 bg-teal-900/78 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
               Built around student life
             </p>
           </div>
@@ -331,24 +369,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section aria-labelledby="featured-heading" className="bg-background">
-        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-          <div className="max-w-2xl">
-            <p className="eyebrow">Available now</p>
-            <h2 id="featured-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              Verified hostels near campus.
-            </h2>
-            <p className="mt-4 text-md leading-7 text-muted-foreground">
-              Every live card is backed by an inspected listing and current room data.
-            </p>
-          </div>
-          <div className="mt-9">
-            <CampusListingsTabs campuses={campusData} listings={featured} />
-          </div>
-        </div>
-      </section>
-
-      <section id="verified" aria-labelledby="verified-heading" className="overflow-hidden bg-[oklch(0.205_0.026_195)] text-white">
+      <section id="verified" aria-labelledby="verified-heading" className="overflow-hidden bg-teal-900 text-white">
         <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
           <div className="lg:sticky lg:top-28 lg:self-start">
             <p className="eyebrow text-coral-500">The CampusHomes badge</p>

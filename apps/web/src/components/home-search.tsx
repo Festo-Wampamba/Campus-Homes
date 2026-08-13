@@ -37,7 +37,7 @@ export function HomeSearch() {
   }
 
   return (
-    <div className="mt-7 w-full max-w-2xl">
+    <div className="mx-auto mt-7 w-full max-w-2xl">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -55,7 +55,12 @@ export function HomeSearch() {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder="Search university, area or hostel"
-            className="h-12 w-full rounded-lg bg-transparent pr-3 pl-12 text-sm font-semibold text-foreground placeholder:font-normal placeholder:text-muted-foreground focus:outline-none sm:h-14 sm:text-base"
+            // The pill behind this input is a hardcoded bg-white (for contrast
+            // against the hero photo in both light and dark theme), so the
+            // text/placeholder colors must stay hardcoded dark too — the
+            // theme-reactive `text-foreground` token turns near-white in dark
+            // mode, which made typed text invisible on the white pill.
+            className="h-12 w-full rounded-lg bg-transparent pr-3 pl-12 text-sm font-semibold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:outline-none sm:h-14 sm:text-base"
           />
         </label>
         <button
@@ -68,7 +73,7 @@ export function HomeSearch() {
         </button>
       </form>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Popular universities">
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2" aria-label="Popular universities">
         <span className="mr-1 text-xs font-semibold text-white/65">Popular near</span>
         {POPULAR_CAMPUSES.map((campus) => (
           <button

@@ -127,8 +127,8 @@
   --font-sans: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-poppins), var(--font-open-sans), ui-sans-serif,
     system-ui, sans-serif;
-  --font-brand: var(--font-corben), Georgia, serif;
-  --font-brand-script: var(--font-cormorant-upright), Georgia, serif;
+  --font-brand: var(--font-dm-serif-display), Georgia, serif;
+  --font-brand-script: var(--font-montez), "Brush Script MT", cursive;
 
   /* fixed product scale, ratio ≈1.2 (DESIGN.md) — 15px UI base, 16px prose */
   --text-xs: 0.75rem;
@@ -275,6 +275,18 @@
     opacity: 1;
   }
 }
+/* Slow continuous zoom under the crossfade — "moving photos" (explicitly
+   not a video). Decoupled from hero-crossfade's 9s cycle on purpose: each
+   photo is only ever on screen for a ~4s window, so a longer 24s zoom just
+   reads as gentle drift rather than resetting visibly between cycles. */
+@keyframes hero-kenburns {
+  from {
+    scale: 1;
+  }
+  to {
+    scale: 1.12;
+  }
+}
 @layer utilities {
   /* Lighter than the first pass on purpose (teal-900-heavy read as too
      dark). Stays inside the teal hue range rather than animating through
@@ -321,11 +333,15 @@
   .hero-crossfade {
     animation: hero-crossfade 9s ease-in-out infinite;
   }
+  .hero-kenburns {
+    animation: hero-kenburns 24s ease-out infinite alternate;
+  }
   @media (prefers-reduced-motion: reduce) {
     .hero-aurora,
     .hero-float,
     .hero-spin-slow,
-    .hero-crossfade {
+    .hero-crossfade,
+    .hero-kenburns {
       animation: none;
     }
   }

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Corben, Cormorant_Upright, Open_Sans, Poppins } from "next/font/google";
+import { DM_Serif_Display, Montez, Open_Sans, Poppins } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 
 import { Providers } from "./providers";
@@ -18,20 +18,21 @@ const poppins = Poppins({
   display: "swap",
 });
 
-// Brand typography from the CampusHomes identity board. These are scoped to
-// the wordmark and editorial accents, while Poppins/Open Sans remain the
-// high-legibility product UI pair.
-const corben = Corben({
-  variable: "--font-corben",
+// Brand typography, scoped to the marketing hero and editorial accents only
+// — Poppins/Open Sans remain the high-legibility product UI pair everywhere
+// else. Borrowed pairing (serif headline + script accent) from
+// waybeyondtoursandtravel.com per Festo's request.
+const dmSerifDisplay = DM_Serif_Display({
+  variable: "--font-dm-serif-display",
   subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["400"],
   display: "swap",
 });
 
-const cormorantUpright = Cormorant_Upright({
-  variable: "--font-cormorant-upright",
+const montez = Montez({
+  variable: "--font-montez",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["400"],
   display: "swap",
 });
 
@@ -56,7 +57,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${openSans.variable} ${poppins.variable} ${corben.variable} ${cormorantUpright.variable} h-full`}
+      className={`${openSans.variable} ${poppins.variable} ${dmSerifDisplay.variable} ${montez.variable} h-full`}
       // The no-FOUC script below adds `.dark` to this element before React
       // hydrates (it must run pre-paint to avoid a light-then-dark flash),
       // so the class list legitimately differs from what was server-rendered
