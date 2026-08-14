@@ -286,6 +286,10 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
   const [detail, setDetail] = useState<PropertyDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
+  const [semesters, setSemesters] = useState<{ id: string; name: string }[]>([]);
+  const [semesterId, setSemesterId] = useState("");
+  const [requesting, setRequesting] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,6 +304,41 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
       cancelled = true;
     };
   }, [propertyId]);
+
+  // Only needed once we know the property has no listing yet — no point
+  // fetching semesters for a property that already has one.
+  useEffect(() => {
+    if (!detail || detail.listing) return;
+    let cancelled = false;
+    api<{ id: string; name: string }[]>(`/listings/semesters?catchment=${detail.property.catchment}`)
+      .then((rows) => {
+        if (cancelled) return;
+        setSemesters(rows ?? []);
+        setSemesterId((rows ?? [])[0]?.id ?? "");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
+  async function requestListing() {
+    if (!semesterId) return;
+    setRequesting(true);
+    setRequestError(null);
+    try {
+      await api(`/listings/drafts`, {
+        method: "POST",
+        body: JSON.stringify({ propertyId, semesterId }),
+      });
+      const refreshed = await api<PropertyDetail>(`/listings/properties/${propertyId}/detail`);
+      setDetail(refreshed);
+    } catch (err) {
+      setRequestError(errorMessage(err, "Couldn't request a listing — try again."));
+    } finally {
+      setRequesting(false);
+    }
+  }
 
   function setRoomPhotos(roomId: string, photos: PropertyDetail["rooms"][number]["photos"]) {
     setDetail((prev) =>
@@ -332,11 +371,32 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
       <RoomStats {...stats} />
 
       {!detail.listing ? (
-        <EmptyState
-          icon={BedDouble}
-          title="No rooms yet"
-          body="Ops adds rooms and photos once this property passes verification and is published."
-        />
+        <div className="space-y-3">
+          <EmptyState
+            icon={BedDouble}
+            title="No listing yet"
+            body="Request a listing for a semester so Ops can schedule your verification visit and publish it."
+          />
+          {semesters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={semesterId}
+                onChange={(e) => setSemesterId(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              >
+                {semesters.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <Button type="button" onClick={requestListing} disabled={requesting}>
+                {requesting ? "Requesting…" : "Request listing"}
+              </Button>
+            </div>
+          )}
+          {requestError && <p className="text-sm text-destructive">{requestError}</p>}
+        </div>
       ) : (
         <>
           {detail.photos.length > 0 && (
