@@ -104,7 +104,8 @@ export function bookingsTrend(
 
 // Listed rent value, not a payment record — CampusHomes never sees rent
 // (payments RLS keeps that table invisible to landlords entirely; only the
-// 5,000 UGX platform hold fee ever touches it). This sums each fulfilled
+// platform's own reservation fee, currently 0 UGX for Phase 1, ever touches
+// it). This sums each fulfilled
 // reservation's unit price by the month it was confirmed, i.e. money that
 // changed hands directly between landlord and tenant, off-platform.
 export function rentValueTrend(

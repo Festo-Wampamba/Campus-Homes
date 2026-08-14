@@ -3,9 +3,16 @@ import { z } from 'zod';
 import { PAYMENT_STATUSES, RESERVATION_STATUSES } from './enums.js';
 import { idempotencyKey, ugxAmount, uuid } from './common.js';
 
-// The fixed reservation fee. Not configurable — pricing changes are a product
-// decision, not an API parameter a client may set.
-export const RESERVATION_FEE_UGX = 5000;
+// The reservation fee. Not client-settable — pricing changes are a product
+// decision made via platform_settings.reservation_fee_ugx (admin console),
+// never an API parameter. Zero for now, deliberately: charging a real fee
+// before the platform has real traffic just adds friction to reserving, and
+// there's no live payment gateway wired yet anyway. reservations.service.ts
+// skips the whole checkout step whenever the effective fee is 0 — a
+// reservation is created straight as 'fulfilled', no hold/payment/webhook
+// involved. Restore a nonzero value here (or set the platform_settings
+// override) once the site has enough traffic to justify collecting it.
+export const RESERVATION_FEE_UGX = 0;
 
 export const createHoldSchema = z.object({
   unitId: uuid,

@@ -13,7 +13,6 @@ import { createZodDto } from 'nestjs-zod';
 import { createHoldSchema } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
-import { assertPaymentsEnabled } from '../../config/payment-guard';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ReservationsService } from './reservations.service';
@@ -28,10 +27,13 @@ export class ReservationsController {
 
   constructor(private readonly reservationsService: ReservationsService) {}
 
+  // assertPaymentsEnabled() is only invoked inside createHold() itself, and
+  // only on the paid branch — a free reservation (the Phase 1 default,
+  // RESERVATION_FEE_UGX = 0) never touches real money, so it doesn't need
+  // the gate.
   @Post('holds')
   @Roles('student')
   createHold(@Req() req: AuthenticatedRequest, @Body() body: CreateHoldDto) {
-    assertPaymentsEnabled(this.env);
     return this.reservationsService.createHold(rlsCtx(req), body, this.redirectUrl);
   }
 

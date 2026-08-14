@@ -17,6 +17,14 @@ const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
   'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
 
+// Must be set before ReservationsService is constructed below — it reads
+// PAYMENTS_ENABLED once via loadEnv() at construction time. This suite
+// specifically exercises the paid/held flow (platform_settings overrides
+// the fee back to a nonzero value in beforeAll), so it needs the gate open,
+// unlike the app's real Phase 1 default (RESERVATION_FEE_UGX = 0, gate
+// irrelevant since a free reservation never reaches it).
+process.env.PAYMENTS_ENABLED = 'true';
+
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
@@ -59,6 +67,16 @@ beforeAll(async () => {
      property_documents, verification_visits, listings, listing_versions,
      units, reservations, payments, refunds, move_ins, audit_log,
      notifications CASCADE`,
+  );
+
+  // The Phase 1 default (RESERVATION_FEE_UGX = 0) skips the whole paid
+  // flow — this describe block specifically tests that flow, so it needs
+  // the platform_settings override a real deployment would use to turn
+  // the fee back on, same mechanism, not a test-only shortcut.
+  await pool.query(
+    `INSERT INTO platform_settings (key, value, description)
+     VALUES ('reservation_fee_ugx', '5000'::jsonb, 'test override')
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
   );
 
   student1 = await seed(
@@ -206,7 +224,7 @@ describe('reservation hold state machine', () => {
     expect({
       status: result.reservation.status,
       paymentStatus: result.payment?.status,
-      hasCheckout: 'checkoutUrl' in result && result.checkoutUrl.length > 0,
+      hasCheckout: 'checkoutUrl' in result && Boolean(result.checkoutUrl && result.checkoutUrl.length > 0),
     }).toEqual({ status: 'held', paymentStatus: 'pending', hasCheckout: true });
   });
 
@@ -365,6 +383,62 @@ describe('reservation hold state machine', () => {
     );
     const result = await reservationsService.cancel(studentCtx(), hold.reservation.id);
     expect(result).toEqual({ outcome: 'cancelled' });
+  });
+});
+
+describe('free reservation (Phase 1 default: reservation_fee_ugx = 0)', () => {
+  beforeAll(async () => {
+    // Overrides this file's own paid-flow setup back to the app's real
+    // Phase 1 default for this block only — subsequent describes below
+    // don't call createHold(), so nothing needs restoring after.
+    await pool.query(
+      `UPDATE platform_settings SET value = '0'::jsonb WHERE key = 'reservation_fee_ugx'`,
+    );
+  });
+
+  it('creates a reservation as fulfilled immediately, no payment or checkout', async () => {
+    await pool.query(
+      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
+       SELECT listing_id, 'Room 4D', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
+      [unitId],
+    );
+    const freeUnit = (
+      await pool.query(`SELECT id FROM units WHERE label = 'Room 4D'`)
+    ).rows[0].id as string;
+
+    const result = await reservationsService.createHold(
+      studentCtx(),
+      { unitId: freeUnit, idempotencyKey: 'hold-key-free-0000001' },
+      'http://localhost:3000/r',
+    );
+
+    expect(result.reservation.status).toBe('fulfilled');
+    expect(result.reservation.holdExpiresAt).toBeNull();
+    expect(result.payment).toBeNull();
+    expect('checkoutUrl' in result && result.checkoutUrl).toBeNull();
+
+    const paymentRow = await pool.query(`SELECT id FROM payments WHERE reservation_id = $1`, [
+      result.reservation.id,
+    ]);
+    expect(paymentRow.rows).toHaveLength(0);
+  });
+
+  it('lets the student confirm move-in immediately, with no payment step in between', async () => {
+    await pool.query(
+      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
+       SELECT listing_id, 'Room 4E', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
+      [unitId],
+    );
+    const freeUnit = (
+      await pool.query(`SELECT id FROM units WHERE label = 'Room 4E'`)
+    ).rows[0].id as string;
+    const hold = await reservationsService.createHold(
+      studentCtx(),
+      { unitId: freeUnit, idempotencyKey: 'hold-key-free-0000002' },
+      'http://localhost:3000/r',
+    );
+    const moveIn = await reservationsService.confirmMoveIn(studentCtx(), hold.reservation.id);
+    expect(moveIn).toMatchObject({ confirmedByRole: 'student' });
   });
 });
 
