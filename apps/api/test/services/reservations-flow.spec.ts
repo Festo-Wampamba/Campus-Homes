@@ -77,7 +77,10 @@ beforeAll(async () => {
     `INSERT INTO users (phone, role, status) VALUES ('+256710000005', 'ops_inspector', 'active') RETURNING id`,
   );
   await pool.query(`INSERT INTO students (user_id, university) VALUES ($1), ($2)`.replace('($1), ($2)', `($1, 'MUK'), ($2, 'MUK')`), [student1, student2]);
-  await pool.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'LL One')`, [landlord1]);
+  await pool.query(
+    `INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'LL One', 'verified')`,
+    [landlord1],
+  );
   await pool.query(
     `INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`,
     [opsLead, inspectorId],

@@ -78,7 +78,10 @@ beforeAll(async () => {
     participantStudent,
     otherStudent,
   ]);
-  await pool.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'LL Chat Test')`, [landlord1]);
+  await pool.query(
+    `INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'LL Chat Test', 'verified')`,
+    [landlord1],
+  );
   await pool.query(`INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`, [
     opsLead,
     inspector,

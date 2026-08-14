@@ -26,6 +26,8 @@ let inspectorActive: string;
 let inspectorInactive: string;
 let propertyA: string;
 let propertyB: string;
+let propertyC: string;
+let propertyD: string;
 let visitA: string;
 let approvedVisitA: string;
 let pendingListingA: string;
@@ -124,10 +126,56 @@ beforeAll(async () => {
      VALUES ($1, $2, 'directory-test-visit-b') RETURNING id`,
     [propertyB, inspectorInactive],
   );
+
+  // propertyC: latest (only) visit failed — must stay visible to the lead
+  // so a re-visit can be scheduled, not vanish from every ops screen.
+  propertyC = await seed(
+    `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+     VALUES ($1, 'Property C', 'Ntinda', 'active', 'MUK') RETURNING id`,
+    [landlord],
+  );
+  // Attributed to inspectorInactive, not inspectorActive — myVisits/
+  // myVisitHistory assert exact equality against inspectorActive's own rows
+  // elsewhere in this file, and this fixture only needs to exist for
+  // queue(), not for any inspector-scoped read.
+  await seed(
+    `INSERT INTO verification_visits
+       (property_id, inspector_id, checklist, client_idempotency_key, result, failure_reason)
+     VALUES ($1, $2, $3, 'directory-test-visit-c-failed', 'failed', 'Rooms did not match listing') RETURNING id`,
+    [propertyC, inspectorInactive, JSON.stringify({ rooms_capacity: { passed: false } })],
+  );
+
+  // propertyD: latest visit passed and already lead-approved — fully
+  // resolved, so it must NOT reappear in the queue.
+  propertyD = await seed(
+    `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+     VALUES ($1, 'Property D', 'Kamwokya', 'active', 'MUK') RETURNING id`,
+    [landlord],
+  );
+  await seed(
+    `INSERT INTO verification_visits
+       (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at)
+     VALUES ($1, $2, $3, 'directory-test-visit-d-approved', 'passed', $4, now()) RETURNING id`,
+    [propertyD, inspectorInactive, fullChecklist, opsLead],
+  );
 });
 
 afterAll(async () => {
   await pool.end();
+});
+
+describe('queue', () => {
+  it('surfaces pending, unapproved-passed, and failed visits, but not a fully-approved one', async () => {
+    const rows = (await ops.queue(leadCtx())) as Array<{ id: string; result: string | null }>;
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.has(propertyA)).toBe(true); // latest visit: passed, unapproved
+    expect(byId.get(propertyA)?.result).toBe('passed');
+    expect(byId.has(propertyB)).toBe(true); // latest visit: pending
+    expect(byId.get(propertyB)?.result).toBe('pending');
+    expect(byId.has(propertyC)).toBe(true); // latest visit: failed
+    expect(byId.get(propertyC)?.result).toBe('failed');
+    expect(byId.has(propertyD)).toBe(false); // latest visit: passed and approved
+  });
 });
 
 describe('listInspectors', () => {
