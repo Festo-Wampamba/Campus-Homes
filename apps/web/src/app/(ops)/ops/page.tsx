@@ -21,13 +21,23 @@ function ageTone(ageHours: number): "success" | "warning" | "destructive" {
 function visitStageLabel(row: OpsQueueRow): string | null {
   if (row.visit_id === null) return null;
   if (row.result === "passed") return "Awaiting your approval";
+  if (row.result === "failed") return "Visit failed — schedule a re-visit";
   if (row.result === "pending") return row.scheduled_at ? "Visit scheduled" : "Not yet scheduled";
   return null;
+}
+
+function stageTone(row: OpsQueueRow): "warning" | "destructive" | "neutral" {
+  if (row.result === "passed") return "warning";
+  if (row.result === "failed") return "destructive";
+  return "neutral";
 }
 
 function QueueRow({ row }: { row: OpsQueueRow }) {
   const hasVisit = row.visit_id !== null;
   const stageLabel = visitStageLabel(row);
+  // A failed visit is a dead end — it can never be approved, so the useful
+  // action is scheduling a fresh one, not re-opening the failed checklist.
+  const needsReschedule = row.result === "failed";
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -36,19 +46,30 @@ function QueueRow({ row }: { row: OpsQueueRow }) {
           <p className="text-sm text-muted-foreground">{row.street_address}</p>
         </div>
         <div className="flex items-center gap-3">
-          {stageLabel && (
-            <StatusChip tone={row.result === "passed" ? "warning" : "neutral"}>
-              {stageLabel}
+          {row.landlord_kyc_status !== "verified" && (
+            <StatusChip tone={row.landlord_kyc_status === "rejected" ? "destructive" : "warning"}>
+              Landlord {row.landlord_kyc_status === "rejected" ? "KYC rejected" : "not KYC-verified"}
             </StatusChip>
           )}
+          {stageLabel && <StatusChip tone={stageTone(row)}>{stageLabel}</StatusChip>}
           <StatusChip tone={ageTone(row.age_hours)}>{Math.round(row.age_hours)}h old</StatusChip>
+          {needsReschedule && (
+            <Link
+              href={`/ops/visits/${row.visit_id}`}
+              className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              View
+            </Link>
+          )}
           <Link
             href={
-              hasVisit ? `/ops/visits/${row.visit_id}` : `/ops/visits/schedule?propertyId=${row.id}`
+              hasVisit && !needsReschedule
+                ? `/ops/visits/${row.visit_id}`
+                : `/ops/visits/schedule?propertyId=${row.id}`
             }
             className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
           >
-            {hasVisit ? "View" : "Schedule"}
+            {hasVisit && !needsReschedule ? "View" : "Schedule"}
           </Link>
         </div>
       </CardContent>

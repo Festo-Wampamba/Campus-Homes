@@ -95,6 +95,7 @@ export const opsQueueRowSchema = z.object({
   result: z.enum(VISIT_RESULTS).nullable(),
   scheduled_at: z.string().nullable(),
   inspector_id: uuid.nullable(),
+  landlord_kyc_status: z.enum(KYC_STATUSES),
   age_hours: z.coerce.number(),
 });
 export type OpsQueueRow = z.infer<typeof opsQueueRowSchema>;
