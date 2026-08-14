@@ -13,6 +13,8 @@ import type { Redis } from 'ioredis';
 import { RESERVATION_FEE_UGX, type CreateHoldInput } from '@campushomes/shared';
 
 import type { PaymentsAdapter } from '../../adapters/payments.adapter';
+import { loadEnv } from '../../config/env';
+import { assertPaymentsEnabled } from '../../config/payment-guard';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
@@ -44,6 +46,8 @@ function toPaymentMethod(
  */
 @Injectable()
 export class ReservationsService {
+  private readonly env = loadEnv();
+
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
@@ -119,6 +123,7 @@ export class ReservationsService {
         const feeUgx = Number.isFinite(configuredFeeUgx) ? configuredFeeUgx : RESERVATION_FEE_UGX;
 
         const now = new Date();
+        const isFree = feeUgx <= 0;
         const reservation = firstRow(
           await db
             .insert(reservations)
@@ -126,10 +131,13 @@ export class ReservationsService {
               studentId: ctx.userId,
               unitId: input.unitId,
               listingVersionId,
-              status: 'held',
+              // No fee means nothing to wait on — go straight to fulfilled
+              // instead of a 'held' state that would just sit there with no
+              // payment ever arriving to release it.
+              status: isFree ? 'fulfilled' : 'held',
               feeAmountUgx: feeUgx,
-              holdStartsAt: now,
-              holdExpiresAt: new Date(now.getTime() + holdHours * 3600_000),
+              holdStartsAt: isFree ? null : now,
+              holdExpiresAt: isFree ? null : new Date(now.getTime() + holdHours * 3600_000),
               idempotencyKey: input.idempotencyKey,
             })
             .returning()
@@ -143,22 +151,27 @@ export class ReservationsService {
             }),
         );
 
-        const payment = firstRow(
-          await db
-            .insert(payments)
-            .values({
-              reservationId: reservation.id,
-              amountUgx: feeUgx,
-              // Actual method is chosen on the provider's checkout page; the
-              // webhook overwrites this with what the student really used.
-              paymentMethod: 'mtn_momo',
-            })
-            .returning(),
-        );
+        // A free reservation never touches the payment adapter or webhook —
+        // no payments row needed, nothing to reconcile later.
+        const payment = isFree
+          ? null
+          : firstRow(
+              await db
+                .insert(payments)
+                .values({
+                  reservationId: reservation.id,
+                  amountUgx: feeUgx,
+                  // Actual method is chosen on the provider's checkout page; the
+                  // webhook overwrites this with what the student really used.
+                  paymentMethod: 'mtn_momo',
+                })
+                .returning(),
+            );
 
         return {
           reservation,
           payment,
+          isFree,
           phone: (unitRes.rows[0].phone as string | null) ?? null,
           holdHours,
           feeUgx,
@@ -170,9 +183,26 @@ export class ReservationsService {
         return result;
       }
 
+      await this.audit.record(ctx, 'reservation.hold', 'reservation', result.reservation.id, {
+        unitId: input.unitId,
+        feeUgx: result.feeUgx,
+      });
+
+      // No fee, no checkout: the reservation is already 'fulfilled' from the
+      // insert above — never touches the payment adapter, the provider
+      // webhook, or the hold-expiry queue (nothing to expire).
+      if (result.isFree) {
+        return { ...result, checkoutUrl: null };
+      }
+
+      // Money is only ever real once this line is reachable — matches
+      // assertPaymentsEnabled's original controller-level guard, just moved
+      // here so a free reservation can skip it entirely.
+      assertPaymentsEnabled(this.env);
+
       const { checkoutUrl } = await this.paymentsAdapter.initiate({
-        txRef: result.payment.id,
-        amountUgx: result.payment.amountUgx,
+        txRef: result.payment!.id,
+        amountUgx: result.payment!.amountUgx,
         phone: result.phone,
         redirectUrl,
       });
@@ -180,8 +210,8 @@ export class ReservationsService {
       await this.rlsDb.run(SERVICE(ctx.userId), async (db) => {
         await db
           .update(payments)
-          .set({ providerRef: result.payment.id })
-          .where(eq(payments.id, result.payment.id));
+          .set({ providerRef: result.payment!.id })
+          .where(eq(payments.id, result.payment!.id));
       });
 
       if (this.holdExpiryQueue) {
@@ -191,11 +221,6 @@ export class ReservationsService {
           { delay: result.holdHours * 3600_000, jobId: `hold-expiry-${result.reservation.id}` },
         );
       }
-
-      await this.audit.record(ctx, 'reservation.hold', 'reservation', result.reservation.id, {
-        unitId: input.unitId,
-        feeUgx: result.feeUgx,
-      });
 
       return { ...result, checkoutUrl };
     } finally {

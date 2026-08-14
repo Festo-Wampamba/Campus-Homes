@@ -28,7 +28,7 @@ function SiteFooter() {
             />
             <p className="mt-5 text-sm leading-6 text-white/62">
               Physically verified student housing near Uganda&apos;s universities.
-              Search clearly, hold a room for 72 hours, and move in knowing what
+              Search clearly, reserve a room for free, and move in knowing what
               is actually there.
             </p>
             <p className="mt-6 inline-flex rounded-full border border-white/12 bg-white/6 px-3 py-1.5 text-xs font-semibold text-white/70">
