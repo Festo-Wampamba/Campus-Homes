@@ -118,7 +118,7 @@ function OtpBoxes({
   );
 }
 
-export function SignInForm() {
+export function SignInForm({ next }: { next: string | null }) {
   const router = useRouter();
   const [mode, setModeState] = useState<Mode>("sign-in");
   const [channel, setChannelState] = useState<Channel>("email");
@@ -157,13 +157,18 @@ export function SignInForm() {
     setVerificationEmail(null);
   }
 
+  // Carries `next` through the OAuth round trip: Better Auth redirects the
+  // browser to this exact URL once the provider flow completes, so
+  // /auth/callback can read it back off its own search params.
+  const callbackUrl = appCallbackUrl(next ? `/auth/callback?next=${encodeURIComponent(next)}` : "/auth/callback");
+
   async function signInWithGoogle() {
     setError(null);
     setNotice(null);
     setPending(true);
     const { error } = await authClient.signIn.social({
       provider: "google",
-      callbackURL: appCallbackUrl("/auth/callback"),
+      callbackURL: callbackUrl,
     });
     if (error) {
       setPending(false);
@@ -177,7 +182,11 @@ export function SignInForm() {
     const sessionRole = data?.user
       ? (data.user as { role?: string }).role
       : undefined;
-    router.replace(homeForAuthenticatedRole(sessionRole));
+    // Still resolves (and validates) the role-based home even when `next` is
+    // set — homeForAuthenticatedRole throws for a session with no real role,
+    // which is the actual point of calling it, not just the fallback value.
+    const home = homeForAuthenticatedRole(sessionRole);
+    router.replace(next ?? home);
     router.refresh();
   }
 
@@ -247,7 +256,7 @@ export function SignInForm() {
     try {
       const { error } =
         mode === "sign-up"
-          ? await authClient.signUp.email({ name, email, password })
+          ? await authClient.signUp.email({ name, email, password, callbackURL: callbackUrl })
           : await authClient.signIn.email({ email, password });
       if (error) {
         if (error.code === "EMAIL_NOT_VERIFIED") {
@@ -274,7 +283,7 @@ export function SignInForm() {
     if (!verificationEmail) return;
     setPending(true);
     setError(null);
-    const { error } = await authClient.sendVerificationEmail({ email: verificationEmail, callbackURL: appCallbackUrl("/auth/callback") });
+    const { error } = await authClient.sendVerificationEmail({ email: verificationEmail, callbackURL: callbackUrl });
     setPending(false);
     if (error) {
       setError(error.message ?? "We could not resend the verification email.");

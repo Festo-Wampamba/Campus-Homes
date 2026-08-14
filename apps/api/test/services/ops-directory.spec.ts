@@ -27,6 +27,7 @@ let inspectorInactive: string;
 let propertyA: string;
 let propertyB: string;
 let visitA: string;
+let approvedVisitA: string;
 let pendingListingA: string;
 let semester: string;
 let priorSemester: string;
@@ -96,7 +97,7 @@ beforeAll(async () => {
       ),
     ),
   );
-  await seed(
+  approvedVisitA = await seed(
     `INSERT INTO verification_visits
        (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at)
      VALUES ($1, $2, $3, 'directory-test-visit-prior-verified', 'passed', $4, now()) RETURNING id`,
@@ -232,5 +233,47 @@ describe('createDraftListing', () => {
     await expect(
       ops.createDraftListing(leadCtx(), { propertyId: propertyB, semesterId: otherUni }),
     ).rejects.toThrow(/active semester/i);
+  });
+});
+
+// Regression coverage for the "approval disappears after logout/login" bug:
+// myVisits() correctly drops an approved visit from the inspector's queue
+// (it's no longer a to-do item), but nothing surfaced it anywhere else —
+// myVisitHistory() is the reviewed half of the same query.
+describe('myVisitHistory', () => {
+  it("returns only the calling inspector's own approved visits", async () => {
+    const rows = (await ops.myVisitHistory(inspectorActiveCtx())) as Array<{
+      visit_id: string;
+      result: string;
+    }>;
+    // Seeded in beforeAll: the prior-verified visit on property A is the
+    // only approved one belonging to inspectorActive — visitA (passed, but
+    // not yet approved) and the inspectorInactive visit on property B must
+    // not appear here.
+    expect(rows.map((r) => r.visit_id)).toEqual([approvedVisitA]);
+    expect(rows[0]?.result).toBe('passed');
+  });
+});
+
+// Regression coverage for the resubmission-overwrite gap found alongside the
+// same bug: a device with no local draft (or a malicious replay) could
+// otherwise silently overwrite an already-approved visit's checklist/result
+// with a brand-new clientIdempotencyKey, since the idempotency check only
+// catches a *replay* of the same submission, not a fresh one.
+describe('syncVisit', () => {
+  it('rejects a resubmission of an already-approved visit', async () => {
+    await expect(
+      ops.syncVisit(inspectorActiveCtx(), {
+        clientIdempotencyKey: 'directory-test-resubmit-attempt',
+        visitId: approvedVisitA,
+        checklist: { location_gps: { passed: true } } as unknown as VerificationChecklist,
+        visitGpsLat: 0.33,
+        visitGpsLon: 32.57,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        result: 'passed',
+        photoStorageKeys: [],
+      }),
+    ).rejects.toThrow(/already been approved/i);
   });
 });

@@ -74,7 +74,7 @@ describe("InspectionForm", () => {
     });
 
     act(() => {
-      root.render(<InspectionForm visitId="visit-gps-race" />);
+      root.render(<InspectionForm visitId="visit-gps-race" serverVisit={null} />);
     });
     await waitFor(() => container.textContent !== "Loading…");
 
@@ -110,7 +110,7 @@ describe("InspectionForm", () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     act(() => {
-      root.render(<InspectionForm visitId="visit-retry" />);
+      root.render(<InspectionForm visitId="visit-retry" serverVisit={null} />);
     });
     await waitFor(() => container.textContent !== "Loading…");
 

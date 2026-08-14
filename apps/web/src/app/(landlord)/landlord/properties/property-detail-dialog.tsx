@@ -2,12 +2,14 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { BedDouble, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
-import type { Property, PropertyDetail } from "@campushomes/shared";
+import type { Property, PropertyDetail, TenantAgreementForPropertyRow } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogHeader } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
+import { PropertyQrCode } from "@/components/property-qr-code";
 import { StatusChip } from "@/components/status-chip";
+import { TenantAgreementBuilderDialog } from "@/components/tenant-agreement-builder-dialog";
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { formatUgx } from "@/lib/format";
@@ -74,6 +76,100 @@ function CoverPhoto({ property }: { property: Property }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
     <img src={url} alt="" className="h-48 w-full rounded-md object-cover" />
+  );
+}
+
+/** Read-only — self-serve submissions, nothing for the landlord to approve
+ * here (see tenant-agreements.service.ts). Fetches on mount, same pattern
+ * as PropertyDetailBody. Each row expands to show every answer plus the
+ * signature (drawn image, or the typed name is already the header). */
+function TenantAgreementsList({ propertyId }: { propertyId: string }) {
+  const [agreements, setAgreements] = useState<TenantAgreementForPropertyRow[] | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<TenantAgreementForPropertyRow[]>(`/tenant-agreements/property/${propertyId}`)
+      .then((rows) => {
+        if (!cancelled) setAgreements(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setAgreements([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyId]);
+
+  if (!agreements || agreements.length === 0) return null;
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase">
+        Tenant agreements ({agreements.length})
+      </p>
+      <div className="divide-y divide-border rounded-md border border-border">
+        {agreements.map((a) => {
+          const expanded = expandedId === a.id;
+          const signatureUrl =
+            a.signature_type === "drawn" && a.signature_storage_key
+              ? listingPhotoUrl(a.signature_storage_key, 300)
+              : null;
+          return (
+            <div key={a.id}>
+              <button
+                type="button"
+                onClick={() => setExpandedId(expanded ? null : a.id)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/50"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground">
+                    {a.signed_name ?? a.student_name ?? "Unnamed student"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Signed{" "}
+                    {new Date(a.submitted_at).toLocaleDateString([], {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {a.signature_type === "drawn" ? " · drawn signature" : ""}
+                  </p>
+                </div>
+                {expanded ? (
+                  <ChevronUp aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronDown aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                )}
+              </button>
+              {expanded && (
+                <div className="space-y-3 border-t border-border bg-muted/30 px-3 py-3">
+                  {a.responses.map((r) => (
+                    <div key={r.fieldId}>
+                      <p className="text-xs font-semibold text-muted-foreground">{r.label}</p>
+                      <p className="text-sm text-foreground">
+                        {Array.isArray(r.value) ? r.value.join(", ") : r.value}
+                      </p>
+                    </div>
+                  ))}
+                  {signatureUrl && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground">Signature</p>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL */}
+                      <img
+                        src={signatureUrl}
+                        alt="Drawn signature"
+                        className="mt-1 h-16 rounded-md border border-border bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -348,6 +444,8 @@ export function PropertyDetailDialog({
   onOpenChange: (open: boolean) => void;
   property: Property | null;
 }) {
+  const [builderOpen, setBuilderOpen] = useState(false);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="lg">
       {property && (
@@ -359,8 +457,27 @@ export function PropertyDetailDialog({
           />
           <DialogBody className="space-y-6">
             <CoverPhoto property={property} />
+            <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Tenant agreement form</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Design the form students fill out and sign after scanning this property&apos;s QR code.
+                </p>
+              </div>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setBuilderOpen(true)}>
+                Edit form
+              </Button>
+            </div>
+            <PropertyQrCode propertyId={property.id} propertyName={property.name} />
+            <TenantAgreementsList propertyId={property.id} />
             <PropertyDetailBody propertyId={property.id} />
           </DialogBody>
+          <TenantAgreementBuilderDialog
+            open={builderOpen}
+            onOpenChange={setBuilderOpen}
+            propertyId={property.id}
+            propertyName={property.name}
+          />
         </>
       )}
     </Dialog>

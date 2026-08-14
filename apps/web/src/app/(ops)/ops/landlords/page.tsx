@@ -30,7 +30,12 @@ export default async function LandlordKycQueuePage() {
                     <p className="text-sm text-muted-foreground">
                       {row.name} · {row.phone ?? "no phone"} · {row.email ?? "no email"}
                     </p>
-                    {idDocUrl ? (
+                    {/* We no longer ask landlords for an ID document (privacy —
+                        see project notes) — idDocUrl only ever appears for a
+                        handful of legacy accounts that uploaded one before
+                        this changed. Nothing shown when it's absent, which is
+                        the expected state for every new landlord now. */}
+                    {idDocUrl && (
                       <a
                         href={idDocUrl}
                         target="_blank"
@@ -40,8 +45,6 @@ export default async function LandlordKycQueuePage() {
                         <FileText aria-hidden className="size-4" />
                         View ID document
                       </a>
-                    ) : (
-                      <p className="mt-2 text-sm text-warning">No ID document uploaded</p>
                     )}
                   </div>
                   <KycDecisionActions userId={row.user_id} />

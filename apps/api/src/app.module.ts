@@ -17,6 +17,7 @@ import { OpsModule } from './modules/ops/ops.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { TenantAgreementsModule } from './modules/tenant-agreements/tenant-agreements.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { RootController } from './root.controller';
 
@@ -37,6 +38,7 @@ import { RootController } from './root.controller';
     UploadsModule,
     StaffModule,
     CalendarModule,
+    TenantAgreementsModule,
   ],
   controllers: [HealthController, RootController],
   providers: [
