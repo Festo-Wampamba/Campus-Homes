@@ -21,7 +21,7 @@ const PROPERTY_STATUS_LABEL: Record<string, string> = {
   suspended: "Suspended",
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
 function StatusBadge({ status }: { status: string }) {
   return (

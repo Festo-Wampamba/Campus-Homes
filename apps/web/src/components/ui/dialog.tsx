@@ -24,11 +24,18 @@ function Dialog({
   open,
   onOpenChange,
   size = "md",
+  dismissible = true,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   size?: "md" | "lg";
+  // false = a backdrop click or Escape can't close this — only an explicit
+  // Cancel/X click can. For a long form (the tenant-agreement builder, the
+  // property form) a stray click just outside the card used to silently
+  // discard everything typed, with no confirmation. Viewer-only dialogs
+  // (nothing to lose) keep the default.
+  dismissible?: boolean;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -40,11 +47,25 @@ function Dialog({
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    // The native <dialog> fires `cancel` (Escape) just before `close` —
+    // preventDefault on `cancel` stops both from happening at all, rather
+    // than closing and immediately reopening.
+    function handleCancel(e: Event) {
+      if (!dismissible) e.preventDefault();
+    }
+    dialog.addEventListener("cancel", handleCancel);
+    return () => dialog.removeEventListener("cancel", handleCancel);
+  }, [dismissible]);
+
   return (
     <dialog
       ref={ref}
       onClose={() => onOpenChange(false)}
       onClick={(e) => {
+        if (!dismissible) return;
         // A click that lands on the <dialog> element itself (not its content
         // wrapper below) is a backdrop click, since the wrapper covers the
         // rest of the box.

@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, Image as ImageIcon, ShieldAlert, UserCheck } from "lucide-react";
+import { Building2, ClipboardCheck, ClipboardList, Image as ImageIcon, ShieldAlert, UserCheck } from "lucide-react";
 
 import { requireRole } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
@@ -20,6 +20,7 @@ export default async function OpsLayout({
           ? [{ label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> }]
           : [
               { label: "Verification queue", href: "/ops", icon: <ClipboardCheck aria-hidden className="size-4 shrink-0" /> },
+              { label: "Properties", href: "/ops/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
               { label: "Landlord KYC", href: "/ops/landlords", icon: <UserCheck aria-hidden className="size-4 shrink-0" /> },
               { label: "Issue strike", href: "/ops/strikes", icon: <ShieldAlert aria-hidden className="size-4 shrink-0" /> },
               { label: "Campus photos", href: "/ops/campuses", icon: <ImageIcon aria-hidden className="size-4 shrink-0" /> },

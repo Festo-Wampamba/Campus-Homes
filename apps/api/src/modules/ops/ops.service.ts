@@ -111,6 +111,28 @@ export class OpsService {
     });
   }
 
+  /** An inspector's own already-reviewed visits — mirrors myVisits() but the
+   * opposite half of the same query (approved, not pending). Without this,
+   * a visit the lead approves simply vanishes from the inspector's world:
+   * myVisits() correctly drops it (it's no longer a queue item), but nothing
+   * ever showed it anywhere else, so from the inspector's side an approval
+   * looked indistinguishable from data loss. */
+  myVisitHistory(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT vv.id AS visit_id, vv.property_id, vv.scheduled_at, vv.result,
+                p.name AS property_name, p.street_address
+         FROM verification_visits vv
+         JOIN properties p ON p.id = vv.property_id
+         WHERE vv.inspector_id = $1 AND vv.approved_at IS NOT NULL
+         ORDER BY vv.approved_at DESC
+         LIMIT 50`,
+        [ctx.userId],
+      );
+      return res.rows as unknown[];
+    });
+  }
+
   /** Full visit record for the lead's review-before-approve screen. */
   async visitDetail(ctx: RlsContext, visitId: string) {
     return this.rlsDb.run(ctx, async (db) => {
@@ -241,6 +263,19 @@ export class OpsService {
       });
       if (existing) {
         return existing; // replayed sync — no double-submit
+      }
+      // A fresh client key targeting an already-approved visit means a
+      // second device/browser lost track of its local draft and is about to
+      // blindly overwrite a decision the lead already made — the idempotency
+      // check above only catches a *replay* of the same submission, not this.
+      const current = await db.query.verificationVisits.findFirst({
+        where: eq(verificationVisits.id, input.visitId),
+      });
+      if (!current) {
+        throw new NotFoundException('Visit not found or not yours');
+      }
+      if (current.approvedAt) {
+        throw new ConflictException('This visit has already been approved and can no longer be resubmitted');
       }
       const [row] = await db
         .update(verificationVisits)

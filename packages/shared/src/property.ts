@@ -119,3 +119,14 @@ export const propertyDetailSchema = z.object({
   rooms: z.array(propertyRoomSchema),
 });
 export type PropertyDetail = z.infer<typeof propertyDetailSchema>;
+
+// Bare name/address for the QR tenant-agreement landing page — GET
+// /listings/properties/:id/summary (raw SQL row, snake_case like
+// listingSearchResultSchema).
+export const propertySummarySchema = z.object({
+  id: uuid,
+  name: z.string(),
+  street_address: z.string(),
+  catchment: z.enum(UNIVERSITIES),
+});
+export type PropertySummary = z.infer<typeof propertySummarySchema>;

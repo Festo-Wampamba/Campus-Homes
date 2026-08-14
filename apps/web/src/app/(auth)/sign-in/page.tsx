@@ -5,7 +5,16 @@ import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const rawNext = (await searchParams).next;
+  // Same open-redirect guard as /profile?next= — only ever send the browser
+  // back within the app.
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+
   return (
     // The gradient/clock backdrop is fixed to the viewport (overflow-hidden)
     // so it never moves — only the inner flex region scrolls, and only if
@@ -17,7 +26,7 @@ export default function SignInPage() {
         <LiveClock />
       </div>
       <div className="flex h-full w-full items-center justify-center overflow-y-auto p-4 py-8 sm:p-8">
-        <SignInForm />
+        <SignInForm next={next} />
       </div>
     </div>
   );

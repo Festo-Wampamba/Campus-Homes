@@ -2,14 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import {
-  DOC_TYPES,
-  UNIVERSITIES,
-  type DocType,
-  type LandlordProfile,
-  type Property,
-  type University,
-} from "@campushomes/shared";
+import { UNIVERSITIES, type LandlordProfile, type Property, type University } from "@campushomes/shared";
 
 import { RoomCategoryRows, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
@@ -17,17 +10,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
-import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { cn } from "@/lib/utils";
 
 type Step = "legal" | "property";
-
-const DOC_LABELS: Record<DocType, string> = {
-  title_deed: "Title deed",
-  tenancy: "Tenancy agreement",
-  authorization: "Landlord authorization letter",
-  other: "Other supporting document",
-};
 
 const UNIVERSITY_LABELS: Record<University, string> = {
   MUK: "Makerere University",
@@ -73,8 +58,6 @@ export function OnboardingWizard({
   const [propertyName, setPropertyName] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
   const [catchment, setCatchment] = useState<University>("MUK");
-  const [docType, setDocType] = useState<DocType>("title_deed");
-  const [docFile, setDocFile] = useState<File | null>(null);
   const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,18 +91,10 @@ export function OnboardingWizard({
           roomCount: Number(row.roomCount),
           pricePerTermUgx: Number(row.pricePerTermUgx),
         }));
-      const property = await api<Property>("/listings/properties", {
+      await api<Property>("/listings/properties", {
         method: "POST",
         body: JSON.stringify({ name: propertyName, streetAddress, catchment, proposedRoomCategories }),
       });
-      if (docFile) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
-        const { publicId } = await uploadToCloudinary(docFile, sig);
-        await api(`/listings/properties/${property.id}/documents`, {
-          method: "POST",
-          body: JSON.stringify({ docType, storageKey: publicId }),
-        });
-      }
       router.push("/landlord");
       router.refresh();
     } catch (err) {
@@ -136,7 +111,7 @@ export function OnboardingWizard({
             <StepHeader
               step="legal"
               title="Your legal name"
-              description="This must match the name on your ID document — our team verifies it before approving your account."
+              description="Our team verifies this before approving your account."
             />
             <form onSubmit={submitLegalName} className="space-y-4">
               <div className="space-y-1.5">
@@ -216,33 +191,6 @@ export function OnboardingWizard({
                   rows={roomCategoryRows}
                   onChange={setRoomCategoryRows}
                   idPrefix="onboarding-room"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="docType">Supporting document type (optional)</Label>
-                <select
-                  id="docType"
-                  value={docType}
-                  onChange={(e) => setDocType(e.target.value as DocType)}
-                  className={cn(
-                    "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
-                    "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
-                  )}
-                >
-                  {DOC_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {DOC_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="docFile">Document file (optional)</Label>
-                <Input
-                  id="docFile"
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
                 />
               </div>
               <Button type="submit" disabled={pending} className="w-full">

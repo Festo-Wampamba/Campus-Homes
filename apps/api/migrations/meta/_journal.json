@@ -134,6 +134,13 @@
       "when": 1786537840000,
       "tag": "0019_backfill_ops_staff",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786623000000,
+      "tag": "0020_tenant_agreements",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { FileCheck2 } from "lucide-react";
 import type { LandlordProfileWithParticulars } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { PhoneField } from "@/components/phone-field";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -35,7 +33,6 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
   const router = useRouter();
   const editable = profile.kycStatus === "pending";
   const [legalName, setLegalName] = useState(profile.legalName);
-  const [idFile, setIdFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -56,17 +53,10 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
     setSaved(false);
     setPending(true);
     try {
-      let idDocStorageKey: string | undefined;
-      if (idFile) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
-        const { publicId } = await uploadToCloudinary(idFile, sig);
-        idDocStorageKey = publicId;
-      }
       await api("/landlords/profile", {
         method: "POST",
-        body: JSON.stringify({ legalName, ...(idDocStorageKey ? { idDocStorageKey } : {}) }),
+        body: JSON.stringify({ legalName }),
       });
-      setIdFile(null);
       setSaved(true);
       router.refresh();
     } catch (err) {
@@ -116,21 +106,6 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
               onChange={(e) => setLegalName(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-id-doc">Replace ID document (optional)</Label>
-            <Input
-              id="profile-id-doc"
-              type="file"
-              accept="image/*,.pdf"
-              onChange={(e) => setIdFile(e.target.files?.[0] ?? null)}
-            />
-            {profile.idDocStorageKey && !idFile && (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <FileCheck2 aria-hidden className="size-3.5 shrink-0" />
-                A document is already on file — only upload a new one to replace it.
-              </p>
-            )}
-          </div>
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save changes"}
@@ -146,10 +121,6 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase">Legal name</p>
             <p className="mt-1 text-sm text-foreground">{profile.legalName}</p>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <FileCheck2 aria-hidden className="size-4 shrink-0" />
-            {profile.idDocStorageKey ? "ID document on file" : "No ID document on file"}
           </div>
         </div>
       )}
