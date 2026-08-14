@@ -22,3 +22,27 @@ export async function apiServer<T>(path: string): Promise<T | null> {
     return null;
   }
 }
+
+// apiServer() collapses "not signed in", "API is down", and "genuinely no
+// data" into the same null/[] — fine for most callers, but wrong for a
+// queue/list page where "nothing to do" and "couldn't reach the API" must
+// look different to the person reading it. A transient backend blip (a
+// Render cold start, a mid-deploy restart window) rendering as a calm
+// "queue is clear" is actively misleading: an ops lead has no reason to
+// suspect anything's wrong and just... doesn't approve anything. This
+// throws instead, so the caller can render a real error state.
+export async function apiServerStrict<T>(path: string): Promise<T> {
+  const cookie = (await headers()).get("cookie");
+  if (!cookie) {
+    throw new Error("Not signed in");
+  }
+  const res = await fetch(`${BASE}/api/v1${path}`, {
+    headers: { cookie },
+    cache: "no-store",
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`API request to ${path} failed with ${res.status}`);
+  }
+  return (await res.json()) as T;
+}

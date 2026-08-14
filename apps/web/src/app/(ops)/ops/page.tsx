@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, TriangleAlert } from "lucide-react";
 import type { OpsQueueRow } from "@campushomes/shared";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,12 +83,36 @@ export default async function OpsQueuePage() {
     redirect("/ops/inspect");
   }
 
-  const queue = await getQueue();
+  let queue: OpsQueueRow[];
+  let loadFailed = false;
+  try {
+    queue = await getQueue();
+  } catch {
+    // Deliberately not falling back to []: "the API didn't respond" and
+    // "there's nothing to approve" must never render identically here — a
+    // lead reading a calm "queue is clear" during a transient backend blip
+    // has no reason to suspect anything's wrong and just moves on.
+    queue = [];
+    loadFailed = true;
+  }
 
   return (
     <>
       <h1 className="text-2xl">Verification queue</h1>
-      {queue.length === 0 ? (
+      {loadFailed ? (
+        <div className="mt-6">
+          <div className="flex flex-col items-center rounded-lg border border-dashed border-destructive/40 px-6 py-12 text-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <TriangleAlert aria-hidden className="size-5" />
+            </span>
+            <h2 className="mt-4 text-lg">Couldn&apos;t load the queue</h2>
+            <p className="mt-1.5 max-w-sm text-base text-muted-foreground">
+              The API didn&apos;t respond — this is not the same as an empty queue. Refresh in a
+              moment; if it keeps happening, check whether the API is up.
+            </p>
+          </div>
+        </div>
+      ) : queue.length === 0 ? (
         <div className="mt-6">
           <EmptyState
             icon={ClipboardCheck}

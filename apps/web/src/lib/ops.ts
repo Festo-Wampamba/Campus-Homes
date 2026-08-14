@@ -8,10 +8,13 @@ import type {
   OpsVisitMine,
 } from "@campushomes/shared";
 
-import { apiServer } from "@/lib/server-api";
+import { apiServer, apiServerStrict } from "@/lib/server-api";
 
+// Deliberately not the swallow-errors-to-[] pattern the rest of this file
+// uses — see apiServerStrict()'s comment. A lead needs to know the
+// difference between "nothing to approve" and "the API didn't respond."
 export function getQueue(): Promise<OpsQueueRow[]> {
-  return apiServer<OpsQueueRow[]>("/ops/queue").then((rows) => rows ?? []);
+  return apiServerStrict<OpsQueueRow[]>("/ops/queue");
 }
 
 export function getInspectors(): Promise<OpsInspector[]> {
