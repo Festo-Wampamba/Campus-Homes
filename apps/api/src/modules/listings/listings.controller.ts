@@ -34,6 +34,14 @@ export class ListingsController {
     return this.listings.reviews(6);
   }
 
+  // Declared before the ':id' catch-all below — route order matters in Nest.
+  @Get('semesters')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  semesters(@Req() req: AuthenticatedRequest, @Query('catchment') catchment?: string) {
+    return this.listings.semestersForCatchment(rlsCtx(req), catchment);
+  }
+
   @Get(':id')
   detail(@Param('id', ParseUUIDPipe) id: string) {
     return this.listings.detail(id);

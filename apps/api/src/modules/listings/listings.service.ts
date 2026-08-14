@@ -283,6 +283,25 @@ export class ListingsService {
     });
   }
 
+  // Picker for the "request a listing" step (createDraftListing needs a
+  // semesterId, but nothing previously let a landlord look one up — semesters
+  // are world-readable (0001 semesters_read), so this runs under the caller's
+  // own ctx, no service_role needed. university IS NULL means "applies to
+  // every catchment", not "applies to none".
+  semestersForCatchment(ctx: RlsContext, catchment?: string) {
+    return this.rlsDb.run(ctx, async (db) =>
+      db.query.semesters.findMany({
+        where: (s, { and, isNull, or, eq, gte }) =>
+          and(
+            isNull(s.archivedAt),
+            gte(s.endsOn, new Date().toISOString().slice(0, 10)),
+            catchment ? or(isNull(s.university), eq(s.university, catchment as never)) : undefined,
+          ),
+        orderBy: (s, { asc }) => [asc(s.startsOn)],
+      }),
+    );
+  }
+
   // ── public paths ───────────────────────────────────────────────────────────
 
   search(input: ListingSearchInput) {
