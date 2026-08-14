@@ -28,6 +28,8 @@ let propertyA: string;
 let propertyB: string;
 let visitA: string;
 let pendingListingA: string;
+let semester: string;
+let priorSemester: string;
 
 const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
 const inspectorActiveCtx = (): RlsContext => ({
@@ -67,7 +69,7 @@ beforeAll(async () => {
     [opsLead, inspectorActive, inspectorInactive],
   );
 
-  const semester = await seed(
+  semester = await seed(
     `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
      VALUES ('Sem Directory Test', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
   );
@@ -81,7 +83,7 @@ beforeAll(async () => {
      VALUES ($1, 'Property B', 'Wandegeya', 'active', 'MUK') RETURNING id`,
     [landlord],
   );
-  const priorSemester = await seed(
+  priorSemester = await seed(
     `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
      VALUES ('Sem Directory Test — Prior', '2026-01-01', '2026-05-15', '2026-04-15') RETURNING id`,
   );
@@ -170,5 +172,65 @@ describe('propertyListings', () => {
   it('returns empty for a property with no listing', async () => {
     const rows = await ops.propertyListings(leadCtx(), propertyB);
     expect(rows).toEqual([]);
+  });
+});
+
+describe('publishableSemesters', () => {
+  it('offers every applicable semester for a property with no listing yet', async () => {
+    const rows = (await ops.publishableSemesters(leadCtx(), propertyB)) as Array<{ id: string }>;
+    expect(rows.map((r) => r.id)).toEqual([semester, priorSemester]);
+  });
+
+  it('excludes semesters the property already has a listing for', async () => {
+    const rows = await ops.publishableSemesters(leadCtx(), propertyA);
+    expect(rows).toEqual([]);
+  });
+});
+
+describe('createDraftListing', () => {
+  it('creates a draft listing and is idempotent on the property+semester unique index', async () => {
+    const first = await ops.createDraftListing(leadCtx(), {
+      propertyId: propertyB,
+      semesterId: semester,
+    });
+    const second = await ops.createDraftListing(leadCtx(), {
+      propertyId: propertyB,
+      semesterId: semester,
+    });
+    expect({ status: first.status, sameRow: first.id === second.id }).toEqual({
+      status: 'draft',
+      sameRow: true,
+    });
+  });
+
+  it('drops a semester from the publishable set once its listing exists', async () => {
+    const rows = (await ops.publishableSemesters(leadCtx(), propertyB)) as Array<{ id: string }>;
+    expect(rows.map((r) => r.id)).toEqual([priorSemester]);
+  });
+
+  it('refuses when the property is already verified for that semester', async () => {
+    await expect(
+      ops.createDraftListing(leadCtx(), { propertyId: propertyA, semesterId: priorSemester }),
+    ).rejects.toThrow(/already verified/i);
+  });
+
+  it('refuses an archived semester even if the picker offered it before archival', async () => {
+    const archived = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on, archived_at)
+       VALUES ('Sem Archived', '2026-08-01', '2026-12-15', '2026-11-15', now()) RETURNING id`,
+    );
+    await expect(
+      ops.createDraftListing(leadCtx(), { propertyId: propertyB, semesterId: archived }),
+    ).rejects.toThrow(/active semester/i);
+  });
+
+  it("refuses a semester scoped to a different university than the property's catchment", async () => {
+    const otherUni = await seed(
+      `INSERT INTO semesters (name, university, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Sem KYU', 'KYU', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
+    );
+    await expect(
+      ops.createDraftListing(leadCtx(), { propertyId: propertyB, semesterId: otherUni }),
+    ).rejects.toThrow(/active semester/i);
   });
 });

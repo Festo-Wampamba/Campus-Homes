@@ -138,6 +138,25 @@ export const opsPropertyListingSchema = z.object({
 });
 export type OpsPropertyListing = z.infer<typeof opsPropertyListingSchema>;
 
+// Semesters applicable to a property's catchment that don't yet have a listing
+// — GET /ops/properties/:id/publishable-semesters. The picker for the ops
+// "create the missing listing before publish" step (landlord onboarding never
+// creates a listing, so an approved property has nothing to publish otherwise).
+export const opsPublishableSemesterSchema = z.object({
+  id: uuid,
+  name: z.string(),
+});
+export type OpsPublishableSemester = z.infer<typeof opsPublishableSemesterSchema>;
+
+// Ops-lead creates the draft listing a property is missing before publish —
+// POST /ops/listings/draft. Service-role write (ops can't INSERT listings
+// under RLS); idempotent on the (property_id, semester_id) unique index.
+export const createOpsDraftListingSchema = z.object({
+  propertyId: uuid,
+  semesterId: uuid,
+});
+export type CreateOpsDraftListingInput = z.infer<typeof createOpsDraftListingSchema>;
+
 // Ops-lead KYC review queue row — GET /ops/landlords/kyc-queue (raw SQL row,
 // landlords joined to users like the verification queue).
 export const opsLandlordKycRowSchema = z.object({

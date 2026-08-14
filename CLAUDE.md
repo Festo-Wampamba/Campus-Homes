@@ -498,6 +498,32 @@ Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. N
   it without touching the shared jest config. RLS/service suites: 134/134
   passing (was 106 last recorded).
 
+- **Verification flow dead-end — approved property could never publish, fixed
+  (2026-08-12):** an inspected+approved property was stuck: gone from the lead
+  queue (approved) but with no way to publish → never verified → never on the
+  landlord dashboard. Two causes: (1) staging ran pre-`cee6cb3` code where
+  `OpsService.queue()` only surfaced `result='pending'`, so a passed-but-
+  unapproved visit vanished from the lead queue — main has carried the
+  `(result='passed' AND approved_at IS NULL)` clause since Aug 2, so **staging
+  just needed a redeploy**; (2) the real code gap — **no listing is ever
+  created in the onboarding→verify path.** `ListingsService.submitProperty()`
+  creates only the property row; `POST /listings/drafts` exists but no UI calls
+  it; only the admin properties-manager makes a listing (when units+semester
+  given). Publish flips an existing listing to verified, so with zero listings
+  the lead's approve→publish path dead-ends. Fix (chosen: ops creates the
+  listing at final verification): new `GET /ops/properties/:id/publishable-
+  semesters` (applicable-to-catchment semesters without a listing yet, read
+  under ops ctx) + `POST /ops/listings/draft` (`OpsService.createDraftListing`,
+  **service_role write** — ops can't INSERT listings under RLS; idempotent on
+  the `listings_property_semester_uk` unique index, refuses if already verified
+  for that semester). Visit-detail page: when `approvedAt && result='passed' &&
+  no listing`, renders `CreateListingToPublish` (semester picker → creates
+  draft → routes to the existing `/ops/publish/:listingId` form). No migration
+  (uses existing tables/RLS). Tests: `ops-directory.spec.ts` +5 (11 total).
+  Confirmed unrelated pre-existing breakage: `finance-reports.spec.ts` fails
+  4/4 on clean HEAD (ledger_accounts test-data pollution + a `rows[0].id`
+  TypeError) — not touched here.
+
 ## Resolved (was brief §20 open item)
 
 **MapLibre GL + OSM raster tiles — decided by Festo 2026-07-08.** No Mapbox, no map

@@ -1,13 +1,15 @@
 import crypto from 'node:crypto';
 
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 
 import type {
+  CreateOpsDraftListingInput,
   IssueStrikeInput,
   OpsKycDecisionInput,
   PublishListingInput,
@@ -137,6 +139,100 @@ export class OpsService {
         .where(and(eq(listings.propertyId, propertyId), ne(listings.status, 'verified')))
         .orderBy(desc(listings.createdAt)),
     );
+  }
+
+  /** Semesters applicable to a property's catchment that don't already carry a
+   * listing — the picker for the ops "create the missing listing before
+   * publish" step. A landlord-onboarded property has no listing at all
+   * (submitProperty creates only the property row), so without this the lead
+   * can approve a passed visit but has nothing to publish. Reads only, so it
+   * runs under the caller's ops context (semesters are world-readable;
+   * properties/listings are ops-readable). */
+  publishableSemesters(ctx: RlsContext, propertyId: string) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT s.id, s.name
+         FROM semesters s
+         JOIN properties p ON p.id = $1
+         WHERE s.archived_at IS NULL
+           AND (s.university IS NULL OR s.university = p.catchment)
+           AND NOT EXISTS (
+             SELECT 1 FROM listings l
+             WHERE l.property_id = p.id AND l.semester_id = s.id
+           )
+         ORDER BY s.starts_on DESC`,
+        [propertyId],
+      );
+      return res.rows as unknown[];
+    });
+  }
+
+  /** Creates the draft listing a property needs before publish. Ops can't
+   * INSERT listings under RLS (only the owning landlord or service_role can),
+   * so this runs as service_role — same posture as admin property creation.
+   * Idempotent against the (property_id, semester_id) unique index: an existing
+   * non-verified listing is returned rather than conflicting. */
+  async createDraftListing(ctx: RlsContext, input: CreateOpsDraftListingInput) {
+    const listing = await this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const property = await db.query.properties.findFirst({
+        where: eq(properties.id, input.propertyId),
+      });
+      if (!property) {
+        throw new NotFoundException('Property not found');
+      }
+      // Re-validate the semester server-side: the picker only checks these
+      // conditions at page-load, so a stale page (after a catchment change or
+      // archive) or a direct API call could otherwise create a listing against
+      // an inactive or wrong-catchment semester. Mirrors the admin path's
+      // AdminPropertiesService.insertUnits guard — no DB constraint ties a
+      // semester's university to a property's catchment.
+      const validSemester = await db.query.semesters.findFirst({
+        where: and(
+          eq(semesters.id, input.semesterId),
+          isNull(semesters.archivedAt),
+          or(isNull(semesters.university), eq(semesters.university, property.catchment)),
+        ),
+      });
+      if (!validSemester) {
+        throw new BadRequestException(
+          'Select an active semester configured for this property university',
+        );
+      }
+      // Atomic idempotency: two leads (or a retry) racing on the same
+      // property+semester would both miss a prior SELECT and one would 500 on
+      // listings_property_semester_uk. onConflictDoNothing lets the loser fall
+      // through to re-read the winner's row instead.
+      const [inserted] = await db
+        .insert(listings)
+        .values({
+          propertyId: input.propertyId,
+          semesterId: input.semesterId,
+          status: 'draft',
+        })
+        .onConflictDoNothing({ target: [listings.propertyId, listings.semesterId] })
+        .returning();
+      if (inserted) {
+        return inserted;
+      }
+      const existing = await db.query.listings.findFirst({
+        where: and(
+          eq(listings.propertyId, input.propertyId),
+          eq(listings.semesterId, input.semesterId),
+        ),
+      });
+      if (!existing) {
+        throw new ConflictException('Could not create the draft listing; please retry');
+      }
+      if (existing.status === 'verified') {
+        throw new ConflictException('This property is already verified for that semester');
+      }
+      return existing;
+    });
+    await this.audit.record(ctx, 'listing.draft_create', 'listing', listing.id, {
+      propertyId: input.propertyId,
+      semesterId: input.semesterId,
+    });
+    return listing;
   }
 
   async scheduleVisit(ctx: RlsContext, input: ScheduleVisitInput) {
