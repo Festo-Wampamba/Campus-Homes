@@ -137,7 +137,9 @@ function ReservationCard({ reservation }: { reservation: Reservation }) {
             )}
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {formatUgx(reservation.feeAmountUgx)} reservation fee
+            {reservation.feeAmountUgx > 0
+              ? `${formatUgx(reservation.feeAmountUgx)} reservation fee`
+              : "Free reservation"}
             {countdown && reservation.status === "held" ? ` · ${countdown}` : ""}
           </p>
         </div>

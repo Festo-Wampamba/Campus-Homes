@@ -105,8 +105,7 @@ const CAMPUS_CARDS = [
 const FAQS = [
   {
     question: "How much does it cost to reserve a room?",
-    answer:
-      "The reservation fee is a one-time UGX 5,000 payment. It holds your chosen room for 72 hours while you arrange the next steps.",
+    answer: "Nothing right now — reserving a room is free while the platform grows.",
   },
   {
     question: "Do I pay rent through CampusHomes?",
@@ -119,14 +118,9 @@ const FAQS = [
       "A CampusHomes inspector physically visited the property and confirmed location, rooms, amenities, photos, landlord identity and safety before publication.",
   },
   {
-    question: "What happens when the 72 hours end?",
-    answer:
-      "If the reservation is not completed, the hold expires automatically and the room becomes available to other students again.",
-  },
-  {
     question: "Can I cancel a reservation?",
     answer:
-      "Yes. A held reservation can be cancelled before it is fulfilled. The reservation area in your account shows the current status and next action.",
+      "Yes. A reservation can be cancelled any time from the reservations area in your account, which also shows its current status.",
   },
 ];
 
@@ -215,7 +209,7 @@ export default async function HomePage() {
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
               Find a hostel we have physically inspected, compare honest room
-              details, and hold your choice for 72 hours before someone else does.
+              details, and reserve your choice for free before someone else does.
             </p>
 
             <HomeSearch />
@@ -234,8 +228,8 @@ export default async function HomePage() {
             {[
               ["4", "launch universities"],
               ["6", "inspection checks"],
-              ["72 hrs", "your room is held"],
-              ["UGX 5,000", "one-time reservation"],
+              ["Free", "to reserve a room"],
+              ["Instant", "reservation confirmed"],
             ].map(([value, label]) => (
               <div key={label} className="px-5 py-5 text-center sm:px-6 sm:py-6">
                 <p className="tabular font-display text-2xl font-bold text-coral-500 sm:text-3xl">
@@ -446,9 +440,9 @@ export default async function HomePage() {
                 <span className="tabular text-sm font-bold tracking-widest text-teal-700">02</span>
                 <ClockIcon className="size-8 text-teal-700 transition-transform duration-500 group-hover:rotate-12" />
               </div>
-              <h3 className="mt-10 text-xl font-semibold">Hold the room for 72 hours</h3>
+              <h3 className="mt-10 text-xl font-semibold">Reserve it for free</h3>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                A one-time UGX 5,000 reservation holds the selected room while you arrange the rest.
+                A free reservation holds the selected room while you arrange the rest.
               </p>
             </li>
             <li className="group rounded-[1.5rem] bg-teal-900 p-7 text-white sm:p-8">

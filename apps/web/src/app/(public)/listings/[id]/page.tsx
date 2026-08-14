@@ -253,9 +253,7 @@ function MoneyCard({
         </p>
         {!compact && (
           <p className="mt-2 text-sm text-muted-foreground">
-            Reserve any available room with a one-time{" "}
-            <strong className="text-foreground">UGX 5,000</strong> fee — the
-            room is held for you for 72 hours.
+            Reserve any available room — it&apos;s free to hold your spot.
           </p>
         )}
       </div>
