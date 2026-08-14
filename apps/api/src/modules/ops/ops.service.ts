@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 
 import type {
   CreateOpsDraftListingInput,
@@ -179,28 +180,53 @@ export class OpsService {
       if (!property) {
         throw new NotFoundException('Property not found');
       }
+      // Re-validate the semester server-side: the picker only checks these
+      // conditions at page-load, so a stale page (after a catchment change or
+      // archive) or a direct API call could otherwise create a listing against
+      // an inactive or wrong-catchment semester. Mirrors the admin path's
+      // AdminPropertiesService.insertUnits guard — no DB constraint ties a
+      // semester's university to a property's catchment.
+      const validSemester = await db.query.semesters.findFirst({
+        where: and(
+          eq(semesters.id, input.semesterId),
+          isNull(semesters.archivedAt),
+          or(isNull(semesters.university), eq(semesters.university, property.catchment)),
+        ),
+      });
+      if (!validSemester) {
+        throw new BadRequestException(
+          'Select an active semester configured for this property university',
+        );
+      }
+      // Atomic idempotency: two leads (or a retry) racing on the same
+      // property+semester would both miss a prior SELECT and one would 500 on
+      // listings_property_semester_uk. onConflictDoNothing lets the loser fall
+      // through to re-read the winner's row instead.
+      const [inserted] = await db
+        .insert(listings)
+        .values({
+          propertyId: input.propertyId,
+          semesterId: input.semesterId,
+          status: 'draft',
+        })
+        .onConflictDoNothing({ target: [listings.propertyId, listings.semesterId] })
+        .returning();
+      if (inserted) {
+        return inserted;
+      }
       const existing = await db.query.listings.findFirst({
         where: and(
           eq(listings.propertyId, input.propertyId),
           eq(listings.semesterId, input.semesterId),
         ),
       });
-      if (existing) {
-        if (existing.status === 'verified') {
-          throw new ConflictException('This property is already verified for that semester');
-        }
-        return existing;
+      if (!existing) {
+        throw new ConflictException('Could not create the draft listing; please retry');
       }
-      return firstRow(
-        await db
-          .insert(listings)
-          .values({
-            propertyId: input.propertyId,
-            semesterId: input.semesterId,
-            status: 'draft',
-          })
-          .returning(),
-      );
+      if (existing.status === 'verified') {
+        throw new ConflictException('This property is already verified for that semester');
+      }
+      return existing;
     });
     await this.audit.record(ctx, 'listing.draft_create', 'listing', listing.id, {
       propertyId: input.propertyId,
