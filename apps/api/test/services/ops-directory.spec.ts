@@ -214,6 +214,26 @@ describe('createDraftListing', () => {
       ops.createDraftListing(leadCtx(), { propertyId: propertyA, semesterId: priorSemester }),
     ).rejects.toThrow(/already verified/i);
   });
+
+  it('refuses an archived semester even if the picker offered it before archival', async () => {
+    const archived = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on, archived_at)
+       VALUES ('Sem Archived', '2026-08-01', '2026-12-15', '2026-11-15', now()) RETURNING id`,
+    );
+    await expect(
+      ops.createDraftListing(leadCtx(), { propertyId: propertyB, semesterId: archived }),
+    ).rejects.toThrow(/active semester/i);
+  });
+
+  it("refuses a semester scoped to a different university than the property's catchment", async () => {
+    const otherUni = await seed(
+      `INSERT INTO semesters (name, university, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Sem KYU', 'KYU', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
+    );
+    await expect(
+      ops.createDraftListing(leadCtx(), { propertyId: propertyB, semesterId: otherUni }),
+    ).rejects.toThrow(/active semester/i);
+  });
 });
 
 // Regression coverage for the "approval disappears after logout/login" bug:
