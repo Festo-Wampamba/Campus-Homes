@@ -57,17 +57,24 @@ export class OpsService {
   ) {}
 
   /** Verification queue: properties with no visit yet, a visit still in
-   * progress, or a passed visit awaiting the lead's approval. Ops-only read.
-   * A visit that's `passed` but not yet `approved_at` must stay in the queue
-   * — that's the lead's own action item — so this can't just filter on
-   * `result = 'pending'` alone. */
+   * progress, a passed visit awaiting the lead's approval, or a failed visit
+   * awaiting a re-visit to be scheduled. Ops-only read. A visit that's
+   * `passed` but not yet `approved_at` must stay in the queue — that's the
+   * lead's own action item — so this can't just filter on `result = 'pending'`
+   * alone. A `failed` latest visit must stay too: without it, a property
+   * whose inspection failed drops out of every ops screen with no path back
+   * to scheduling a re-visit — the property is neither pending (there's a
+   * completed visit) nor does it ever get approved (a failed visit can't
+   * be), so it would otherwise be silently orphaned forever. */
   queue(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
         `SELECT p.id, p.name, p.street_address, p.status, p.created_at,
                 v.id AS visit_id, v.result, v.scheduled_at, v.inspector_id,
+                l.kyc_status AS landlord_kyc_status,
                 EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600 AS age_hours
          FROM properties p
+         JOIN landlords l ON l.user_id = p.landlord_id
          LEFT JOIN LATERAL (
            SELECT * FROM verification_visits vv
            WHERE vv.property_id = p.id
@@ -75,6 +82,7 @@ export class OpsService {
          ) v ON true
          WHERE v.id IS NULL
             OR v.result = 'pending'
+            OR v.result = 'failed'
             OR (v.result = 'passed' AND v.approved_at IS NULL)
          ORDER BY p.created_at ASC`,
       );
@@ -377,6 +385,34 @@ export class OpsService {
       if (listing.status === 'verified') {
         throw new ConflictException('Listing is already verified');
       }
+      // Defense in depth alongside submitProperty()'s own gate: the
+      // landlord could have been verified at submission time and rejected
+      // or suspended (3-strike auto-suspend) any time before this, the
+      // actual moment the listing becomes publicly visible — so the KYC
+      // and account-status check is re-run here, not just trusted from
+      // whenever the property was first created.
+      const [property] = await db
+        .select({ landlordId: properties.landlordId })
+        .from(properties)
+        .where(eq(properties.id, listing.propertyId));
+      if (!property) {
+        throw new NotFoundException('Property not found');
+      }
+      const [landlordAccount] = await db
+        .select({ kycStatus: landlords.kycStatus, userStatus: users.status })
+        .from(landlords)
+        .innerJoin(users, eq(users.id, landlords.userId))
+        .where(eq(landlords.userId, property.landlordId));
+      if (!landlordAccount || landlordAccount.kycStatus !== 'verified') {
+        throw new ConflictException(
+          "This property's landlord is not KYC-verified — publishing is blocked until ops approves their identity",
+        );
+      }
+      if (landlordAccount.userStatus !== 'active') {
+        throw new ConflictException(
+          "This property's landlord account is not active — publishing is blocked",
+        );
+      }
       // The visit whose photos (staged at sync time) get promoted below —
       // the most recently approved, passed visit for this property.
       const approvedVisit = await db.query.verificationVisits.findFirst({
@@ -523,6 +559,17 @@ export class OpsService {
         .returning();
       if (!row) {
         throw new NotFoundException('Landlord not found');
+      }
+      // Gives the property's own status column real meaning: it's set to
+      // 'pending_kyc' at submission and otherwise never changes anywhere in
+      // the codebase. A verified decision is the one event that should
+      // release it — a rejection deliberately leaves it at 'pending_kyc'
+      // rather than 'suspended', since nothing was ever live to suspend.
+      if (input.decision === 'verified') {
+        await db
+          .update(properties)
+          .set({ status: 'active' })
+          .where(and(eq(properties.landlordId, landlordUserId), eq(properties.status, 'pending_kyc')));
       }
       return row;
     });

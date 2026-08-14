@@ -173,12 +173,17 @@ export function InspectionForm({
   }
 
   if (draft.syncStatus === "synced") {
+    const failed = draft.result === "failed";
     return (
       <Card>
         <CardContent className="p-5">
-          <StatusChip tone="success">Synced</StatusChip>
+          <StatusChip tone={failed ? "destructive" : "success"}>
+            {failed ? "Synced — failed" : "Synced"}
+          </StatusChip>
           <p className="mt-2 text-sm text-muted-foreground">
-            This checklist has already been submitted and is waiting on lead approval.
+            {failed
+              ? "This checklist was submitted and recorded as failed. It can't be approved — a lead needs to schedule a new visit before this property can be verified."
+              : "This checklist has already been submitted and is waiting on lead approval."}
           </p>
         </CardContent>
       </Card>
