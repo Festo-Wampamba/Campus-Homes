@@ -9,6 +9,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
 import { getPropertyListings, getPublishableSemesters, getVisitDetail } from "@/lib/ops";
+import { getServerSession } from "@/lib/session";
 import { ApproveVisitButton } from "./approve-visit-button";
 import { CreateListingToPublish } from "./create-listing-to-publish";
 
@@ -29,16 +30,21 @@ export default async function VisitDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const visit = await getVisitDetail(id);
+  const [visit, session] = await Promise.all([getVisitDetail(id), getServerSession()]);
   if (!visit) {
     notFound();
   }
+  // Inspectors can reach this page now (visits/mine only holds
+  // not-yet-approved visits, so an approved one links here) — approve/publish
+  // stay lead-only actions, the API would 403 an inspector anyway, but there
+  // is no reason to render controls they can't legally use.
+  const isLead = session?.user.role === "ops_lead" || session?.user.role === "admin";
 
-  const listings = visit.approvedAt ? await getPropertyListings(visit.propertyId) : [];
+  const listings = visit.approvedAt && isLead ? await getPropertyListings(visit.propertyId) : [];
   // A landlord-onboarded property has no listing at all, so an approved visit
-  // has nothing to publish — offer to create one from the applicable semesters.
+  // has nothing to publish — offer the lead the applicable semesters to create one.
   const publishableSemesters =
-    visit.approvedAt && listings.length === 0
+    visit.approvedAt && isLead && listings.length === 0
       ? await getPublishableSemesters(visit.propertyId)
       : [];
 
@@ -66,7 +72,7 @@ export default async function VisitDetailPage({
                 </p>
               )}
             </div>
-            {visit.result === "passed" && !visit.approvedAt && (
+            {isLead && visit.result === "passed" && !visit.approvedAt && (
               <ApproveVisitButton visitId={visit.id} />
             )}
             {visit.approvedAt && <StatusChip tone="success">Approved</StatusChip>}

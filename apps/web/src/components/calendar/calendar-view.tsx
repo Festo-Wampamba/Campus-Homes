@@ -265,7 +265,7 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
         )}
       </div>
 
-      <Dialog open={formDate !== null} onOpenChange={(open) => !open && setFormDate(null)}>
+      <Dialog open={formDate !== null} onOpenChange={(open) => !open && setFormDate(null)} dismissible={false}>
         <DialogHeader title="Add calendar event" description={formDate ?? undefined} onClose={() => setFormDate(null)} />
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="space-y-4">

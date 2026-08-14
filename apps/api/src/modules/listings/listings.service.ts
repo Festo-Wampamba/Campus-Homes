@@ -107,12 +107,27 @@ export class ListingsService {
         throw new NotFoundException('Property not found');
       }
 
-      const [listing] = await db
+      // Prefer the currently-live verified listing (it's the one with real
+      // rooms) over a newer re-verification draft, which starts with zero
+      // units until Ops publishes it — picking "most recent by createdAt"
+      // alone would shadow an active listing's rooms with an empty draft's.
+      // Only fall back to the newest non-verified listing when the property
+      // has never been verified at all.
+      const [verifiedListing] = await db
         .select()
         .from(listings)
-        .where(eq(listings.propertyId, propertyId))
+        .where(and(eq(listings.propertyId, propertyId), eq(listings.status, 'verified')))
         .orderBy(desc(listings.createdAt))
         .limit(1);
+
+      const [listing] = verifiedListing
+        ? [verifiedListing]
+        : await db
+            .select()
+            .from(listings)
+            .where(eq(listings.propertyId, propertyId))
+            .orderBy(desc(listings.createdAt))
+            .limit(1);
 
       if (!listing) {
         return { property, listing: null, photos: [], rooms: [] };
@@ -386,6 +401,30 @@ export class ListingsService {
         },
       );
       return { ...detail, property, availability };
+    });
+  }
+
+  /** Bare name/address for the QR tenant-agreement landing page
+   * (GET /listings/properties/:id/summary, public) — properties has no
+   * public SELECT policy, same reasoning as detail()'s property lookup
+   * above. Deliberately property-scoped, not listing-scoped: the QR code is
+   * printed per-property and must resolve even for one with no published
+   * listing yet. */
+  propertySummary(propertyId: string) {
+    return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const res = await client.query(
+        `SELECT id, name, street_address, catchment FROM properties WHERE id = $1`,
+        [propertyId],
+      );
+      if (res.rowCount === 0) {
+        throw new NotFoundException('Property not found');
+      }
+      return res.rows[0] as {
+        id: string;
+        name: string;
+        street_address: string;
+        catchment: string;
+      };
     });
   }
 

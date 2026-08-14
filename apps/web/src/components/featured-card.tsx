@@ -32,7 +32,7 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
               <span className="mt-3 text-xs font-semibold">Inspection photos pending</span>
             </div>
           )}
-          <div className="absolute inset-0 bg-linear-to-t from-teal-900/38 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-teal-900/22 via-transparent to-transparent transition-opacity duration-300 group-hover:from-teal-900/10" />
           <VerifiedBadge size="sm" className="absolute top-3 left-3 shadow-sm" />
           <span className="absolute right-3 bottom-3 flex size-9 items-center justify-center rounded-full border border-white/30 bg-white/88 text-teal-900 opacity-0 backdrop-blur-sm transition duration-300 group-hover:translate-x-0 group-hover:opacity-100 sm:translate-x-2">
             <ArrowTopRightIcon className="size-4" />

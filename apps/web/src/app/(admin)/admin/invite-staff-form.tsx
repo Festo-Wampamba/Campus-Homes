@@ -80,7 +80,7 @@ export function InviteStaffForm() {
         Invite staff
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={setOpen} dismissible={false}>
         <DialogHeader
           title="Invite staff"
           description="Creates the account and grants the selected role. They can't sign in until credentials are provisioned."

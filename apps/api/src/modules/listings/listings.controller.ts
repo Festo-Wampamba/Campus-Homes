@@ -39,6 +39,13 @@ export class ListingsController {
     return this.listings.detail(id);
   }
 
+  // Public: the QR tenant-agreement landing page needs a property's name
+  // before the visitor is even signed in.
+  @Get('properties/:id/summary')
+  propertySummary(@Param('id', ParseUUIDPipe) id: string) {
+    return this.listings.propertySummary(id);
+  }
+
   // ── landlord ───────────────────────────────────────────────────────────────
 
   @Post('properties')

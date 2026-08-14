@@ -14,7 +14,7 @@ const PRODUCT_LINKS = [
 
 function SiteFooter() {
   return (
-    <footer className="mt-auto bg-[oklch(0.18_0.024_195)] text-white">
+    <footer className="mt-auto bg-teal-900 text-white">
       <div className="mx-auto w-full max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8 lg:pt-20">
         <div className="grid gap-12 border-b border-white/10 pb-14 md:grid-cols-[1.35fr_0.65fr_1fr_0.8fr]">
           <div className="max-w-sm">
