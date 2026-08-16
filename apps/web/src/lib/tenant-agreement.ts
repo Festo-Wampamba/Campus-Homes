@@ -1,9 +1,12 @@
 import type { PropertySummary, TenantAgreement, TenantAgreementTemplate } from "@campushomes/shared";
 
-import { apiServer } from "@/lib/server-api";
+import { apiServer, apiServerPublic } from "@/lib/server-api";
 
+// Genuinely public (no session cookie required) — a QR-scan visitor hasn't
+// necessarily signed in yet, and this is the call that has to work before
+// the sign-in redirect even runs. See apiServerPublic()'s own comment.
 export function getPropertySummary(propertyId: string): Promise<PropertySummary | null> {
-  return apiServer<PropertySummary>(`/listings/properties/${propertyId}/summary`);
+  return apiServerPublic<PropertySummary>(`/listings/properties/${propertyId}/summary`);
 }
 
 // null = the landlord/custodian hasn't set up a form for this property yet.
