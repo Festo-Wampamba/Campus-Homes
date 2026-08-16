@@ -20,14 +20,27 @@ export const scheduleVisitSchema = z.object({
 });
 export type ScheduleVisitInput = z.infer<typeof scheduleVisitSchema>;
 
+// Generous bounding box around Uganda (with margin for border-adjacent
+// properties) — catches the failure mode where a desktop/laptop browser's
+// IP-based geolocation fallback (no real GPS chip, or a VPN) reports a
+// wildly wrong location instead of failing loudly. A listing with GPS
+// outside this box can never surface in a Kampala-area bounding-box search
+// no matter how it's published, so this must reject at submission time
+// rather than fail silently downstream.
+export const UGANDA_GPS_BOUNDS = { minLat: -2.5, maxLat: 5, minLon: 28.5, maxLon: 35.5 };
+
 // Offline-sync checklist submission (§9 flow 2). The client generates the
 // idempotency key when the visit starts; a retried sync can never double-submit.
 export const syncVisitSchema = z.object({
   clientIdempotencyKey: idempotencyKey,
   visitId: uuid,
   checklist: verificationChecklistSchema,
-  visitGpsLat: z.number().min(-90).max(90),
-  visitGpsLon: z.number().min(-180).max(180),
+  visitGpsLat: z.number().min(UGANDA_GPS_BOUNDS.minLat).max(UGANDA_GPS_BOUNDS.maxLat, {
+    message: 'GPS latitude is outside Uganda — retry on-site with location services enabled (not a desktop browser or VPN).',
+  }),
+  visitGpsLon: z.number().min(UGANDA_GPS_BOUNDS.minLon).max(UGANDA_GPS_BOUNDS.maxLon, {
+    message: 'GPS longitude is outside Uganda — retry on-site with location services enabled (not a desktop browser or VPN).',
+  }),
   startedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
   result: z.enum(VISIT_RESULTS.filter((r) => r !== 'pending') as ['passed', 'failed']),

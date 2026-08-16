@@ -33,15 +33,18 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   ]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visitPhotoCount, setVisitPhotoCount] = useState<number | null>(null);
 
   // Pre-fill from the landlord's proposed room categories (submitted at
   // onboarding) so Ops confirms/adjusts real inspection numbers instead of
   // typing every listing from a blank form.
   useEffect(() => {
     let cancelled = false;
-    api<{ property: Property }>(`/ops/listings/${listingId}`)
-      .then(({ property }) => {
-        if (cancelled || !property.proposedRoomCategories?.length) return;
+    api<{ property: Property; visitPhotoCount: number }>(`/ops/listings/${listingId}`)
+      .then(({ property, visitPhotoCount: count }) => {
+        if (cancelled) return;
+        setVisitPhotoCount(count);
+        if (!property.proposedRoomCategories?.length) return;
         setRoomCategoryRows(
           property.proposedRoomCategories.map((p) => ({
             key: `prefill-${p.category}-${p.pricePerTermUgx}-${Math.random()}`,
@@ -103,6 +106,13 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {visitPhotoCount === 0 && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          The inspector didn&apos;t stage any photos on this visit — publishing now
+          will go live with no verification photos. You can still publish, but
+          consider getting photos from the inspector first.
+        </p>
+      )}
       <div className="space-y-1.5">
         <Label>Room types & pricing</Label>
         <p className="text-xs text-muted-foreground">

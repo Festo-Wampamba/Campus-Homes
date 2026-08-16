@@ -8,14 +8,15 @@ import {
 } from '@nestjs/common';
 import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 
-import type {
-  CreateOpsDraftListingInput,
-  IssueStrikeInput,
-  OpsKycDecisionInput,
-  PublishListingInput,
-  ScheduleVisitInput,
-  SyncVisitInput,
-  University,
+import {
+  UGANDA_GPS_BOUNDS,
+  type CreateOpsDraftListingInput,
+  type IssueStrikeInput,
+  type OpsKycDecisionInput,
+  type PublishListingInput,
+  type ScheduleVisitInput,
+  type SyncVisitInput,
+  type University,
 } from '@campushomes/shared';
 
 import type { RlsContext } from '../../db/rls-context';
@@ -355,6 +356,24 @@ export class OpsService {
         throw new NotFoundException('Visit not found');
       }
       if (row.visitGpsLat != null && row.visitGpsLon != null) {
+        const lat = Number(row.visitGpsLat);
+        const lon = Number(row.visitGpsLon);
+        // syncVisitSchema rejects out-of-country GPS at submission time now,
+        // but this guards legacy rows captured before that check existed —
+        // silently promoting bad GPS here is what makes a listing "verified"
+        // yet permanently invisible to search (a laptop's IP-based
+        // geolocation fallback, or a VPN, can report a location continents
+        // away with no error at capture time).
+        if (
+          lat < UGANDA_GPS_BOUNDS.minLat ||
+          lat > UGANDA_GPS_BOUNDS.maxLat ||
+          lon < UGANDA_GPS_BOUNDS.minLon ||
+          lon > UGANDA_GPS_BOUNDS.maxLon
+        ) {
+          throw new BadRequestException(
+            'This visit\'s captured GPS falls outside Uganda — it cannot be approved until the inspector recaptures location on-site (not from a desktop browser or VPN).',
+          );
+        }
         await db
           .update(properties)
           .set({ gpsLat: row.visitGpsLat, gpsLon: row.visitGpsLon })
@@ -522,7 +541,18 @@ export class OpsService {
         .select()
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
-      return { listing, property };
+      // Same lookup publishListing() uses to promote photos — surfaced here
+      // so the publish screen can warn *before* publishing if the inspector
+      // staged none, rather than the listing quietly going live photo-less.
+      const approvedVisit = await db.query.verificationVisits.findFirst({
+        where: and(
+          eq(verificationVisits.propertyId, listing.propertyId),
+          eq(verificationVisits.result, 'passed'),
+        ),
+        orderBy: (v, ops) => [ops.desc(v.approvedAt)],
+      });
+      const visitPhotoCount = (approvedVisit?.photoStorageKeys as string[] | null)?.length ?? 0;
+      return { listing, property, visitPhotoCount };
     });
   }
 
