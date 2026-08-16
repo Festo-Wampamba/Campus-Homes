@@ -29,18 +29,24 @@ export class AdminPropertiesService {
       await client.query('BEGIN');
       try {
         const landlord = (await client.query(`
-          SELECT l.user_id FROM landlords l JOIN users u ON u.id = l.user_id
+          SELECT l.user_id, l.kyc_status AS "kycStatus" FROM landlords l JOIN users u ON u.id = l.user_id
           WHERE l.user_id = $1 AND u.deleted_at IS NULL
         `, [input.landlordId])).rows[0];
         if (!landlord) throw new BadRequestException('Select a user with an active landlord profile');
 
+        // Mirrors ListingsService.submitProperty's own gate: the 'pending_kyc'
+        // column default only makes sense for a property created before its
+        // landlord was reviewed. Inserting it unconditionally here left
+        // admin-created properties for an already-verified landlord stuck at
+        // 'pending_kyc' forever, since decideKyc()'s flip only fires for
+        // properties that already existed at the moment of approval.
         const property = (await client.query(`
           INSERT INTO properties (
-            landlord_id, name, street_address, type, catchment,
+            landlord_id, name, street_address, type, catchment, status,
             description, operational_status, amenities, utilities, house_rules,
             contact_phone, contact_email, proposed_amenities, cover_photo_key
           ) VALUES (
-            $1, $2, $3, $4::property_type, $5::university,
+            $1, $2, $3, $4::property_type, $5::university, $14::property_status,
             $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $8::jsonb, $13
           ) RETURNING id, name, status::text, operational_status AS "operationalStatus"
         `, [
@@ -57,6 +63,7 @@ export class AdminPropertiesService {
           input.contactPhone ?? null,
           input.contactEmail || null,
           input.coverPhotoKey ?? null,
+          landlord.kycStatus === 'verified' ? 'active' : 'pending_kyc',
         ])).rows[0]!;
 
         await client.query(`

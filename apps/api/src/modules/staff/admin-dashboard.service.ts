@@ -95,7 +95,8 @@ export class AdminDashboardService {
           (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded' AND created_at >= now() - interval '30 days')::text AS "revenue30dUgx",
           (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded' AND created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorRevenue30dUgx",
           (SELECT count(*) FROM landlords WHERE kyc_status = 'pending')::text AS "pendingKyc",
-          (SELECT count(*) FROM verification_visits WHERE result = 'pending')::text AS "pendingVisits",
+          (SELECT count(*) FROM verification_visits
+            WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
           (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
           (SELECT count(*) FROM notifications WHERE status = 'failed')::text AS "failedNotifications"
       `);
