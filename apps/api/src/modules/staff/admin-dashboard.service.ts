@@ -195,7 +195,7 @@ export class AdminDashboardService {
                vv.result::text AS "latestVisitResult", vv.scheduled_at AS "visitScheduledAt"
         FROM properties p
         JOIN landlords l ON l.user_id = p.landlord_id
-        JOIN users u ON u.id = p.landlord_id
+        JOIN users u ON u.id = p.landlord_id AND u.deleted_at IS NULL
         LEFT JOIN LATERAL (SELECT * FROM listings x WHERE x.property_id = p.id ORDER BY x.created_at DESC LIMIT 1) li ON true
         LEFT JOIN LATERAL (SELECT * FROM verification_visits x WHERE x.property_id = p.id ORDER BY x.created_at DESC LIMIT 1) vv ON true
         ORDER BY p.created_at DESC LIMIT 250
