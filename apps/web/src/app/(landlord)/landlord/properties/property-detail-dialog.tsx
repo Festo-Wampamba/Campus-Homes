@@ -443,6 +443,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                 <th scope="col" className="px-3 py-2">Type</th>
                 <th scope="col" className="px-3 py-2">Sleeps</th>
                 <th scope="col" className="px-3 py-2">Price / semester</th>
+                <th scope="col" className="px-3 py-2">Deposit</th>
                 <th scope="col" className="px-3 py-2">Status</th>
                 <th scope="col" className="px-3 py-2">Photos</th>
               </tr>
@@ -460,6 +461,9 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                       <td className="px-3 py-2 text-muted-foreground">{room.capacity}</td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {formatUgx(room.pricePerTermUgx)}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {room.depositUgx != null ? formatUgx(room.depositUgx) : "—"}
                       </td>
                       <td className="px-3 py-2">{reservationChip(room.reservationStatus)}</td>
                       <td className="px-3 py-2">

@@ -125,6 +125,7 @@ export class AdminPropertiesService {
       const units = await client.query(`
           SELECT un.id, un.listing_id AS "listingId", un.label, un.capacity,
                  un.room_category::text AS "roomCategory", un.price_per_term_ugx AS "pricePerTermUgx",
+                 un.deposit_ugx AS "depositUgx",
                  un.operational_status AS "operationalStatus", un.building_name AS "buildingName",
                  un.floor_label AS "floorLabel", un.electricity_meter_type AS "electricityMeterType",
                  un.amenities, un.notes
@@ -290,16 +291,17 @@ export class AdminPropertiesService {
     for (const unit of units) {
       await client.query(`
         INSERT INTO units (
-          listing_id, label, capacity, room_category, price_per_term_ugx,
+          listing_id, label, capacity, room_category, price_per_term_ugx, deposit_ugx,
           available_for_semester_id, operational_status, building_name, floor_label,
           electricity_meter_type, amenities, notes
-        ) VALUES ($1, $2, $3, $4::room_category, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+        ) VALUES ($1, $2, $3, $4::room_category, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
       `, [
         listing.id,
         unit.label,
         unit.capacity,
         unit.roomCategory,
         unit.pricePerTermUgx,
+        unit.depositUgx ?? null,
         semesterId,
         unit.operationalStatus,
         unit.buildingName ?? null,

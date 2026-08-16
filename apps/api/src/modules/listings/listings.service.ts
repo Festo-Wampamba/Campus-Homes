@@ -220,6 +220,7 @@ export class ListingsService {
           capacity: u.capacity,
           roomCategory: u.roomCategory,
           pricePerTermUgx: u.pricePerTermUgx,
+          depositUgx: u.depositUgx,
           reservationStatus: statusByUnit.get(u.id) ?? null,
           photos: photosByUnit.get(u.id) ?? [],
         })),
@@ -578,6 +579,18 @@ export class ListingsService {
         [limit],
       );
       return res.rows as unknown[];
+    });
+  }
+
+  /** Public help/complaint contact — GET /listings/support-contact. Reads
+   * the same platform_settings row the admin console writes, but exposes
+   * only this one key to an unauthenticated caller. */
+  supportContact() {
+    return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const res = await client.query<{ value: { email: string; phone: string } }>(
+        `SELECT value FROM platform_settings WHERE key = 'support_contact'`,
+      );
+      return res.rows[0]?.value ?? { email: 'support@campushomes.com', phone: '' };
     });
   }
 }

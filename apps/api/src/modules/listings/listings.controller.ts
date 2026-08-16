@@ -34,6 +34,14 @@ export class ListingsController {
     return this.listings.reviews(6);
   }
 
+  // Support contact lives in the admin-only platform_settings table, but
+  // students/the public need to see it (help/complaint routes) without
+  // signing in — this exposes just that one value, nothing else from settings.
+  @Get('support-contact')
+  supportContact() {
+    return this.listings.supportContact();
+  }
+
   // Declared before the ':id' catch-all below — route order matters in Nest.
   @Get('semesters')
   @UseGuards(AuthGuard, RolesGuard)

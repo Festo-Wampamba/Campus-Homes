@@ -267,10 +267,8 @@ export function SignInForm({ next }: { next: string | null }) {
         }
         return;
       }
-      if (mode === "sign-up") {
-        setNotice("Check your email to verify your account before signing in.");
-        return;
-      }
+      // Email verification is off for now (MVP testing) — Better Auth signs
+      // the new account straight in, so sign-up and sign-in both just route.
       await routeBySession();
     } catch (error) {
       setError(emailAuthFailureMessage(error, mode));

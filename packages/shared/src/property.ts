@@ -20,6 +20,10 @@ export const proposedRoomCategorySchema = z.object({
   category: z.enum(ROOM_CATEGORIES),
   roomCount: z.number().int().min(1).max(500),
   pricePerTermUgx: ugxAmount,
+  // Optional — not every property charges a deposit. Same "proposal"
+  // status as pricePerTermUgx: informational until Ops confirms it on
+  // the real units at publish time.
+  depositUgx: ugxAmount.optional(),
 });
 export type ProposedRoomCategory = z.infer<typeof proposedRoomCategorySchema>;
 
@@ -96,6 +100,7 @@ export const propertyRoomSchema = z.object({
   capacity: z.number().int(),
   roomCategory: z.enum(ROOM_CATEGORIES),
   pricePerTermUgx: z.number(),
+  depositUgx: z.number().nullable(),
   reservationStatus: z.enum(RESERVATION_STATUSES).nullable(),
   // Landlord-uploaded, per this specific room (unit_photos) — separate from
   // the whole-listing `photos` array above, which is Ops-captured. Carries

@@ -117,6 +117,7 @@ export const adminUnitInputSchema = z.object({
   capacity: z.number().int().min(1).max(50).default(1),
   roomCategory: z.enum(ROOM_CATEGORIES).default('single'),
   pricePerTermUgx: z.number().int().positive().max(100_000_000),
+  depositUgx: z.number().int().min(0).max(100_000_000).nullable().optional(),
   operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES).default('available'),
   buildingName: z.string().trim().max(100).nullable().optional(),
   floorLabel: z.string().trim().max(50).nullable().optional(),

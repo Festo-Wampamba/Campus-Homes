@@ -113,6 +113,7 @@ export const unitSchema = z.object({
   capacity: z.number().int(),
   roomCategory: z.enum(ROOM_CATEGORIES),
   pricePerTermUgx: z.number().int(),
+  depositUgx: z.number().int().nullable(),
   availableForSemesterId: uuid,
 });
 export type Unit = z.infer<typeof unitSchema>;

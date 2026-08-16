@@ -148,6 +148,13 @@
       "when": 1786710000000,
       "tag": "0021_free_reservations",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0022_unit_deposit",
+      "breakpoints": true
     }
   ]
 }
