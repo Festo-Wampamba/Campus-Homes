@@ -80,13 +80,18 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
     emailAndPassword: {
       enabled: true,
       disableSignUp: false,
-      requireEmailVerification: true,
+      // MVP-phase relaxation: verification-gated sign-up depends on RESEND
+      // being configured and delivering in every test environment, which
+      // isn't guaranteed during moderated testing — a student who never
+      // receives (or can't access) the email would be stuck unable to sign
+      // in at all. Revisit before a real production launch.
+      requireEmailVerification: false,
       sendResetPassword: async ({ user, url }) => {
         await sendAuthEmail(env, { to: user.email, name: user.name, url, kind: 'reset-password' });
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      sendOnSignUp: false,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         await sendAuthEmail(env, { to: user.email, name: user.name, url, kind: 'verify-email' });
