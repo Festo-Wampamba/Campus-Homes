@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
   UGANDA_GPS_BOUNDS,
@@ -553,8 +553,65 @@ export class OpsService {
         orderBy: (v, ops) => [ops.desc(v.approvedAt)],
       });
       const visitPhotoCount = (approvedVisit?.photoStorageKeys as string[] | null)?.length ?? 0;
-      return { listing, property, visitPhotoCount };
+      const photos = listing.currentVersionId
+        ? await db
+            .select()
+            .from(listingPhotos)
+            .where(eq(listingPhotos.listingVersionId, listing.currentVersionId))
+            .orderBy(asc(listingPhotos.sortOrder))
+        : [];
+      return { listing, property, visitPhotoCount, photos };
     });
+  }
+
+  /** Backfills listing_photos on an already-published listing — the fix for
+   * an inspector who skipped photos at visit time (publishListing() only
+   * ever gets one shot at promoting the visit's staged photos; there was no
+   * way to add more afterward). listing_photos.gps_lat/lon is NOT NULL
+   * ("EXIF-verified... never trusted" — schema comment), so a backfill photo
+   * not tied to a fresh on-site capture uses the property's own verified
+   * GPS (set once, at visit approval) rather than fabricating a value. */
+  async addListingPhotos(ctx: RlsContext, listingId: string, storageKeys: string[]) {
+    const result = await this.rlsDb.run(ctx, async (db) => {
+      const listing = await db.query.listings.findFirst({ where: eq(listings.id, listingId) });
+      if (!listing) {
+        throw new NotFoundException('Listing not found');
+      }
+      if (!listing.currentVersionId) {
+        throw new BadRequestException('Publish this listing before adding photos to it');
+      }
+      const [property] = await db
+        .select({ gpsLat: properties.gpsLat, gpsLon: properties.gpsLon })
+        .from(properties)
+        .where(eq(properties.id, listing.propertyId));
+      if (!property?.gpsLat || !property.gpsLon) {
+        throw new BadRequestException('This property has no verified GPS yet — approve a visit first');
+      }
+      const { gpsLat, gpsLon } = property;
+      const existing = await db
+        .select({ sortOrder: listingPhotos.sortOrder })
+        .from(listingPhotos)
+        .where(eq(listingPhotos.listingVersionId, listing.currentVersionId));
+      const nextSortOrder = existing.length;
+      const inserted = await db
+        .insert(listingPhotos)
+        .values(
+          storageKeys.map((storageKey, i) => ({
+            listingVersionId: listing.currentVersionId!,
+            storageKey,
+            capturedBy: ctx.userId,
+            gpsLat,
+            gpsLon,
+            capturedAt: new Date(),
+            isPrimary: existing.length === 0 && i === 0,
+            sortOrder: nextSortOrder + i,
+          })),
+        )
+        .returning();
+      return inserted;
+    });
+    await this.audit.record(ctx, 'listing.photos_add', 'listing', listingId, { count: storageKeys.length });
+    return result;
   }
 
   /** Landlords awaiting KYC review, oldest first. landlords_read already

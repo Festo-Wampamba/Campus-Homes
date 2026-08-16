@@ -187,7 +187,7 @@ export class AdminDashboardService {
                p.created_at AS "createdAt",
                coalesce(nullif(u.name, ''), l.legal_name) AS "landlordName",
                l.kyc_status::text AS "landlordKycStatus",
-               li.status::text AS "listingStatus", li.verified_at AS "verifiedAt",
+               li.id AS "listingId", li.status::text AS "listingStatus", li.verified_at AS "verifiedAt",
                (SELECT count(*)::int FROM units un WHERE un.listing_id = li.id) AS "unitCount",
                (SELECT count(*)::int FROM property_media pm WHERE pm.property_id = p.id) AS "imageCount",
                (SELECT count(*)::int FROM units un JOIN listings ux ON ux.id = un.listing_id
