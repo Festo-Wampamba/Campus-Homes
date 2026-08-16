@@ -31,6 +31,26 @@ export async function apiServer<T>(path: string): Promise<T | null> {
 // "queue is clear" is actively misleading: an ops lead has no reason to
 // suspect anything's wrong and just... doesn't approve anything. This
 // throws instead, so the caller can render a real error state.
+// For genuinely public endpoints only (no auth required at all) — unlike
+// apiServer(), never short-circuits on a missing cookie. The QR-scan tenant
+// agreement flow is the reason this exists: a first-time visitor scanning a
+// property's QR code has no session cookie by definition, so apiServer()'s
+// "no cookie -> null" shortcut made GET /listings/properties/:id/summary
+// return null before the request was ever sent, 404ing the page before it
+// could even reach the sign-in redirect meant to handle exactly this case.
+export async function apiServerPublic<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${BASE}/api/v1${path}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiServerStrict<T>(path: string): Promise<T> {
   const cookie = (await headers()).get("cookie");
   if (!cookie) {
