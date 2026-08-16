@@ -370,6 +370,13 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
     <div className="space-y-6">
       <RoomStats {...stats} />
 
+      {detail.listing && detail.listing.status !== "verified" && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          {detail.listing.status === "draft"
+            ? "This listing is a draft — it won't appear in student search until Ops schedules and completes a verification visit and publishes it."
+            : `Listing status: ${detail.listing.status.replaceAll("_", " ")} — not yet visible in student search.`}
+        </div>
+      )}
       {!detail.listing ? (
         <div className="space-y-3">
           <EmptyState
