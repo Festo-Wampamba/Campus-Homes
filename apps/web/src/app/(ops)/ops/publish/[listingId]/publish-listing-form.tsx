@@ -51,6 +51,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
             category: p.category,
             roomCount: String(p.roomCount),
             pricePerTermUgx: String(p.pricePerTermUgx),
+            depositUgx: p.depositUgx != null ? String(p.depositUgx) : "",
           })),
         );
       })
@@ -80,11 +81,13 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         const category = row.category as RoomCategory;
         const count = Number(row.roomCount);
         const price = Number(row.pricePerTermUgx);
+        const deposit = row.depositUgx ? Number(row.depositUgx) : undefined;
         return Array.from({ length: count }, (_, i) => ({
           label: `${roomCategoryLabel(category)} ${i + 1}`,
           capacity: ROOM_CATEGORY_DEFAULT_CAPACITY[category] ?? 1,
           roomCategory: category,
           pricePerTermUgx: price,
+          ...(deposit ? { depositUgx: deposit } : {}),
         }));
       });
       await api("/ops/listings/publish", {

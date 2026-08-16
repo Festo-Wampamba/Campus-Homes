@@ -73,6 +73,7 @@ export const publishListingSchema = z.object({
         capacity: z.number().int().min(1).max(20).default(1),
         roomCategory: z.enum(ROOM_CATEGORIES),
         pricePerTermUgx: ugxAmount,
+        depositUgx: ugxAmount.optional(),
       }),
     )
     .min(1)

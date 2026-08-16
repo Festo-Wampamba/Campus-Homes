@@ -88,6 +88,9 @@ export const units = pgTable('units', {
   // not one flat price for the whole listing. CHECK price > 0 in SQL migration.
   roomCategory: roomCategory('room_category').notNull().default('other'),
   pricePerTermUgx: integer('price_per_term_ugx').notNull(),
+  // Nullable — not every room charges a deposit, and older units predate
+  // this column. CHECK >= 0 in SQL migration, same as price's > 0 check.
+  depositUgx: integer('deposit_ugx'),
   availableForSemesterId: uuid('available_for_semester_id')
     .notNull()
     .references(() => semesters.id),

@@ -488,6 +488,7 @@ export class OpsService {
           capacity: u.capacity,
           roomCategory: u.roomCategory,
           pricePerTermUgx: u.pricePerTermUgx,
+          depositUgx: u.depositUgx ?? null,
           availableForSemesterId: listing.semesterId,
         })),
       );

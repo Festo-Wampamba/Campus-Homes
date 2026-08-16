@@ -38,6 +38,7 @@ function roomRowsFromProperty(property: Property | null): RoomCategoryRow[] {
     category: row.category,
     roomCount: String(row.roomCount),
     pricePerTermUgx: String(row.pricePerTermUgx),
+    depositUgx: row.depositUgx != null ? String(row.depositUgx) : "",
   }));
 }
 
@@ -119,6 +120,7 @@ function PropertyForm({
           category: row.category,
           roomCount: Number(row.roomCount),
           pricePerTermUgx: Number(row.pricePerTermUgx),
+          ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
         }));
       const body = JSON.stringify({
         name,

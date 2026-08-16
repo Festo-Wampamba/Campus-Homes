@@ -14,12 +14,14 @@ export type RoomCategoryRow = {
   category: RoomCategory;
   roomCount: string;
   pricePerTermUgx: string;
+  // Optional — not every property charges a deposit.
+  depositUgx: string;
 };
 
 let nextKey = 0;
 export function emptyRoomCategoryRow(): RoomCategoryRow {
   nextKey += 1;
-  return { key: `row-${nextKey}`, category: "single", roomCount: "", pricePerTermUgx: "" };
+  return { key: `row-${nextKey}`, category: "single", roomCount: "", pricePerTermUgx: "", depositUgx: "" };
 }
 
 /** Repeatable {category, room count, price} rows — the shared input for "I
@@ -49,7 +51,7 @@ export function RoomCategoryRows({
       {rows.map((row, i) => (
         <div
           key={row.key}
-          className="grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_auto]"
+          className="grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]"
         >
           <div className="col-span-2 space-y-1.5 sm:col-span-1">
             <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>
@@ -87,6 +89,17 @@ export function RoomCategoryRows({
               inputMode="numeric"
               value={row.pricePerTermUgx}
               onChange={(e) => update(row.key, { pricePerTermUgx: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-deposit-${i}`}>Deposit (UGX, optional)</Label>
+            <Input
+              id={`${idPrefix}-deposit-${i}`}
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={row.depositUgx}
+              onChange={(e) => update(row.key, { depositUgx: e.target.value })}
             />
           </div>
           <Button
