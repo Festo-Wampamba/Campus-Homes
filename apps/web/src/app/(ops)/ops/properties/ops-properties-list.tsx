@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import Link from "next/link";
+import { Images, Search } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
@@ -16,6 +17,7 @@ export type OpsPropertyRow = {
   catchment: string;
   landlordName: string;
   status: string;
+  listingId: string | null;
 };
 
 export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
@@ -57,6 +59,15 @@ export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <StatusChip tone={row.status === "active" ? "success" : "neutral"}>{row.status}</StatusChip>
+                {row.listingId && (
+                  <Link
+                    href={`/ops/listings/${row.listingId}/photos`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                  >
+                    <Images aria-hidden className="size-4" />
+                    Photos
+                  </Link>
+                )}
                 <button
                   type="button"
                   onClick={() => setEditing(row)}

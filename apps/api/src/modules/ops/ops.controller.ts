@@ -5,6 +5,7 @@ import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import type { University } from '@campushomes/shared';
 
 import {
+  AddListingPhotosDto,
   CreateOpsDraftListingDto,
   IssueStrikeDto,
   OpsKycDecisionDto,
@@ -66,6 +67,19 @@ export class OpsController {
   @Roles('ops_lead', 'admin')
   listingForPublish(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.listingForPublish(rlsCtx(req), id);
+  }
+
+  // Backfills listing_photos on an already-published listing — for an
+  // inspector who skipped photos at visit time, publish is a one-shot
+  // promotion of whatever the visit staged and never revisits it.
+  @Post('listings/:id/photos')
+  @Roles('ops_lead', 'admin')
+  addListingPhotos(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AddListingPhotosDto,
+  ) {
+    return this.ops.addListingPhotos(rlsCtx(req), id, body.storageKeys);
   }
 
   @Get('properties/:id/publishable-semesters')

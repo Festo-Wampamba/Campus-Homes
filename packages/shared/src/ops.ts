@@ -81,6 +81,14 @@ export const publishListingSchema = z.object({
 });
 export type PublishListingInput = z.infer<typeof publishListingSchema>;
 
+// Backfills listing_photos after publish — an inspector who skipped photos
+// at visit time (or whose visit predates this) shouldn't leave a listing
+// permanently photo-less; Ops can add more any time, not just at publish.
+export const addListingPhotosSchema = z.object({
+  storageKeys: z.array(z.string().min(1).max(500)).min(1).max(20),
+});
+export type AddListingPhotosInput = z.infer<typeof addListingPhotosSchema>;
+
 export const issueStrikeSchema = z.object({
   landlordId: uuid,
   reservationId: uuid.optional(),
