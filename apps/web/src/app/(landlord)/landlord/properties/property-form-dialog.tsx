@@ -136,7 +136,14 @@ function PropertyForm({
         await api("/listings/properties", { method: "POST", body });
       }
       onSaved();
-      onOpenChange(false);
+      // router.refresh() doesn't resolve when the server component has
+      // actually re-rendered with fresh data — closing immediately races it,
+      // so reopening Edit right after Save can still show the pre-save
+      // property (amenities/room categories looking reverted even though
+      // the write succeeded). Same workaround the admin property dialog
+      // already uses for this exact race.
+      setTimeout(() => onOpenChange(false), 800);
+      return;
     } catch (err) {
       setError(errorMessage(err, `Couldn't save this property — try again.`));
     } finally {

@@ -337,11 +337,31 @@ export class AdminUsersService {
           if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
         }
 
-        await client.query(`UPDATE users SET status = 'suspended', deleted_at = now(), deletion_reason = $2, updated_at = now() WHERE id = $1`, [userId, reason]);
+        // email/phone keep their plain UNIQUE constraints (not partial on
+        // deleted_at), and Better Auth's own sign-up lookup has no idea about
+        // our deleted_at convention anyway — leaving them intact permanently
+        // blocks the same person from ever signing up again. Mangle both to a
+        // deterministic, guaranteed-unique value derived from the row's own
+        // id so they're freed for reuse immediately; the row (and its id)
+        // stays intact for audit_log/FK history.
+        await client.query(
+          `UPDATE users SET status = 'suspended', deleted_at = now(), deletion_reason = $2, updated_at = now(),
+                  email = 'deleted-' || id || '@deleted.campushomes.internal', phone = NULL
+           WHERE id = $1`,
+          [userId, reason],
+        );
         await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
         await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
         await client.query('UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
         await client.query(`UPDATE property_memberships SET status = 'revoked', revoked_at = now(), revoked_by = $2, revocation_reason = $3 WHERE user_id = $1 AND revoked_at IS NULL`, [userId, actor.userId, reason]);
+        // Mirrors enforce_strike_suspension() (0001_rls_hardening.sql): a
+        // deleted landlord's previously-verified listings must stop being
+        // publicly searchable immediately, not just vanish from admin lists.
+        await client.query(
+          `UPDATE listings SET status = 'suspended'
+           WHERE status = 'verified' AND property_id IN (SELECT id FROM properties WHERE landlord_id = $1)`,
+          [userId],
+        );
         await client.query('COMMIT');
         return { id: userId, deleted: true };
       } catch (error) {
