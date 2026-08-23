@@ -163,7 +163,9 @@ describe('search() availability', () => {
     const row = rows.find((r) => r.id === listingId);
     expect(row).toBeDefined();
     // 3 units total, 2 occupied (fulfilled + payment_pending), 1 free (cancelled doesn't count).
-    expect(row!.unit_count).toBe(1);
+    // search() returns raw snake_case SQL rows — COUNT(*) arrives as a string;
+    // the shared listingSearchResultSchema coerces it at the wire boundary.
+    expect(Number(row!.unit_count)).toBe(1);
   });
 
   it('excludes a listing entirely once every unit is occupied', async () => {
