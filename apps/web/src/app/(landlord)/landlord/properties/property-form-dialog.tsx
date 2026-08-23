@@ -2,8 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { UNIVERSITIES, type Property, type University } from "@campushomes/shared";
+import { PROPERTY_TYPES, UNIVERSITIES, type Property, type PropertyType, type University } from "@campushomes/shared";
 
+import {
+  emptyPropertyDeclarationFields,
+  PropertyDeclarationFields,
+  propertyDeclarationsAllAccepted,
+  type PropertyDeclarationFieldsValue,
+} from "@/components/property-declaration-fields";
+import {
+  emptyPropertyExtendedFields,
+  PropertyExtendedFields,
+  propertyExtendedFieldsFromProperty,
+  serializePropertyExtendedFields,
+  type PropertyExtendedFieldsValue,
+} from "@/components/property-extended-fields";
 import { RoomCategoryRows, emptyRoomCategoryRow, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -20,6 +33,16 @@ const UNIVERSITY_LABELS: Record<University, string> = {
   KIU: "Kampala International University",
   KYU: "Kyambogo University",
   other: "Other / not listed",
+};
+
+const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
+  hostel: "Hostel",
+  apartment: "Apartment",
+  hall: "Hall of residence",
+  boarding_house: "Boarding house",
+  shared_house: "Shared house",
+  studio: "Studio",
+  other: "Other",
 };
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -57,6 +80,7 @@ function PropertyForm({
   const isEdit = property != null;
   const [name, setName] = useState(property?.name ?? "");
   const [streetAddress, setStreetAddress] = useState(property?.streetAddress ?? "");
+  const [type, setType] = useState<PropertyType>(property?.type ?? "hostel");
   const [catchment, setCatchment] = useState<University>(property?.catchment ?? "MUK");
   const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>(
     roomRowsFromProperty(property),
@@ -66,6 +90,12 @@ function PropertyForm({
   );
   const [customAmenity, setCustomAmenity] = useState("");
   const [coverPhotoFile, setCoverPhotoFile] = useState<File | null>(null);
+  const [extended, setExtended] = useState<PropertyExtendedFieldsValue>(() =>
+    property ? propertyExtendedFieldsFromProperty(property) : emptyPropertyExtendedFields(),
+  );
+  const [declaration, setDeclaration] = useState<PropertyDeclarationFieldsValue>(
+    emptyPropertyDeclarationFields(),
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +136,10 @@ function PropertyForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!isEdit && !propertyDeclarationsAllAccepted(declaration)) {
+      setError("Please accept every item in the consent & declaration section.");
+      return;
+    }
     setPending(true);
     try {
       let newCoverPhotoKey: string | undefined;
@@ -128,6 +162,11 @@ function PropertyForm({
         catchment,
         proposedRoomCategories,
         proposedAmenities: amenities,
+        ...serializePropertyExtendedFields(extended),
+        // Create-only: updatePropertySchema doesn't accept `type` or the
+        // 5-item declaration (fixed/one-time-consent once submitted), so
+        // only send them when adding.
+        ...(isEdit ? {} : { type, ...declaration }),
         // Omitted entirely when no new file was picked — for an edit, that
         // leaves the existing cover photo untouched instead of clearing it.
         ...(newCoverPhotoKey ? { coverPhotoKey: newCoverPhotoKey } : {}),
@@ -188,6 +227,26 @@ function PropertyForm({
               placeholder="Street, area, city"
             />
           </div>
+          {!isEdit && (
+            <div className="space-y-1.5">
+              <Label htmlFor="property-type">Property type</Label>
+              <select
+                id="property-type"
+                value={type}
+                onChange={(e) => setType(e.target.value as PropertyType)}
+                className={cn(
+                  "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
+                  "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
+                )}
+              >
+                {PROPERTY_TYPES.map((value) => (
+                  <option key={value} value={value}>
+                    {PROPERTY_TYPE_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="property-catchment">Nearest university</Label>
             <select
@@ -297,6 +356,20 @@ function PropertyForm({
             </div>
           </div>
         </div>
+
+        <PropertyExtendedFields
+          value={extended}
+          onChange={(patch) => setExtended((prev) => ({ ...prev, ...patch }))}
+          idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
+        />
+
+        {!isEdit && (
+          <PropertyDeclarationFields
+            value={declaration}
+            onChange={(patch) => setDeclaration((prev) => ({ ...prev, ...patch }))}
+          />
+        )}
+
         <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
           {error}
         </p>

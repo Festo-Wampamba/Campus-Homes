@@ -11,6 +11,7 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { HealthController } from './modules/health/health.controller';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { LandlordsModule } from './modules/landlords/landlords.module';
+import { LeadsModule } from './modules/leads/leads.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OpsModule } from './modules/ops/ops.module';
@@ -39,6 +40,7 @@ import { RootController } from './root.controller';
     StaffModule,
     CalendarModule,
     TenantAgreementsModule,
+    LeadsModule,
   ],
   controllers: [HealthController, RootController],
   providers: [

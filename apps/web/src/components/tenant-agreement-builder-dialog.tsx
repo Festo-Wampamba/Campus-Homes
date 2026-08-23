@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import type { TenantAgreementField, TenantAgreementFieldType, TenantAgreementTemplate } from "@campushomes/shared";
-import { TENANT_AGREEMENT_FIELD_TYPES } from "@campushomes/shared";
+import { DEFAULT_TENANT_AGREEMENT_TEMPLATE_FIELDS, TENANT_AGREEMENT_FIELD_TYPES } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -42,6 +42,22 @@ let nextKey = 0;
 function emptyField(): FieldRow {
   nextKey += 1;
   return { key: `field-${nextKey}`, fieldType: "fill_in", label: "", options: [], required: false };
+}
+
+// Offered as the starting point for a property with no saved template yet —
+// see DEFAULT_TENANT_AGREEMENT_TEMPLATE_FIELDS in shared for why these
+// particular fields. Nothing is persisted until the landlord clicks save.
+function defaultFieldRows(): FieldRow[] {
+  return DEFAULT_TENANT_AGREEMENT_TEMPLATE_FIELDS.map((f) => {
+    nextKey += 1;
+    return {
+      key: `field-${nextKey}`,
+      fieldType: f.fieldType,
+      label: f.label,
+      options: f.options ?? [],
+      required: f.required,
+    };
+  });
 }
 
 // Fields don't have a real id until they're saved — a preview needs
@@ -285,6 +301,8 @@ function TenantAgreementBuilderBody({
             })),
           );
           setHasSavedTemplate(true);
+        } else {
+          setFields(defaultFieldRows());
         }
       })
       .catch(() => {
@@ -453,8 +471,8 @@ function TenantAgreementBuilderBody({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Every submission ends with a signature (drawn or typed name) automatically — you don&apos;t need
-              to add one here.
+              Every submission always includes a declaration of consent and ends with a signature (drawn or
+              typed name) automatically — you don&apos;t need to add either of those here.
             </p>
           </>
         )}

@@ -5,6 +5,7 @@ import {
   listingSearchSchema,
   submitPropertySchema,
   updatePropertySchema,
+  updateUnitOperationalStatusSchema,
   uuid as uuidSchema,
 } from '@campushomes/shared';
 import { DOC_TYPES } from '@campushomes/shared';
@@ -34,3 +35,11 @@ export class AddUnitPhotoDto extends createZodDto(
     storageKey: z.string().min(1).max(500),
   }),
 ) {}
+
+export class AddPropertyMediaDto extends createZodDto(
+  z.object({
+    storageKey: z.string().min(1).max(500),
+  }),
+) {}
+
+export class UpdateUnitOperationalStatusDto extends createZodDto(updateUnitOperationalStatusSchema) {}

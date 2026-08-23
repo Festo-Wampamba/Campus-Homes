@@ -3,22 +3,28 @@ import crypto from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { hashPassword } from 'better-auth/crypto';
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
   UGANDA_GPS_BOUNDS,
   type CreateOpsDraftListingInput,
+  type InviteLandlordInput,
   type IssueStrikeInput,
+  type OnboardingLeadStatus,
   type OpsKycDecisionInput,
   type PublishListingInput,
   type ScheduleVisitInput,
   type SyncVisitInput,
+  type UnitOperationalStatus,
   type University,
 } from '@campushomes/shared';
 
+import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
@@ -29,6 +35,7 @@ import {
   listingPhotos,
   listingVersions,
   listings,
+  onboardingLeads,
   opsStaff,
   properties,
   semesters,
@@ -36,6 +43,8 @@ import {
   users,
   verificationVisits,
 } from '../../db/schema';
+import type { Auth } from '../auth/auth.config';
+import { AUTH } from '../auth/auth.tokens';
 import { AuditService } from './audit.service';
 
 /** Promoting a visit's staged photos into listing_photos at publish time is
@@ -55,6 +64,7 @@ export class OpsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    @Inject(AUTH) private readonly auth: Auth,
   ) {}
 
   /** Verification queue: properties with no visit yet, a visit still in
@@ -91,14 +101,21 @@ export class OpsService {
     });
   }
 
-  /** Inspector picker for the schedule-visit form. Ops-lead-only read. */
+  /** Inspector picker for the schedule-visit form. Ops-lead-only read.
+   * Includes team='lead' too (MVP full-parity decision) so a lead can
+   * self-assign a visit and run it end-to-end without an inspector. */
   listInspectors(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (db) =>
       db
-        .select({ id: users.id, name: users.name, catchment: opsStaff.assignedCatchment })
+        .select({
+          id: users.id,
+          name: users.name,
+          catchment: opsStaff.assignedCatchment,
+          team: opsStaff.team,
+        })
         .from(opsStaff)
         .innerJoin(users, eq(opsStaff.userId, users.id))
-        .where(and(eq(opsStaff.team, 'inspector'), eq(opsStaff.active, true))),
+        .where(and(inArray(opsStaff.team, ['inspector', 'lead']), eq(opsStaff.active, true))),
     );
   }
 
@@ -264,6 +281,35 @@ export class OpsService {
       semesterId: input.semesterId,
     });
     return listing;
+  }
+
+  /** Ops flipping a room's status by hand (0024) — units_ops_update (0001)
+   * already gives any ops role unrestricted UPDATE, so this runs under the
+   * caller's own ctx like everything else in this controller. Covers the
+   * same off-platform-tenant gap as the landlord's own
+   * ListingsService.updateUnitOperationalStatus, for the concierge-model
+   * case where Ops is the one who finds out a room was let outside the
+   * platform. */
+  async updateUnitOperationalStatus(
+    ctx: RlsContext,
+    unitId: string,
+    operationalStatus: UnitOperationalStatus,
+  ) {
+    const unit = await this.rlsDb.run(ctx, async (db) => {
+      const [row] = await db
+        .update(units)
+        .set({ operationalStatus })
+        .where(eq(units.id, unitId))
+        .returning();
+      if (!row) {
+        throw new NotFoundException('Unit not found');
+      }
+      return row;
+    });
+    await this.audit.record(ctx, 'unit.operational_status_update', 'unit', unitId, {
+      operationalStatus,
+    });
+    return unit;
   }
 
   async scheduleVisit(ctx: RlsContext, input: ScheduleVisitInput) {
@@ -684,6 +730,106 @@ export class OpsService {
           .returning(),
       ),
     );
+  }
+
+  /** The public /landlords "Request onboarding" queue (0027) — leads run
+   * ops_lead's own ctx (onboarding_leads_ops_read/_update, 0027 grant it
+   * directly, no service_role needed, same posture as units_ops_update). */
+  leadsQueue(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT id, name, phone, email, property_location AS "propertyLocation",
+                message, status, contacted_by AS "contactedBy", contacted_at AS "contactedAt",
+                created_at AS "createdAt"
+         FROM onboarding_leads
+         ORDER BY (status = 'new') DESC, created_at ASC`,
+      );
+      return res.rows as unknown[];
+    });
+  }
+
+  async updateLeadStatus(ctx: RlsContext, leadId: string, status: OnboardingLeadStatus) {
+    const lead = await this.rlsDb.run(ctx, async (db) => {
+      const [row] = await db
+        .update(onboardingLeads)
+        .set({
+          status,
+          contactedBy: status === 'new' ? null : ctx.userId,
+          contactedAt: status === 'new' ? null : new Date(),
+        })
+        .where(eq(onboardingLeads.id, leadId))
+        .returning();
+      if (!row) {
+        throw new NotFoundException('Lead not found');
+      }
+      return row;
+    });
+    await this.audit.record(ctx, 'lead.status_update', 'onboarding_lead', leadId, { status });
+    return lead;
+  }
+
+  /** Self-serve landlord registration — no schema change, reuses users/
+   * landlords/accounts/user_role_assignments plus the 0027 onboarding_leads
+   * table. For the "owners who stay very
+   * far" case the product meeting flagged: instead of an in-person
+   * concierge visit, ops emails a link and the landlord sets their own
+   * password and runs the onboarding wizard themselves. The account (plus a
+   * throwaway credential nobody is ever told) is created up front purely so
+   * Better Auth's existing requestPasswordReset flow has something to reset —
+   * reusing that flow end-to-end means no new token/email infra was needed,
+   * just this one trigger. */
+  async inviteLandlord(ctx: RlsContext, input: InviteLandlordInput) {
+    const user = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await client.query('BEGIN');
+      try {
+        const existing = await client.query('SELECT id FROM users WHERE email = $1', [input.email]);
+        if (existing.rows[0]) {
+          throw new ConflictException('A user with this email already exists');
+        }
+        const created = (await client.query(
+          `INSERT INTO users (name, email, phone, role, status, email_verified, phone_verified)
+           VALUES ($1, $2, $3, 'landlord', 'active', true, false)
+           RETURNING id, name, email`,
+          [input.name, input.email, input.phone],
+        )).rows[0] as { id: string; name: string; email: string };
+        await client.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, $2)`, [
+          created.id,
+          input.name,
+        ]);
+        // Never revealed to anyone — its only purpose is giving Better
+        // Auth's password-reset flow a credential row to reset below.
+        const throwawayPassword = crypto.randomBytes(32).toString('hex');
+        await client.query(
+          `INSERT INTO accounts (id, account_id, provider_id, user_id, password)
+           VALUES ($1, $2::text, 'credential', $2::uuid, $3)`,
+          [crypto.randomUUID(), created.id, await hashPassword(throwawayPassword)],
+        );
+        await client.query(
+          `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+           SELECT $1, id, 'own', $2, 'Landlord self-registration invite'
+           FROM roles WHERE key = 'landlord'`,
+          [created.id, ctx.userId],
+        );
+        if (input.leadId) {
+          await client.query(
+            `UPDATE onboarding_leads SET status = 'converted', contacted_by = $2, contacted_at = now()
+             WHERE id = $1`,
+            [input.leadId, ctx.userId],
+          );
+        }
+        await client.query('COMMIT');
+        return created;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
+    });
+    const env = loadEnv();
+    await this.auth.api.requestPasswordReset({
+      body: { email: input.email, redirectTo: `${env.WEB_ORIGIN}/reset-password` },
+    });
+    await this.audit.record(ctx, 'landlord.invite', 'user', user.id, { email: input.email });
+    return user;
   }
 
   async issueStrike(ctx: RlsContext, input: IssueStrikeInput) {

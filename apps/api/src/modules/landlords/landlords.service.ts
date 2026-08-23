@@ -45,6 +45,9 @@ export class LandlordsService {
             userId: ctx.userId,
             legalName: input.legalName,
             idDocStorageKey: input.idDocStorageKey ?? null,
+            whatsappNumber: input.whatsappNumber ?? null,
+            businessType: input.businessType,
+            businessTypeOther: input.businessTypeOther ?? null,
           })
           .returning();
         return row;
@@ -59,6 +62,9 @@ export class LandlordsService {
         .set({
           legalName: input.legalName,
           idDocStorageKey: input.idDocStorageKey ?? existing.idDocStorageKey,
+          whatsappNumber: input.whatsappNumber ?? existing.whatsappNumber,
+          businessType: input.businessType,
+          businessTypeOther: input.businessTypeOther ?? existing.businessTypeOther,
         })
         .where(eq(landlords.userId, ctx.userId))
         .returning();

@@ -1,5 +1,6 @@
 import type {
   Campus,
+  OnboardingLead,
   OpsInspector,
   OpsLandlordKycRow,
   OpsPropertyListing,
@@ -52,4 +53,8 @@ export function getKycQueue(): Promise<OpsLandlordKycRow[]> {
 
 export function getCampuses(): Promise<Campus[]> {
   return apiServer<Campus[]>("/listings/campuses").then((rows) => rows ?? []);
+}
+
+export function getLeadsQueue(): Promise<OnboardingLead[]> {
+  return apiServer<OnboardingLead[]>("/ops/leads").then((rows) => rows ?? []);
 }

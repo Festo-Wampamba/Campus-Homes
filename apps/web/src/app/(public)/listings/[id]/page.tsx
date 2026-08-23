@@ -62,7 +62,7 @@ export default async function ListingDetailPage({
   const needsProfile = isStudent && studentProfile === null;
   const isSaved = savedListings.some((row) => row.id === listingId);
 
-  const { property, version, photos, units, unitPhotos, availability } = detail;
+  const { property, version, photos, units, unitPhotos, availability, propertyMedia } = detail;
   const unitPrices = units.map((u) => u.pricePerTermUgx);
   const minPriceUgx = unitPrices.length > 0 ? Math.min(...unitPrices) : version.pricePerTermUgx;
   const maxPriceUgx = unitPrices.length > 0 ? Math.max(...unitPrices) : version.pricePerTermUgx;
@@ -72,6 +72,15 @@ export default async function ListingDetailPage({
   const orderedPhotos = [...photos].sort(
     (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder,
   );
+  // Gallery-only combined list: Ops-verified inspection photos first, then
+  // the landlord's own whole-property shots (property_media, 0026) — kept
+  // separate from orderedPhotos itself since TrackRecentlyViewed and
+  // RoomCategoryList below expect the real ListingPhoto shape, not this
+  // display-only id+storageKey union.
+  const galleryPhotos: { id: string; storageKey: string }[] = [
+    ...orderedPhotos.map((p) => ({ id: p.id, storageKey: p.storageKey })),
+    ...propertyMedia.map((m) => ({ id: m.id, storageKey: m.storage_key })),
+  ];
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
@@ -79,7 +88,7 @@ export default async function ListingDetailPage({
         id={listingId}
         name={property.name}
         streetAddress={property.street_address}
-        photoStorageKey={orderedPhotos[0]?.storageKey ?? null}
+        photoStorageKey={galleryPhotos[0]?.storageKey ?? null}
         priceUgx={minPriceUgx}
       />
       <BackButton fallbackHref="/search" label="Back" />
@@ -87,6 +96,9 @@ export default async function ListingDetailPage({
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl tracking-[-0.035em] sm:text-4xl">{property.name}</h1>
         <VerifiedBadge />
+        <Link href="/#verified" className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
+          What does Verified mean?
+        </Link>
         {isStudent && (
           <div className="ml-auto">
             <SaveButton listingId={listingId} initialSaved={isSaved} />
@@ -101,18 +113,19 @@ export default async function ListingDetailPage({
           e-commerce product image + buy box. */}
       <div className="mt-7 grid gap-10 lg:grid-cols-[1fr_minmax(0,24rem)] lg:items-start">
         <div>
-          {/* Photos — inspector-captured, EXIF-verified server-side */}
+          {/* Photos — inspector-captured (EXIF-verified) plus the
+              landlord's own whole-property shots (property_media, 0026) */}
           <div className="mb-8">
-            {orderedPhotos.length === 0 ? (
+            {galleryPhotos.length === 0 ? (
               <div className="flex h-72 items-center justify-center rounded-2xl bg-teal-50 text-muted-foreground">
                 <span className="inline-flex items-center gap-2 text-sm">
                   <Camera aria-hidden className="size-4" />
-                  Inspection photos coming soon
+                  Photos coming soon
                 </span>
               </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-3 sm:grid-rows-2">
-                {orderedPhotos.slice(0, 5).map((photo, i) => {
+                {galleryPhotos.slice(0, 5).map((photo, i) => {
                   const url = listingPhotoUrl(photo.storageKey, i === 0 ? 1200 : 600);
                   return (
                     <div
@@ -126,7 +139,7 @@ export default async function ListingDetailPage({
                       {url ? (
                         <Image
                           src={url}
-                          alt={`${property.name} — inspection photo ${i + 1}`}
+                          alt={`${property.name} — photo ${i + 1}`}
                           fill
                           sizes={i === 0 ? "(min-width: 640px) 66vw, 100vw" : "33vw"}
                           className="object-cover"

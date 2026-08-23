@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   date,
   jsonb,
   numeric,
@@ -67,6 +68,48 @@ export const properties = pgTable('properties', {
   houseRules: jsonb('house_rules').notNull().default([]),
   contactPhone: text('contact_phone'),
   contactEmail: text('contact_email'),
+  // Landlord & Property Registration Form parity (0025) — the rest of this
+  // table mirrors the Google Form's Property Details / Location / Authority /
+  // Room Information / Security / Accessibility / Consent sections. All
+  // text + CHECK or plain jsonb, not pgEnum, matching operationalStatus above.
+  alternativeName: text('alternative_name'),
+  genderArrangement: text('gender_arrangement'),
+  // Multi-select "Other Universities Served" — catchment above stays the
+  // single primary one search/browse already key off; this is informational.
+  otherCatchments: jsonb('other_catchments').notNull().default([]),
+  // Combined "Country, District, Village/Zone, Nearest Landmark" free text —
+  // the Google Form asks this as one field, distinct from streetAddress.
+  locationDetails: text('location_details'),
+  authorityRole: text('authority_role'),
+  authorityRoleOther: text('authority_role_other'),
+  transportShuttle: boolean('transport_shuttle').notNull().default(false),
+  advanceRentRequired: boolean('advance_rent_required').notNull().default(false),
+  bookingFeePercent: smallint('booking_fee_percent'),
+  rentPeriod: text('rent_period'),
+  rentPeriodOther: text('rent_period_other'),
+  // Distinct from `utilities` above (water/electricity/internet/waste
+  // status) — the Google Form's furnishing checklist (bathroom/kitchen/
+  // mattress/wardrobe/...), a different concept that just shares a word.
+  furnishingItems: jsonb('furnishing_items').notNull().default({}),
+  securityFeatures: jsonb('security_features').notNull().default({}),
+  accessibilityFeatures: jsonb('accessibility_features').notNull().default({}),
+  photographyConsent: boolean('photography_consent').notNull().default(false),
+  // Aggregate counts declared at registration — informational, like
+  // proposedRoomCategories, not tied 1:1 to real units (which don't exist
+  // until Ops publishes).
+  selfContainedRoomCount: smallint('self_contained_room_count'),
+  nonSelfContainedRoomCount: smallint('non_self_contained_room_count'),
+  // The landlord's own 5-item consent (Google Form Section 12) — mirrors
+  // TENANT_AGREEMENT_DECLARATION_TEXT's pattern but as 5 discrete checkboxes
+  // instead of one block, matching the source form. No backfill-true for
+  // existing rows (unlike tenant_agreements' declaration_accepted): those
+  // properties never actually attested to this, so false is the honest
+  // default, not a retroactive claim of consent.
+  declaredInfoAccurate: boolean('declared_info_accurate').notNull().default(false),
+  declaredAuthorityOverProperty: boolean('declared_authority_over_property').notNull().default(false),
+  declaredWillKeepUpdated: boolean('declared_will_keep_updated').notNull().default(false),
+  declaredAuthorizesPublish: boolean('declared_authorizes_publish').notNull().default(false),
+  declaredConsentToProcessing: boolean('declared_consent_to_processing').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

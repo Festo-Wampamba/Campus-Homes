@@ -2,7 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { STATIC_TENANT_AGREEMENT_FIELD_TYPES, type TenantAgreementTemplate } from "@campushomes/shared";
+import {
+  STATIC_TENANT_AGREEMENT_FIELD_TYPES,
+  TENANT_AGREEMENT_DECLARATION_TEXT,
+  type TenantAgreementTemplate,
+} from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +30,7 @@ export function TenantAgreementForm({
   // Drawing is the default — most students scanning a QR posted at the
   // property are on a phone. Typing the name is the explicit fallback for
   // when drawing isn't practical.
+  const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [signatureMode, setSignatureMode] = useState<"drawn" | "typed">("drawn");
   const [signedName, setSignedName] = useState("");
   const signaturePadRef = useRef<SignaturePadHandle>(null);
@@ -48,6 +53,10 @@ export function TenantAgreementForm({
         setError(`"${field.label}" is required.`);
         return;
       }
+    }
+    if (!declarationAccepted) {
+      setError("You must accept the declaration to submit.");
+      return;
     }
     if (signatureMode === "typed" && signedName.trim().length < 2) {
       setError("Type your full name to sign.");
@@ -79,6 +88,7 @@ export function TenantAgreementForm({
           responses: template.fields
             .filter((f) => !STATIC_TENANT_AGREEMENT_FIELD_TYPES.has(f.fieldType) && answers[f.id] !== undefined)
             .map((f) => ({ fieldId: f.id, value: answers[f.id] })),
+          declarationAccepted: true,
           signature,
         }),
       });
@@ -100,6 +110,22 @@ export function TenantAgreementForm({
           onChange={(value) => setAnswer(field.id, value)}
         />
       ))}
+
+      <div className="space-y-2 border-t border-border pt-4">
+        <p className="text-sm font-semibold text-foreground">Declaration</p>
+        <label className="flex items-start gap-2.5 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={declarationAccepted}
+            onChange={(e) => setDeclarationAccepted(e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 rounded border-input"
+          />
+          <span>
+            {TENANT_AGREEMENT_DECLARATION_TEXT}
+            <span className="ml-0.5 text-destructive">*</span>
+          </span>
+        </label>
+      </div>
 
       <div className="space-y-2 border-t border-border pt-4">
         <p className="text-sm font-semibold text-foreground">Sign to finish</p>

@@ -10,6 +10,7 @@ const PRODUCT_LINKS = [
   { href: "/search", label: "Find a room" },
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#verified", label: "How we verify" },
+  { href: "/support", label: "Support" },
   { href: "/sign-in", label: "Student sign in" },
 ];
 
@@ -95,7 +96,7 @@ async function SiteFooter() {
                 </li>
               )}
               <li>
-                <Link href="/#landlords" className="transition-colors duration-300 hover:text-white">
+                <Link href="/landlords" className="transition-colors duration-300 hover:text-white">
                   List your hostel
                 </Link>
               </li>

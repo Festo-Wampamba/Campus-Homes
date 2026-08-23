@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type {
   ListingSearchInput,
   SubmitPropertyInput,
+  UnitOperationalStatus,
   UpdatePropertyInput,
 } from '@campushomes/shared';
 
@@ -16,6 +17,7 @@ import {
   listings,
   properties,
   propertyDocuments,
+  propertyMedia,
   reservations,
   unitPhotos,
   units,
@@ -25,6 +27,13 @@ import {
  * cancelled/refunded/expired holds free the room back up. Mirrors the
  * `reservations_one_live_hold_per_unit` partial unique index (0001). */
 const LIVE_RESERVATION_STATUSES = ['held', 'payment_pending', 'fulfilled'] as const;
+
+/** units.operational_status values that make a room unavailable independent
+ * of any reservation — the manual side of occupancy (0024): a tenant found
+ * outside the reservation flow, or a room pulled for maintenance, has no
+ * `reservations` row at all, so LIVE_RESERVATION_STATUSES alone can't catch
+ * it. 'available'/'vacant' both mean free and are deliberately excluded. */
+const UNAVAILABLE_OPERATIONAL_STATUSES = ['held', 'occupied', 'blocked', 'under_maintenance'] as const;
 
 /** Anonymous/public reads: RLS only exposes `status = 'verified'` rows to a
  * non-ops, non-owner identity, so the nil uuid sees exactly the public set. */
@@ -81,13 +90,35 @@ export class ListingsService {
         .values({
           landlordId: ctx.userId,
           name: input.name,
+          alternativeName: input.alternativeName,
           streetAddress: input.streetAddress,
+          locationDetails: input.locationDetails,
           type: input.type,
+          genderArrangement: input.genderArrangement,
           catchment: input.catchment,
+          otherCatchments: input.otherCatchments,
           status: 'active',
           proposedRoomCategories: input.proposedRoomCategories,
           proposedAmenities: input.proposedAmenities,
+          furnishingItems: input.furnishingItems,
+          securityFeatures: input.securityFeatures,
+          accessibilityFeatures: input.accessibilityFeatures,
+          photographyConsent: input.photographyConsent,
+          selfContainedRoomCount: input.selfContainedRoomCount,
+          nonSelfContainedRoomCount: input.nonSelfContainedRoomCount,
+          transportShuttle: input.transportShuttle,
+          advanceRentRequired: input.advanceRentRequired,
+          bookingFeePercent: input.bookingFeePercent,
+          rentPeriod: input.rentPeriod,
+          rentPeriodOther: input.rentPeriodOther,
+          authorityRole: input.authorityRole,
+          authorityRoleOther: input.authorityRoleOther,
           coverPhotoKey: input.coverPhotoKey,
+          declaredInfoAccurate: input.declaredInfoAccurate,
+          declaredAuthorityOverProperty: input.declaredAuthorityOverProperty,
+          declaredWillKeepUpdated: input.declaredWillKeepUpdated,
+          declaredAuthorizesPublish: input.declaredAuthorizesPublish,
+          declaredConsentToProcessing: input.declaredConsentToProcessing,
         })
         .returning();
       return property;
@@ -134,6 +165,14 @@ export class ListingsService {
         throw new NotFoundException('Property not found');
       }
 
+      // Independent of whether a listing exists yet — a landlord can add
+      // whole-property gallery photos before Ops ever publishes anything.
+      const propertyMediaRows = await db
+        .select({ id: propertyMedia.id, storageKey: propertyMedia.storageKey })
+        .from(propertyMedia)
+        .where(and(eq(propertyMedia.propertyId, propertyId), eq(propertyMedia.mediaType, 'image')))
+        .orderBy(asc(propertyMedia.sortOrder));
+
       // Prefer the currently-live verified listing (it's the one with real
       // rooms) over a newer re-verification draft, which starts with zero
       // units until Ops publishes it — picking "most recent by createdAt"
@@ -157,7 +196,7 @@ export class ListingsService {
             .limit(1);
 
       if (!listing) {
-        return { property, listing: null, photos: [], rooms: [] };
+        return { property, listing: null, photos: [], rooms: [], propertyMedia: propertyMediaRows };
       }
 
       const [version] = listing.currentVersionId
@@ -214,6 +253,7 @@ export class ListingsService {
           pricePerTermUgx: version?.pricePerTermUgx ?? null,
         },
         photos: photoRows.map((p) => p.storageKey),
+        propertyMedia: propertyMediaRows,
         rooms: roomRows.map((u) => ({
           id: u.id,
           label: u.label,
@@ -221,6 +261,7 @@ export class ListingsService {
           roomCategory: u.roomCategory,
           pricePerTermUgx: u.pricePerTermUgx,
           depositUgx: u.depositUgx,
+          operationalStatus: u.operationalStatus,
           reservationStatus: statusByUnit.get(u.id) ?? null,
           photos: photosByUnit.get(u.id) ?? [],
         })),
@@ -243,6 +284,53 @@ export class ListingsService {
         .values({ unitId, storageKey, uploadedBy: ctx.userId })
         .returning();
       return photo;
+    });
+  }
+
+  /** Whole-property gallery photos — distinct from listing_photos (Ops-only,
+   * EXIF/GPS-verified during a visit) and unit_photos (per-room). Landlords
+   * get a real write surface here (property_media_landlord_insert/_delete,
+   * 0026) precisely because property_media never had the ops_staff FK
+   * listing_photos does — it was already structurally landlord-shaped,
+   * just never wired to a landlord endpoint or the public gallery before. */
+  addPropertyMedia(ctx: RlsContext, propertyId: string, storageKey: string) {
+    return this.rlsDb.run(ctx, async (db) => {
+      const [media] = await db
+        .insert(propertyMedia)
+        .values({ propertyId, storageKey, mediaType: 'image', uploadedBy: ctx.userId })
+        .returning();
+      return media;
+    });
+  }
+
+  removePropertyMedia(ctx: RlsContext, mediaId: string) {
+    return this.rlsDb.run(ctx, async (db) => {
+      const [media] = await db
+        .delete(propertyMedia)
+        .where(eq(propertyMedia.id, mediaId))
+        .returning();
+      if (!media) {
+        throw new NotFoundException('Photo not found');
+      }
+      return { ok: true };
+    });
+  }
+
+  /** A landlord flipping a room's status by hand — the only unit field they
+   * can write (0024: column-restricted UPDATE grant). Covers a tenant found
+   * outside the reservation flow: without this, an off-platform let has no
+   * way to stop the room from still showing as available to students. */
+  updateUnitOperationalStatus(ctx: RlsContext, unitId: string, operationalStatus: UnitOperationalStatus) {
+    return this.rlsDb.run(ctx, async (db) => {
+      const [unit] = await db
+        .update(units)
+        .set({ operationalStatus })
+        .where(eq(units.id, unitId))
+        .returning();
+      if (!unit) {
+        throw new NotFoundException('Unit not found');
+      }
+      return unit;
     });
   }
 
@@ -315,6 +403,13 @@ export class ListingsService {
       // lv.price_per_term_ugx is the *cheapest* room category (computed at
       // publish time, ops.service.ts) — "starting from", not the only price;
       // room_categories carries the full per-category breakdown for display.
+      // min/max capacity, unit_count and room_categories all exclude units
+      // with a live reservation (LIVE_RESERVATION_STATUSES) or a manually-set
+      // unavailable operational_status (UNAVAILABLE_OPERATIONAL_STATUSES,
+      // 0024 — catches a room let outside the reservation flow entirely) — a
+      // search result must never advertise rooms that are already
+      // held/paid/occupied, and a listing with nothing left to reserve is
+      // excluded entirely below.
       const res = await client.query(
         `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
                 lv.id AS version_id, lv.price_per_term_ugx, lv.amenities, lv.description,
@@ -333,9 +428,15 @@ export class ListingsService {
            LIMIT 1
          ) ph ON true
          LEFT JOIN LATERAL (
-           SELECT MIN(capacity) AS min_capacity, MAX(capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, MAX(price_per_term_ugx) AS max_price
-           FROM units WHERE listing_id = l.id
+           SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
+                  COUNT(*) AS unit_count, MAX(un.price_per_term_ugx) AS max_price
+           FROM units un
+           WHERE un.listing_id = l.id
+             AND un.operational_status <> ALL($11::text[])
+             AND NOT EXISTS (
+               SELECT 1 FROM reservations r
+               WHERE r.unit_id = un.id AND r.status = ANY($10::text[])
+             )
          ) u ON true
          LEFT JOIN LATERAL (
            SELECT jsonb_agg(
@@ -346,9 +447,15 @@ export class ListingsService {
                     ) ORDER BY price_per_term_ugx ASC
                   ) AS categories
            FROM (
-             SELECT room_category AS category, price_per_term_ugx, COUNT(*) AS unit_count
-             FROM units WHERE listing_id = l.id
-             GROUP BY room_category, price_per_term_ugx
+             SELECT un.room_category AS category, un.price_per_term_ugx, COUNT(*) AS unit_count
+             FROM units un
+             WHERE un.listing_id = l.id
+               AND un.operational_status <> ALL($11::text[])
+               AND NOT EXISTS (
+                 SELECT 1 FROM reservations r
+                 WHERE r.unit_id = un.id AND r.status = ANY($10::text[])
+               )
+             GROUP BY un.room_category, un.price_per_term_ugx
            ) grouped
          ) rc ON true
          WHERE l.status = 'verified'
@@ -357,6 +464,7 @@ export class ListingsService {
            AND ($6::int IS NULL OR lv.price_per_term_ugx >= $6)
            AND ($7::int IS NULL OR u.max_capacity >= $7)
            AND ($8::text IS NULL OR p.name ILIKE '%' || $8 || '%')
+           AND COALESCE(u.unit_count, 0) > 0
          ORDER BY lv.price_per_term_ugx ASC
          LIMIT $9`,
         [
@@ -369,6 +477,8 @@ export class ListingsService {
           input.minCapacity ?? null,
           input.q ?? null,
           input.limit,
+          LIVE_RESERVATION_STATUSES,
+          UNAVAILABLE_OPERATIONAL_STATUSES,
         ],
       );
       return res.rows as unknown[];
@@ -410,16 +520,26 @@ export class ListingsService {
       // unit look free. Only a boolean per unit leaves this query. The
       // property row rides along for the same reason (no public SELECT on
       // properties) — name/address/GPS of a verified listing are public data.
-      const { availability, property } = await this.rlsDb.run(
+      const { availability, property, propertyMedia } = await this.rlsDb.run(
         SERVICE_CTX,
         async (_db, client) => {
+          // Bug fixed here: this used to only check status = 'held', so a
+          // unit with a 'payment_pending' or already-'fulfilled' reservation
+          // still showed as available to a browsing student — matches
+          // LIVE_RESERVATION_STATUSES now, same set the owner-facing detail
+          // query (above) and search() already use. Also now checks
+          // operational_status (0024) — a unit taken outside the reservation
+          // flow entirely has no reservations row to catch it otherwise.
           const availRes = await client.query(
-            `SELECT u.id, NOT EXISTS (
-               SELECT 1 FROM reservations r
-               WHERE r.unit_id = u.id AND r.status = 'held'
+            `SELECT u.id, (
+               NOT EXISTS (
+                 SELECT 1 FROM reservations r
+                 WHERE r.unit_id = u.id AND r.status = ANY($2::text[])
+               )
+               AND u.operational_status <> ALL($3::text[])
              ) AS available
              FROM units u WHERE u.listing_id = $1`,
-            [listingId],
+            [listingId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES],
           );
           // Custodian contact rides along here too — landlords has no public
           // SELECT policy either, and a student deciding whether to reserve
@@ -433,6 +553,19 @@ export class ListingsService {
              WHERE p.id = $1`,
             [detail.listing.propertyId],
           );
+          // Property-level gallery photos — distinct from listing_photos
+          // (Ops-only, EXIF/GPS-verified during a visit) and unit_photos
+          // (per-room). property_media has no ops_staff FK, so it's the
+          // landlord's own write surface for whole-property shots; property_
+          // media has no public SELECT policy either (svc_all only, 0013),
+          // hence reading it here alongside everything else on this ctx.
+          const mediaRes = await client.query(
+            `SELECT id, storage_key, caption
+             FROM property_media
+             WHERE property_id = $1 AND media_type = 'image'
+             ORDER BY sort_order, created_at`,
+            [detail.listing.propertyId],
+          );
           return {
             availability: availRes.rows as { id: string; available: boolean }[],
             property: propRes.rows[0] as {
@@ -444,10 +577,11 @@ export class ListingsService {
               custodian_name: string;
               custodian_phone: string | null;
             },
+            propertyMedia: mediaRes.rows as { id: string; storage_key: string; caption: string | null }[],
           };
         },
       );
-      return { ...detail, property, availability };
+      return { ...detail, property, availability, propertyMedia };
     });
   }
 

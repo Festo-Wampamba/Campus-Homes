@@ -4,11 +4,13 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   AddPropertyDocumentDto,
+  AddPropertyMediaDto,
   AddUnitPhotoDto,
   CreateDraftListingDto,
   ListingSearchDto,
   SubmitPropertyDto,
   UpdatePropertyDto,
+  UpdateUnitOperationalStatusDto,
 } from './listings.dto';
 import { ListingsService } from './listings.service';
 
@@ -130,5 +132,38 @@ export class ListingsController {
   @Roles('landlord')
   removeUnitPhoto(@Req() req: AuthenticatedRequest, @Param('photoId', ParseUUIDPipe) photoId: string) {
     return this.listings.removeUnitPhoto(rlsCtx(req), photoId);
+  }
+
+  // Whole-property gallery photos (0026) — distinct from units/:id/photos
+  // (per-room) and Ops-only listing photos.
+  @Post('properties/:id/media')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  addPropertyMedia(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) propertyId: string,
+    @Body() body: AddPropertyMediaDto,
+  ) {
+    return this.listings.addPropertyMedia(rlsCtx(req), propertyId, body.storageKey);
+  }
+
+  @Delete('properties/media/:mediaId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  removePropertyMedia(@Req() req: AuthenticatedRequest, @Param('mediaId', ParseUUIDPipe) mediaId: string) {
+    return this.listings.removePropertyMedia(rlsCtx(req), mediaId);
+  }
+
+  // Marks a room taken/free by hand — the landlord's one lever for a tenant
+  // who never went through our own reservation flow (0024).
+  @Patch('units/:id/operational-status')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  updateUnitOperationalStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) unitId: string,
+    @Body() body: UpdateUnitOperationalStatusDto,
+  ) {
+    return this.listings.updateUnitOperationalStatus(rlsCtx(req), unitId, body.operationalStatus);
   }
 }

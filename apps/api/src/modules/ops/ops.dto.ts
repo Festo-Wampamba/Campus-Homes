@@ -3,12 +3,15 @@ import { createZodDto } from 'nestjs-zod';
 import {
   addListingPhotosSchema,
   createOpsDraftListingSchema,
+  inviteLandlordSchema,
   issueStrikeSchema,
   opsKycDecisionSchema,
   publishListingSchema,
   scheduleVisitSchema,
   setCampusPhotoSchema,
   syncVisitSchema,
+  updateOnboardingLeadSchema,
+  updateUnitOperationalStatusSchema,
 } from '@campushomes/shared';
 
 export class ScheduleVisitDto extends createZodDto(scheduleVisitSchema) {}
@@ -19,3 +22,6 @@ export class IssueStrikeDto extends createZodDto(issueStrikeSchema) {}
 export class OpsKycDecisionDto extends createZodDto(opsKycDecisionSchema) {}
 export class SetCampusPhotoDto extends createZodDto(setCampusPhotoSchema) {}
 export class CreateOpsDraftListingDto extends createZodDto(createOpsDraftListingSchema) {}
+export class UpdateUnitOperationalStatusDto extends createZodDto(updateUnitOperationalStatusSchema) {}
+export class UpdateLeadStatusDto extends createZodDto(updateOnboardingLeadSchema) {}
+export class InviteLandlordDto extends createZodDto(inviteLandlordSchema) {}

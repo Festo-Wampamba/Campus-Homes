@@ -66,6 +66,33 @@ export const CATCHMENTS = ['MUK', 'MUBS', 'KIU', 'KYU', 'all'] as const;
 export const KYC_STATUSES = ['pending', 'verified', 'rejected'] as const;
 export const TOKEN_TYPES = ['phone_otp', 'step_up_otp'] as const;
 
+// Landlord & Property Registration Form parity (0025) — mirrors the
+// Google Form's "How do you operate this accommodation?" options.
+export const LANDLORD_BUSINESS_TYPES = [
+  'individual_landlord',
+  'joint_owners',
+  'family_business',
+  'registered_company',
+  'partnership',
+  'hostel_management_company',
+  'property_agent',
+  'university',
+  'religious_organisation',
+  'other',
+] as const;
+export const PROPERTY_AUTHORITY_ROLES = [
+  'owner',
+  'joint_owner',
+  'property_manager',
+  'caretaker',
+  'agent',
+  'family_representative',
+  'tenant_allowed_to_sublet',
+  'other',
+] as const;
+export const GENDER_ARRANGEMENTS = ['male_only', 'female_only', 'mixed'] as const;
+export const RENT_PERIODS = ['monthly', 'per_semester', 'other'] as const;
+
 export const PROPERTY_TYPES = [
   'hostel',
   'apartment',
@@ -169,3 +196,7 @@ export type VerificationChecklistComponent = (typeof VERIFICATION_CHECKLIST_COMP
 export type VisitResult = (typeof VISIT_RESULTS)[number];
 export type StrikeReason = (typeof STRIKE_REASONS)[number];
 export type LedgerAccountType = (typeof LEDGER_ACCOUNT_TYPES)[number];
+export type LandlordBusinessType = (typeof LANDLORD_BUSINESS_TYPES)[number];
+export type PropertyAuthorityRole = (typeof PROPERTY_AUTHORITY_ROLES)[number];
+export type GenderArrangement = (typeof GENDER_ARRANGEMENTS)[number];
+export type RentPeriod = (typeof RENT_PERIODS)[number];

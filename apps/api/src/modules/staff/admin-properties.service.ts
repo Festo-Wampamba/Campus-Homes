@@ -40,21 +40,42 @@ export class AdminPropertiesService {
         // admin-created properties for an already-verified landlord stuck at
         // 'pending_kyc' forever, since decideKyc()'s flip only fires for
         // properties that already existed at the moment of approval.
+        const status = landlord.kycStatus === 'verified' ? 'active' : 'pending_kyc';
         const property = (await client.query(`
           INSERT INTO properties (
-            landlord_id, name, street_address, type, catchment, status,
+            landlord_id, name, alternative_name, street_address, location_details,
+            type, gender_arrangement, catchment, other_catchments, status,
             description, operational_status, amenities, utilities, house_rules,
-            contact_phone, contact_email, proposed_amenities, cover_photo_key
+            contact_phone, contact_email, proposed_amenities, cover_photo_key,
+            furnishing_items, security_features, accessibility_features, photography_consent,
+            self_contained_room_count, non_self_contained_room_count,
+            transport_shuttle, advance_rent_required, booking_fee_percent,
+            rent_period, rent_period_other, authority_role, authority_role_other,
+            declared_info_accurate, declared_authority_over_property,
+            declared_will_keep_updated, declared_authorizes_publish, declared_consent_to_processing
           ) VALUES (
-            $1, $2, $3, $4::property_type, $5::university, $14::property_status,
-            $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $8::jsonb, $13
+            $1, $2, $3, $4, $5,
+            $6::property_type, $7, $8::university, $9::jsonb, $10::property_status,
+            $11, $12, $13::jsonb, $14::jsonb, $15::jsonb,
+            $16, $17, $13::jsonb, $18,
+            $19::jsonb, $20::jsonb, $21::jsonb, $22,
+            $23, $24,
+            $25, $26, $27,
+            $28, $29, $30, $31,
+            $32, $33,
+            $34, $35, $36
           ) RETURNING id, name, status::text, operational_status AS "operationalStatus"
         `, [
           input.landlordId,
           input.name,
+          input.alternativeName ?? null,
           input.streetAddress,
+          input.locationDetails ?? null,
           input.type,
+          input.genderArrangement ?? null,
           input.catchment,
+          JSON.stringify(input.otherCatchments),
+          status,
           input.description ?? null,
           input.operationalStatus,
           JSON.stringify(input.amenities),
@@ -63,7 +84,24 @@ export class AdminPropertiesService {
           input.contactPhone ?? null,
           input.contactEmail || null,
           input.coverPhotoKey ?? null,
-          landlord.kycStatus === 'verified' ? 'active' : 'pending_kyc',
+          JSON.stringify(input.furnishingItems),
+          JSON.stringify(input.securityFeatures),
+          JSON.stringify(input.accessibilityFeatures),
+          input.photographyConsent,
+          input.selfContainedRoomCount ?? null,
+          input.nonSelfContainedRoomCount ?? null,
+          input.transportShuttle,
+          input.advanceRentRequired,
+          input.bookingFeePercent ?? null,
+          input.rentPeriod ?? null,
+          input.rentPeriodOther ?? null,
+          input.authorityRole ?? null,
+          input.authorityRoleOther ?? null,
+          input.declaredInfoAccurate,
+          input.declaredAuthorityOverProperty,
+          input.declaredWillKeepUpdated,
+          input.declaredAuthorizesPublish,
+          input.declaredConsentToProcessing,
         ])).rows[0]!;
 
         await client.query(`
@@ -107,7 +145,23 @@ export class AdminPropertiesService {
         SELECT p.*, p.street_address AS "streetAddress", p.landlord_id AS "landlordId",
                p.operational_status AS "operationalStatus", p.house_rules AS "houseRules",
                p.contact_phone AS "contactPhone", p.contact_email AS "contactEmail",
-               p.cover_photo_key AS "coverPhotoKey", u.name AS "landlordName", u.email AS "landlordEmail"
+               p.cover_photo_key AS "coverPhotoKey",
+               p.alternative_name AS "alternativeName", p.location_details AS "locationDetails",
+               p.gender_arrangement AS "genderArrangement", p.other_catchments AS "otherCatchments",
+               p.authority_role AS "authorityRole", p.authority_role_other AS "authorityRoleOther",
+               p.transport_shuttle AS "transportShuttle", p.advance_rent_required AS "advanceRentRequired",
+               p.booking_fee_percent AS "bookingFeePercent", p.rent_period AS "rentPeriod",
+               p.rent_period_other AS "rentPeriodOther", p.furnishing_items AS "furnishingItems",
+               p.security_features AS "securityFeatures", p.accessibility_features AS "accessibilityFeatures",
+               p.photography_consent AS "photographyConsent",
+               p.self_contained_room_count AS "selfContainedRoomCount",
+               p.non_self_contained_room_count AS "nonSelfContainedRoomCount",
+               p.declared_info_accurate AS "declaredInfoAccurate",
+               p.declared_authority_over_property AS "declaredAuthorityOverProperty",
+               p.declared_will_keep_updated AS "declaredWillKeepUpdated",
+               p.declared_authorizes_publish AS "declaredAuthorizesPublish",
+               p.declared_consent_to_processing AS "declaredConsentToProcessing",
+               u.name AS "landlordName", u.email AS "landlordEmail"
         FROM properties p JOIN users u ON u.id = p.landlord_id WHERE p.id = $1
       `, [propertyId])).rows[0];
       if (!property) throw new NotFoundException('Property not found');
@@ -147,13 +201,35 @@ export class AdminPropertiesService {
     const columnMap: Record<string, { column: string; cast?: string; json?: boolean }> = {
       landlordId: { column: 'landlord_id' },
       name: { column: 'name' },
+      alternativeName: { column: 'alternative_name' },
       streetAddress: { column: 'street_address' },
+      locationDetails: { column: 'location_details' },
       type: { column: 'type', cast: '::property_type' },
+      genderArrangement: { column: 'gender_arrangement' },
       catchment: { column: 'catchment', cast: '::university' },
+      otherCatchments: { column: 'other_catchments', cast: '::jsonb', json: true },
       description: { column: 'description' },
       operationalStatus: { column: 'operational_status' },
       amenities: { column: 'amenities', cast: '::jsonb', json: true },
       utilities: { column: 'utilities', cast: '::jsonb', json: true },
+      furnishingItems: { column: 'furnishing_items', cast: '::jsonb', json: true },
+      securityFeatures: { column: 'security_features', cast: '::jsonb', json: true },
+      accessibilityFeatures: { column: 'accessibility_features', cast: '::jsonb', json: true },
+      photographyConsent: { column: 'photography_consent' },
+      selfContainedRoomCount: { column: 'self_contained_room_count' },
+      nonSelfContainedRoomCount: { column: 'non_self_contained_room_count' },
+      transportShuttle: { column: 'transport_shuttle' },
+      advanceRentRequired: { column: 'advance_rent_required' },
+      bookingFeePercent: { column: 'booking_fee_percent' },
+      rentPeriod: { column: 'rent_period' },
+      rentPeriodOther: { column: 'rent_period_other' },
+      authorityRole: { column: 'authority_role' },
+      authorityRoleOther: { column: 'authority_role_other' },
+      declaredInfoAccurate: { column: 'declared_info_accurate' },
+      declaredAuthorityOverProperty: { column: 'declared_authority_over_property' },
+      declaredWillKeepUpdated: { column: 'declared_will_keep_updated' },
+      declaredAuthorizesPublish: { column: 'declared_authorizes_publish' },
+      declaredConsentToProcessing: { column: 'declared_consent_to_processing' },
       houseRules: { column: 'house_rules', cast: '::jsonb', json: true },
       contactPhone: { column: 'contact_phone' },
       contactEmail: { column: 'contact_email' },

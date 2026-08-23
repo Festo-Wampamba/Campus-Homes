@@ -2,7 +2,13 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { BedDouble, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
-import type { Property, PropertyDetail, TenantAgreementForPropertyRow } from "@campushomes/shared";
+import {
+  UNIT_OPERATIONAL_STATUSES,
+  type Property,
+  type PropertyDetail,
+  type TenantAgreementForPropertyRow,
+  type UnitOperationalStatus,
+} from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogHeader } from "@/components/ui/dialog";
@@ -30,6 +36,15 @@ const PROPERTY_STATUS_LABEL: Record<string, string> = {
   pending_kyc: "Awaiting verification",
   active: "Active",
   suspended: "Suspended",
+};
+
+const OPERATIONAL_STATUS_LABEL: Record<UnitOperationalStatus, string> = {
+  available: "Available",
+  vacant: "Vacant",
+  held: "Held (manual)",
+  occupied: "Taken off-platform",
+  under_maintenance: "Maintenance",
+  blocked: "Blocked",
 };
 
 function RoomStats({
@@ -152,6 +167,9 @@ function TenantAgreementsList({ propertyId }: { propertyId: string }) {
                       </p>
                     </div>
                   ))}
+                  <p className="text-xs text-muted-foreground">
+                    {a.declaration_accepted ? "Declaration accepted" : "Declaration not recorded"}
+                  </p>
                   {signatureUrl && (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground">Signature</p>
@@ -184,6 +202,158 @@ function reservationChip(status: PropertyDetail["rooms"][number]["reservationSta
     default:
       return <StatusChip tone="success">Available</StatusChip>;
   }
+}
+
+/** Lets the landlord flip a room's status by hand — the fix for the
+ * off-platform-tenant gap: `reservationStatus` above only ever reflects a
+ * reservation made through CampusHomes, so a room let directly (no
+ * reservations row at all) had no way to stop showing as available to
+ * students. Independent of the reservation column: a room can be
+ * `operationalStatus: "occupied"` with no reservation, or vice versa. */
+function RoomOccupancyControl({
+  room,
+  onChange,
+}: {
+  room: PropertyDetail["rooms"][number];
+  onChange: (operationalStatus: UnitOperationalStatus) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleChange(value: UnitOperationalStatus) {
+    setError(null);
+    setSaving(true);
+    try {
+      await api(`/listings/units/${room.id}/operational-status`, {
+        method: "PATCH",
+        body: JSON.stringify({ operationalStatus: value }),
+      });
+      onChange(value);
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't update this room's status — try again."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        value={room.operationalStatus}
+        disabled={saving}
+        onChange={(e) => void handleChange(e.target.value as UnitOperationalStatus)}
+        className="h-8 rounded-md border border-input bg-background px-1.5 text-xs text-foreground disabled:opacity-60"
+      >
+        {UNIT_OPERATIONAL_STATUSES.map((status) => (
+          <option key={status} value={status}>
+            {OPERATIONAL_STATUS_LABEL[status]}
+          </option>
+        ))}
+      </select>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  );
+}
+
+/** Whole-property gallery — distinct from RoomPhotoManager (per-room) below
+ * and from the Ops-captured "Verification photos" (read-only, EXIF-verified
+ * at inspection time). This is the landlord's own write surface for
+ * whole-property shots (property_media, 0026), shown publicly alongside the
+ * inspection gallery on the listing detail page. */
+function PropertyMediaManager({
+  propertyId,
+  media,
+  onMediaChange,
+}: {
+  propertyId: string;
+  media: PropertyDetail["propertyMedia"];
+  onMediaChange: (media: PropertyDetail["propertyMedia"]) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleUpload(file: File) {
+    setError(null);
+    setUploading(true);
+    try {
+      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+      const { publicId } = await uploadToCloudinary(file, sig);
+      const created = await api<{ id: string; storageKey: string }>(
+        `/listings/properties/${propertyId}/media`,
+        { method: "POST", body: JSON.stringify({ storageKey: publicId }) },
+      );
+      onMediaChange([...media, { id: created.id, storageKey: created.storageKey }]);
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't upload this photo — try again."));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleRemove(mediaId: string) {
+    setError(null);
+    setRemovingId(mediaId);
+    try {
+      await api(`/listings/properties/media/${mediaId}`, { method: "DELETE" });
+      onMediaChange(media.filter((m) => m.id !== mediaId));
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't remove this photo — try again."));
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase">
+        Property photos ({media.length})
+      </p>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Shown publicly on this property&apos;s listing page — separate from each room&apos;s own photos.
+      </p>
+      {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+      {media.length > 0 && (
+        <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {media.map((item) => {
+            const url = listingPhotoUrl(item.storageKey, 300);
+            return (
+              <div key={item.id} className="group relative">
+                {url && (
+                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
+                  <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+                )}
+                <button
+                  type="button"
+                  aria-label="Remove photo"
+                  disabled={removingId === item.id}
+                  onClick={() => handleRemove(item.id)}
+                  className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
+                >
+                  <X aria-hidden className="size-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-teal-700">
+        <Camera aria-hidden className="size-4" />
+        {uploading ? "Uploading…" : "Add a property photo"}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void handleUpload(file);
+          }}
+        />
+      </label>
+    </div>
+  );
 }
 
 /** Inline expanded panel under a room row — upload a photo for this specific
@@ -348,6 +518,18 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
     );
   }
 
+  function setRoomOperationalStatus(roomId: string, operationalStatus: UnitOperationalStatus) {
+    setDetail((prev) =>
+      prev
+        ? { ...prev, rooms: prev.rooms.map((r) => (r.id === roomId ? { ...r, operationalStatus } : r)) }
+        : prev,
+    );
+  }
+
+  function setPropertyMedia(propertyMedia: PropertyDetail["propertyMedia"]) {
+    setDetail((prev) => (prev ? { ...prev, propertyMedia } : prev));
+  }
+
   if (error) {
     return <p className="text-sm text-destructive">{error}</p>;
   }
@@ -359,8 +541,14 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
   const rooms = detail.rooms;
   const stats = {
     total: rooms.length,
-    available: rooms.filter((r) => r.reservationStatus === null).length,
-    occupied: rooms.filter((r) => r.reservationStatus === "fulfilled").length,
+    available: rooms.filter(
+      (r) =>
+        r.reservationStatus === null &&
+        (r.operationalStatus === "available" || r.operationalStatus === "vacant"),
+    ).length,
+    occupied: rooms.filter(
+      (r) => r.reservationStatus === "fulfilled" || r.operationalStatus === "occupied",
+    ).length,
     pending: rooms.filter(
       (r) => r.reservationStatus === "held" || r.reservationStatus === "payment_pending",
     ).length,
@@ -369,6 +557,8 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
   return (
     <div className="space-y-6">
       <RoomStats {...stats} />
+
+      <PropertyMediaManager propertyId={propertyId} media={detail.propertyMedia} onMediaChange={setPropertyMedia} />
 
       {detail.listing && detail.listing.status !== "verified" && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
@@ -445,6 +635,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                 <th scope="col" className="px-3 py-2">Price / semester</th>
                 <th scope="col" className="px-3 py-2">Deposit</th>
                 <th scope="col" className="px-3 py-2">Status</th>
+                <th scope="col" className="px-3 py-2">Occupancy</th>
                 <th scope="col" className="px-3 py-2">Photos</th>
               </tr>
             </thead>
@@ -467,6 +658,12 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                       </td>
                       <td className="px-3 py-2">{reservationChip(room.reservationStatus)}</td>
                       <td className="px-3 py-2">
+                        <RoomOccupancyControl
+                          room={room}
+                          onChange={(operationalStatus) => setRoomOperationalStatus(room.id, operationalStatus)}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
                         <Button
                           type="button"
                           variant="ghost"
@@ -485,7 +682,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                     </tr>
                     {expanded && (
                       <tr>
-                        <td colSpan={6} className="bg-muted/10 px-3 py-3">
+                        <td colSpan={8} className="bg-muted/10 px-3 py-3">
                           <RoomPhotoManager
                             room={room}
                             onPhotosChange={(photos) => setRoomPhotos(room.id, photos)}

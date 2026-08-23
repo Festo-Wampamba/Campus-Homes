@@ -11,7 +11,7 @@ export default async function SupportPage() {
   );
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-6 px-4 py-16 sm:px-6 lg:px-8">
       <h1 className="text-2xl">Support</h1>
       <p className="text-sm text-muted-foreground">
         Questions about a listing, a reservation, or something that doesn&apos;t

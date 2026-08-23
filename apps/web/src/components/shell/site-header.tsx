@@ -32,7 +32,13 @@ async function SiteHeader() {
             How it works
           </Link>
           <Link
-            href="/#landlords"
+            href="/support"
+            className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition duration-300 hover:bg-muted hover:text-foreground md:block"
+          >
+            Support
+          </Link>
+          <Link
+            href="/landlords"
             className="hidden whitespace-nowrap rounded-lg border border-border px-3.5 py-2 text-sm font-semibold text-foreground transition duration-300 hover:border-teal-600 hover:bg-accent sm:block"
           >
             List a property
