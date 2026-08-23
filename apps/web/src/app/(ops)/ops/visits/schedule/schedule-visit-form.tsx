@@ -73,7 +73,8 @@ export function ScheduleVisitForm({
           </option>
           {inspectors.map((inspector) => (
             <option key={inspector.id} value={inspector.id}>
-              {inspector.name} ({inspector.catchment})
+              {inspector.name} ({inspector.catchment}
+              {inspector.team === "lead" ? ", lead — self-assign" : ""})
             </option>
           ))}
         </select>

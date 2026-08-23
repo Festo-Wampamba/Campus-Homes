@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 
 import {
   STATIC_TENANT_AGREEMENT_FIELD_TYPES,
+  TENANT_AGREEMENT_DECLARATION_TEXT,
   type SaveTenantAgreementTemplateInput,
   type SubmitTenantAgreementInput,
   type TenantAgreementFieldType,
@@ -187,6 +188,7 @@ export class TenantAgreementsService {
             propertyId: input.propertyId,
             studentId: ctx.userId,
             responses,
+            declarationAccepted: input.declarationAccepted,
             signatureType: input.signature.type,
             signedName: input.signature.type === 'typed' ? input.signature.signedName : null,
             signatureStorageKey:
@@ -264,6 +266,11 @@ export class TenantAgreementsService {
         }
       }
     }
+
+    if (pdf.y > pdf.page.height - 140) pdf.addPage();
+    pdf.moveDown(0.8).font('Helvetica-Bold').fontSize(11).fillColor('#0f172a').text('Declaration');
+    pdf.moveDown(0.2).font('Helvetica').fontSize(9).fillColor('#334155').text(TENANT_AGREEMENT_DECLARATION_TEXT);
+    pdf.moveDown(0.4).font('Helvetica').fontSize(10).fillColor('#0f172a').text('[ ]  I agree to the declaration above');
 
     pdf.moveDown(1.5).font('Helvetica').fontSize(9).fillColor('#64748b');
     pdf.text('Tenant signature: ____________________________     Date: ______________');

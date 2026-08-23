@@ -12,6 +12,7 @@
 import { Pool } from 'pg';
 
 import { RlsDb } from '../../src/db/db.module';
+import type { Auth } from '../../src/modules/auth/auth.config';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import { ListingsService } from '../../src/modules/listings/listings.service';
@@ -24,7 +25,8 @@ const TEST_DATABASE_URL =
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const ops = new OpsService(rlsDb, audit);
+// Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
+const ops = new OpsService(rlsDb, audit, {} as Auth);
 const listings = new ListingsService(rlsDb);
 
 const submitInput = (name: string) => ({
@@ -35,6 +37,19 @@ const submitInput = (name: string) => ({
   proposedRoomCategories: [],
   proposedAmenities: {},
   coverPhotoKey: undefined,
+  otherCatchments: [],
+  furnishingItems: {},
+  securityFeatures: {},
+  accessibilityFeatures: {},
+  photographyConsent: false,
+  transportShuttle: false,
+  advanceRentRequired: false,
+  authorityRole: 'owner' as const,
+  declaredInfoAccurate: true as const,
+  declaredAuthorityOverProperty: true as const,
+  declaredWillKeepUpdated: true as const,
+  declaredAuthorizesPublish: true as const,
+  declaredConsentToProcessing: true as const,
 });
 
 let opsLead: string;

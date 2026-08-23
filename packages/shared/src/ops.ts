@@ -4,6 +4,7 @@ import {
   CATCHMENTS,
   KYC_STATUSES,
   LISTING_STATUSES,
+  OPS_TEAMS,
   PROPERTY_STATUSES,
   ROOM_CATEGORIES,
   STRIKE_REASONS,
@@ -11,6 +12,7 @@ import {
 } from './enums.js';
 import { idempotencyKey, ugxAmount, uuid } from './common.js';
 import { verificationChecklistSchema } from './listing.js';
+import { africanPhone } from './phone.js';
 
 // Ops lead schedules a visit and assigns an inspector (§9 flow 1).
 export const scheduleVisitSchema = z.object({
@@ -97,11 +99,28 @@ export const issueStrikeSchema = z.object({
 });
 export type IssueStrikeInput = z.infer<typeof issueStrikeSchema>;
 
+// Self-serve landlord registration invite — creates the account + a
+// credential row up front (a random, never-revealed password) purely so
+// Better Auth's existing requestPasswordReset/reset-password flow has
+// something to reset; the landlord's first real action is setting their own
+// password via the email link. Optionally tied to an onboarding_leads row
+// (0027), which gets marked 'converted' when provided.
+export const inviteLandlordSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  email: z.email(),
+  phone: africanPhone,
+  leadId: uuid.optional(),
+});
+export type InviteLandlordInput = z.infer<typeof inviteLandlordSchema>;
+
 // Ops-lead inspector picker (schedule-visit form) — GET /ops/inspectors.
+// Includes team='lead' rows (MVP full-parity decision) so a lead can
+// self-assign a visit instead of always delegating to an inspector.
 export const opsInspectorSchema = z.object({
   id: uuid,
   name: z.string(),
   catchment: z.enum(CATCHMENTS),
+  team: z.enum(OPS_TEAMS),
 });
 export type OpsInspector = z.infer<typeof opsInspectorSchema>;
 

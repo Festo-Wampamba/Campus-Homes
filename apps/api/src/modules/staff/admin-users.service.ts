@@ -91,8 +91,16 @@ export class AdminUsersService {
         }
         if (input.accountType === 'landlord') {
           await client.query(
-            `INSERT INTO landlords (user_id, legal_name) VALUES ($1, $2)`,
-            [user.id, input.legalName],
+            `INSERT INTO landlords
+               (user_id, legal_name, whatsapp_number, business_type, business_type_other)
+             VALUES ($1, $2, $3, COALESCE($4, 'individual_landlord'), $5)`,
+            [
+              user.id,
+              input.legalName,
+              nullable(input.whatsappNumber),
+              nullable(input.businessType),
+              nullable(input.businessTypeOther),
+            ],
           );
         }
         if (input.accountType === 'ops_inspector' || input.accountType === 'ops_lead') {
@@ -163,6 +171,8 @@ export class AdminUsersService {
                u.created_at AS "createdAt", u.updated_at AS "updatedAt",
                s.university::text, s.year_of_study AS "yearOfStudy",
                l.legal_name AS "legalName", l.kyc_status::text AS "kycStatus",
+               l.whatsapp_number AS "whatsappNumber", l.business_type AS "businessType",
+               l.business_type_other AS "businessTypeOther",
                coalesce((SELECT array_agg(DISTINCT a.provider_id) FROM accounts a WHERE a.user_id = u.id), '{}') AS "authProviders"
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
@@ -285,15 +295,44 @@ export class AdminUsersService {
               year_of_study = $3 WHERE user_id = $1
           `, [userId, input.university ?? null, input.yearOfStudy ?? null]);
         }
+        const landlordFieldsGiven =
+          input.whatsappNumber !== undefined ||
+          input.businessType !== undefined ||
+          input.businessTypeOther !== undefined;
         if (nextType === 'landlord') {
           const legalName = input.legalName ?? (user?.name as string | undefined);
           if (!legalName) throw new BadRequestException('Legal name is required for landlord accounts');
           await client.query(`
-            INSERT INTO landlords (user_id, legal_name) VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET legal_name = EXCLUDED.legal_name
-          `, [userId, legalName]);
-        } else if (input.legalName !== undefined) {
-          await client.query('UPDATE landlords SET legal_name = $2 WHERE user_id = $1', [userId, input.legalName]);
+            INSERT INTO landlords
+              (user_id, legal_name, whatsapp_number, business_type, business_type_other)
+            VALUES ($1, $2, $3, COALESCE($4, 'individual_landlord'), $5)
+            ON CONFLICT (user_id) DO UPDATE SET
+              legal_name = EXCLUDED.legal_name,
+              whatsapp_number = coalesce(EXCLUDED.whatsapp_number, landlords.whatsapp_number),
+              business_type = coalesce($4, landlords.business_type),
+              business_type_other = coalesce(EXCLUDED.business_type_other, landlords.business_type_other)
+          `, [
+            userId,
+            legalName,
+            nullable(input.whatsappNumber),
+            nullable(input.businessType),
+            nullable(input.businessTypeOther),
+          ]);
+        } else if (input.legalName !== undefined || landlordFieldsGiven) {
+          await client.query(`
+            UPDATE landlords SET
+              legal_name = coalesce($2, legal_name),
+              whatsapp_number = coalesce($3, whatsapp_number),
+              business_type = coalesce($4, business_type),
+              business_type_other = coalesce($5, business_type_other)
+            WHERE user_id = $1
+          `, [
+            userId,
+            nullable(input.legalName),
+            nullable(input.whatsappNumber),
+            nullable(input.businessType),
+            nullable(input.businessTypeOther),
+          ]);
         }
 
         if (input.status && input.status !== 'active') {

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { LISTING_STATUSES, ROOM_CATEGORIES, UNIVERSITIES, VERIFICATION_CHECKLIST_COMPONENTS } from './enums.js';
+import {
+  LISTING_STATUSES,
+  ROOM_CATEGORIES,
+  UNIT_OPERATIONAL_STATUSES,
+  UNIVERSITIES,
+  VERIFICATION_CHECKLIST_COMPONENTS,
+} from './enums.js';
 import { ugxAmount, uuid } from './common.js';
 
 // One entry per checklist component; a listing can only be verified when all 6 pass.
@@ -118,6 +124,17 @@ export const unitSchema = z.object({
 });
 export type Unit = z.infer<typeof unitSchema>;
 
+// Landlord and ops both write this through the same narrow surface (0024):
+// landlord RLS grants column-only UPDATE on units.operational_status, ops
+// keeps its existing full-row units_ops_update policy — this is the one
+// field either of them can flip after a unit exists, precisely so a room
+// taken outside the reservation flow (a walk-in tenant, a direct deal) can
+// still be reflected as unavailable.
+export const updateUnitOperationalStatusSchema = z.object({
+  operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES),
+});
+export type UpdateUnitOperationalStatusInput = z.infer<typeof updateUnitOperationalStatusSchema>;
+
 export const listingDetailResponseSchema = z.object({
   listing: listingSchema.extend({ expiresAt: z.string().nullable() }),
   version: listingVersionSchema,
@@ -140,5 +157,8 @@ export const listingDetailResponseSchema = z.object({
   // show "view photos" per room.
   unitPhotos: z.array(z.object({ unitId: uuid, storageKey: z.string() })),
   availability: z.array(z.object({ id: uuid, available: z.boolean() })),
+  // Whole-property gallery — distinct from `photos` above (Ops-captured
+  // listing_photos) and unitPhotos (per-room). Landlord-uploadable (0026).
+  propertyMedia: z.array(z.object({ id: uuid, storage_key: z.string(), caption: z.string().nullable() })),
 });
 export type ListingDetailResponse = z.infer<typeof listingDetailResponseSchema>;

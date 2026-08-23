@@ -170,6 +170,7 @@ describe('submit', () => {
       tenantAgreements.submit(studentCtx(studentWithProfile), {
         propertyId: propertyA,
         responses: [],
+        declarationAccepted: true,
         signature: { type: 'typed', signedName: 'Student One' },
       }),
     ).rejects.toThrow(/room number.*required/i);
@@ -180,6 +181,7 @@ describe('submit', () => {
       tenantAgreements.submit(studentCtx(studentWithoutProfile), {
         propertyId: propertyA,
         responses: [{ fieldId: templateFieldId, value: '2A' }],
+        declarationAccepted: true,
         signature: { type: 'typed', signedName: 'No Profile' },
       }),
     ).rejects.toThrow(/complete your student profile/i);
@@ -190,6 +192,7 @@ describe('submit', () => {
       tenantAgreements.submit(studentCtx(studentWithProfile), {
         propertyId: '00000000-0000-0000-0000-000000000000',
         responses: [],
+        declarationAccepted: true,
         signature: { type: 'typed', signedName: 'Student One' },
       }),
     ).rejects.toThrow(/property not found/i);
@@ -199,9 +202,11 @@ describe('submit', () => {
     const agreement = await tenantAgreements.submit(studentCtx(studentWithProfile), {
       propertyId: propertyA,
       responses: [{ fieldId: templateFieldId, value: '2A' }],
+      declarationAccepted: true,
       signature: { type: 'typed', signedName: 'Student One' },
     });
     expect(agreement.signedName).toBe('Student One');
+    expect(agreement.declarationAccepted).toBe(true);
     expect(agreement.responses).toEqual([
       { fieldId: templateFieldId, label: 'Room number', fieldType: 'fill_in', value: '2A' },
     ]);
@@ -212,6 +217,7 @@ describe('submit', () => {
       tenantAgreements.submit(studentCtx(studentWithProfile), {
         propertyId: propertyA,
         responses: [{ fieldId: templateFieldId, value: '2B' }],
+        declarationAccepted: true,
         signature: { type: 'typed', signedName: 'Student One Again' },
       }),
     ).rejects.toThrow(/already submitted/i);

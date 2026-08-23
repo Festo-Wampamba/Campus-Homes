@@ -67,7 +67,85 @@ export const tenantAgreementTemplateSchema = z.object({
 });
 export type TenantAgreementTemplate = z.infer<typeof tenantAgreementTemplateSchema>;
 
+// Starter template offered when a property has no saved form yet — a
+// field-for-field match of CampusHomes' original paper/Google-Forms student
+// registration form, so a landlord (or ops, under the MVP concierge model)
+// starts from something already shaped like what students expect instead of
+// a blank page. Two deviations from that source form, both deliberate:
+// "Date of Registration" and "Date Signed" are dropped (the submission's own
+// timestamp already captures this automatically), and "Medical Conditions /
+// Allergies" is optional rather than required (product decision — still
+// important to collect, but shouldn't block submission). Declaration and
+// signature are never template fields at all — see TENANT_AGREEMENT_
+// DECLARATION_TEXT below and the field-types comment at the top of this
+// file. Landlords can still freely edit or remove any of these afterward;
+// this is only the pre-filled starting point.
+export const DEFAULT_TENANT_AGREEMENT_TEMPLATE_FIELDS: TenantAgreementFieldInput[] = [
+  { fieldType: 'heading', label: 'Property & Landlord Details', required: false },
+  { fieldType: 'fill_in', label: 'Property / Hostel Name', required: true },
+  { fieldType: 'fill_in', label: 'Landlord / Caretaker Name', required: true },
+  { fieldType: 'fill_in', label: 'Landlord / Caretaker Phone Number', required: true },
+  { fieldType: 'fill_in', label: 'Room / Unit Number', required: true },
+  { fieldType: 'heading', label: 'Student Personal Details', required: false },
+  { fieldType: 'fill_in', label: 'Student Full Name', required: true },
+  {
+    fieldType: 'multiple_choice',
+    label: 'Gender',
+    options: ['Male', 'Female', 'Prefer not to say'],
+    required: true,
+  },
+  { fieldType: 'fill_in', label: 'Date of Birth (DD/MM/YYYY)', required: true },
+  { fieldType: 'fill_in', label: 'National ID / Passport Number', required: false },
+  { fieldType: 'fill_in', label: 'Student Phone Number', required: true },
+  { fieldType: 'fill_in', label: 'Student Email Address', required: true },
+  { fieldType: 'heading', label: 'Academic Details', required: false },
+  { fieldType: 'fill_in', label: 'University / Institution Name', required: true },
+  { fieldType: 'fill_in', label: 'Student Registration / ID Number', required: true },
+  { fieldType: 'fill_in', label: 'Course / Programme of Study', required: true },
+  {
+    fieldType: 'multiple_choice',
+    label: 'Year of Study',
+    options: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5+'],
+    required: true,
+  },
+  { fieldType: 'fill_in', label: 'Parent / Guardian Phone Number', required: true },
+  { fieldType: 'fill_in', label: 'Parent / Guardian Name(s)', required: true },
+  { fieldType: 'heading', label: 'Next of Kin', required: false },
+  {
+    fieldType: 'multiple_choice',
+    label: 'Relationship to Student',
+    options: ['Sibling', 'Relative', 'Guardian', 'Other'],
+    required: true,
+  },
+  {
+    fieldType: 'fill_in',
+    label: 'Next of Kin Phone Number / WhatsApp Number / Location / Address',
+    required: true,
+  },
+  { fieldType: 'heading', label: 'Tenancy & Welfare', required: false },
+  { fieldType: 'fill_in', label: 'Move-in Date (DD/MM/YYYY)', required: true },
+  { fieldType: 'fill_in', label: 'Agreed Rent Amount', required: true },
+  {
+    fieldType: 'multiple_choice',
+    label: 'Agreed Rent Frequency',
+    options: ['Monthly', 'Per Semester', 'Annually', 'Termly'],
+    required: true,
+  },
+  { fieldType: 'fill_in', label: 'Medical Conditions / Allergies', required: false },
+  { fieldType: 'fill_in', label: 'Vehicle / Motorcycle Registration Number', required: false },
+  { fieldType: 'fill_in', label: 'Additional Notes', required: false },
+  { fieldType: 'heading', label: 'Declaration', required: false },
+  { fieldType: 'fill_in', label: 'Form Completed By', required: true },
+];
+
 // ── Submission (student) ─────────────────────────────────────────────────────
+
+// Fixed, platform-wide wording — not a landlord-configurable template field
+// (same precedent as signature, per the field-types comment above: every
+// submission always ends with a declaration + signature, so it isn't
+// something a landlord can omit or reword for their own property).
+export const TENANT_AGREEMENT_DECLARATION_TEXT =
+  "I confirm that the information provided in this form is accurate to the best of my knowledge. I consent to CampusHomes and this property's management storing this information in the property database for tenancy management, communication, and emergency-contact purposes. This information will not be sold or commercialised, and will not be shared with third parties outside those purposes.";
 
 export const submitTenantAgreementSchema = z.object({
   propertyId: uuid,
@@ -79,6 +157,10 @@ export const submitTenantAgreementSchema = z.object({
       }),
     )
     .max(50),
+  // Mandatory on every submission, independent of the landlord's own
+  // template fields — z.literal(true) rejects both `false` and a missing
+  // value, so there's no way to submit without ticking it.
+  declarationAccepted: z.literal(true),
   signature: z.discriminatedUnion('type', [
     z.object({ type: z.literal('typed'), signedName: z.string().trim().min(2).max(200) }),
     // Cloudinary public id — the drawn signature is uploaded the same way
@@ -102,6 +184,7 @@ export const tenantAgreementSchema = z.object({
   propertyId: uuid,
   studentId: uuid,
   responses: z.array(tenantAgreementResponseAnswerSchema),
+  declarationAccepted: z.boolean(),
   signatureType: z.enum(['typed', 'drawn']),
   signedName: z.string().nullable(),
   signatureStorageKey: z.string().nullable(),
@@ -119,6 +202,7 @@ export const tenantAgreementForPropertyRowSchema = z.object({
   student_id: uuid,
   student_name: z.string().nullable(),
   responses: z.array(tenantAgreementResponseAnswerSchema),
+  declaration_accepted: z.boolean(),
   signature_type: z.enum(['typed', 'drawn']),
   signed_name: z.string().nullable(),
   signature_storage_key: z.string().nullable(),

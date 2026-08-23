@@ -8,6 +8,7 @@ export * from './campus.js';
 export * from './review.js';
 export * from './saved-listing.js';
 export * from './listing.js';
+export * from './lead.js';
 export * from './reservation.js';
 export * from './ops.js';
 export * from './chat.js';

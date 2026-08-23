@@ -7,6 +7,7 @@ import { Pool } from 'pg';
 
 import { StubPayments } from '../../src/adapters/payments.adapter';
 import { RlsDb } from '../../src/db/db.module';
+import type { Auth } from '../../src/modules/auth/auth.config';
 import { LedgerService } from '../../src/modules/finance/ledger.service';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
@@ -28,7 +29,8 @@ process.env.PAYMENTS_ENABLED = 'true';
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const ops = new OpsService(rlsDb, audit);
+// Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
+const ops = new OpsService(rlsDb, audit, {} as Auth);
 const ledger = new LedgerService();
 const reservationsService = new ReservationsService(
   rlsDb,

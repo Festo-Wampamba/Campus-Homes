@@ -353,6 +353,52 @@ describe('unit_photos isolation (0008)', () => {
   });
 });
 
+describe('units.operational_status (0024): off-platform-occupancy write path', () => {
+  it("a landlord can flip their own room's operational_status", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit1]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it("a landlord cannot flip another landlord's room operational_status", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit2]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it("a landlord cannot write any other units column, even on their own room", async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE units SET price_per_term_ugx = 1 WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("ops_lead can flip operational_status on any unit", async () => {
+    const res = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'under_maintenance' WHERE id = $1`, [unit2]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it('ops_lead is also restricted to the operational_status column', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(`UPDATE units SET price_per_term_ugx = 1 WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('a student cannot write operational_status at all', async () => {
+    const res = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit1]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+});
+
 describe('auth infra (0002): accounts / verifications / sessions are service-only', () => {
   beforeAll(async () => {
     await pool.query('TRUNCATE accounts, verifications, sessions CASCADE');

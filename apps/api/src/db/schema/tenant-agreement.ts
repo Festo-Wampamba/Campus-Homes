@@ -66,6 +66,10 @@ export const tenantAgreements = pgTable(
     // Snapshot of the template's fields at submit time — editing the
     // template later never corrupts how an old submission displays.
     responses: jsonb('responses').$type<TenantAgreementResponseAnswer[]>().notNull(),
+    // Fixed, platform-wide consent — z.literal(true) on the submit schema
+    // means this is always true for any row that made it through validation;
+    // stored explicitly anyway so the column is a self-contained audit trail.
+    declarationAccepted: boolean('declaration_accepted').notNull().default(false),
     signatureType: text('signature_type').notNull(), // 'typed' | 'drawn'
     signedName: text('signed_name'),
     signatureStorageKey: text('signature_storage_key'),

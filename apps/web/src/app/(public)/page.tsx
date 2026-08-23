@@ -531,13 +531,13 @@ export default async function HomePage() {
               <p className="mt-5 max-w-lg text-base leading-7 text-white/68">
                 Get inspected once, publish honest room details and reach students searching near your campus catchment.
               </p>
-              <a
-                href="mailto:hello@campushomes.ug?subject=Landlord%20listing%20request"
+              <Link
+                href="/landlords"
                 className="mt-8 inline-flex h-12 w-fit items-center gap-2 rounded-lg bg-white px-6 font-bold text-teal-900 transition duration-300 hover:bg-coral-500 active:scale-[0.98]"
               >
-                Request a property inspection
+                List your property
                 <ArrowRightIcon className="size-4" />
-              </a>
+              </Link>
             </div>
             <div className="relative min-h-72 lg:min-h-[31rem]">
               <Image

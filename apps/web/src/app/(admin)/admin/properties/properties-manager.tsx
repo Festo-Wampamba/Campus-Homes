@@ -24,8 +24,24 @@ const TYPES = ["hostel", "apartment", "hall", "boarding_house", "shared_house", 
 const CATCHMENTS = ["MUK", "MUBS", "KIU", "KYU", "other"];
 const ROOM_TYPES = ["single", "double", "triple", "quad", "studio", "self_contained", "bedsitter", "dormitory", "other"];
 const AMENITIES = ["wifi", "parking", "security", "cctv", "study_area", "laundry", "kitchen", "furnished", "wheelchair_access", "backup_power", "water_tank", "recreation_area"];
+// Landlord & Property Registration Form parity (0025) — mirrors the Google
+// Form's remaining sections. Kept as plain key lists (not shared enums)
+// consistent with this file's other option arrays (TYPES, ROOM_TYPES, ...).
+const GENDER_ARRANGEMENTS = ["male_only", "female_only", "mixed"];
+const AUTHORITY_ROLES = ["owner", "joint_owner", "property_manager", "caretaker", "agent", "family_representative", "tenant_allowed_to_sublet", "other"];
+const RENT_PERIODS = ["monthly", "per_semester", "other"];
+const FURNISHING_ITEMS = ["bathroom", "kitchen", "fully_furnished", "partly_furnished", "unfurnished", "mattress", "wardrobe", "study_desk", "bed"];
+const SECURITY_FEATURES = ["perimeter_wall", "security_guard", "cctv", "fire_extinguishers", "smoke_detectors", "emergency_exit", "first_aid_kit", "off_grid_light"];
+const ACCESSIBILITY_FEATURES = ["step_free_entrance", "ground_floor_rooms", "accessible_bathroom", "lift", "wheelchair_accessible"];
 const emptyUnit = (): UnitDraft => ({ label: "", capacity: "1", roomCategory: "single", pricePerTermUgx: "", depositUgx: "", operationalStatus: "available", buildingName: "", floorLabel: "", electricityMeterType: "included", notes: "" });
-const emptyForm = { landlordId: "", name: "", streetAddress: "", type: "hostel", catchment: "MUK", description: "", operationalStatus: "open", contactPhone: "", contactEmail: "", houseRules: "", semesterId: "", water: "included", electricity: "included", internet: "included", wasteCollection: "included" };
+const emptyForm = { landlordId: "", name: "", alternativeName: "", streetAddress: "", locationDetails: "", type: "hostel", genderArrangement: "", catchment: "MUK", description: "", operationalStatus: "open", contactPhone: "", contactEmail: "", houseRules: "", semesterId: "", water: "included", electricity: "included", internet: "included", wasteCollection: "included", authorityRole: "owner", authorityRoleOther: "", transportShuttle: "false", advanceRentRequired: "false", bookingFeePercent: "", rentPeriod: "", rentPeriodOther: "", selfContainedRoomCount: "", nonSelfContainedRoomCount: "", photographyConsent: "false", declaredInfoAccurate: "false", declaredAuthorityOverProperty: "false", declaredWillKeepUpdated: "false", declaredAuthorizesPublish: "false", declaredConsentToProcessing: "false" };
+const DECLARATION_KEYS: [string, string][] = [
+  ["declaredInfoAccurate", "Information provided is accurate"],
+  ["declaredAuthorityOverProperty", "Landlord owns or has authority over this property"],
+  ["declaredWillKeepUpdated", "Landlord agrees to keep pricing and availability updated"],
+  ["declaredAuthorizesPublish", "Landlord authorises CampusHomes to publish approved listing information"],
+  ["declaredConsentToProcessing", "Landlord consents to CampusHomes processing their data"],
+];
 const fieldButton = "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-bold hover:bg-slate-50 disabled:opacity-45 dark:border-border dark:hover:bg-muted";
 
 export function PropertiesManager({ rows, landlords, semesters, permissions }: { rows: PropertyRow[]; landlords: Landlord[]; semesters: Semester[]; permissions: string[] }) {
@@ -37,6 +53,10 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
   const [detail, setDetail] = useState<PropertyDetail | null>(null);
   const [form, setForm] = useState<Record<string, string>>(emptyForm);
   const [amenities, setAmenities] = useState<Record<string, boolean>>({});
+  const [otherCatchments, setOtherCatchments] = useState<Record<string, boolean>>({});
+  const [furnishingItems, setFurnishingItems] = useState<Record<string, boolean>>({});
+  const [securityFeatures, setSecurityFeatures] = useState<Record<string, boolean>>({});
+  const [accessibilityFeatures, setAccessibilityFeatures] = useState<Record<string, boolean>>({});
   const [units, setUnits] = useState<UnitDraft[]>([emptyUnit()]);
   const [imageUrls, setImageUrls] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -80,7 +100,8 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     const catchment = defaultCatchmentFor(landlordId);
     const firstSemester = semesters.find((semester) => !semester.university || semester.university === catchment);
     setForm({ ...emptyForm, landlordId, catchment, semesterId: firstSemester?.id ?? "" });
-    setAmenities({}); setUnits([emptyUnit()]); setImageUrls(""); setImageFiles([]); setNotice(null); setMode("create");
+    setAmenities({}); setOtherCatchments({}); setFurnishingItems({}); setSecurityFeatures({}); setAccessibilityFeatures({});
+    setUnits([emptyUnit()]); setImageUrls(""); setImageFiles([]); setNotice(null); setMode("create");
   }
 
   async function load(row: PropertyRow, nextMode: "edit" | "detail") {
@@ -90,8 +111,13 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
       const p = data.property;
       const propertyCatchment = String(p.catchment ?? "MUK");
       const firstSemester = semesters.find((semester) => !semester.university || semester.university === propertyCatchment);
-      setForm({ ...emptyForm, landlordId: String(p.landlordId ?? ""), name: String(p.name ?? ""), streetAddress: String(p.streetAddress ?? ""), type: String(p.type ?? "hostel"), catchment: propertyCatchment, description: String(p.description ?? ""), operationalStatus: String(p.operationalStatus ?? "open"), contactPhone: String(p.contactPhone ?? ""), contactEmail: String(p.contactEmail ?? ""), houseRules: Array.isArray(p.houseRules) ? p.houseRules.join("\n") : "", semesterId: firstSemester?.id ?? "", water: String((p.utilities as Record<string, unknown> | undefined)?.water ?? "included"), electricity: String((p.utilities as Record<string, unknown> | undefined)?.electricity ?? "included"), internet: String((p.utilities as Record<string, unknown> | undefined)?.internet ?? "included"), wasteCollection: String((p.utilities as Record<string, unknown> | undefined)?.wasteCollection ?? "included") });
-      setAmenities((p.amenities as Record<string, boolean>) ?? {}); setUnits([emptyUnit()]); setImageUrls(""); setImageFiles([]);
+      setForm({ ...emptyForm, landlordId: String(p.landlordId ?? ""), name: String(p.name ?? ""), alternativeName: String(p.alternativeName ?? ""), streetAddress: String(p.streetAddress ?? ""), locationDetails: String(p.locationDetails ?? ""), type: String(p.type ?? "hostel"), genderArrangement: String(p.genderArrangement ?? ""), catchment: propertyCatchment, description: String(p.description ?? ""), operationalStatus: String(p.operationalStatus ?? "open"), contactPhone: String(p.contactPhone ?? ""), contactEmail: String(p.contactEmail ?? ""), houseRules: Array.isArray(p.houseRules) ? p.houseRules.join("\n") : "", semesterId: firstSemester?.id ?? "", water: String((p.utilities as Record<string, unknown> | undefined)?.water ?? "included"), electricity: String((p.utilities as Record<string, unknown> | undefined)?.electricity ?? "included"), internet: String((p.utilities as Record<string, unknown> | undefined)?.internet ?? "included"), wasteCollection: String((p.utilities as Record<string, unknown> | undefined)?.wasteCollection ?? "included"), authorityRole: String(p.authorityRole ?? "owner"), authorityRoleOther: String(p.authorityRoleOther ?? ""), transportShuttle: String(Boolean(p.transportShuttle)), advanceRentRequired: String(Boolean(p.advanceRentRequired)), bookingFeePercent: p.bookingFeePercent == null ? "" : String(p.bookingFeePercent), rentPeriod: String(p.rentPeriod ?? ""), rentPeriodOther: String(p.rentPeriodOther ?? ""), selfContainedRoomCount: p.selfContainedRoomCount == null ? "" : String(p.selfContainedRoomCount), nonSelfContainedRoomCount: p.nonSelfContainedRoomCount == null ? "" : String(p.nonSelfContainedRoomCount), photographyConsent: String(Boolean(p.photographyConsent)), declaredInfoAccurate: String(Boolean(p.declaredInfoAccurate)), declaredAuthorityOverProperty: String(Boolean(p.declaredAuthorityOverProperty)), declaredWillKeepUpdated: String(Boolean(p.declaredWillKeepUpdated)), declaredAuthorizesPublish: String(Boolean(p.declaredAuthorizesPublish)), declaredConsentToProcessing: String(Boolean(p.declaredConsentToProcessing)) });
+      setAmenities((p.amenities as Record<string, boolean>) ?? {});
+      setOtherCatchments(Object.fromEntries(((p.otherCatchments as string[] | undefined) ?? []).map((u) => [u, true])));
+      setFurnishingItems((p.furnishingItems as Record<string, boolean>) ?? {});
+      setSecurityFeatures((p.securityFeatures as Record<string, boolean>) ?? {});
+      setAccessibilityFeatures((p.accessibilityFeatures as Record<string, boolean>) ?? {});
+      setUnits([emptyUnit()]); setImageUrls(""); setImageFiles([]);
     } catch { setNotice("Property details could not be loaded."); } finally { setPending(false); }
   }
 
@@ -106,10 +132,26 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
   }
 
   const basePayload = () => ({
-    landlordId: form.landlordId, name: form.name, streetAddress: form.streetAddress,
-    type: form.type, catchment: form.catchment, description: form.description || null,
+    landlordId: form.landlordId, name: form.name, alternativeName: form.alternativeName || null,
+    streetAddress: form.streetAddress, locationDetails: form.locationDetails || null,
+    type: form.type, genderArrangement: form.genderArrangement || null,
+    catchment: form.catchment, otherCatchments: Object.keys(otherCatchments).filter((k) => otherCatchments[k]),
+    description: form.description || null,
     operationalStatus: form.operationalStatus, amenities,
     utilities: { water: form.water, electricity: form.electricity, internet: form.internet, wasteCollection: form.wasteCollection },
+    furnishingItems, securityFeatures, accessibilityFeatures,
+    photographyConsent: form.photographyConsent === "true",
+    selfContainedRoomCount: form.selfContainedRoomCount ? Number(form.selfContainedRoomCount) : null,
+    nonSelfContainedRoomCount: form.nonSelfContainedRoomCount ? Number(form.nonSelfContainedRoomCount) : null,
+    transportShuttle: form.transportShuttle === "true", advanceRentRequired: form.advanceRentRequired === "true",
+    bookingFeePercent: form.bookingFeePercent ? Number(form.bookingFeePercent) : null,
+    rentPeriod: form.rentPeriod || null, rentPeriodOther: form.rentPeriod === "other" ? (form.rentPeriodOther || null) : null,
+    authorityRole: form.authorityRole || null, authorityRoleOther: form.authorityRole === "other" ? (form.authorityRoleOther || null) : null,
+    declaredInfoAccurate: form.declaredInfoAccurate === "true",
+    declaredAuthorityOverProperty: form.declaredAuthorityOverProperty === "true",
+    declaredWillKeepUpdated: form.declaredWillKeepUpdated === "true",
+    declaredAuthorizesPublish: form.declaredAuthorizesPublish === "true",
+    declaredConsentToProcessing: form.declaredConsentToProcessing === "true",
     houseRules: form.houseRules.split("\n").map((item) => item.trim()).filter(Boolean),
     contactPhone: form.contactPhone || null, contactEmail: form.contactEmail || null,
   });
@@ -202,6 +244,53 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     <AdminModal open={mode === "create" || mode === "edit"} onClose={close} title={mode === "create" ? "Add a property" : `Update ${selected?.name ?? "property"}`} description="Create the property record, operational utilities, media, and room inventory without changing Ops-controlled verification or publication status." wide>
       <form onSubmit={save} className="space-y-6 p-5"><div className="grid gap-4 md:grid-cols-3"><AdminField label="Landlord / owner" required><select required className={adminFieldClass} value={form.landlordId} onChange={(e) => setLandlord(e.target.value)}><option value="">Select owner</option>{landlords.map((landlord) => <option key={landlord.id} value={landlord.id}>{landlord.name} · {landlord.email}</option>)}</select></AdminField><AdminField label="Property name" required><input required className={adminFieldClass} placeholder="Makerere View Hostel" value={form.name} onChange={(e) => setField("name", e.target.value)} /></AdminField><AdminField label="Property type"><select className={adminFieldClass} value={form.type} onChange={(e) => setField("type", e.target.value)}>{TYPES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField><div className="md:col-span-2"><AdminField label="Street address" required><input required className={adminFieldClass} placeholder="Plot 12, Makerere Hill Road" value={form.streetAddress} onChange={(e) => setField("streetAddress", e.target.value)} /></AdminField></div><AdminField label="University catchment"><select className={adminFieldClass} value={form.catchment} onChange={(e) => setCatchment(e.target.value)}>{CATCHMENTS.map((item) => <option key={item}>{item}</option>)}</select></AdminField><AdminField label="Operational status"><select className={adminFieldClass} value={form.operationalStatus} onChange={(e) => setField("operationalStatus", e.target.value)}>{["open", "temporarily_closed", "under_renovation", "emergency_closure"].map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField><AdminField label="Contact phone"><input type="tel" inputMode="tel" className={adminFieldClass} placeholder="+256 771 234 567" value={form.contactPhone} onChange={(e) => setField("contactPhone", e.target.value)} /></AdminField><AdminField label="Contact email"><input type="email" className={adminFieldClass} placeholder="manager@example.com" value={form.contactEmail} onChange={(e) => setField("contactEmail", e.target.value)} /></AdminField></div><AdminField label="Description"><textarea className={adminTextareaClass} placeholder="Describe the location, rooms, access, and notable facilities…" value={form.description} onChange={(e) => setField("description", e.target.value)} /></AdminField>
         <section className="rounded-xl border border-slate-200 p-4 dark:border-border"><h3 className="text-sm font-bold">Amenities and utilities</h3><div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-4">{AMENITIES.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={amenities[item] ?? false} onChange={(e) => setAmenities((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div><div className="mt-4 grid gap-4 sm:grid-cols-4">{[["water", "Water"], ["electricity", "Electricity"], ["internet", "Internet"], ["wasteCollection", "Waste collection"]].map(([key, label]) => <AdminField key={key} label={label}><select className={adminFieldClass} value={form[key]} onChange={(e) => setField(key, e.target.value)}>{["included", "metered", "prepaid", "shared", "not_available"].map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField>)}</div></section>
+        <section className="rounded-xl border border-slate-200 p-4 dark:border-border">
+          <h3 className="text-sm font-bold">Property identity &amp; location</h3>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <AdminField label="Alternative name"><input className={adminFieldClass} value={form.alternativeName} onChange={(e) => setField("alternativeName", e.target.value)} /></AdminField>
+            <AdminField label="Gender arrangement"><select className={adminFieldClass} value={form.genderArrangement} onChange={(e) => setField("genderArrangement", e.target.value)}><option value="">Not specified</option>{GENDER_ARRANGEMENTS.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField>
+            <div className="sm:col-span-3"><AdminField label="Country, district, village/zone, nearest landmark"><input className={adminFieldClass} value={form.locationDetails} onChange={(e) => setField("locationDetails", e.target.value)} /></AdminField></div>
+          </div>
+          <div className="mt-4"><AdminField label="Other universities served"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{CATCHMENTS.filter((c) => c !== "other").map((c) => <label key={c} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={otherCatchments[c] ?? false} onChange={(e) => setOtherCatchments((current) => ({ ...current, [c]: e.target.checked }))} />{c}</label>)}</div></AdminField></div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 p-4 dark:border-border">
+          <h3 className="text-sm font-bold">Authority over property</h3>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <AdminField label="Role in relation to this property"><select className={adminFieldClass} value={form.authorityRole} onChange={(e) => setField("authorityRole", e.target.value)}>{AUTHORITY_ROLES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField>
+            {form.authorityRole === "other" && <AdminField label="Describe the role"><input className={adminFieldClass} value={form.authorityRoleOther} onChange={(e) => setField("authorityRoleOther", e.target.value)} /></AdminField>}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 p-4 dark:border-border">
+          <h3 className="text-sm font-bold">Room information</h3>
+          <div className="mt-3 grid gap-4 sm:grid-cols-4">
+            <AdminField label="Self-contained rooms"><input type="number" min={0} className={adminFieldClass} value={form.selfContainedRoomCount} onChange={(e) => setField("selfContainedRoomCount", e.target.value)} /></AdminField>
+            <AdminField label="Non-self-contained rooms"><input type="number" min={0} className={adminFieldClass} value={form.nonSelfContainedRoomCount} onChange={(e) => setField("nonSelfContainedRoomCount", e.target.value)} /></AdminField>
+            <AdminField label="Booking fee (%)"><input type="number" min={0} max={100} className={adminFieldClass} value={form.bookingFeePercent} onChange={(e) => setField("bookingFeePercent", e.target.value)} /></AdminField>
+            <AdminField label="Rent period"><select className={adminFieldClass} value={form.rentPeriod} onChange={(e) => setField("rentPeriod", e.target.value)}><option value="">Not specified</option>{RENT_PERIODS.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField>
+            {form.rentPeriod === "other" && <AdminField label="Describe the rent period"><input className={adminFieldClass} value={form.rentPeriodOther} onChange={(e) => setField("rentPeriodOther", e.target.value)} /></AdminField>}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.transportShuttle === "true"} onChange={(e) => setField("transportShuttle", String(e.target.checked))} />University shuttle available</label>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.advanceRentRequired === "true"} onChange={(e) => setField("advanceRentRequired", String(e.target.checked))} />Advance rent required</label>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.photographyConsent === "true"} onChange={(e) => setField("photographyConsent", String(e.target.checked))} />Permission to take pictures</label>
+          </div>
+          <div className="mt-4"><AdminField label="Utilities included (furnishing)"><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{FURNISHING_ITEMS.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={furnishingItems[item] ?? false} onChange={(e) => setFurnishingItems((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 p-4 dark:border-border">
+          <h3 className="text-sm font-bold">Security &amp; accessibility</h3>
+          <div className="mt-3"><AdminField label="Security measures"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{SECURITY_FEATURES.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={securityFeatures[item] ?? false} onChange={(e) => setSecurityFeatures((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
+          <div className="mt-4"><AdminField label="Accessibility"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{ACCESSIBILITY_FEATURES.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={accessibilityFeatures[item] ?? false} onChange={(e) => setAccessibilityFeatures((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 p-4 dark:border-border">
+          <h3 className="text-sm font-bold">Consent &amp; declaration</h3>
+          <p className="mt-1 text-[11px] text-slate-500">What the landlord agreed to on paper or in person during onboarding.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">{DECLARATION_KEYS.map(([key, label]) => <label key={key} className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={form[key] === "true"} onChange={(e) => setField(key, String(e.target.checked))} />{label}</label>)}</div>
+        </section>
+
         <section className="grid gap-4 rounded-xl border border-slate-200 p-4 dark:border-border md:grid-cols-2"><AdminField label="Property images" hint="Select files for Cloudinary; existing URLs/public IDs can also be entered."><input type="file" multiple accept="image/*" className={adminFieldClass} onChange={(e) => setImageFiles(Array.from(e.target.files ?? []))} /></AdminField><AdminField label="Image URLs or storage keys" hint="One per line."><textarea className={adminTextareaClass} value={imageUrls} onChange={(e) => setImageUrls(e.target.value)} /></AdminField><div className="md:col-span-2"><AdminField label="House rules" hint="One rule per line."><textarea className={adminTextareaClass} value={form.houseRules} onChange={(e) => setField("houseRules", e.target.value)} /></AdminField></div></section>
         {canManageUnits && <section className="rounded-xl border border-slate-200 p-4 dark:border-border"><div className="flex items-center justify-between"><div><h3 className="text-sm font-bold">Room and unit inventory</h3><p className="mt-1 text-[11px] text-slate-500">Label, building, type, capacity, term price, electricity, and operating status.</p><p className="mt-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400">Saving units here only creates a draft listing — it stays invisible in public search until Ops schedules and approves a verification visit, then publishes it.</p></div><button type="button" className={fieldButton} onClick={() => setUnits((current) => [...current, emptyUnit()])}><Plus className="size-3.5" />Add unit</button></div><div className="mt-4"><AdminField label={`Semester for ${form.catchment}`} required={unitPayload().length > 0} hint={!applicableSemesters.length ? `No semester is configured for ${form.catchment}. Add Semester 1 or 2 under Platform settings, or pick a different university catchment above.` : "Only semesters configured for this property's university are shown."}><select required={unitPayload().length > 0} className={adminFieldClass} value={form.semesterId} onChange={(e) => setField("semesterId", e.target.value)}><option value="">{applicableSemesters.length ? "Select semester" : "No applicable semesters"}</option>{applicableSemesters.map((semester) => <option key={semester.id} value={semester.id}>{semester.name}</option>)}</select></AdminField></div>{units.some((unit) => (unit.label || unit.pricePerTermUgx) && !(unit.label && unit.pricePerTermUgx)) && <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-400">A unit row needs both a label and a price to be saved — rows missing either are silently skipped.</p>}<p className="mt-2 text-[11px] text-slate-500">{unitPayload().length} of {units.length} row{units.length === 1 ? "" : "s"} will be saved as units.</p><div className="mt-4 space-y-3">{units.map((unit, index) => <div key={index} className="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-4 dark:bg-muted/50"><AdminField label="Unit label"><input className={adminFieldClass} value={unit.label} onChange={(e) => updateUnit(index, "label", e.target.value)} placeholder="e.g. Room 2A / Bed 1 (type a real value — this is just an example)" /></AdminField><AdminField label="Building / block"><input className={adminFieldClass} placeholder="Block A" value={unit.buildingName} onChange={(e) => updateUnit(index, "buildingName", e.target.value)} /></AdminField><AdminField label="Floor"><input className={adminFieldClass} placeholder="2nd floor" value={unit.floorLabel} onChange={(e) => updateUnit(index, "floorLabel", e.target.value)} /></AdminField><AdminField label="Room type"><select className={adminFieldClass} value={unit.roomCategory} onChange={(e) => updateUnit(index, "roomCategory", e.target.value)}>{ROOM_TYPES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField><AdminField label="Capacity"><input type="number" min={1} max={50} className={adminFieldClass} value={unit.capacity} onChange={(e) => updateUnit(index, "capacity", e.target.value)} /></AdminField><AdminField label="Price per term (UGX)"><input type="number" min={1} className={adminFieldClass} placeholder="e.g. 1500000" value={unit.pricePerTermUgx} onChange={(e) => updateUnit(index, "pricePerTermUgx", e.target.value)} /></AdminField><AdminField label="Deposit (UGX, optional)"><input type="number" min={0} className={adminFieldClass} placeholder="e.g. 300000" value={unit.depositUgx} onChange={(e) => updateUnit(index, "depositUgx", e.target.value)} /></AdminField><AdminField label="Unit status"><select className={adminFieldClass} value={unit.operationalStatus} onChange={(e) => updateUnit(index, "operationalStatus", e.target.value)}>{["available", "vacant", "occupied", "held", "under_maintenance", "blocked"].map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></AdminField><div className="flex items-end gap-2"><AdminField label="Electricity"><select className={adminFieldClass} value={unit.electricityMeterType} onChange={(e) => updateUnit(index, "electricityMeterType", e.target.value)}>{["included", "prepaid", "postpaid", "shared", "none"].map((item) => <option key={item}>{item}</option>)}</select></AdminField>{units.length > 1 && <button type="button" aria-label="Remove unit row" onClick={() => setUnits((current) => current.filter((_, position) => position !== index))} className="mb-0.5 grid size-10 place-items-center rounded-lg text-red-700 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950"><Trash2 className="size-4" /></button>}</div></div>)}</div></section>}
         {notice && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{notice}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={close} className={fieldButton}>Cancel</button><button disabled={pending} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-bold text-white disabled:opacity-45"><ImagePlus className="size-4" />{pending ? "Saving…" : "Save property"}</button></div></form>
