@@ -2,9 +2,13 @@
  * FinanceReportsService.profitLoss/balanceSheet against the real docker test
  * DB. Entries are hand-seeded into a fixed 2020 window that nothing else in
  * the suite ever touches (every other ledger-posting test defaults to
- * today's date) — journal_entries/journal_lines are append-only, so there is
- * no way to isolate this with a TRUNCATE between suites; date-scoping is the
- * isolation mechanism instead.
+ * today's date) — journal_entries/journal_lines are append-only, so
+ * date-scoping is the isolation mechanism instead of TRUNCATE.
+ *
+ * Re-runs stay idempotent by clearing exactly this suite's own 2020 window
+ * first (journal_lines cascade with their entry; no other suite writes there)
+ * and upserting its two toggle accounts back to active — otherwise a second
+ * run double-posts every fixture and collides on ledger_accounts_code_uk.
  */
 import { Pool } from 'pg';
 
@@ -29,6 +33,11 @@ async function accountId(code: string): Promise<string> {
 }
 
 beforeAll(async () => {
+  await pool.query(
+    `DELETE FROM journal_entries WHERE entry_date >= '2020-01-01' AND entry_date < '2021-01-01'`,
+  );
+  await pool.query(`UPDATE ledger_accounts SET is_active = true WHERE code IN ('5901', '1901')`);
+
   const [cash, revenue, refunds, expense, payable] = await Promise.all([
     accountId('1000'),
     accountId('4000'),
@@ -75,7 +84,10 @@ beforeAll(async () => {
   // cumulative-as-of, so April entries stay invisible to the Feb asOf too).
   async function createAccount(code: string, name: string, accountType: string): Promise<string> {
     const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO ledger_accounts (code, name, account_type, is_active) VALUES ($1, $2, $3, true) RETURNING id`,
+      `INSERT INTO ledger_accounts (code, name, account_type, is_active)
+       VALUES ($1, $2, $3, true)
+       ON CONFLICT (code) DO UPDATE SET name = $2, account_type = $3, is_active = true
+       RETURNING id`,
       [code, name, accountType],
     );
     return rows[0]!.id;

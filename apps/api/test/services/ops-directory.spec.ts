@@ -181,9 +181,12 @@ describe('queue', () => {
 });
 
 describe('listInspectors', () => {
-  it('returns only active inspectors, not the inactive one', async () => {
+  it('returns active inspectors plus the active lead (ops_lead parity), not the inactive one', async () => {
     const rows = await ops.listInspectors(leadCtx());
-    expect(rows.map((r) => r.id).sort()).toEqual([inspectorActive].sort());
+    expect(rows.map((r) => r.id).sort()).toEqual([opsLead, inspectorActive].sort());
+    // The lead rides along as an assignable reviewer, flagged with their team.
+    const lead = rows.find((r) => r.id === opsLead);
+    expect(lead?.team).toBe('lead');
   });
 });
 

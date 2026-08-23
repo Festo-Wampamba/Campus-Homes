@@ -435,7 +435,7 @@ export class ListingsService {
              AND un.operational_status <> ALL($11::text[])
              AND NOT EXISTS (
                SELECT 1 FROM reservations r
-               WHERE r.unit_id = un.id AND r.status = ANY($10::text[])
+               WHERE r.unit_id = un.id AND r.status = ANY($10::reservation_status[])
              )
          ) u ON true
          LEFT JOIN LATERAL (
@@ -453,7 +453,7 @@ export class ListingsService {
                AND un.operational_status <> ALL($11::text[])
                AND NOT EXISTS (
                  SELECT 1 FROM reservations r
-                 WHERE r.unit_id = un.id AND r.status = ANY($10::text[])
+                 WHERE r.unit_id = un.id AND r.status = ANY($10::reservation_status[])
                )
              GROUP BY un.room_category, un.price_per_term_ugx
            ) grouped
@@ -534,7 +534,7 @@ export class ListingsService {
             `SELECT u.id, (
                NOT EXISTS (
                  SELECT 1 FROM reservations r
-                 WHERE r.unit_id = u.id AND r.status = ANY($2::text[])
+                  WHERE r.unit_id = u.id AND r.status = ANY($2::reservation_status[])
                )
                AND u.operational_status <> ALL($3::text[])
              ) AS available
