@@ -12,6 +12,7 @@ import { HealthController } from './modules/health/health.controller';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { LandlordsModule } from './modules/landlords/landlords.module';
 import { LeadsModule } from './modules/leads/leads.module';
+import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OpsModule } from './modules/ops/ops.module';
@@ -41,6 +42,7 @@ import { RootController } from './root.controller';
     CalendarModule,
     TenantAgreementsModule,
     LeadsModule,
+    InquiriesModule,
   ],
   controllers: [HealthController, RootController],
   providers: [

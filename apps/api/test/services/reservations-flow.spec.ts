@@ -25,6 +25,9 @@ const TEST_DATABASE_URL =
 // unlike the app's real Phase 1 default (RESERVATION_FEE_UGX = 0, gate
 // irrelevant since a free reservation never reaches it).
 process.env.PAYMENTS_ENABLED = 'true';
+// Same construction-time loadEnv() also requires DATABASE_URL; bare
+// `pnpm test` doesn't export one, so fall back to the docker test DB.
+process.env.DATABASE_URL = process.env.DATABASE_URL || TEST_DATABASE_URL;
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);

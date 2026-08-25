@@ -77,7 +77,16 @@ export class AdminActivitiesService {
         })
         .returning({ id: activities.id });
       if (!row) throw new NotFoundException('Activity not found');
-      return this.detail(row.id);
+      // Same-tx read: calling this.detail() here would open a second pooled
+      // connection whose transaction cannot see this uncommitted insert.
+      const [created] = await db
+        .select(this.selection())
+        .from(activities)
+        .leftJoin(assignee, eq(assignee.id, activities.assignedTo))
+        .leftJoin(creator, eq(creator.id, activities.createdBy))
+        .where(eq(activities.id, row.id));
+      if (!created) throw new NotFoundException('Activity not found');
+      return created;
     });
   }
 
@@ -99,7 +108,15 @@ export class AdminActivitiesService {
         .where(eq(activities.id, id))
         .returning({ id: activities.id });
       if (!row) throw new NotFoundException('Activity not found');
-      return this.detail(row.id);
+      // Same-tx read — see note in create().
+      const [updated] = await db
+        .select(this.selection())
+        .from(activities)
+        .leftJoin(assignee, eq(assignee.id, activities.assignedTo))
+        .leftJoin(creator, eq(creator.id, activities.createdBy))
+        .where(eq(activities.id, row.id));
+      if (!updated) throw new NotFoundException('Activity not found');
+      return updated;
     });
   }
 

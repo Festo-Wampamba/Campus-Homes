@@ -657,6 +657,77 @@ describe('activities (0017): staff ops board is service-only', () => {
   });
 });
 
+describe('inquiries (0028): student support desk is self-insert + service-only staff access', () => {
+  let inquiry1: string;
+
+  beforeAll(async () => {
+    inquiry1 = await seed(
+      `INSERT INTO inquiries (student_id, category, subject, message)
+       VALUES ($1, 'reservation', 'Wrong room allocated', 'I reserved Room 1A but was told it is taken.') RETURNING id`,
+      [student1],
+    );
+  });
+
+  it('a student can submit their own inquiry', async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c
+        .query(
+          `INSERT INTO inquiries (student_id, category, subject, message)
+           VALUES ($1, 'general', 'Payment options', 'Can I pay per month?') RETURNING id`,
+          [student2],
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a student cannot submit an inquiry for someone else', async () => {
+    await expect(
+      asIdentity({ userId: student2, role: 'student' }, async (c) =>
+        c.query(
+          `INSERT INTO inquiries (student_id, subject, message) VALUES ($1, 'Sneaky', 'spoofed author')`,
+          [student1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('the author reads their own inquiry', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [inquiry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("another student cannot read someone else's inquiry", async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [inquiry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("the author's own-row UPDATE affects zero rows (no self-UPDATE policy)", async () => {
+    const res = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE inquiries SET status = 'resolved' WHERE id = $1`, [inquiry1]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it('service_role reads and resolves any inquiry', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [inquiry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+    const res = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(
+        `UPDATE inquiries SET status = 'resolved', resolved_at = now() WHERE id = $1`,
+        [inquiry1],
+      ),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+});
+
 describe('ledger (0018): finance chart of accounts + journal is service-only', () => {
   let cashAccountId: string;
   let revenueAccountId: string;

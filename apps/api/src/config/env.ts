@@ -21,6 +21,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
   AUTH_EMAIL_FROM: z.string().min(1).default('CampusHomes <hello@campushomes.ug>'),
+  // Comma-separated inbox(es) that receive new student inquiries. Unset =
+  // inquiries are stored only (dev/staging posture); set + RESEND_API_KEY in
+  // production for the email leg of the support desk.
+  SUPPORT_NOTIFY_EMAILS: z.string().min(1).optional(),
   AUTH_APP_URL: z.string().url().default('http://localhost:3000'),
   // Required when the browser-facing web app and Better Auth API use sibling
   // subdomains. Omit locally so development cookies remain host-only.

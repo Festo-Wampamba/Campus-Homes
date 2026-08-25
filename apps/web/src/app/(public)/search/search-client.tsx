@@ -7,6 +7,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Building2, MapPin, RefreshCw, Search as SearchIcon } from "lucide-react";
 import {
   listingSearchResultSchema,
+  ROOM_CATEGORIES,
   type ListingSearchResult,
   type University,
 } from "@campushomes/shared";
@@ -35,6 +36,14 @@ const CAPACITY_OPTIONS = [
   { value: "4", label: "4+ people" },
 ];
 
+const ROOM_TYPE_OPTIONS = [
+  { value: "", label: "Any room type" },
+  ...ROOM_CATEGORIES.filter((c) => c !== "other").map((category) => ({
+    value: category,
+    label: humanizeKey(category),
+  })),
+];
+
 // Round so panning a few metres doesn't bust the query cache key
 function roundBounds(b: MapBounds): MapBounds {
   const r = (n: number) => Math.round(n * 1e4) / 1e4;
@@ -55,6 +64,7 @@ export function SearchClient() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [minCapacity, setMinCapacity] = useState("");
+  const [roomCategory, setRoomCategory] = useState("");
 
   // Debounced so typing a name doesn't fire a request per keystroke.
   useEffect(() => {
@@ -63,7 +73,7 @@ export function SearchClient() {
   }, [q]);
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, minCapacity],
+    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, minCapacity, roomCategory],
     enabled: bounds !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -79,6 +89,7 @@ export function SearchClient() {
       if (minPrice) qs.set("minPriceUgx", minPrice);
       if (maxPrice) qs.set("maxPriceUgx", maxPrice);
       if (minCapacity) qs.set("minCapacity", minCapacity);
+      if (roomCategory) qs.set("roomCategory", roomCategory);
       return searchResponse.parse(await api<unknown>(`/listings/search?${qs}`));
     },
   });
@@ -179,6 +190,21 @@ export function SearchClient() {
             )}
           >
             {CAPACITY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={roomCategory}
+            onChange={(e) => setRoomCategory(e.target.value)}
+            aria-label="Room type"
+            className={cn(
+              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
+              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            )}
+          >
+            {ROOM_TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
