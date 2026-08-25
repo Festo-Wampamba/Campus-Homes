@@ -534,3 +534,74 @@ Swap to a paid/self-hosted tile server later = env change only.
 ## Verification loop
 
 Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at root.
+
+- **Student support desk — inquiries form → ops/admin consoles + email (2026-08-23):**
+  students submit categorized inquiries from `/support`; rows persist, staff see them in
+  `/admin/inquiries` and `/ops/inquiries`, and each submission fires a best-effort email.
+  Key facts:
+  - Migration `0028_student_inquiries.sql` (hand-written like all post-0011): `inquiries`
+    table + new permission keys `inquiries.resolve`/`inquiries.read`. Grants: resolve →
+    super_admin/platform_admin/ops_lead/support_admin; read → those four + ops_inspector/
+    finance_admin/auditor.
+  - **RLS shape matters:** `withRlsContext` never `SET ROLE`s to a separate service role —
+    even SERVICE_CTX runs as `app_user` with the `app.user_role` GUC flipped. So the staff
+    resolve path needs UPDATE granted to `app_user`, and the ONLY thing keeping a student
+    from resolving their own inquiry is the absence of a self-UPDATE policy. Policies are
+    therefore split: `svc_all` FOR ALL, `inquiries_self_select`, `inquiries_self_insert`
+    (no self-UPDATE). Grant is `SELECT, INSERT, UPDATE TO app_user`; a student UPDATE
+    matches zero rows (calendar_events-style silent deny), covered by an RLS test.
+  - **Nested-transaction bug found and fixed (also latent in activities):** calling a
+    helper that does its own `rlsDb.run()` INSIDE an open run() grabs a second pooled
+    connection whose transaction cannot see the uncommitted INSERT/UPDATE. Inquiries
+    `create`/`resolve` read back via a same-handle `selectById(db, …)`; the identical
+    pre-existing bug in `AdminActivitiesService.create` (always threw NotFound on the
+    success path) and `.update` (returned the stale pre-update row) was fixed the same
+    way with inline same-tx selects. Never nest rlsDb.run for read-backs of writes made
+    in the outer transaction.
+  - Email leg: plain-fetch Resend (same pattern as `auth.email.ts`) gated on
+    `SUPPORT_NOTIFY_EMAILS` (comma-separated) + `RESEND_API_KEY`; unset inbox = stored-
+    only with a log line. Fire-and-forget with .catch — mailer failure must never fail
+    the student's POST.
+  - Web: public `(public)/support/page.tsx` branches on session — students get the
+    `SupportDesk` component (form + their threads + responses); everyone keeps the
+    contact card. Staff view is one shared `InquiriesManager` component mounted at BOTH
+    `(admin)/admin/inquiries` and `(ops)/ops/inquiries` (ops_lead can't reach /admin —
+    requireRole(["admin"]) is enum-only). API path is `/admin/inquiries` from both
+    portals; PermissionsGuard decides, not the portal. Admin nav item gated on the new
+    permission keys via the standard `any: string[]` pattern.
+  - Pre-existing breakage fixed en route: `reservations-flow.spec.ts` failed standalone
+    ("Invalid environment configuration: DATABASE_URL") because ReservationsService calls
+    loadEnv() at construction and bare `pnpm test` exports nothing — added the same
+    one-line bootstrap it already had for PAYMENTS_ENABLED. Verified-by-stash unrelated
+    failure NOT touched: `apps/web/src/app/dev/checkout/[txRef]/page.test.tsx` fails on
+    clean HEAD too.
+  - Verified: shared builds; api typecheck/lint/test green — 231/231 across 22 suites
+    (RLS suite includes 6 new inquiries tests; service spec `inquiries.spec.ts` 7);
+    web typecheck/lint green, web tests 30/31 (the 1 failure pre-existing above);
+    `drizzle-kit check` still "Everything's fine".
+
+- **MVP checklist audit + readiness fixes (2026-08-23):** walked the full
+  MVP build/test-readiness checklist against the code (verdict table in the
+  session report; accounts/comms posture captured in new root `TESTING.md`).
+  Fixes landed from it:
+  - Search gained a `roomCategory` filter (shared schema + raw-SQL EXISTS
+    clause — note the enum cast `$n::room_category`, NOT `::text`; pgEnum
+    columns reject text comparison) and /search grew a room-type select.
+    Availability is inherently filtered already (`unit_count > 0` +
+    live-reservation/operational_status exclusions), so no separate toggle.
+  - Listing detail now discloses `booking_fee_percent` /
+    `advance_rent_required` ("Other charges" block in MoneyCard — data was
+    captured at submission but never surfaced), shows an "Inspected <date>"
+    stamp next to VerifiedBadge (listing.verifiedAt added to the detail
+    response schema — zod strips undeclared keys, so adding display fields
+    REQUIRES extending listingDetailResponseSchema), and a 3-step
+    "Before you move in" explainer.
+  - Inquiry resolve now writes `inquiry.resolve` to audit_log (AuditService
+    injected into InquiriesService via OpsModule import; record() runs AFTER
+    the tx closes — never nest it inside rlsDb.run).
+  - Dev-DB test data: backfilled units.deposit_ugx (~25% of term rent, all
+    344 units were NULL) so deposit disclosure is actually visible.
+  - Deliberately NOT built (flagged as product decisions): viewing-request
+    scheduling, compare tooling (favourites = shortlist reading), landlord-
+    routed student enquiries (inquiries are staff-inbox by design; landlord
+    comms = reservation chat threads), self-serve landlord signup.

@@ -62,7 +62,7 @@ export default async function ListingDetailPage({
   const needsProfile = isStudent && studentProfile === null;
   const isSaved = savedListings.some((row) => row.id === listingId);
 
-  const { property, version, photos, units, unitPhotos, availability, propertyMedia } = detail;
+  const { property, listing, version, photos, units, unitPhotos, availability, propertyMedia } = detail;
   const unitPrices = units.map((u) => u.pricePerTermUgx);
   const minPriceUgx = unitPrices.length > 0 ? Math.min(...unitPrices) : version.pricePerTermUgx;
   const maxPriceUgx = unitPrices.length > 0 ? Math.max(...unitPrices) : version.pricePerTermUgx;
@@ -99,6 +99,16 @@ export default async function ListingDetailPage({
         <Link href="/#verified" className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
           What does Verified mean?
         </Link>
+        {listing.verifiedAt && (
+          <span className="text-xs text-muted-foreground">
+            Inspected{" "}
+            {new Date(listing.verifiedAt).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+        )}
         {isStudent && (
           <div className="ml-auto">
             <SaveButton listingId={listingId} initialSaved={isSaved} />
@@ -210,6 +220,8 @@ export default async function ListingDetailPage({
             listingId={listingId}
             minPriceUgx={minPriceUgx}
             maxPriceUgx={maxPriceUgx}
+            bookingFeePercent={property.booking_fee_percent}
+            advanceRentRequired={property.advance_rent_required}
             custodianName={property.custodian_name}
             custodianPhone={property.custodian_phone}
           />
@@ -240,6 +252,8 @@ function MoneyCard({
   listingId,
   minPriceUgx,
   maxPriceUgx,
+  bookingFeePercent,
+  advanceRentRequired,
   custodianName,
   custodianPhone,
   compact = false,
@@ -250,6 +264,8 @@ function MoneyCard({
   listingId: string;
   minPriceUgx: number;
   maxPriceUgx: number;
+  bookingFeePercent?: number | null;
+  advanceRentRequired?: boolean;
   custodianName?: string;
   custodianPhone?: string | null;
   compact?: boolean;
@@ -306,6 +322,31 @@ function MoneyCard({
         <p className="mt-3 text-xs text-muted-foreground">
           Rent and tenancy terms are agreed directly with the landlord.
         </p>
+      )}
+      {!compact && (bookingFeePercent != null || advanceRentRequired) && (
+        <div className="mt-3 rounded-lg bg-muted p-3">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Other charges
+          </p>
+          <ul className="mt-1.5 space-y-1 text-xs text-foreground">
+            {bookingFeePercent != null && (
+              <li>{bookingFeePercent}% booking fee on the semester rent</li>
+            )}
+            {advanceRentRequired && <li>Advance rent required before move-in</li>}
+          </ul>
+        </div>
+      )}
+      {!compact && (
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Before you move in
+          </p>
+          <ol className="mt-1.5 list-inside list-decimal space-y-1 text-xs text-muted-foreground">
+            <li>Reserve a free room — no payment needed to hold it.</li>
+            <li>Agree tenancy terms and pay the landlord directly.</li>
+            <li>Confirm your move-in here so the room is marked occupied.</li>
+          </ol>
+        </div>
       )}
       {!compact && custodianName && (
         <div className="mt-4 border-t border-border pt-4">

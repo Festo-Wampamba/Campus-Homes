@@ -17,5 +17,6 @@ export * from './rbac.js';
 export * from './admin.js';
 export * from './calendar.js';
 export * from './activities.js';
+export * from './inquiries.js';
 export * from './ledger.js';
 export * from './tenant-agreement.js';

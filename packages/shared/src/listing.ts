@@ -57,6 +57,9 @@ export const listingSearchSchema = z.object({
   // one undifferentiated price.
   minCapacity: z.coerce.number().int().min(1).max(20).optional(),
   q: z.string().trim().min(1).max(100).optional(),
+  // Room-type filter (single/double/studio/…) — matches any unit in the
+  // listing, independent of the capacity floor above.
+  roomCategory: z.enum(ROOM_CATEGORIES).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export type ListingSearchInput = z.infer<typeof listingSearchSchema>;
@@ -136,7 +139,12 @@ export const updateUnitOperationalStatusSchema = z.object({
 export type UpdateUnitOperationalStatusInput = z.infer<typeof updateUnitOperationalStatusSchema>;
 
 export const listingDetailResponseSchema = z.object({
-  listing: listingSchema.extend({ expiresAt: z.string().nullable() }),
+  listing: listingSchema.extend({
+    expiresAt: z.string().nullable(),
+    // Surfaced so students can see WHEN the physical inspection happened,
+    // not just that one did — the verification claim comes with a date.
+    verifiedAt: z.string().nullable(),
+  }),
   version: listingVersionSchema,
   // raw SQL row (service-role fetch — properties has no public SELECT policy)
   property: z.object({
@@ -149,6 +157,10 @@ export const listingDetailResponseSchema = z.object({
     // directly with the landlord" (MoneyCard copy) implies contact is expected.
     custodian_name: z.string(),
     custodian_phone: z.string().nullable(),
+    // Other charges captured at submission (PropertyExtendedFields) — null
+    // booking_fee_percent = the landlord didn't state one.
+    booking_fee_percent: z.coerce.number().nullable(),
+    advance_rent_required: z.boolean(),
   }),
   photos: z.array(listingPhotoSchema),
   units: z.array(unitSchema),

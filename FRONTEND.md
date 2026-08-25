@@ -53,6 +53,9 @@ https://<production-api-host>/api/auth/callback/google
 | GET+POST `/chat/threads/:id/messages` | participants | History / send (Soketi event `message` on channel `private-thread-{id}`) |
 | GET `/notifications` · POST `/notifications/:id/read` | any authed | Feed / mark read |
 | POST `/notifications/push-subscriptions` | any authed | Register Web Push subscription |
+| POST `/inquiries` · GET `/inquiries/mine` | student | Support desk: submit / list own (RLS self-scoped) |
+| GET `/admin/inquiries?status?` | staff (`inquiries.read`) | All student inquiries, newest first |
+| PATCH `/admin/inquiries/:id` | staff (`inquiries.resolve`) | Resolve/reopen + response text |
 
 Validation errors come back as 400 with Zod issue detail (nestjs-zod format).
 

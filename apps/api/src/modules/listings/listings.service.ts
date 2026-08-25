@@ -458,15 +458,27 @@ export class ListingsService {
              GROUP BY un.room_category, un.price_per_term_ugx
            ) grouped
          ) rc ON true
-         WHERE l.status = 'verified'
-           AND p.gps_point && ST_MakeEnvelope($1, $2, $3, $4, 4326)
-           AND ($5::int IS NULL OR lv.price_per_term_ugx <= $5)
-           AND ($6::int IS NULL OR lv.price_per_term_ugx >= $6)
-           AND ($7::int IS NULL OR u.max_capacity >= $7)
-           AND ($8::text IS NULL OR p.name ILIKE '%' || $8 || '%')
-           AND COALESCE(u.unit_count, 0) > 0
-         ORDER BY lv.price_per_term_ugx ASC
-         LIMIT $9`,
+          WHERE l.status = 'verified'
+            AND p.gps_point && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+            AND ($5::int IS NULL OR lv.price_per_term_ugx <= $5)
+            AND ($6::int IS NULL OR lv.price_per_term_ugx >= $6)
+            AND ($7::int IS NULL OR u.max_capacity >= $7)
+            AND ($8::text IS NULL OR p.name ILIKE '%' || $8 || '%')
+            AND (
+              $12::text IS NULL OR EXISTS (
+                SELECT 1 FROM units uf
+                WHERE uf.listing_id = l.id
+                  AND uf.room_category = $12::room_category
+                  AND uf.operational_status <> ALL($11::text[])
+                  AND NOT EXISTS (
+                    SELECT 1 FROM reservations rf
+                    WHERE rf.unit_id = uf.id AND rf.status = ANY($10::reservation_status[])
+                  )
+              )
+            )
+            AND COALESCE(u.unit_count, 0) > 0
+          ORDER BY lv.price_per_term_ugx ASC
+          LIMIT $9`,
         [
           input.minLon,
           input.minLat,
@@ -479,6 +491,7 @@ export class ListingsService {
           input.limit,
           LIVE_RESERVATION_STATUSES,
           UNAVAILABLE_OPERATIONAL_STATUSES,
+          input.roomCategory ?? null,
         ],
       );
       return res.rows as unknown[];
@@ -546,6 +559,7 @@ export class ListingsService {
           // needs a name/phone to actually reach, not just an address.
           const propRes = await client.query(
             `SELECT p.id, p.name, p.street_address, p.gps_lat, p.gps_lon,
+                    p.booking_fee_percent, p.advance_rent_required,
                     u.name AS custodian_name, u.phone AS custodian_phone
              FROM properties p
              JOIN landlords l ON l.user_id = p.landlord_id
@@ -574,6 +588,8 @@ export class ListingsService {
               street_address: string;
               gps_lat: string | null;
               gps_lon: string | null;
+              booking_fee_percent: string | number | null;
+              advance_rent_required: boolean;
               custodian_name: string;
               custodian_phone: string | null;
             },
