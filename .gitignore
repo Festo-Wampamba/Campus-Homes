@@ -24,6 +24,9 @@ OwnResourceFolder/
 # generated tool output (graphify knowledge-graph artifacts)
 graphify-out/
 
+# playwright MCP session artifacts (console logs, page snapshots, screenshots)
+.playwright-mcp/
+
 # subagent-driven-development scratch state (progress ledger, task briefs)
 .superpowers/
 
