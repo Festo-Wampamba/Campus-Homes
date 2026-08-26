@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import type { GrantRoleInput, InviteStaffInput, StaffRoleKey, UserRole } from '@campushomes/shared';
@@ -6,7 +6,9 @@ import type { GrantRoleInput, InviteStaffInput, StaffRoleKey, UserRole } from '@
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { roles, userRoleAssignments, users } from '../../db/schema';
+import type { Auth } from '../auth/auth.config';
 import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
+import { AUTH } from '../auth/auth.tokens';
 import { AuditService } from '../ops/audit.service';
 
 const SERVICE_CTX: RlsContext = {
@@ -30,9 +32,12 @@ const ROLE_TO_DB_ROLE: Record<StaffRoleKey, UserRole> = {
 
 @Injectable()
 export class StaffService {
+  private readonly logger = new Logger(StaffService.name);
+
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    @Inject(AUTH) private readonly auth: Auth,
   ) {}
 
   async invite(
@@ -53,7 +58,12 @@ export class StaffService {
           email: input.email,
           phone: input.phone,
           role: dbRole,
-          status: 'pending',
+          // Admin-provisioned: the email is trusted, so skip the verification
+          // gate and activate immediately. The invited user still can't sign
+          // in until they set a password via the emailed link below (no
+          // credential account exists yet), so 'active' is not a live login.
+          status: 'active',
+          emailVerified: input.email ? true : false,
         })
         .returning();
       const user = row!;
@@ -77,7 +87,32 @@ export class StaffService {
       scopeId: input.scopeId ?? null,
       assignmentId: result.assignment.id,
     });
+    if (input.email) {
+      await this.sendSetPasswordInvite(input.email);
+    }
     return result.user;
+  }
+
+  // Emails a set-password link (Better Auth's reset flow, which creates the
+  // credential account on submit — see auth.config sendResetPassword). Sent
+  // after the user row is committed and kept non-fatal: a transient email
+  // failure must not roll back a successful invite, and the invitee can still
+  // self-serve via "forgot password".
+  private async sendSetPasswordInvite(email: string) {
+    // Mirrors env.ts's WEB_ORIGIN default; a full loadEnv() here would couple
+    // the invite path to every unrelated required secret being present.
+    const webOrigin = process.env.WEB_ORIGIN || 'http://localhost:3000';
+    try {
+      await this.auth.api.requestPasswordReset({
+        body: { email, redirectTo: `${webOrigin}/reset-password` },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Staff invite created but set-password email failed for ${email}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   list() {

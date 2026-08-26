@@ -156,7 +156,7 @@ export class PermissionsGuard implements CanActivate {
       // This remains fail-closed and can be upgraded to MFA without changing
       // controller contracts.
       const signedInAt = new Date(req.session.session.createdAt).getTime();
-      if (!Number.isFinite(signedInAt) || Date.now() - signedInAt > 15 * 60_000) {
+      if (!Number.isFinite(signedInAt) || Date.now() - signedInAt > 30 * 60_000) {
         throw new UnauthorizedException(`${matched} requires a fresh sign-in`);
       }
     }
