@@ -657,6 +657,70 @@ describe('activities (0017): staff ops board is service-only', () => {
   });
 });
 
+describe('visit_corrections (0029): ops-only read, service-only write', () => {
+  let correctionInspector: string;
+  let correctionVisit: string;
+  let correction1: string;
+
+  beforeAll(async () => {
+    correctionInspector = await seedUser('ops_inspector', '+256700000020');
+    await seed(`INSERT INTO ops_staff (user_id, team) VALUES ($1, 'inspector')`, [
+      correctionInspector,
+    ]);
+    correctionVisit = await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, checklist, client_idempotency_key)
+       VALUES ($1, $2, '{}'::jsonb, 'seed-visit-corrections-0000') RETURNING id`,
+      [property1, correctionInspector],
+    );
+    correction1 = await seed(
+      `INSERT INTO visit_corrections (visit_id, component, message, raised_by)
+       VALUES ($1, 'photos', 'Photos are blurry, retake them', $2) RETURNING id`,
+      [correctionVisit, opsLead],
+    );
+  });
+
+  it('a landlord cannot read visit corrections', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM visit_corrections').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('an ops_lead can read visit corrections', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query('SELECT * FROM visit_corrections WHERE id = $1', [correction1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('an ops_lead cannot insert a correction directly (app-layer write only)', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(
+          `INSERT INTO visit_corrections (visit_id, component, message, raised_by)
+           VALUES ($1, 'safety', 'Sneaky', $2)`,
+          [correctionVisit, opsLead],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads, updates and deletes across all corrections', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM visit_corrections WHERE id = $1', [correction1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+    const update = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`UPDATE visit_corrections SET status = 'resolved' WHERE id = $1`, [correction1]),
+    );
+    expect(update.rowCount).toBe(1);
+    const del = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`DELETE FROM visit_corrections WHERE id = $1`, [correction1]),
+    );
+    expect(del.rowCount).toBe(1);
+  });
+});
+
 describe('inquiries (0028): student support desk is self-insert + service-only staff access', () => {
   let inquiry1: string;
 

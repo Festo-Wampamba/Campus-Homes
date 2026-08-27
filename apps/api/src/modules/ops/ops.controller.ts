@@ -11,6 +11,8 @@ import {
   IssueStrikeDto,
   OpsKycDecisionDto,
   PublishListingDto,
+  RaiseVisitCorrectionDto,
+  ResolveVisitCorrectionDto,
   ScheduleVisitDto,
   SetCampusPhotoDto,
   SyncVisitDto,
@@ -133,6 +135,32 @@ export class OpsController {
   @Roles('ops_lead', 'admin')
   approveVisit(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.approveVisit(rlsCtx(req), id);
+  }
+
+  // Sends one checklist component back to the assigned inspector (0029) —
+  // never the landlord, this data is inspector-captured.
+  @Post('visits/:id/corrections')
+  @Roles('ops_lead', 'admin')
+  raiseVisitCorrection(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RaiseVisitCorrectionDto,
+  ) {
+    return this.ops.raiseVisitCorrection(rlsCtx(req), id, body);
+  }
+
+  // The assigned inspector fixes a flagged component and resubmits it.
+  // ops_lead/admin included for the same MVP full-parity reason as
+  // syncVisit — the service layer still enforces the caller is the actual
+  // assigned inspector for a real correction to resolve.
+  @Patch('visits/:id/checklist-item')
+  @Roles('ops_inspector', 'ops_lead', 'admin')
+  resolveVisitCorrection(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ResolveVisitCorrectionDto,
+  ) {
+    return this.ops.resolveVisitCorrection(rlsCtx(req), id, body);
   }
 
   @Post('listings/publish')

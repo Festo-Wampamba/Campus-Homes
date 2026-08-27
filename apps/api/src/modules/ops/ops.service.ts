@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -18,6 +19,8 @@ import {
   type OnboardingLeadStatus,
   type OpsKycDecisionInput,
   type PublishListingInput,
+  type RaiseVisitCorrectionInput,
+  type ResolveVisitCorrectionInput,
   type ScheduleVisitInput,
   type SyncVisitInput,
   type UnitOperationalStatus,
@@ -42,9 +45,11 @@ import {
   units,
   users,
   verificationVisits,
+  visitCorrections,
 } from '../../db/schema';
 import type { Auth } from '../auth/auth.config';
 import { AUTH } from '../auth/auth.tokens';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from './audit.service';
 
 /** Promoting a visit's staged photos into listing_photos at publish time is
@@ -64,6 +69,7 @@ export class OpsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(AUTH) private readonly auth: Auth,
   ) {}
 
@@ -169,8 +175,121 @@ export class OpsService {
       if (!visit) {
         throw new NotFoundException('Visit not found');
       }
-      return visit;
+      // visit_corrections has no client SELECT policy beyond app_is_ops() —
+      // readable under the caller's own ctx same as everything else here,
+      // since visits_read already gated the visit row itself above.
+      const corrections = await db
+        .select()
+        .from(visitCorrections)
+        .where(eq(visitCorrections.visitId, visitId))
+        .orderBy(desc(visitCorrections.raisedAt));
+      return { ...visit, corrections };
     });
+  }
+
+  /** Ops-lead sends one checklist component back to the assigned inspector
+   * (0029) — never the landlord, this data is inspector-captured, not
+   * landlord-supplied. visit_corrections has no client write policy, so this
+   * runs as service_role; the @Roles('ops_lead', 'admin') guard on the
+   * controller is the real gate. */
+  async raiseVisitCorrection(ctx: RlsContext, visitId: string, input: RaiseVisitCorrectionInput) {
+    const visit = await this.rlsDb.run(ctx, (db) =>
+      db.query.verificationVisits.findFirst({ where: eq(verificationVisits.id, visitId) }),
+    );
+    if (!visit) {
+      throw new NotFoundException('Visit not found');
+    }
+    const correction = await this.rlsDb.run(SERVICE_CTX, async (db) =>
+      firstRow(
+        await db
+          .insert(visitCorrections)
+          .values({
+            visitId,
+            component: input.component,
+            message: input.message,
+            raisedBy: ctx.userId,
+          })
+          .returning(),
+      ),
+    );
+    await this.audit.record(ctx, 'visit.correction_raise', 'verification_visit', visitId, {
+      component: input.component,
+    });
+    await this.notifications.notify(visit.inspectorId, 'visit.correction_requested', 'in_app', {
+      visitId,
+      component: input.component,
+      message: input.message,
+    });
+    return correction;
+  }
+
+  /** The assigned inspector fixes a flagged checklist component and resolves
+   * it (0029) — the only one who can, in-code: RLS's visits_inspector_update
+   * already restricts the checklist write itself to inspector_id =
+   * app_user_id(), but resolving visit_corrections needs service_role (no
+   * client write policy), so that half needs its own explicit check. */
+  async resolveVisitCorrection(
+    ctx: RlsContext,
+    visitId: string,
+    input: ResolveVisitCorrectionInput,
+  ) {
+    const visit = await this.rlsDb.run(ctx, async (db) => {
+      const current = await db.query.verificationVisits.findFirst({
+        where: eq(verificationVisits.id, visitId),
+      });
+      if (!current) {
+        throw new NotFoundException('Visit not found');
+      }
+      if (current.inspectorId !== ctx.userId) {
+        throw new ForbiddenException('Only the assigned inspector can resolve this correction');
+      }
+      const checklist = (current.checklist ?? {}) as Record<
+        string,
+        { passed: boolean; notes?: string }
+      >;
+      const photoStorageKeys =
+        input.component === 'photos' && input.newPhotoStorageKeys?.length
+          ? [...((current.photoStorageKeys as string[] | null) ?? []), ...input.newPhotoStorageKeys]
+          : (current.photoStorageKeys as string[] | null);
+      const [row] = await db
+        .update(verificationVisits)
+        .set({
+          checklist: {
+            ...checklist,
+            [input.component]: { passed: input.passed, notes: input.notes },
+          },
+          photoStorageKeys,
+        })
+        .where(eq(verificationVisits.id, visitId))
+        .returning();
+      return row;
+    });
+    if (!visit) {
+      throw new NotFoundException('Visit not found');
+    }
+    const resolved = await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db
+        .update(visitCorrections)
+        .set({ status: 'resolved', resolvedAt: new Date() })
+        .where(
+          and(
+            eq(visitCorrections.visitId, visitId),
+            eq(visitCorrections.component, input.component),
+            eq(visitCorrections.status, 'open'),
+          ),
+        )
+        .returning(),
+    );
+    await this.audit.record(ctx, 'visit.correction_resolve', 'verification_visit', visitId, {
+      component: input.component,
+    });
+    for (const correction of resolved) {
+      await this.notifications.notify(correction.raisedBy, 'visit.correction_resolved', 'in_app', {
+        visitId,
+        component: input.component,
+      });
+    }
+    return visit;
   }
 
   /** Links an approved visit's property to the listing it should publish —

@@ -11,6 +11,7 @@ import { StatusChip } from "@/components/status-chip";
 import { getPropertyListings, getPublishableSemesters, getVisitDetail } from "@/lib/ops";
 import { getServerSession } from "@/lib/session";
 import { ApproveVisitButton } from "./approve-visit-button";
+import { ChecklistItemDialog } from "./checklist-item-dialog";
 import { CreateListingToPublish } from "./create-listing-to-publish";
 
 export const metadata: Metadata = { title: "Visit review" };
@@ -81,22 +82,40 @@ export default async function VisitDetailPage({
 
         {VERIFICATION_CHECKLIST_COMPONENTS.map((component) => {
           const entry = visit.checklist[component];
+          const itemCorrections = visit.corrections.filter((c) => c.component === component);
+          const hasOpenCorrection = itemCorrections.some((c) => c.status === "open");
           return (
-            <Card key={component}>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold text-foreground">{COMPONENT_LABEL[component]}</p>
-                  {entry && (
-                    <StatusChip tone={entry.passed ? "success" : "destructive"}>
-                      {entry.passed ? "Pass" : "Fail"}
-                    </StatusChip>
-                  )}
-                </div>
-                {entry?.notes && (
-                  <p className="mt-2 text-sm text-muted-foreground">{entry.notes}</p>
-                )}
-              </CardContent>
-            </Card>
+            <ChecklistItemDialog
+              key={component}
+              visitId={visit.id}
+              component={component}
+              label={COMPONENT_LABEL[component]}
+              entry={entry}
+              photoStorageKeys={(visit.photoStorageKeys as string[] | null) ?? []}
+              corrections={itemCorrections}
+              trigger={
+                <Card className="transition-colors hover:bg-muted">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-foreground">{COMPONENT_LABEL[component]}</p>
+                      <div className="flex items-center gap-2">
+                        {hasOpenCorrection && (
+                          <StatusChip tone="warning">Correction sent</StatusChip>
+                        )}
+                        {entry && (
+                          <StatusChip tone={entry.passed ? "success" : "destructive"}>
+                            {entry.passed ? "Pass" : "Fail"}
+                          </StatusChip>
+                        )}
+                      </div>
+                    </div>
+                    {entry?.notes && (
+                      <p className="mt-2 text-sm text-muted-foreground">{entry.notes}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              }
+            />
           );
         })}
 
