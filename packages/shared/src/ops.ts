@@ -8,6 +8,7 @@ import {
   PROPERTY_STATUSES,
   ROOM_CATEGORIES,
   STRIKE_REASONS,
+  VERIFICATION_CHECKLIST_COMPONENTS,
   VISIT_RESULTS,
 } from './enums.js';
 import { idempotencyKey, ugxAmount, uuid } from './common.js';
@@ -153,6 +154,38 @@ export const opsVisitMineSchema = z.object({
 });
 export type OpsVisitMine = z.infer<typeof opsVisitMineSchema>;
 
+// Per-checklist-item correction (0029) — a lead sends one component back to
+// the assigned inspector; the inspector fixes it and resolves it themselves.
+export const visitCorrectionSchema = z.object({
+  id: uuid,
+  component: z.enum(VERIFICATION_CHECKLIST_COMPONENTS),
+  message: z.string(),
+  status: z.enum(['open', 'resolved']),
+  raisedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+});
+export type VisitCorrection = z.infer<typeof visitCorrectionSchema>;
+
+// POST /ops/visits/:id/corrections — ops_lead/admin only.
+export const raiseVisitCorrectionSchema = z.object({
+  component: z.enum(VERIFICATION_CHECKLIST_COMPONENTS),
+  message: z.string().trim().min(1).max(1000),
+});
+export type RaiseVisitCorrectionInput = z.infer<typeof raiseVisitCorrectionSchema>;
+
+// PATCH /ops/visits/:id/checklist-item — the assigned inspector fixing a
+// flagged component and resubmitting it for review. Photos are additive
+// (Cloudinary public IDs already uploaded via POST /uploads/sign), matching
+// how the original offline capture works — this never removes an already
+// staged photo, only adds more.
+export const resolveVisitCorrectionSchema = z.object({
+  component: z.enum(VERIFICATION_CHECKLIST_COMPONENTS),
+  passed: z.boolean(),
+  notes: z.string().max(500).optional(),
+  newPhotoStorageKeys: z.array(z.string().min(1).max(500)).max(20).optional(),
+});
+export type ResolveVisitCorrectionInput = z.infer<typeof resolveVisitCorrectionSchema>;
+
 // Full visit record for lead review — GET /ops/visits/:id.
 export const opsVisitDetailSchema = z.object({
   id: uuid,
@@ -164,10 +197,12 @@ export const opsVisitDetailSchema = z.object({
   visitGpsLat: z.string().nullable(),
   visitGpsLon: z.string().nullable(),
   checklist: verificationChecklistSchema.partial(),
+  photoStorageKeys: z.array(z.string()).nullable(),
   result: z.enum(VISIT_RESULTS),
   failureReason: z.string().nullable(),
   approvedBy: uuid.nullable(),
   approvedAt: z.string().nullable(),
+  corrections: z.array(visitCorrectionSchema),
 });
 export type OpsVisitDetail = z.infer<typeof opsVisitDetailSchema>;
 

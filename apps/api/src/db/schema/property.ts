@@ -208,3 +208,23 @@ export const verificationVisits = pgTable(
     uniqueIndex('verification_visits_idempotency_uk').on(t.clientIdempotencyKey),
   ],
 );
+
+// Per-checklist-item correction workflow (0029): an ops_lead sends one
+// checklist component back to the assigned inspector to redo, with a
+// message; the inspector fixes it and explicitly resubmits. No client RLS
+// write policy — both raise and resolve go through service-role writes in
+// ops.service.ts with an in-code role/assignment check.
+export const visitCorrections = pgTable('visit_corrections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  visitId: uuid('visit_id')
+    .notNull()
+    .references(() => verificationVisits.id, { onDelete: 'cascade' }),
+  component: text('component').notNull(),
+  message: text('message').notNull(),
+  status: text('status').notNull().default('open'),
+  raisedBy: uuid('raised_by')
+    .notNull()
+    .references(() => opsStaff.userId),
+  raisedAt: timestamp('raised_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+});

@@ -7,6 +7,8 @@ import {
   issueStrikeSchema,
   opsKycDecisionSchema,
   publishListingSchema,
+  raiseVisitCorrectionSchema,
+  resolveVisitCorrectionSchema,
   scheduleVisitSchema,
   setCampusPhotoSchema,
   syncVisitSchema,
@@ -25,3 +27,5 @@ export class CreateOpsDraftListingDto extends createZodDto(createOpsDraftListing
 export class UpdateUnitOperationalStatusDto extends createZodDto(updateUnitOperationalStatusSchema) {}
 export class UpdateLeadStatusDto extends createZodDto(updateOnboardingLeadSchema) {}
 export class InviteLandlordDto extends createZodDto(inviteLandlordSchema) {}
+export class RaiseVisitCorrectionDto extends createZodDto(raiseVisitCorrectionSchema) {}
+export class ResolveVisitCorrectionDto extends createZodDto(resolveVisitCorrectionSchema) {}

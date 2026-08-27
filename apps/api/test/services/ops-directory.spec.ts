@@ -11,6 +11,7 @@ import { RlsDb } from '../../src/db/db.module';
 import type { Auth } from '../../src/modules/auth/auth.config';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
+import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { RlsContext } from '../../src/db/rls-context';
 
 const TEST_DATABASE_URL =
@@ -21,7 +22,7 @@ const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
 // Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
-const ops = new OpsService(rlsDb, audit, {} as Auth);
+const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as Auth);
 
 let opsLead: string;
 let inspectorActive: string;
