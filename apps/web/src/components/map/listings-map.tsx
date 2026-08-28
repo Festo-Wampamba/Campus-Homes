@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { cn } from "@/lib/utils";
+
 export interface MapBounds {
   minLat: number;
   minLon: number;
@@ -108,8 +110,17 @@ export function ListingsMap({
       // through to the page as normal.
       cooperativeGestures: true,
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.AttributionControl({ compact: false }));
+
+    // Container size changes for reasons MapLibre never sees on its own —
+    // the "Hide/show map" toggle collapsing this div's height/width, a
+    // sidebar opening, a window resize mid-transition — and a stale canvas
+    // size is what makes a WebGL map look cut off or blank after any of
+    // those. ResizeObserver catches all of them in one place instead of
+    // wiring a resize() call into every caller that can change our size.
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(containerRef.current);
     // Bounds come from the camera transform (center/zoom/container size),
     // available the instant the map is constructed — they don't need tiles
     // to have finished downloading. Search must never depend on tile-load
@@ -126,6 +137,7 @@ export function ListingsMap({
     mapRef.current = map;
     return () => {
       clearTimeout(timer);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -159,5 +171,10 @@ export function ListingsMap({
     }
   }, [selectedId, markers]);
 
-  return <div ref={containerRef} className={className} />;
+  // min-w-0 overrides flexbox/grid's default min-width:auto — without it, a
+  // WebGL canvas reporting its own intrinsic size can force this flex/grid
+  // child (and the whole page) wider than the viewport instead of shrinking
+  // to fit. overflow-hidden clips the map/controls to this box no matter
+  // what size MapLibre's internal canvas thinks it wants to be.
+  return <div ref={containerRef} className={cn("min-w-0 overflow-hidden", className)} />;
 }
