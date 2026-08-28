@@ -27,6 +27,9 @@ graphify-out/
 # subagent-driven-development scratch state (progress ledger, task briefs)
 .superpowers/
 
+# DB dumps — real user data, never committed
+db-backups/
+
 # local git worktrees
 .worktrees/
 .claude/worktrees/
