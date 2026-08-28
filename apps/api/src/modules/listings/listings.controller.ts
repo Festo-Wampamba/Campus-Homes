@@ -4,11 +4,13 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   AddPropertyDocumentDto,
+  AddPropertyMediaDto,
   AddUnitPhotoDto,
   CreateDraftListingDto,
   ListingSearchDto,
   SubmitPropertyDto,
   UpdatePropertyDto,
+  UpdateUnitOperationalStatusDto,
 } from './listings.dto';
 import { ListingsService } from './listings.service';
 
@@ -32,6 +34,14 @@ export class ListingsController {
   @Get('reviews')
   reviews() {
     return this.listings.reviews(6);
+  }
+
+  // Support contact lives in the admin-only platform_settings table, but
+  // students/the public need to see it (help/complaint routes) without
+  // signing in — this exposes just that one value, nothing else from settings.
+  @Get('support-contact')
+  supportContact() {
+    return this.listings.supportContact();
   }
 
   // Declared before the ':id' catch-all below — route order matters in Nest.
@@ -122,5 +132,38 @@ export class ListingsController {
   @Roles('landlord')
   removeUnitPhoto(@Req() req: AuthenticatedRequest, @Param('photoId', ParseUUIDPipe) photoId: string) {
     return this.listings.removeUnitPhoto(rlsCtx(req), photoId);
+  }
+
+  // Whole-property gallery photos (0026) — distinct from units/:id/photos
+  // (per-room) and Ops-only listing photos.
+  @Post('properties/:id/media')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  addPropertyMedia(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) propertyId: string,
+    @Body() body: AddPropertyMediaDto,
+  ) {
+    return this.listings.addPropertyMedia(rlsCtx(req), propertyId, body.storageKey);
+  }
+
+  @Delete('properties/media/:mediaId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  removePropertyMedia(@Req() req: AuthenticatedRequest, @Param('mediaId', ParseUUIDPipe) mediaId: string) {
+    return this.listings.removePropertyMedia(rlsCtx(req), mediaId);
+  }
+
+  // Marks a room taken/free by hand — the landlord's one lever for a tenant
+  // who never went through our own reservation flow (0024).
+  @Patch('units/:id/operational-status')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  updateUnitOperationalStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) unitId: string,
+    @Body() body: UpdateUnitOperationalStatusDto,
+  ) {
+    return this.listings.updateUnitOperationalStatus(rlsCtx(req), unitId, body.operationalStatus);
   }
 }

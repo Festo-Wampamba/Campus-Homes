@@ -8,8 +8,10 @@ import { Pool } from 'pg';
 import type { VerificationChecklist } from '@campushomes/shared';
 
 import { RlsDb } from '../../src/db/db.module';
+import type { Auth } from '../../src/modules/auth/auth.config';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
+import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { RlsContext } from '../../src/db/rls-context';
 
 const TEST_DATABASE_URL =
@@ -19,7 +21,8 @@ const TEST_DATABASE_URL =
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const ops = new OpsService(rlsDb, audit);
+// Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
+const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as Auth);
 
 let opsLead: string;
 let inspectorActive: string;
@@ -179,9 +182,12 @@ describe('queue', () => {
 });
 
 describe('listInspectors', () => {
-  it('returns only active inspectors, not the inactive one', async () => {
+  it('returns active inspectors plus the active lead (ops_lead parity), not the inactive one', async () => {
     const rows = await ops.listInspectors(leadCtx());
-    expect(rows.map((r) => r.id).sort()).toEqual([inspectorActive].sort());
+    expect(rows.map((r) => r.id).sort()).toEqual([opsLead, inspectorActive].sort());
+    // The lead rides along as an assignable reviewer, flagged with their team.
+    const lead = rows.find((r) => r.id === opsLead);
+    expect(lead?.team).toBe('lead');
   });
 });
 

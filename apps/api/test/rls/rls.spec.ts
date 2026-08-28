@@ -353,6 +353,52 @@ describe('unit_photos isolation (0008)', () => {
   });
 });
 
+describe('units.operational_status (0024): off-platform-occupancy write path', () => {
+  it("a landlord can flip their own room's operational_status", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit1]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it("a landlord cannot flip another landlord's room operational_status", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit2]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it("a landlord cannot write any other units column, even on their own room", async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE units SET price_per_term_ugx = 1 WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("ops_lead can flip operational_status on any unit", async () => {
+    const res = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'under_maintenance' WHERE id = $1`, [unit2]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it('ops_lead is also restricted to the operational_status column', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(`UPDATE units SET price_per_term_ugx = 1 WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('a student cannot write operational_status at all', async () => {
+    const res = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit1]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+});
+
 describe('auth infra (0002): accounts / verifications / sessions are service-only', () => {
   beforeAll(async () => {
     await pool.query('TRUNCATE accounts, verifications, sessions CASCADE');
@@ -608,6 +654,141 @@ describe('activities (0017): staff ops board is service-only', () => {
       c.query(`DELETE FROM activities WHERE id = $1`, [activity1]),
     );
     expect(del.rowCount).toBe(1);
+  });
+});
+
+describe('visit_corrections (0029): ops-only read, service-only write', () => {
+  let correctionInspector: string;
+  let correctionVisit: string;
+  let correction1: string;
+
+  beforeAll(async () => {
+    correctionInspector = await seedUser('ops_inspector', '+256700000020');
+    await seed(`INSERT INTO ops_staff (user_id, team) VALUES ($1, 'inspector')`, [
+      correctionInspector,
+    ]);
+    correctionVisit = await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, checklist, client_idempotency_key)
+       VALUES ($1, $2, '{}'::jsonb, 'seed-visit-corrections-0000') RETURNING id`,
+      [property1, correctionInspector],
+    );
+    correction1 = await seed(
+      `INSERT INTO visit_corrections (visit_id, component, message, raised_by)
+       VALUES ($1, 'photos', 'Photos are blurry, retake them', $2) RETURNING id`,
+      [correctionVisit, opsLead],
+    );
+  });
+
+  it('a landlord cannot read visit corrections', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM visit_corrections').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('an ops_lead can read visit corrections', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query('SELECT * FROM visit_corrections WHERE id = $1', [correction1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('an ops_lead cannot insert a correction directly (app-layer write only)', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(
+          `INSERT INTO visit_corrections (visit_id, component, message, raised_by)
+           VALUES ($1, 'safety', 'Sneaky', $2)`,
+          [correctionVisit, opsLead],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads, updates and deletes across all corrections', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM visit_corrections WHERE id = $1', [correction1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+    const update = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`UPDATE visit_corrections SET status = 'resolved' WHERE id = $1`, [correction1]),
+    );
+    expect(update.rowCount).toBe(1);
+    const del = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`DELETE FROM visit_corrections WHERE id = $1`, [correction1]),
+    );
+    expect(del.rowCount).toBe(1);
+  });
+});
+
+describe('inquiries (0028): student support desk is self-insert + service-only staff access', () => {
+  let inquiry1: string;
+
+  beforeAll(async () => {
+    inquiry1 = await seed(
+      `INSERT INTO inquiries (student_id, category, subject, message)
+       VALUES ($1, 'reservation', 'Wrong room allocated', 'I reserved Room 1A but was told it is taken.') RETURNING id`,
+      [student1],
+    );
+  });
+
+  it('a student can submit their own inquiry', async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c
+        .query(
+          `INSERT INTO inquiries (student_id, category, subject, message)
+           VALUES ($1, 'general', 'Payment options', 'Can I pay per month?') RETURNING id`,
+          [student2],
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a student cannot submit an inquiry for someone else', async () => {
+    await expect(
+      asIdentity({ userId: student2, role: 'student' }, async (c) =>
+        c.query(
+          `INSERT INTO inquiries (student_id, subject, message) VALUES ($1, 'Sneaky', 'spoofed author')`,
+          [student1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('the author reads their own inquiry', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [inquiry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("another student cannot read someone else's inquiry", async () => {
+    const rows = await asIdentity({ userId: student2, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [inquiry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("the author's own-row UPDATE affects zero rows (no self-UPDATE policy)", async () => {
+    const res = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE inquiries SET status = 'resolved' WHERE id = $1`, [inquiry1]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it('service_role reads and resolves any inquiry', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [inquiry1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+    const res = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(
+        `UPDATE inquiries SET status = 'resolved', resolved_at = now() WHERE id = $1`,
+        [inquiry1],
+      ),
+    );
+    expect(res.rowCount).toBe(1);
   });
 });
 

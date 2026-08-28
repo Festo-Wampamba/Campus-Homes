@@ -91,8 +91,16 @@ export class AdminUsersService {
         }
         if (input.accountType === 'landlord') {
           await client.query(
-            `INSERT INTO landlords (user_id, legal_name) VALUES ($1, $2)`,
-            [user.id, input.legalName],
+            `INSERT INTO landlords
+               (user_id, legal_name, whatsapp_number, business_type, business_type_other)
+             VALUES ($1, $2, $3, COALESCE($4, 'individual_landlord'), $5)`,
+            [
+              user.id,
+              input.legalName,
+              nullable(input.whatsappNumber),
+              nullable(input.businessType),
+              nullable(input.businessTypeOther),
+            ],
           );
         }
         if (input.accountType === 'ops_inspector' || input.accountType === 'ops_lead') {
@@ -163,6 +171,8 @@ export class AdminUsersService {
                u.created_at AS "createdAt", u.updated_at AS "updatedAt",
                s.university::text, s.year_of_study AS "yearOfStudy",
                l.legal_name AS "legalName", l.kyc_status::text AS "kycStatus",
+               l.whatsapp_number AS "whatsappNumber", l.business_type AS "businessType",
+               l.business_type_other AS "businessTypeOther",
                coalesce((SELECT array_agg(DISTINCT a.provider_id) FROM accounts a WHERE a.user_id = u.id), '{}') AS "authProviders"
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
@@ -285,15 +295,44 @@ export class AdminUsersService {
               year_of_study = $3 WHERE user_id = $1
           `, [userId, input.university ?? null, input.yearOfStudy ?? null]);
         }
+        const landlordFieldsGiven =
+          input.whatsappNumber !== undefined ||
+          input.businessType !== undefined ||
+          input.businessTypeOther !== undefined;
         if (nextType === 'landlord') {
           const legalName = input.legalName ?? (user?.name as string | undefined);
           if (!legalName) throw new BadRequestException('Legal name is required for landlord accounts');
           await client.query(`
-            INSERT INTO landlords (user_id, legal_name) VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET legal_name = EXCLUDED.legal_name
-          `, [userId, legalName]);
-        } else if (input.legalName !== undefined) {
-          await client.query('UPDATE landlords SET legal_name = $2 WHERE user_id = $1', [userId, input.legalName]);
+            INSERT INTO landlords
+              (user_id, legal_name, whatsapp_number, business_type, business_type_other)
+            VALUES ($1, $2, $3, COALESCE($4, 'individual_landlord'), $5)
+            ON CONFLICT (user_id) DO UPDATE SET
+              legal_name = EXCLUDED.legal_name,
+              whatsapp_number = coalesce(EXCLUDED.whatsapp_number, landlords.whatsapp_number),
+              business_type = coalesce($4, landlords.business_type),
+              business_type_other = coalesce(EXCLUDED.business_type_other, landlords.business_type_other)
+          `, [
+            userId,
+            legalName,
+            nullable(input.whatsappNumber),
+            nullable(input.businessType),
+            nullable(input.businessTypeOther),
+          ]);
+        } else if (input.legalName !== undefined || landlordFieldsGiven) {
+          await client.query(`
+            UPDATE landlords SET
+              legal_name = coalesce($2, legal_name),
+              whatsapp_number = coalesce($3, whatsapp_number),
+              business_type = coalesce($4, business_type),
+              business_type_other = coalesce($5, business_type_other)
+            WHERE user_id = $1
+          `, [
+            userId,
+            nullable(input.legalName),
+            nullable(input.whatsappNumber),
+            nullable(input.businessType),
+            nullable(input.businessTypeOther),
+          ]);
         }
 
         if (input.status && input.status !== 'active') {
@@ -337,11 +376,31 @@ export class AdminUsersService {
           if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
         }
 
-        await client.query(`UPDATE users SET status = 'suspended', deleted_at = now(), deletion_reason = $2, updated_at = now() WHERE id = $1`, [userId, reason]);
+        // email/phone keep their plain UNIQUE constraints (not partial on
+        // deleted_at), and Better Auth's own sign-up lookup has no idea about
+        // our deleted_at convention anyway — leaving them intact permanently
+        // blocks the same person from ever signing up again. Mangle both to a
+        // deterministic, guaranteed-unique value derived from the row's own
+        // id so they're freed for reuse immediately; the row (and its id)
+        // stays intact for audit_log/FK history.
+        await client.query(
+          `UPDATE users SET status = 'suspended', deleted_at = now(), deletion_reason = $2, updated_at = now(),
+                  email = 'deleted-' || id || '@deleted.campushomes.internal', phone = NULL
+           WHERE id = $1`,
+          [userId, reason],
+        );
         await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
         await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
         await client.query('UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
         await client.query(`UPDATE property_memberships SET status = 'revoked', revoked_at = now(), revoked_by = $2, revocation_reason = $3 WHERE user_id = $1 AND revoked_at IS NULL`, [userId, actor.userId, reason]);
+        // Mirrors enforce_strike_suspension() (0001_rls_hardening.sql): a
+        // deleted landlord's previously-verified listings must stop being
+        // publicly searchable immediately, not just vanish from admin lists.
+        await client.query(
+          `UPDATE listings SET status = 'suspended'
+           WHERE status = 'verified' AND property_id IN (SELECT id FROM properties WHERE landlord_id = $1)`,
+          [userId],
+        );
         await client.query('COMMIT');
         return { id: userId, deleted: true };
       } catch (error) {

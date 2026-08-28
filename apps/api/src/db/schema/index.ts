@@ -11,5 +11,7 @@ export * from './rbac';
 export * from './admin';
 export * from './calendar';
 export * from './activities';
+export * from './inquiries';
 export * from './ledger';
 export * from './tenant-agreement';
+export * from './lead';

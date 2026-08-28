@@ -7,9 +7,11 @@ import { Pool } from 'pg';
 
 import { StubPayments } from '../../src/adapters/payments.adapter';
 import { RlsDb } from '../../src/db/db.module';
+import type { Auth } from '../../src/modules/auth/auth.config';
 import { LedgerService } from '../../src/modules/finance/ledger.service';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
+import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
 import type { RlsContext } from '../../src/db/rls-context';
 
@@ -24,11 +26,15 @@ const TEST_DATABASE_URL =
 // unlike the app's real Phase 1 default (RESERVATION_FEE_UGX = 0, gate
 // irrelevant since a free reservation never reaches it).
 process.env.PAYMENTS_ENABLED = 'true';
+// Same construction-time loadEnv() also requires DATABASE_URL; bare
+// `pnpm test` doesn't export one, so fall back to the docker test DB.
+process.env.DATABASE_URL = process.env.DATABASE_URL || TEST_DATABASE_URL;
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const ops = new OpsService(rlsDb, audit);
+// Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
+const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as Auth);
 const ledger = new LedgerService();
 const reservationsService = new ReservationsService(
   rlsDb,

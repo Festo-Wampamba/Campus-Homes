@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { CATCHMENTS, KYC_STATUSES, OPS_TEAMS, UNIVERSITIES } from './enums.js';
+import {
+  CATCHMENTS,
+  KYC_STATUSES,
+  LANDLORD_BUSINESS_TYPES,
+  OPS_TEAMS,
+  UNIVERSITIES,
+} from './enums.js';
 import { uuid } from './common.js';
 
 export const studentProfileSchema = z.object({
@@ -26,13 +32,28 @@ export const landlordProfileSchema = z.object({
   legalName: z.string().min(2).max(200),
   kycStatus: z.enum(KYC_STATUSES),
   idDocStorageKey: z.string().nullable(),
+  // Landlord & Property Registration Form parity (0025) — Google Form
+  // "Landlord/Caretaker Information" section. Deliberately excludes
+  // Identity Verification (doc type/number) — landlords are never asked to
+  // submit an identity document (privacy decision, product call).
+  whatsappNumber: z.string().nullable(),
+  businessType: z.enum(LANDLORD_BUSINESS_TYPES),
+  businessTypeOther: z.string().nullable(),
 });
 export type LandlordProfile = z.infer<typeof landlordProfileSchema>;
 
-export const upsertLandlordProfileSchema = z.object({
-  legalName: z.string().min(2).max(200),
-  idDocStorageKey: z.string().min(1).max(500).nullable().optional(),
-});
+export const upsertLandlordProfileSchema = z
+  .object({
+    legalName: z.string().min(2).max(200),
+    idDocStorageKey: z.string().min(1).max(500).nullable().optional(),
+    whatsappNumber: z.string().trim().max(30).nullable().optional(),
+    businessType: z.enum(LANDLORD_BUSINESS_TYPES).default('individual_landlord'),
+    businessTypeOther: z.string().trim().max(200).nullable().optional(),
+  })
+  .refine((v) => v.businessType !== 'other' || Boolean(v.businessTypeOther), {
+    message: 'Describe the business type',
+    path: ['businessTypeOther'],
+  });
 export type UpsertLandlordProfileInput = z.infer<typeof upsertLandlordProfileSchema>;
 
 // Self-service identity edits (student and landlord "my profile" pages).

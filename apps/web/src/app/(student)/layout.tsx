@@ -1,4 +1,4 @@
-import { Calendar, CalendarCheck, Clock, Heart, MessageCircle, Search, User } from "lucide-react";
+import { Calendar, CalendarCheck, Clock, Heart, LifeBuoy, MessageCircle, Search, User } from "lucide-react";
 
 import { requireRole } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
@@ -20,6 +20,7 @@ export default async function StudentLayout({
         { label: "Recently viewed", href: "/recently-viewed", icon: <Clock aria-hidden className="size-4 shrink-0" /> },
         { label: "Calendar", href: "/calendar", icon: <Calendar aria-hidden className="size-4 shrink-0" /> },
         { label: "Profile", href: "/profile", icon: <User aria-hidden className="size-4 shrink-0" /> },
+        { label: "Support", href: "/support", icon: <LifeBuoy aria-hidden className="size-4 shrink-0" /> },
       ]}
     >
       {children}

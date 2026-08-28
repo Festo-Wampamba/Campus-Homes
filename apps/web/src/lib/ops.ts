@@ -1,5 +1,6 @@
 import type {
   Campus,
+  OnboardingLead,
   OpsInspector,
   OpsLandlordKycRow,
   OpsPropertyListing,
@@ -9,10 +10,13 @@ import type {
   OpsVisitMine,
 } from "@campushomes/shared";
 
-import { apiServer } from "@/lib/server-api";
+import { apiServer, apiServerStrict } from "@/lib/server-api";
 
+// Deliberately not the swallow-errors-to-[] pattern the rest of this file
+// uses — see apiServerStrict()'s comment. A lead needs to know the
+// difference between "nothing to approve" and "the API didn't respond."
 export function getQueue(): Promise<OpsQueueRow[]> {
-  return apiServer<OpsQueueRow[]>("/ops/queue").then((rows) => rows ?? []);
+  return apiServerStrict<OpsQueueRow[]>("/ops/queue");
 }
 
 export function getInspectors(): Promise<OpsInspector[]> {
@@ -49,4 +53,8 @@ export function getKycQueue(): Promise<OpsLandlordKycRow[]> {
 
 export function getCampuses(): Promise<Campus[]> {
   return apiServer<Campus[]>("/listings/campuses").then((rows) => rows ?? []);
+}
+
+export function getLeadsQueue(): Promise<OnboardingLead[]> {
+  return apiServer<OnboardingLead[]>("/ops/leads").then((rows) => rows ?? []);
 }

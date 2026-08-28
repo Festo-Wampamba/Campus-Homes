@@ -100,6 +100,13 @@ export function ListingsMap({
       zoom: initialZoomRef.current,
       // OSM tile policy requires always-visible attribution — no compact toggle
       attributionControl: false,
+      // A plain scroll over the map was hijacking page scroll entirely
+      // (MapLibre's default scrollZoom captures the wheel event outright).
+      // cooperativeGestures requires ctrl/cmd+scroll to zoom the map (with a
+      // brief "use ctrl + scroll to zoom" hint on a plain scroll attempt) and
+      // two fingers to pan on touch, so one-finger/plain scroll always falls
+      // through to the page as normal.
+      cooperativeGestures: true,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
     map.addControl(new maplibregl.AttributionControl({ compact: false }));

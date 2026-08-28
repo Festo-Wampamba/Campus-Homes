@@ -9,6 +9,14 @@ import { TenantAgreementForm } from "./tenant-agreement-form";
 
 export const metadata: Metadata = { title: "Tenant agreement" };
 
+// Same backup as not-found.tsx — offered here too since "the landlord
+// hasn't set up a form yet" and "the template fetch silently failed" are
+// indistinguishable from this page's perspective (apiServer() swallows
+// both into the same null), and either way the student showed up wanting
+// to register and shouldn't be left with no path forward.
+const STUDENT_REGISTRATION_FORM_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSfC4JXnuGxF6qcIoyCXpNNxQuNgKwtOmc5r8muRavSeEH8Nag/viewform";
+
 export default async function TenantAgreementPage({
   params,
 }: {
@@ -64,6 +72,14 @@ export default async function TenantAgreementPage({
                 {property.name} hasn&apos;t set up a tenant agreement form yet. Check back once they have,
                 or ask them directly.
               </p>
+              <a
+                href={STUDENT_REGISTRATION_FORM_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                Use the paper form instead
+              </a>
             </>
           ) : existing ? (
             <>

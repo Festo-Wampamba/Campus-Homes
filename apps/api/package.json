@@ -62,6 +62,9 @@
       "<rootDir>/src",
       "<rootDir>/test"
     ],
+    "moduleNameMapper": {
+      "^better-auth/crypto$": "<rootDir>/test/mocks/better-auth-crypto.js"
+    },
     "testTimeout": 30000
   }
 }

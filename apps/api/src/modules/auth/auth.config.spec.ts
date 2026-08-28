@@ -96,11 +96,11 @@ describe('createAuth cookie scope', () => {
       disableImplicitLinking: true,
     }));
     expect(options.emailAndPassword).toEqual(expect.objectContaining({
-      requireEmailVerification: true,
+      requireEmailVerification: false,
       sendResetPassword: expect.any(Function),
     }));
     expect(options.emailVerification).toEqual(expect.objectContaining({
-      sendOnSignUp: true,
+      sendOnSignUp: false,
       sendVerificationEmail: expect.any(Function),
     }));
   });

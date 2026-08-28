@@ -3,21 +3,31 @@ import crypto from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { hashPassword } from 'better-auth/crypto';
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
-import type {
-  CreateOpsDraftListingInput,
-  IssueStrikeInput,
-  OpsKycDecisionInput,
-  PublishListingInput,
-  ScheduleVisitInput,
-  SyncVisitInput,
-  University,
+import {
+  UGANDA_GPS_BOUNDS,
+  type CreateOpsDraftListingInput,
+  type InviteLandlordInput,
+  type IssueStrikeInput,
+  type OnboardingLeadStatus,
+  type OpsKycDecisionInput,
+  type PublishListingInput,
+  type RaiseVisitCorrectionInput,
+  type ResolveVisitCorrectionInput,
+  type ScheduleVisitInput,
+  type SyncVisitInput,
+  type UnitOperationalStatus,
+  type University,
 } from '@campushomes/shared';
 
+import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
@@ -28,13 +38,18 @@ import {
   listingPhotos,
   listingVersions,
   listings,
+  onboardingLeads,
   opsStaff,
   properties,
   semesters,
   units,
   users,
   verificationVisits,
+  visitCorrections,
 } from '../../db/schema';
+import type { Auth } from '../auth/auth.config';
+import { AUTH } from '../auth/auth.tokens';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from './audit.service';
 
 /** Promoting a visit's staged photos into listing_photos at publish time is
@@ -54,6 +69,8 @@ export class OpsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
+    @Inject(AUTH) private readonly auth: Auth,
   ) {}
 
   /** Verification queue: properties with no visit yet, a visit still in
@@ -90,14 +107,21 @@ export class OpsService {
     });
   }
 
-  /** Inspector picker for the schedule-visit form. Ops-lead-only read. */
+  /** Inspector picker for the schedule-visit form. Ops-lead-only read.
+   * Includes team='lead' too (MVP full-parity decision) so a lead can
+   * self-assign a visit and run it end-to-end without an inspector. */
   listInspectors(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (db) =>
       db
-        .select({ id: users.id, name: users.name, catchment: opsStaff.assignedCatchment })
+        .select({
+          id: users.id,
+          name: users.name,
+          catchment: opsStaff.assignedCatchment,
+          team: opsStaff.team,
+        })
         .from(opsStaff)
         .innerJoin(users, eq(opsStaff.userId, users.id))
-        .where(and(eq(opsStaff.team, 'inspector'), eq(opsStaff.active, true))),
+        .where(and(inArray(opsStaff.team, ['inspector', 'lead']), eq(opsStaff.active, true))),
     );
   }
 
@@ -151,8 +175,121 @@ export class OpsService {
       if (!visit) {
         throw new NotFoundException('Visit not found');
       }
-      return visit;
+      // visit_corrections has no client SELECT policy beyond app_is_ops() —
+      // readable under the caller's own ctx same as everything else here,
+      // since visits_read already gated the visit row itself above.
+      const corrections = await db
+        .select()
+        .from(visitCorrections)
+        .where(eq(visitCorrections.visitId, visitId))
+        .orderBy(desc(visitCorrections.raisedAt));
+      return { ...visit, corrections };
     });
+  }
+
+  /** Ops-lead sends one checklist component back to the assigned inspector
+   * (0029) — never the landlord, this data is inspector-captured, not
+   * landlord-supplied. visit_corrections has no client write policy, so this
+   * runs as service_role; the @Roles('ops_lead', 'admin') guard on the
+   * controller is the real gate. */
+  async raiseVisitCorrection(ctx: RlsContext, visitId: string, input: RaiseVisitCorrectionInput) {
+    const visit = await this.rlsDb.run(ctx, (db) =>
+      db.query.verificationVisits.findFirst({ where: eq(verificationVisits.id, visitId) }),
+    );
+    if (!visit) {
+      throw new NotFoundException('Visit not found');
+    }
+    const correction = await this.rlsDb.run(SERVICE_CTX, async (db) =>
+      firstRow(
+        await db
+          .insert(visitCorrections)
+          .values({
+            visitId,
+            component: input.component,
+            message: input.message,
+            raisedBy: ctx.userId,
+          })
+          .returning(),
+      ),
+    );
+    await this.audit.record(ctx, 'visit.correction_raise', 'verification_visit', visitId, {
+      component: input.component,
+    });
+    await this.notifications.notify(visit.inspectorId, 'visit.correction_requested', 'in_app', {
+      visitId,
+      component: input.component,
+      message: input.message,
+    });
+    return correction;
+  }
+
+  /** The assigned inspector fixes a flagged checklist component and resolves
+   * it (0029) — the only one who can, in-code: RLS's visits_inspector_update
+   * already restricts the checklist write itself to inspector_id =
+   * app_user_id(), but resolving visit_corrections needs service_role (no
+   * client write policy), so that half needs its own explicit check. */
+  async resolveVisitCorrection(
+    ctx: RlsContext,
+    visitId: string,
+    input: ResolveVisitCorrectionInput,
+  ) {
+    const visit = await this.rlsDb.run(ctx, async (db) => {
+      const current = await db.query.verificationVisits.findFirst({
+        where: eq(verificationVisits.id, visitId),
+      });
+      if (!current) {
+        throw new NotFoundException('Visit not found');
+      }
+      if (current.inspectorId !== ctx.userId) {
+        throw new ForbiddenException('Only the assigned inspector can resolve this correction');
+      }
+      const checklist = (current.checklist ?? {}) as Record<
+        string,
+        { passed: boolean; notes?: string }
+      >;
+      const photoStorageKeys =
+        input.component === 'photos' && input.newPhotoStorageKeys?.length
+          ? [...((current.photoStorageKeys as string[] | null) ?? []), ...input.newPhotoStorageKeys]
+          : (current.photoStorageKeys as string[] | null);
+      const [row] = await db
+        .update(verificationVisits)
+        .set({
+          checklist: {
+            ...checklist,
+            [input.component]: { passed: input.passed, notes: input.notes },
+          },
+          photoStorageKeys,
+        })
+        .where(eq(verificationVisits.id, visitId))
+        .returning();
+      return row;
+    });
+    if (!visit) {
+      throw new NotFoundException('Visit not found');
+    }
+    const resolved = await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db
+        .update(visitCorrections)
+        .set({ status: 'resolved', resolvedAt: new Date() })
+        .where(
+          and(
+            eq(visitCorrections.visitId, visitId),
+            eq(visitCorrections.component, input.component),
+            eq(visitCorrections.status, 'open'),
+          ),
+        )
+        .returning(),
+    );
+    await this.audit.record(ctx, 'visit.correction_resolve', 'verification_visit', visitId, {
+      component: input.component,
+    });
+    for (const correction of resolved) {
+      await this.notifications.notify(correction.raisedBy, 'visit.correction_resolved', 'in_app', {
+        visitId,
+        component: input.component,
+      });
+    }
+    return visit;
   }
 
   /** Links an approved visit's property to the listing it should publish —
@@ -265,6 +402,35 @@ export class OpsService {
     return listing;
   }
 
+  /** Ops flipping a room's status by hand (0024) — units_ops_update (0001)
+   * already gives any ops role unrestricted UPDATE, so this runs under the
+   * caller's own ctx like everything else in this controller. Covers the
+   * same off-platform-tenant gap as the landlord's own
+   * ListingsService.updateUnitOperationalStatus, for the concierge-model
+   * case where Ops is the one who finds out a room was let outside the
+   * platform. */
+  async updateUnitOperationalStatus(
+    ctx: RlsContext,
+    unitId: string,
+    operationalStatus: UnitOperationalStatus,
+  ) {
+    const unit = await this.rlsDb.run(ctx, async (db) => {
+      const [row] = await db
+        .update(units)
+        .set({ operationalStatus })
+        .where(eq(units.id, unitId))
+        .returning();
+      if (!row) {
+        throw new NotFoundException('Unit not found');
+      }
+      return row;
+    });
+    await this.audit.record(ctx, 'unit.operational_status_update', 'unit', unitId, {
+      operationalStatus,
+    });
+    return unit;
+  }
+
   async scheduleVisit(ctx: RlsContext, input: ScheduleVisitInput) {
     const visit = await this.rlsDb.run(ctx, async (db) =>
       firstRow(
@@ -355,6 +521,24 @@ export class OpsService {
         throw new NotFoundException('Visit not found');
       }
       if (row.visitGpsLat != null && row.visitGpsLon != null) {
+        const lat = Number(row.visitGpsLat);
+        const lon = Number(row.visitGpsLon);
+        // syncVisitSchema rejects out-of-country GPS at submission time now,
+        // but this guards legacy rows captured before that check existed —
+        // silently promoting bad GPS here is what makes a listing "verified"
+        // yet permanently invisible to search (a laptop's IP-based
+        // geolocation fallback, or a VPN, can report a location continents
+        // away with no error at capture time).
+        if (
+          lat < UGANDA_GPS_BOUNDS.minLat ||
+          lat > UGANDA_GPS_BOUNDS.maxLat ||
+          lon < UGANDA_GPS_BOUNDS.minLon ||
+          lon > UGANDA_GPS_BOUNDS.maxLon
+        ) {
+          throw new BadRequestException(
+            'This visit\'s captured GPS falls outside Uganda — it cannot be approved until the inspector recaptures location on-site (not from a desktop browser or VPN).',
+          );
+        }
         await db
           .update(properties)
           .set({ gpsLat: row.visitGpsLat, gpsLon: row.visitGpsLon })
@@ -469,6 +653,7 @@ export class OpsService {
           capacity: u.capacity,
           roomCategory: u.roomCategory,
           pricePerTermUgx: u.pricePerTermUgx,
+          depositUgx: u.depositUgx ?? null,
           availableForSemesterId: listing.semesterId,
         })),
       );
@@ -522,8 +707,76 @@ export class OpsService {
         .select()
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
-      return { listing, property };
+      // Same lookup publishListing() uses to promote photos — surfaced here
+      // so the publish screen can warn *before* publishing if the inspector
+      // staged none, rather than the listing quietly going live photo-less.
+      const approvedVisit = await db.query.verificationVisits.findFirst({
+        where: and(
+          eq(verificationVisits.propertyId, listing.propertyId),
+          eq(verificationVisits.result, 'passed'),
+        ),
+        orderBy: (v, ops) => [ops.desc(v.approvedAt)],
+      });
+      const visitPhotoCount = (approvedVisit?.photoStorageKeys as string[] | null)?.length ?? 0;
+      const photos = listing.currentVersionId
+        ? await db
+            .select()
+            .from(listingPhotos)
+            .where(eq(listingPhotos.listingVersionId, listing.currentVersionId))
+            .orderBy(asc(listingPhotos.sortOrder))
+        : [];
+      return { listing, property, visitPhotoCount, photos };
     });
+  }
+
+  /** Backfills listing_photos on an already-published listing — the fix for
+   * an inspector who skipped photos at visit time (publishListing() only
+   * ever gets one shot at promoting the visit's staged photos; there was no
+   * way to add more afterward). listing_photos.gps_lat/lon is NOT NULL
+   * ("EXIF-verified... never trusted" — schema comment), so a backfill photo
+   * not tied to a fresh on-site capture uses the property's own verified
+   * GPS (set once, at visit approval) rather than fabricating a value. */
+  async addListingPhotos(ctx: RlsContext, listingId: string, storageKeys: string[]) {
+    const result = await this.rlsDb.run(ctx, async (db) => {
+      const listing = await db.query.listings.findFirst({ where: eq(listings.id, listingId) });
+      if (!listing) {
+        throw new NotFoundException('Listing not found');
+      }
+      if (!listing.currentVersionId) {
+        throw new BadRequestException('Publish this listing before adding photos to it');
+      }
+      const [property] = await db
+        .select({ gpsLat: properties.gpsLat, gpsLon: properties.gpsLon })
+        .from(properties)
+        .where(eq(properties.id, listing.propertyId));
+      if (!property?.gpsLat || !property.gpsLon) {
+        throw new BadRequestException('This property has no verified GPS yet — approve a visit first');
+      }
+      const { gpsLat, gpsLon } = property;
+      const existing = await db
+        .select({ sortOrder: listingPhotos.sortOrder })
+        .from(listingPhotos)
+        .where(eq(listingPhotos.listingVersionId, listing.currentVersionId));
+      const nextSortOrder = existing.length;
+      const inserted = await db
+        .insert(listingPhotos)
+        .values(
+          storageKeys.map((storageKey, i) => ({
+            listingVersionId: listing.currentVersionId!,
+            storageKey,
+            capturedBy: ctx.userId,
+            gpsLat,
+            gpsLon,
+            capturedAt: new Date(),
+            isPrimary: existing.length === 0 && i === 0,
+            sortOrder: nextSortOrder + i,
+          })),
+        )
+        .returning();
+      return inserted;
+    });
+    await this.audit.record(ctx, 'listing.photos_add', 'listing', listingId, { count: storageKeys.length });
+    return result;
   }
 
   /** Landlords awaiting KYC review, oldest first. landlords_read already
@@ -596,6 +849,106 @@ export class OpsService {
           .returning(),
       ),
     );
+  }
+
+  /** The public /landlords "Request onboarding" queue (0027) — leads run
+   * ops_lead's own ctx (onboarding_leads_ops_read/_update, 0027 grant it
+   * directly, no service_role needed, same posture as units_ops_update). */
+  leadsQueue(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (_db, client) => {
+      const res = await client.query(
+        `SELECT id, name, phone, email, property_location AS "propertyLocation",
+                message, status, contacted_by AS "contactedBy", contacted_at AS "contactedAt",
+                created_at AS "createdAt"
+         FROM onboarding_leads
+         ORDER BY (status = 'new') DESC, created_at ASC`,
+      );
+      return res.rows as unknown[];
+    });
+  }
+
+  async updateLeadStatus(ctx: RlsContext, leadId: string, status: OnboardingLeadStatus) {
+    const lead = await this.rlsDb.run(ctx, async (db) => {
+      const [row] = await db
+        .update(onboardingLeads)
+        .set({
+          status,
+          contactedBy: status === 'new' ? null : ctx.userId,
+          contactedAt: status === 'new' ? null : new Date(),
+        })
+        .where(eq(onboardingLeads.id, leadId))
+        .returning();
+      if (!row) {
+        throw new NotFoundException('Lead not found');
+      }
+      return row;
+    });
+    await this.audit.record(ctx, 'lead.status_update', 'onboarding_lead', leadId, { status });
+    return lead;
+  }
+
+  /** Self-serve landlord registration — no schema change, reuses users/
+   * landlords/accounts/user_role_assignments plus the 0027 onboarding_leads
+   * table. For the "owners who stay very
+   * far" case the product meeting flagged: instead of an in-person
+   * concierge visit, ops emails a link and the landlord sets their own
+   * password and runs the onboarding wizard themselves. The account (plus a
+   * throwaway credential nobody is ever told) is created up front purely so
+   * Better Auth's existing requestPasswordReset flow has something to reset —
+   * reusing that flow end-to-end means no new token/email infra was needed,
+   * just this one trigger. */
+  async inviteLandlord(ctx: RlsContext, input: InviteLandlordInput) {
+    const user = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await client.query('BEGIN');
+      try {
+        const existing = await client.query('SELECT id FROM users WHERE email = $1', [input.email]);
+        if (existing.rows[0]) {
+          throw new ConflictException('A user with this email already exists');
+        }
+        const created = (await client.query(
+          `INSERT INTO users (name, email, phone, role, status, email_verified, phone_verified)
+           VALUES ($1, $2, $3, 'landlord', 'active', true, false)
+           RETURNING id, name, email`,
+          [input.name, input.email, input.phone],
+        )).rows[0] as { id: string; name: string; email: string };
+        await client.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, $2)`, [
+          created.id,
+          input.name,
+        ]);
+        // Never revealed to anyone — its only purpose is giving Better
+        // Auth's password-reset flow a credential row to reset below.
+        const throwawayPassword = crypto.randomBytes(32).toString('hex');
+        await client.query(
+          `INSERT INTO accounts (id, account_id, provider_id, user_id, password)
+           VALUES ($1, $2::text, 'credential', $2::uuid, $3)`,
+          [crypto.randomUUID(), created.id, await hashPassword(throwawayPassword)],
+        );
+        await client.query(
+          `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+           SELECT $1, id, 'own', $2, 'Landlord self-registration invite'
+           FROM roles WHERE key = 'landlord'`,
+          [created.id, ctx.userId],
+        );
+        if (input.leadId) {
+          await client.query(
+            `UPDATE onboarding_leads SET status = 'converted', contacted_by = $2, contacted_at = now()
+             WHERE id = $1`,
+            [input.leadId, ctx.userId],
+          );
+        }
+        await client.query('COMMIT');
+        return created;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
+    });
+    const env = loadEnv();
+    await this.auth.api.requestPasswordReset({
+      body: { email: input.email, redirectTo: `${env.WEB_ORIGIN}/reset-password` },
+    });
+    await this.audit.record(ctx, 'landlord.invite', 'user', user.id, { email: input.email });
+    return user;
   }
 
   async issueStrike(ctx: RlsContext, input: IssueStrikeInput) {

@@ -49,6 +49,15 @@ export const landlords = pgTable('landlords', {
   phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
   kycReviewedBy: uuid('kyc_reviewed_by').references(() => users.id),
   kycReviewedAt: timestamp('kyc_reviewed_at', { withTimezone: true }),
+  // Landlord & Property Registration Form parity (0025) — mirrors the
+  // Google Form's "Landlord/Caretaker Information" section. text + CHECK,
+  // not a pgEnum, matching the operational_status precedent for post-hoc
+  // ALTER TABLE additions (0013). Deliberately no Identity Verification
+  // fields (doc type/number) — landlords are never asked to submit an
+  // identity document (privacy decision, product call).
+  whatsappNumber: text('whatsapp_number'),
+  businessType: text('business_type').notNull().default('individual_landlord'),
+  businessTypeOther: text('business_type_other'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -46,14 +46,94 @@ export function humanizeKey(key: string): string {
 // pre-fills the Ops publish form) and Ops' authoritative listing_versions
 // .amenities must use the same keys, or a landlord's "wifi" checkbox and
 // Ops' "wifi" checkbox would silently drift apart. Both forms import this.
+// Matches the Google Form's "Amenities" list field-for-field (0025).
 export const AMENITY_OPTIONS: Array<{ key: string; label: string }> = [
-  { key: "water_supply", label: "Water supply" },
-  { key: "power_backup", label: "Power backup" },
+  { key: "electricity", label: "Electricity" },
+  { key: "water_supply", label: "Water" },
+  { key: "hot_water", label: "Hot water" },
+  { key: "backup_water", label: "Backup water" },
+  { key: "power_backup", label: "Backup electricity" },
+  { key: "internet", label: "Internet" },
   { key: "wifi", label: "Wi-Fi" },
-  { key: "security_guard", label: "Security guard" },
+  { key: "laundry", label: "Laundry" },
+  { key: "common_room", label: "Common room / TV area" },
+  { key: "dining_area", label: "Dining area" },
   { key: "parking", label: "Parking" },
-  { key: "furnished", label: "Furnished" },
+  { key: "shop", label: "Shop" },
+  { key: "security_guard", label: "Security" },
+  { key: "cleaning", label: "Cleaning" },
+  { key: "meals", label: "Meals" },
+  { key: "reception", label: "Reception" },
 ];
+
+// "Utilities Included" — a distinct question from Amenities on the Google
+// Form (mostly furnishing-level, not services). Same free-form-key pattern.
+export const UTILITY_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "bathroom", label: "Bathroom" },
+  { key: "kitchen", label: "Kitchen" },
+  { key: "fully_furnished", label: "Fully furnished" },
+  { key: "partly_furnished", label: "Partly furnished" },
+  { key: "unfurnished", label: "Unfurnished" },
+  { key: "mattress", label: "Mattress" },
+  { key: "wardrobe", label: "Wardrobe" },
+  { key: "study_desk", label: "Study desk" },
+  { key: "bed", label: "Bed" },
+];
+
+export const SECURITY_FEATURE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "perimeter_wall", label: "Perimeter wall" },
+  { key: "security_guard", label: "Security guard" },
+  { key: "cctv", label: "CCTV" },
+  { key: "fire_extinguishers", label: "Fire extinguishers" },
+  { key: "smoke_detectors", label: "Smoke detectors" },
+  { key: "emergency_exit", label: "Emergency exit" },
+  { key: "first_aid_kit", label: "First aid kit" },
+  { key: "off_grid_light", label: "Off-grid light" },
+];
+
+export const ACCESSIBILITY_FEATURE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "step_free_entrance", label: "Step-free entrance" },
+  { key: "ground_floor_rooms", label: "Ground floor rooms" },
+  { key: "accessible_bathroom", label: "Accessible bathroom" },
+  { key: "lift", label: "Lift" },
+  { key: "wheelchair_accessible", label: "Wheelchair accessible" },
+];
+
+export const LANDLORD_BUSINESS_TYPE_LABELS: Record<string, string> = {
+  individual_landlord: "Individual landlord",
+  joint_owners: "Joint owners",
+  family_business: "Family business",
+  registered_company: "Registered company",
+  partnership: "Partnership",
+  hostel_management_company: "Hostel management company",
+  property_agent: "Property agent",
+  university: "University",
+  religious_organisation: "Religious organisation",
+  other: "Other",
+};
+
+export const PROPERTY_AUTHORITY_ROLE_LABELS: Record<string, string> = {
+  owner: "Owner",
+  joint_owner: "Joint owner",
+  property_manager: "Property manager",
+  caretaker: "Caretaker",
+  agent: "Agent",
+  family_representative: "Family representative",
+  tenant_allowed_to_sublet: "Tenant allowed to sublet",
+  other: "Other",
+};
+
+export const GENDER_ARRANGEMENT_LABELS: Record<string, string> = {
+  male_only: "Male only",
+  female_only: "Female only",
+  mixed: "Mixed",
+};
+
+export const RENT_PERIOD_LABELS: Record<string, string> = {
+  monthly: "Monthly",
+  per_semester: "Per semester",
+  other: "Other",
+};
 
 // A hostel is never one room at one price — units.capacity varies per room,
 // so search results show the spread instead of implying a single room type.

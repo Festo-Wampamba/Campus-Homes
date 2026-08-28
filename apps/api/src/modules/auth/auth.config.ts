@@ -76,7 +76,15 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
         // input: false — clients can never set their own role/status; the
         // users table has no self-UPDATE policy either (defense in depth).
         role: { type: 'string', required: false, defaultValue: 'student', input: false },
-        status: { type: 'string', required: false, defaultValue: 'pending', input: false },
+        // 'pending' here meant every self-serve sign-up (student or
+        // phone-OTP) — the only self-serve paths that exist — was
+        // permanently unusable: AuthGuard rejects any session whose
+        // status isn't 'active', and nothing anywhere ever flips a
+        // self-serve account from pending to active. Staff invites are a
+        // separate, unaffected path — StaffService inserts its own
+        // explicit 'pending' status directly (staff.service.ts), which
+        // legitimately requires a password to be seeded before sign-in.
+        status: { type: 'string', required: false, defaultValue: 'active', input: false },
       },
     },
     // Explicit session policy (Better Auth's defaults, pinned so "session
@@ -89,7 +97,12 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
     emailAndPassword: {
       enabled: true,
       disableSignUp: false,
-      requireEmailVerification: true,
+      // MVP-phase relaxation: verification-gated sign-up depends on RESEND
+      // being configured and delivering in every test environment, which
+      // isn't guaranteed during moderated testing — a student who never
+      // receives (or can't access) the email would be stuck unable to sign
+      // in at all. Revisit before a real production launch.
+      requireEmailVerification: false,
       sendResetPassword: async ({ user, url }) => {
         const [credential] = await db
           .select({ id: accounts.id })
@@ -104,7 +117,7 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      sendOnSignUp: false,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         await sendAuthEmail(env, { to: user.email, name: user.name, url, kind: 'verify-email' });

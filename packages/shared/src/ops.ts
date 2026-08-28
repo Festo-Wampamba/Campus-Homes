@@ -4,13 +4,16 @@ import {
   CATCHMENTS,
   KYC_STATUSES,
   LISTING_STATUSES,
+  OPS_TEAMS,
   PROPERTY_STATUSES,
   ROOM_CATEGORIES,
   STRIKE_REASONS,
+  VERIFICATION_CHECKLIST_COMPONENTS,
   VISIT_RESULTS,
 } from './enums.js';
 import { idempotencyKey, ugxAmount, uuid } from './common.js';
 import { verificationChecklistSchema } from './listing.js';
+import { africanPhone } from './phone.js';
 
 // Ops lead schedules a visit and assigns an inspector (§9 flow 1).
 export const scheduleVisitSchema = z.object({
@@ -20,14 +23,27 @@ export const scheduleVisitSchema = z.object({
 });
 export type ScheduleVisitInput = z.infer<typeof scheduleVisitSchema>;
 
+// Generous bounding box around Uganda (with margin for border-adjacent
+// properties) — catches the failure mode where a desktop/laptop browser's
+// IP-based geolocation fallback (no real GPS chip, or a VPN) reports a
+// wildly wrong location instead of failing loudly. A listing with GPS
+// outside this box can never surface in a Kampala-area bounding-box search
+// no matter how it's published, so this must reject at submission time
+// rather than fail silently downstream.
+export const UGANDA_GPS_BOUNDS = { minLat: -2.5, maxLat: 5, minLon: 28.5, maxLon: 35.5 };
+
 // Offline-sync checklist submission (§9 flow 2). The client generates the
 // idempotency key when the visit starts; a retried sync can never double-submit.
 export const syncVisitSchema = z.object({
   clientIdempotencyKey: idempotencyKey,
   visitId: uuid,
   checklist: verificationChecklistSchema,
-  visitGpsLat: z.number().min(-90).max(90),
-  visitGpsLon: z.number().min(-180).max(180),
+  visitGpsLat: z.number().min(UGANDA_GPS_BOUNDS.minLat).max(UGANDA_GPS_BOUNDS.maxLat, {
+    message: 'GPS latitude is outside Uganda — retry on-site with location services enabled (not a desktop browser or VPN).',
+  }),
+  visitGpsLon: z.number().min(UGANDA_GPS_BOUNDS.minLon).max(UGANDA_GPS_BOUNDS.maxLon, {
+    message: 'GPS longitude is outside Uganda — retry on-site with location services enabled (not a desktop browser or VPN).',
+  }),
   startedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
   result: z.enum(VISIT_RESULTS.filter((r) => r !== 'pending') as ['passed', 'failed']),
@@ -60,12 +76,21 @@ export const publishListingSchema = z.object({
         capacity: z.number().int().min(1).max(20).default(1),
         roomCategory: z.enum(ROOM_CATEGORIES),
         pricePerTermUgx: ugxAmount,
+        depositUgx: ugxAmount.optional(),
       }),
     )
     .min(1)
     .max(200),
 });
 export type PublishListingInput = z.infer<typeof publishListingSchema>;
+
+// Backfills listing_photos after publish — an inspector who skipped photos
+// at visit time (or whose visit predates this) shouldn't leave a listing
+// permanently photo-less; Ops can add more any time, not just at publish.
+export const addListingPhotosSchema = z.object({
+  storageKeys: z.array(z.string().min(1).max(500)).min(1).max(20),
+});
+export type AddListingPhotosInput = z.infer<typeof addListingPhotosSchema>;
 
 export const issueStrikeSchema = z.object({
   landlordId: uuid,
@@ -75,11 +100,28 @@ export const issueStrikeSchema = z.object({
 });
 export type IssueStrikeInput = z.infer<typeof issueStrikeSchema>;
 
+// Self-serve landlord registration invite — creates the account + a
+// credential row up front (a random, never-revealed password) purely so
+// Better Auth's existing requestPasswordReset/reset-password flow has
+// something to reset; the landlord's first real action is setting their own
+// password via the email link. Optionally tied to an onboarding_leads row
+// (0027), which gets marked 'converted' when provided.
+export const inviteLandlordSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  email: z.email(),
+  phone: africanPhone,
+  leadId: uuid.optional(),
+});
+export type InviteLandlordInput = z.infer<typeof inviteLandlordSchema>;
+
 // Ops-lead inspector picker (schedule-visit form) — GET /ops/inspectors.
+// Includes team='lead' rows (MVP full-parity decision) so a lead can
+// self-assign a visit instead of always delegating to an inspector.
 export const opsInspectorSchema = z.object({
   id: uuid,
   name: z.string(),
   catchment: z.enum(CATCHMENTS),
+  team: z.enum(OPS_TEAMS),
 });
 export type OpsInspector = z.infer<typeof opsInspectorSchema>;
 
@@ -112,6 +154,38 @@ export const opsVisitMineSchema = z.object({
 });
 export type OpsVisitMine = z.infer<typeof opsVisitMineSchema>;
 
+// Per-checklist-item correction (0029) — a lead sends one component back to
+// the assigned inspector; the inspector fixes it and resolves it themselves.
+export const visitCorrectionSchema = z.object({
+  id: uuid,
+  component: z.enum(VERIFICATION_CHECKLIST_COMPONENTS),
+  message: z.string(),
+  status: z.enum(['open', 'resolved']),
+  raisedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+});
+export type VisitCorrection = z.infer<typeof visitCorrectionSchema>;
+
+// POST /ops/visits/:id/corrections — ops_lead/admin only.
+export const raiseVisitCorrectionSchema = z.object({
+  component: z.enum(VERIFICATION_CHECKLIST_COMPONENTS),
+  message: z.string().trim().min(1).max(1000),
+});
+export type RaiseVisitCorrectionInput = z.infer<typeof raiseVisitCorrectionSchema>;
+
+// PATCH /ops/visits/:id/checklist-item — the assigned inspector fixing a
+// flagged component and resubmitting it for review. Photos are additive
+// (Cloudinary public IDs already uploaded via POST /uploads/sign), matching
+// how the original offline capture works — this never removes an already
+// staged photo, only adds more.
+export const resolveVisitCorrectionSchema = z.object({
+  component: z.enum(VERIFICATION_CHECKLIST_COMPONENTS),
+  passed: z.boolean(),
+  notes: z.string().max(500).optional(),
+  newPhotoStorageKeys: z.array(z.string().min(1).max(500)).max(20).optional(),
+});
+export type ResolveVisitCorrectionInput = z.infer<typeof resolveVisitCorrectionSchema>;
+
 // Full visit record for lead review — GET /ops/visits/:id.
 export const opsVisitDetailSchema = z.object({
   id: uuid,
@@ -123,10 +197,12 @@ export const opsVisitDetailSchema = z.object({
   visitGpsLat: z.string().nullable(),
   visitGpsLon: z.string().nullable(),
   checklist: verificationChecklistSchema.partial(),
+  photoStorageKeys: z.array(z.string()).nullable(),
   result: z.enum(VISIT_RESULTS),
   failureReason: z.string().nullable(),
   approvedBy: uuid.nullable(),
   approvedAt: z.string().nullable(),
+  corrections: z.array(visitCorrectionSchema),
 });
 export type OpsVisitDetail = z.infer<typeof opsVisitDetailSchema>;
 

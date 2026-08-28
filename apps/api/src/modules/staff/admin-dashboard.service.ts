@@ -95,7 +95,8 @@ export class AdminDashboardService {
           (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded' AND created_at >= now() - interval '30 days')::text AS "revenue30dUgx",
           (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded' AND created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorRevenue30dUgx",
           (SELECT count(*) FROM landlords WHERE kyc_status = 'pending')::text AS "pendingKyc",
-          (SELECT count(*) FROM verification_visits WHERE result = 'pending')::text AS "pendingVisits",
+          (SELECT count(*) FROM verification_visits
+            WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
           (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
           (SELECT count(*) FROM notifications WHERE status = 'failed')::text AS "failedNotifications"
       `);
@@ -186,7 +187,7 @@ export class AdminDashboardService {
                p.created_at AS "createdAt",
                coalesce(nullif(u.name, ''), l.legal_name) AS "landlordName",
                l.kyc_status::text AS "landlordKycStatus",
-               li.status::text AS "listingStatus", li.verified_at AS "verifiedAt",
+               li.id AS "listingId", li.status::text AS "listingStatus", li.verified_at AS "verifiedAt",
                (SELECT count(*)::int FROM units un WHERE un.listing_id = li.id) AS "unitCount",
                (SELECT count(*)::int FROM property_media pm WHERE pm.property_id = p.id) AS "imageCount",
                (SELECT count(*)::int FROM units un JOIN listings ux ON ux.id = un.listing_id
@@ -194,7 +195,7 @@ export class AdminDashboardService {
                vv.result::text AS "latestVisitResult", vv.scheduled_at AS "visitScheduledAt"
         FROM properties p
         JOIN landlords l ON l.user_id = p.landlord_id
-        JOIN users u ON u.id = p.landlord_id
+        JOIN users u ON u.id = p.landlord_id AND u.deleted_at IS NULL
         LEFT JOIN LATERAL (SELECT * FROM listings x WHERE x.property_id = p.id ORDER BY x.created_at DESC LIMIT 1) li ON true
         LEFT JOIN LATERAL (SELECT * FROM verification_visits x WHERE x.property_id = p.id ORDER BY x.created_at DESC LIMIT 1) vv ON true
         ORDER BY p.created_at DESC LIMIT 250

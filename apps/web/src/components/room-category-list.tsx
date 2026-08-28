@@ -22,6 +22,7 @@ type CategoryGroup = {
   key: string;
   category: string;
   pricePerTermUgx: number;
+  depositUgx: number | null;
   capacity: number;
   roomCount: number;
   availableCount: number;
@@ -66,6 +67,7 @@ function groupByCategory(
         key,
         category: unit.roomCategory,
         pricePerTermUgx: unit.pricePerTermUgx,
+        depositUgx: unit.depositUgx,
         capacity: unit.capacity,
         roomCount: 1,
         availableCount: isAvailable ? 1 : 0,
@@ -122,6 +124,11 @@ export function RoomCategoryList({
             <p className="tabular text-sm font-semibold text-foreground">
               {formatUgx(group.pricePerTermUgx)}
               <span className="font-normal text-muted-foreground"> / semester</span>
+              {group.depositUgx != null && (
+                <span className="block text-xs font-normal text-muted-foreground">
+                  + {formatUgx(group.depositUgx)} deposit
+                </span>
+              )}
             </p>
             {group.availableCount > 0 ? (
               <StatusChip tone="success">{group.availableCount} free</StatusChip>

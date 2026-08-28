@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 
+import { api } from "@/lib/api";
 import { CAMPUS_LOCATIONS } from "@/lib/campuses";
 
 const CAMPUSES = Object.values(CAMPUS_LOCATIONS);
@@ -9,10 +10,17 @@ const PRODUCT_LINKS = [
   { href: "/search", label: "Find a room" },
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#verified", label: "How we verify" },
+  { href: "/support", label: "Support" },
   { href: "/sign-in", label: "Student sign in" },
 ];
 
-function SiteFooter() {
+async function SiteFooter() {
+  // Admin-configured (Platform settings → Support contact), not hardcoded —
+  // falls back to the same default the backend itself uses if the fetch
+  // fails, so the footer never renders with no contact route at all.
+  const support = await api<{ email: string; phone: string }>("/listings/support-contact").catch(
+    () => ({ email: "hello@campushomes.ug", phone: "" }),
+  );
   return (
     <footer className="mt-auto bg-teal-900 text-white">
       <div className="mx-auto w-full max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8 lg:pt-20">
@@ -71,14 +79,24 @@ function SiteFooter() {
               <li>Kampala, Uganda</li>
               <li>
                 <a
-                  href="mailto:hello@campushomes.ug"
+                  href={`mailto:${support.email}`}
                   className="transition-colors duration-300 hover:text-white"
                 >
-                  hello@campushomes.ug
+                  {support.email}
                 </a>
               </li>
+              {support.phone && (
+                <li>
+                  <a
+                    href={`tel:${support.phone}`}
+                    className="transition-colors duration-300 hover:text-white"
+                  >
+                    {support.phone}
+                  </a>
+                </li>
+              )}
               <li>
-                <Link href="/#landlords" className="transition-colors duration-300 hover:text-white">
+                <Link href="/landlords" className="transition-colors duration-300 hover:text-white">
                   List your hostel
                 </Link>
               </li>
