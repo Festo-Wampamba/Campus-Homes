@@ -33,6 +33,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://campushomes:campushomes_test@localhost:5432/campushomes_test
+      # Every DB-backed spec connects via TEST_DATABASE_URL, not DATABASE_URL,
+      # and falls back to the local docker-compose port 54329 — which does not
+      # exist on a runner. Without this the whole suite fails at pool.connect().
+      TEST_DATABASE_URL: postgresql://campushomes:campushomes_test@localhost:5432/campushomes_test
 
     steps:
       - uses: actions/checkout@v4
