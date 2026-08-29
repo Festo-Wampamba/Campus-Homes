@@ -26,6 +26,23 @@ export const resolveInquirySchema = z.object({
 });
 export type ResolveInquiryInput = z.infer<typeof resolveInquirySchema>;
 
+// POST /admin/inquiries/:id/forward — notify-only, the inquiry itself stays
+// in the shared staff inbox either way (no "assigned to" state). The
+// recipient can be any staff member or a landlord (both are just users.id;
+// the forward-targets endpoint is what tells the two apart in the UI).
+export const forwardInquirySchema = z.object({
+  recipientUserId: z.string().uuid(),
+  note: z.string().trim().max(500).optional(),
+});
+export type ForwardInquiryInput = z.infer<typeof forwardInquirySchema>;
+
+export type InquiryForwardTarget = {
+  id: string;
+  name: string | null;
+  role: string;
+  label: string; // "Legal Name — Landlord" or "Name — ops_lead", pre-formatted for the picker
+};
+
 // List response shape — the service joins in the student's identity so staff
 // can reply without a second round trip per row.
 export type Inquiry = {

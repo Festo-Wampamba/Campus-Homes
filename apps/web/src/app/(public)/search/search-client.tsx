@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Building2, MapPin, RefreshCw, Search as SearchIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  Map as MapIcon,
+  MapPin,
+  RefreshCw,
+  Search as SearchIcon,
+  X,
+} from "lucide-react";
 import {
   listingSearchResultSchema,
   ROOM_CATEGORIES,
@@ -56,6 +64,7 @@ export function SearchClient() {
 
   const [bounds, setBounds] = useState<MapBounds | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mapOpen, setMapOpen] = useState(true);
   const cardRefs = useRef(new Map<string, HTMLElement>());
 
   const initialQ = searchParams.get("q") ?? "";
@@ -111,26 +120,66 @@ export function SearchClient() {
   }
 
   return (
-    <div className="flex flex-col bg-background lg:grid lg:grid-cols-[minmax(0,32rem)_1fr]">
-      <ListingsMap
-        markers={markers}
-        selectedId={selectedId}
-        onSelect={selectFromMap}
-        onBoundsChange={(b) => setBounds(roundBounds(b))}
-        className="h-[42vh] w-full lg:sticky lg:top-16 lg:order-2 lg:h-[calc(100vh-4rem)]"
-        initialCenter={campus ? [campus.lon, campus.lat] : undefined}
-      />
+    <div
+      className={cn(
+        "flex flex-col bg-background lg:grid",
+        mapOpen ? "lg:grid-cols-[minmax(0,32rem)_1fr]" : "lg:grid-cols-[0_1fr]",
+      )}
+    >
+      <div
+        className={cn(
+          "relative w-full shrink-0 overflow-hidden transition-[height] duration-300 ease-out lg:order-2 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:transition-[width]",
+          mapOpen ? "h-[42vh] lg:w-auto" : "h-0 lg:w-0",
+        )}
+      >
+        <div className="absolute inset-0 overflow-hidden rounded-b-2xl border-b border-border shadow-sm lg:inset-3 lg:rounded-2xl lg:border">
+          <ListingsMap
+            markers={markers}
+            selectedId={selectedId}
+            onSelect={selectFromMap}
+            onBoundsChange={(b) => setBounds(roundBounds(b))}
+            className="size-full"
+            initialCenter={campus ? [campus.lon, campus.lat] : undefined}
+          />
+        </div>
+        {mapOpen && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setMapOpen(false)}
+            className="absolute top-4 left-4 gap-1.5 shadow-md lg:top-7 lg:left-7"
+          >
+            <X aria-hidden className="size-4" />
+            Hide map
+          </Button>
+        )}
+      </div>
       <section
         aria-label="Search results"
         className="flex flex-col gap-4 border-r border-border px-4 py-6 sm:px-6 lg:order-1 lg:h-[calc(100vh-4rem)] lg:overflow-y-auto lg:px-7"
       >
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 self-start rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-300 hover:border-teal-700 hover:text-teal-700"
-        >
-          <ArrowLeft aria-hidden className="size-4" />
-          Home
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 self-start rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-300 hover:border-teal-700 hover:text-teal-700"
+          >
+            <ArrowLeft aria-hidden className="size-4" />
+            Home
+          </Link>
+          {!mapOpen && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setMapOpen(true)}
+              className="gap-1.5"
+            >
+              <MapIcon aria-hidden className="size-4" />
+              Show map
+            </Button>
+          )}
+        </div>
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-2xl tracking-tight">
             {campus ? `Near ${campus.name}` : "Verified places here"}

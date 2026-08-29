@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
-import type { CreateInquiryInput, ResolveInquiryInput } from '@campushomes/shared';
+import type {
+  CreateInquiryInput,
+  ForwardInquiryInput,
+  InquiryForwardTarget,
+  ResolveInquiryInput,
+} from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { Db } from '../../db/client';
@@ -10,6 +15,8 @@ import type { RlsContext } from '../../db/rls-context';
 import { inquiries, users } from '../../db/schema';
 import { loadEnv } from '../../config/env';
 import { AuditService } from '../ops/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { StaffService } from '../staff/staff.service';
 import { sendInquiryEmail } from './inquiry-email';
 
 const SERVICE_CTX: RlsContext = {
@@ -31,6 +38,8 @@ export class InquiriesService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
+    private readonly staff: StaffService,
   ) {}
 
   private selection() {
@@ -138,6 +147,74 @@ export class InquiriesService {
       });
     }
     return updated;
+  }
+
+  // Staff + landlord roster for the "Forward to" picker (0030). Landlords
+  // have no console access to inquiries at all, so they only ever reach
+  // this via the notification forward() sends — never a real read grant.
+  async forwardTargets(): Promise<InquiryForwardTarget[]> {
+    const staffRows = await this.staff.list();
+    const landlordRows = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const res = await client.query<{ user_id: string; legal_name: string }>(
+        `SELECT l.user_id, l.legal_name
+         FROM landlords l
+         JOIN users u ON u.id = l.user_id
+         WHERE u.status = 'active'
+         ORDER BY l.legal_name ASC`,
+      );
+      return res.rows;
+    });
+    return [
+      ...staffRows.map((s) => ({
+        id: s.id,
+        name: s.name,
+        role: s.role,
+        label: `${s.name ?? 'Unnamed'} — ${s.role}`,
+      })),
+      ...landlordRows.map((l) => ({
+        id: l.user_id,
+        name: l.legal_name,
+        role: 'landlord',
+        label: `${l.legal_name} — Landlord`,
+      })),
+    ];
+  }
+
+  // Notify-only forward (0030): the inquiry itself is unchanged, still sits
+  // in the shared staff inbox either way — this just pings whoever the
+  // caller thinks should look at it. A landlord has no console to read it
+  // in, so their forward is SMS; staff already live in the console daily,
+  // so theirs is in_app.
+  async forward(ctx: RlsContext, id: string, input: ForwardInquiryInput) {
+    const inquiry = await this.rlsDb.run(SERVICE_CTX, (db) => this.selectById(db, id));
+    if (!inquiry) throw new NotFoundException('Inquiry not found');
+    const [recipient] = await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db
+        .select({ id: users.id, role: users.role, phone: users.phone })
+        .from(users)
+        .where(eq(users.id, input.recipientUserId)),
+    );
+    if (!recipient) throw new NotFoundException('Recipient not found');
+
+    const payload = {
+      inquiryId: id,
+      subject: inquiry.subject,
+      message: `Inquiry forwarded: "${inquiry.subject}" — ${inquiry.message}${
+        input.note ? ` (Note: ${input.note})` : ''
+      }`,
+      note: input.note ?? null,
+    };
+    if (recipient.role === 'landlord') {
+      await this.notifications.notify(recipient.id, 'inquiry.forwarded', 'sms', payload);
+    } else {
+      await this.notifications.notify(recipient.id, 'inquiry.forwarded', 'in_app', payload);
+    }
+
+    await this.audit.record(ctx, 'inquiry.forward', 'inquiry', id, {
+      recipientUserId: input.recipientUserId,
+      note: input.note ?? null,
+    });
+    return { forwarded: true };
   }
 
   private selectById(db: Db, id: string) {

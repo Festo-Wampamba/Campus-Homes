@@ -234,6 +234,17 @@
   .map-pin[data-selected="true"] {
     background: var(--coral-600);
   }
+
+  /* MapLibre's non-compact attribution renders as one unbroken line by
+     default — on a narrow map panel that's wider than the box itself,
+     which is what was forcing the horizontal page overflow on mobile.
+     compact mode stays off (OSM policy requires the text always visible,
+     not hidden behind an (i) toggle) — this just lets it wrap instead. */
+  .maplibregl-ctrl-attrib {
+    max-width: 100%;
+    white-space: normal;
+    font-size: 11px;
+  }
 }
 
 /* Hero motion — pure CSS (no JS, no added bundle weight), so it's free of
