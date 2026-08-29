@@ -18,7 +18,7 @@ jobs:
         # Same image the local test DB pins (apps/api/docker-compose.test.yml),
         # resolved to a digest so CI can't silently drift onto a newer PG/PostGIS
         # minor without anyone noticing.
-        image: postgis/postgis@sha256:697504b61e8e172a5bc8e1bde7af3ea888a63d5c0af8f15889f0c4202bbc949e
+        image: postgis/postgis@sha256:eb2e8b8afd9b0ecee83bc20fd01aca62a5071bada2c0f38763174b653f8eed42
         env:
           POSTGRES_USER: campushomes
           POSTGRES_PASSWORD: campushomes_test

@@ -2,7 +2,7 @@
 # its tables, so application development must use docker-compose.local.yml.
 services:
   db:
-    image: postgis/postgis:17-3.5-alpine
+    image: postgis/postgis:18-3.6-alpine
     environment:
       POSTGRES_USER: campushomes
       POSTGRES_PASSWORD: campushomes_test
