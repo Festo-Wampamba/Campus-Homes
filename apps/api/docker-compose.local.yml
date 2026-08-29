@@ -4,7 +4,7 @@ name: campushomes-local
 # separate disposable database in docker-compose.test.yml on port 54329.
 services:
   db:
-    image: postgis/postgis:17-3.5-alpine
+    image: postgis/postgis:18-3.6-alpine
     environment:
       POSTGRES_USER: campushomes
       POSTGRES_PASSWORD: campushomes_dev
@@ -12,7 +12,9 @@ services:
     ports:
       - '54328:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # PG18's image moved the data directory: the volume must mount the parent
+      # /var/lib/postgresql, not .../data, or the container crash-loops on restart.
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U campushomes -d campushomes_dev']
       interval: 2s

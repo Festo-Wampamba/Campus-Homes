@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Repo had zero CI before this — Dokploy's GitHub App was the only build
+# trigger, and pre-merge discipline was the only quality gate (see the
+# Neon/Logto migration review, Phase 0.3). This does not touch Dokploy or
+# deploy anything; it only runs lint/typecheck/test/build on every push and PR.
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Same image the local test DB pins (apps/api/docker-compose.test.yml),
+        # resolved to a digest so CI can't silently drift onto a newer PG/PostGIS
+        # minor without anyone noticing.
+        image: postgis/postgis@sha256:eb2e8b8afd9b0ecee83bc20fd01aca62a5071bada2c0f38763174b653f8eed42
+        env:
+          POSTGRES_USER: campushomes
+          POSTGRES_PASSWORD: campushomes_test
+          POSTGRES_DB: campushomes_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campushomes -d campushomes_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://campushomes:campushomes_test@localhost:5432/campushomes_test
+      # Every DB-backed spec connects via TEST_DATABASE_URL, not DATABASE_URL,
+      # and falls back to the local docker-compose port 54329 — which does not
+      # exist on a runner. Without this the whole suite fails at pool.connect().
+      TEST_DATABASE_URL: postgresql://campushomes:campushomes_test@localhost:5432/campushomes_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Nest/Next both consume packages/shared from dist/, not src/, at
+      # typecheck/build/runtime — must build it first (same order as both
+      # Dockerfiles).
+      - run: pnpm --filter @campushomes/shared build
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      # db:migrate shells out via `node --env-file=.env`, so it needs the
+      # file to exist even though DATABASE_URL is already in the job env.
+      - run: echo "DATABASE_URL=$DATABASE_URL" > apps/api/.env
+      - run: pnpm --filter @campushomes/api db:migrate
+
+      - run: pnpm test
+
+      - run: pnpm --filter @campushomes/api build
+      - run: pnpm --filter @campushomes/web build
+
+      - name: Validate API container builds
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+
+      - name: Validate web container builds
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false

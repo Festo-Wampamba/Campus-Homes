@@ -18,7 +18,11 @@ const TEST_DATABASE_URL =
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const staff = new StaffService(rlsDb, audit);
+const requestPasswordReset = jest.fn().mockResolvedValue({ status: true });
+const authMock = { api: { requestPasswordReset } } as unknown as ConstructorParameters<
+  typeof StaffService
+>[2];
+const staff = new StaffService(rlsDb, audit, authMock);
 
 let superAdmin: string;
 let platformAdmin: string;
@@ -125,7 +129,7 @@ describe('StaffService.grantRole — success path', () => {
 });
 
 describe('StaffService.invite + revokeRole round trip', () => {
-  it('invites a staff member with the mapped DB role and pending status', async () => {
+  it('invites a staff member with the mapped DB role', async () => {
     const user = await staff.invite(
       superAdminCtx(),
       new Set(['roles.assign']),
@@ -139,6 +143,61 @@ describe('StaffService.invite + revokeRole round trip', () => {
       },
     );
     expect(user.role).toBe('admin');
+  });
+
+  it('activates the invited staff member so they can sign in once a password is set', async () => {
+    const user = await staff.invite(
+      superAdminCtx(),
+      new Set(['roles.assign']),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      {
+        name: 'Active Support Admin',
+        email: 'active.support@campushomes.ug',
+        roleKey: 'support_admin',
+        scopeType: 'platform_wide',
+        reason: 'new hire',
+      },
+    );
+    expect(user.status).toBe('active');
+  });
+
+  it('emails a set-password link to an invited staff member with an email', async () => {
+    requestPasswordReset.mockClear();
+    await staff.invite(
+      superAdminCtx(),
+      new Set(['roles.assign']),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      {
+        name: 'Emailed Support Admin',
+        email: 'emailed.support@campushomes.ug',
+        roleKey: 'support_admin',
+        scopeType: 'platform_wide',
+        reason: 'new hire',
+      },
+    );
+    expect(requestPasswordReset).toHaveBeenCalledWith({
+      body: {
+        email: 'emailed.support@campushomes.ug',
+        redirectTo: expect.stringMatching(/\/reset-password$/),
+      },
+    });
+  });
+
+  it('does not attempt a set-password email for a phone-only invite', async () => {
+    requestPasswordReset.mockClear();
+    await staff.invite(
+      superAdminCtx(),
+      new Set(['roles.assign']),
+      [{ scopeType: 'platform_wide', scopeId: null }],
+      {
+        name: 'Phone Only Admin',
+        phone: '+256700000313',
+        roleKey: 'support_admin',
+        scopeType: 'platform_wide',
+        reason: 'new hire',
+      },
+    );
+    expect(requestPasswordReset).not.toHaveBeenCalled();
   });
 
   it('revoking the granted assignment sets revokedAt', async () => {

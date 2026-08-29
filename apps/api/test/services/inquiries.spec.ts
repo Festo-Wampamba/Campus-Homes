@@ -39,7 +39,9 @@ const inquiriesService = new InquiriesService(
   rlsDb,
   auditService,
   new NotificationsService(rlsDb, new ConsoleMessaging()),
-  new StaffService(rlsDb, auditService),
+  // StaffService's third constructor arg is Better Auth, reached only by
+  // invite(); these tests exercise staff.list() alone, so a stub suffices.
+  new StaffService(rlsDb, auditService, {} as ConstructorParameters<typeof StaffService>[2]),
 );
 
 let student1: string;

@@ -8,8 +8,10 @@ import { phoneNumber } from 'better-auth/plugins';
 import type { MessagingAdapter } from '../../adapters/messaging.adapter';
 import type { Env } from '../../config/env';
 import type { Db } from '../../db/client';
+import { and, eq } from 'drizzle-orm';
+
 import { assertStubAllowed } from '../../config/integration-guard';
-import { sendAuthEmail } from './auth.email';
+import { pickPasswordEmailKind, sendAuthEmail } from './auth.email';
 import { accounts, sessions, users, verifications } from '../../db/schema';
 
 /**
@@ -85,6 +87,13 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
         status: { type: 'string', required: false, defaultValue: 'active', input: false },
       },
     },
+    // Explicit session policy (Better Auth's defaults, pinned so "session
+    // time" is a config decision, not a library default): a 7-day session
+    // that rolls forward on activity (re-issued once older than a day).
+    session: {
+      expiresIn: 60 * 60 * 24 * 7,
+      updateAge: 60 * 60 * 24,
+    },
     emailAndPassword: {
       enabled: true,
       disableSignUp: false,
@@ -95,7 +104,16 @@ export function createAuth(env: Env, db: Db, messaging: MessagingAdapter) {
       // in at all. Revisit before a real production launch.
       requireEmailVerification: false,
       sendResetPassword: async ({ user, url }) => {
-        await sendAuthEmail(env, { to: user.email, name: user.name, url, kind: 'reset-password' });
+        const [credential] = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(eq(accounts.userId, user.id), eq(accounts.providerId, 'credential')));
+        await sendAuthEmail(env, {
+          to: user.email,
+          name: user.name,
+          url,
+          kind: pickPasswordEmailKind(Boolean(credential)),
+        });
       },
     },
     emailVerification: {

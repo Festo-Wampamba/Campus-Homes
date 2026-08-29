@@ -83,7 +83,7 @@ export function InviteStaffForm() {
       <Dialog open={open} onOpenChange={setOpen} dismissible={false}>
         <DialogHeader
           title="Invite staff"
-          description="Creates the account and grants the selected role. They can't sign in until credentials are provisioned."
+          description="Creates the account and grants the selected role. If you add an email, they'll get a link to set their password and sign in."
           onClose={() => setOpen(false)}
         />
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
