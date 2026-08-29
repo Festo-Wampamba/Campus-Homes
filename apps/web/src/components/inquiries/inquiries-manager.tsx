@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Mail, Phone, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Forward, Mail, Phone, RotateCcw } from "lucide-react";
 
-import { INQUIRY_STATUSES, type Inquiry } from "@campushomes/shared";
+import { INQUIRY_STATUSES, type Inquiry, type InquiryForwardTarget } from "@campushomes/shared";
 
 import { api, apiErrorMessage } from "@/lib/api";
 
@@ -32,6 +32,49 @@ export function InquiriesManager({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [forwardTargets, setForwardTargets] = useState<InquiryForwardTarget[] | null>(null);
+  const [forwardTo, setForwardTo] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
+  const [forwarding, setForwarding] = useState(false);
+  const [forwardError, setForwardError] = useState<string | null>(null);
+  const [forwardNotice, setForwardNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canResolve) return; // forward-targets requires the same permission as this whole console
+    let cancelled = false;
+    api<InquiryForwardTarget[]>("/admin/inquiries/forward-targets")
+      .then((rows) => {
+        if (!cancelled) setForwardTargets(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setForwardTargets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canResolve]);
+
+  async function forwardInquiry(row: Inquiry) {
+    if (!forwardTo) return;
+    setForwarding(true);
+    setForwardError(null);
+    setForwardNotice(null);
+    try {
+      await api(`/admin/inquiries/${row.id}/forward`, {
+        method: "POST",
+        body: JSON.stringify({ recipientUserId: forwardTo, note: forwardNote.trim() || undefined }),
+      });
+      const target = forwardTargets?.find((t) => t.id === forwardTo);
+      setForwardNotice(`Forwarded to ${target?.name ?? "recipient"}.`);
+      setForwardTo("");
+      setForwardNote("");
+    } catch (err) {
+      setForwardError(apiErrorMessage(err, "Couldn't forward this inquiry — try again."));
+    } finally {
+      setForwarding(false);
+    }
+  }
+
   const visible = filter === "all" ? rows : rows.filter((row) => row.status === filter);
   const openCount = rows.filter((row) => row.status === "open").length;
   const selected = rows.find((row) => row.id === selectedId) ?? null;
@@ -40,6 +83,10 @@ export function InquiriesManager({
     setSelectedId(row.id);
     setResolution(row.resolution ?? "");
     setError(null);
+    setForwardTo("");
+    setForwardNote("");
+    setForwardError(null);
+    setForwardNotice(null);
   }
 
   async function setStatus(row: Inquiry, status: "open" | "resolved") {
@@ -152,6 +199,56 @@ export function InquiriesManager({
             </div>
 
             <p className="whitespace-pre-line text-sm">{selected.message}</p>
+
+            {canResolve && (
+              <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-border">
+                <label
+                  htmlFor={`forward-${selected.id}`}
+                  className="text-xs font-semibold text-muted-foreground"
+                >
+                  Forward to
+                </label>
+                <select
+                  id={`forward-${selected.id}`}
+                  value={forwardTo}
+                  onChange={(e) => setForwardTo(e.target.value)}
+                  disabled={!forwardTargets}
+                  className="w-full rounded-lg border border-input bg-background p-2.5 text-sm"
+                >
+                  <option value="">
+                    {forwardTargets ? "Choose a person…" : "Loading…"}
+                  </option>
+                  {forwardTargets?.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {target.label}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  rows={2}
+                  maxLength={500}
+                  value={forwardNote}
+                  onChange={(e) => setForwardNote(e.target.value)}
+                  placeholder="Optional note for them…"
+                  className="w-full rounded-lg border border-input bg-background p-3 text-sm"
+                />
+                {forwardError && (
+                  <p className="text-xs font-semibold text-destructive">{forwardError}</p>
+                )}
+                {forwardNotice && (
+                  <p className="text-xs font-semibold text-teal-700 dark:text-teal-400">{forwardNotice}</p>
+                )}
+                <button
+                  type="button"
+                  disabled={forwarding || !forwardTo}
+                  onClick={() => forwardInquiry(selected)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-bold hover:bg-slate-100 disabled:opacity-50 dark:border-border dark:hover:bg-muted"
+                >
+                  <Forward aria-hidden className="size-4" />
+                  {forwarding ? "Forwarding…" : "Forward"}
+                </button>
+              </div>
+            )}
 
             {canResolve && (
               <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-border">

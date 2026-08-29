@@ -39,5 +39,9 @@ import { StaffService } from './staff.service';
     AdminExportsService,
     AdminActivitiesService,
   ],
+  // StaffService.list() is the staff roster other modules reuse rather than
+  // duplicating the query — activities' assignee picker (same module) and
+  // now inquiries' forward-target picker (InquiriesModule).
+  exports: [StaffService],
 })
 export class StaffModule {}

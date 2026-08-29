@@ -7,10 +7,13 @@ import { createInquirySchema } from '@campushomes/shared';
 
 import { Pool } from 'pg';
 
+import { ConsoleMessaging } from '../../src/adapters/messaging.adapter';
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { InquiriesService } from '../../src/modules/inquiries/inquiries.service';
+import { NotificationsService } from '../../src/modules/notifications/notifications.service';
+import { StaffService } from '../../src/modules/staff/staff.service';
 
 jest.mock('../../src/modules/inquiries/inquiry-email', () => ({
   sendInquiryEmail: jest.fn().mockResolvedValue(undefined),
@@ -31,7 +34,13 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || TEST_DATABASE_URL;
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
-const inquiriesService = new InquiriesService(rlsDb, new AuditService(rlsDb));
+const auditService = new AuditService(rlsDb);
+const inquiriesService = new InquiriesService(
+  rlsDb,
+  auditService,
+  new NotificationsService(rlsDb, new ConsoleMessaging()),
+  new StaffService(rlsDb, auditService),
+);
 
 let student1: string;
 let student2: string;
