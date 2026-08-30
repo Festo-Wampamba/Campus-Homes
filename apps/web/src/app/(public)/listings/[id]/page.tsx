@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Camera, Check, Phone, User } from "lucide-react";
 import {
   listingDetailResponseSchema,
@@ -15,6 +16,7 @@ import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
 import { cn } from "@/lib/utils";
+import { AskLandlordDialog } from "@/components/listing/ask-landlord-dialog";
 import { BackButton } from "@/components/back-button";
 import { RoomCategoryList } from "@/components/room-category-list";
 import { SaveButton } from "@/components/save-button";
@@ -23,7 +25,11 @@ import { VerifiedBadge } from "@/components/verified-badge";
 
 // Renders the version snapshot the API returns — never re-fetch live listing
 // fields (FRONTEND.md §7.2); students reserve against exactly this snapshot.
-async function getDetail(id: string): Promise<ListingDetailResponse | null> {
+// Wrapped in React's cache() so generateMetadata() and the page component
+// below (which both need this) share one call per request — without it,
+// every real page view hit GET /listings/:id twice, double-counting the
+// listing_view pilot-funnel event (0031) logged server-side on that route.
+const getDetail = cache(async (id: string): Promise<ListingDetailResponse | null> => {
   try {
     return listingDetailResponseSchema.parse(
       await api<unknown>(`/listings/${id}`, { cache: "no-store" }),
@@ -34,7 +40,7 @@ async function getDetail(id: string): Promise<ListingDetailResponse | null> {
     }
     throw err;
   }
-}
+});
 
 export async function generateMetadata({
   params,
@@ -206,6 +212,30 @@ export default async function ListingDetailPage({
               propertyName={property.name}
               canReserve={canReserve}
             />
+          </section>
+
+          {/* Pre-reservation channel to the landlord — separate from the
+              reservation chat thread (only opens once a hold exists) and
+              from /support (staff-routed, never reaches the landlord). */}
+          <section aria-labelledby="ask-heading" className="mt-8 max-w-sm">
+            <h2 id="ask-heading" className="text-xl">
+              Have a question?
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ask the landlord directly, or request a viewing — no reservation needed.
+            </p>
+            <div className="mt-3">
+              {session ? (
+                <AskLandlordDialog listingId={listingId} propertyName={property.name} />
+              ) : (
+                <Link
+                  href="/sign-in"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-background text-base font-semibold text-foreground shadow-xs hover:bg-muted"
+                >
+                  Sign in to ask a question
+                </Link>
+              )}
+            </div>
           </section>
         </div>
 

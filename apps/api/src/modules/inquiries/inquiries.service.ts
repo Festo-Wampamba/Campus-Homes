@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
@@ -7,12 +7,13 @@ import type {
   ForwardInquiryInput,
   InquiryForwardTarget,
   ResolveInquiryInput,
+  RespondToInquiryInput,
 } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { Db } from '../../db/client';
 import type { RlsContext } from '../../db/rls-context';
-import { inquiries, users } from '../../db/schema';
+import { inquiries, listings, properties, users } from '../../db/schema';
 import { loadEnv } from '../../config/env';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -55,6 +56,10 @@ export class InquiriesService {
       studentEmail: student.email,
       studentPhone: student.phone,
       resolvedByName: resolver.name,
+      listingId: inquiries.listingId,
+      landlordId: inquiries.landlordId,
+      landlordResponse: inquiries.landlordResponse,
+      landlordRespondedAt: inquiries.landlordRespondedAt,
       createdAt: inquiries.createdAt,
       updatedAt: inquiries.updatedAt,
     };
@@ -69,6 +74,22 @@ export class InquiriesService {
   // second pooled connection whose transaction cannot see this uncommitted
   // insert, and the read would come back empty.
   async create(ctx: RlsContext, input: CreateInquiryInput) {
+    // Resolved under SERVICE_CTX because a student's own RLS ctx can't read
+    // properties (owner+ops only) — the client only ever supplies listingId,
+    // never landlordId, so there's nothing here for a forged request to
+    // misroute. Only a verified listing's landlord is a valid recipient.
+    let landlordId: string | null = null;
+    if (input.listingId) {
+      const [row] = await this.rlsDb.run(SERVICE_CTX, (db) =>
+        db
+          .select({ landlordId: properties.landlordId })
+          .from(listings)
+          .innerJoin(properties, eq(properties.id, listings.propertyId))
+          .where(and(eq(listings.id, input.listingId!), eq(listings.status, 'verified'))),
+      );
+      landlordId = row?.landlordId ?? null;
+    }
+
     const created = await this.rlsDb.run(ctx, async (db) => {
       const [row] = await db
         .insert(inquiries)
@@ -77,6 +98,8 @@ export class InquiriesService {
           category: input.category,
           subject: input.subject,
           message: input.message,
+          listingId: input.listingId ?? null,
+          landlordId,
         })
         .returning({ id: inquiries.id });
       if (!row) throw new Error('Inquiry insert returned no row');
@@ -90,7 +113,57 @@ export class InquiriesService {
     sendInquiryEmail(this.env, created).catch((err: unknown) => {
       console.error('[inquiries] notification email failed:', err);
     });
+    // Landlord notification is also best-effort — the enquiry is already
+    // durably stored and visible to the landlord next time they check, so a
+    // notify failure must not fail the student's submission.
+    if (landlordId) {
+      this.notifications
+        .notify(landlordId, 'inquiry.received', 'sms', {
+          inquiryId: created.id,
+          message: `New enquiry about your listing: "${created.subject}" — ${created.message}`,
+        })
+        .catch((err: unknown) => {
+          console.error('[inquiries] landlord notify failed:', err);
+        });
+    }
     return created;
+  }
+
+  // Landlord's own inbox — runs under the landlord's own ctx (not
+  // SERVICE_CTX) so RLS itself scopes the rows via inquiries_landlord_select
+  // (0030), the same pattern as landlords_self_* elsewhere.
+  landlordMine(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, (db) =>
+      db
+        .select(this.selection())
+        .from(inquiries)
+        .leftJoin(student, eq(student.id, inquiries.studentId))
+        .leftJoin(resolver, eq(resolver.id, inquiries.resolvedBy))
+        .where(eq(inquiries.landlordId, ctx.userId))
+        .orderBy(desc(inquiries.createdAt)),
+    );
+  }
+
+  // Landlord's reply to their own listing-scoped enquiry. Runs under the
+  // landlord's own ctx: inquiries_landlord_respond (0030) scopes the row,
+  // and the column-level GRANT (0030) means this UPDATE physically cannot
+  // touch status/resolution even if a bug tried — those stay staff-authored.
+  async respond(ctx: RlsContext, id: string, input: RespondToInquiryInput) {
+    const updated = await this.rlsDb.run(ctx, async (db) => {
+      const [row] = await db
+        .update(inquiries)
+        .set({
+          landlordResponse: input.response,
+          landlordRespondedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(inquiries.id, id), eq(inquiries.landlordId, ctx.userId)))
+        .returning({ id: inquiries.id });
+      if (!row) return undefined;
+      return this.selectById(db, row.id);
+    });
+    if (!updated) throw new ForbiddenException('Inquiry not found or not addressed to you');
+    return updated;
   }
 
   mine(ctx: RlsContext) {

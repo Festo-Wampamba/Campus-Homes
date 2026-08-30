@@ -155,8 +155,22 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
                     month: "short",
                     year: "numeric",
                   })}
+                  {row.listingId && (
+                    <>
+                      {" · "}
+                      <a href={`/listings/${row.listingId}`} className="normal-case underline">
+                        View listing
+                      </a>
+                    </>
+                  )}
                 </p>
                 <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{row.message}</p>
+                {row.landlordResponse && (
+                  <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
+                    <p className="font-semibold">Landlord&apos;s reply</p>
+                    <p className="mt-1 whitespace-pre-line text-muted-foreground">{row.landlordResponse}</p>
+                  </div>
+                )}
                 {row.resolution && (
                   <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
                     <p className="font-semibold">Team response</p>

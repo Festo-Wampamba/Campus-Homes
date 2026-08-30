@@ -17,6 +17,9 @@ export const createInquirySchema = z.object({
   category: z.enum(INQUIRY_CATEGORIES).default('general'),
   subject: z.string().trim().min(1).max(200),
   message: z.string().trim().min(1).max(4000),
+  // Set when the enquiry is asked from a listing page — the server resolves
+  // this to the listing's landlord (landlordId is never client-supplied).
+  listingId: z.string().uuid().optional(),
 });
 export type CreateInquiryInput = z.infer<typeof createInquirySchema>;
 
@@ -25,6 +28,14 @@ export const resolveInquirySchema = z.object({
   resolution: z.string().trim().max(2000).nullable().optional(),
 });
 export type ResolveInquiryInput = z.infer<typeof resolveInquirySchema>;
+
+// POST /listings/:id/inquiries/:inquiryId/respond — landlord's reply to a
+// listing-scoped enquiry. Column-grant-restricted at the DB level (0030) so
+// this can never touch status/resolution, only the landlord_response pair.
+export const respondToInquirySchema = z.object({
+  response: z.string().trim().min(1).max(2000),
+});
+export type RespondToInquiryInput = z.infer<typeof respondToInquirySchema>;
 
 // POST /admin/inquiries/:id/forward — notify-only, the inquiry itself stays
 // in the shared staff inbox either way (no "assigned to" state). The
@@ -57,6 +68,10 @@ export type Inquiry = {
   studentEmail: string | null;
   studentPhone: string | null;
   resolvedByName: string | null;
+  listingId: string | null;
+  landlordId: string | null;
+  landlordResponse: string | null;
+  landlordRespondedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
