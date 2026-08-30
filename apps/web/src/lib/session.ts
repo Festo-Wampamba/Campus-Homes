@@ -50,5 +50,13 @@ export async function requireRole(
   if (!session || !roles.includes(session.user.role)) {
     redirect(signInPath);
   }
+  // A pending (self-registered, unapproved) or suspended account still has a
+  // valid session — Better Auth's own sign-in doesn't check this custom
+  // column. Catch it here too, not just at the sign-in form's own routing,
+  // so a bookmarked/`next`-redirected portal URL can't skip straight past
+  // it into a page whose first API call would just 401 from AuthGuard.
+  if (session.user.status !== "active") {
+    redirect("/account-pending");
+  }
   return session;
 }

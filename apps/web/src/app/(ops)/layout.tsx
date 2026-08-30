@@ -1,4 +1,4 @@
-import { Building2, ClipboardCheck, ClipboardList, Image as ImageIcon, LifeBuoy, ShieldAlert, UserCheck, UserPlus } from "lucide-react";
+import { Building2, ClipboardCheck, ClipboardList, Image as ImageIcon, LifeBuoy, ShieldAlert, UserCheck, UserPlus, Users } from "lucide-react";
 
 import { requireRole } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
@@ -26,6 +26,7 @@ export default async function OpsLayout({
               // lead's own nav instead of being inspector-only.
               { label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> },
               { label: "Properties", href: "/ops/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
+              { label: "Landlord accounts", href: "/ops/landlord-accounts", icon: <Users aria-hidden className="size-4 shrink-0" /> },
               { label: "Landlord KYC", href: "/ops/landlords", icon: <UserCheck aria-hidden className="size-4 shrink-0" /> },
               { label: "Onboarding leads", href: "/ops/leads", icon: <UserPlus aria-hidden className="size-4 shrink-0" /> },
               { label: "Student inquiries", href: "/ops/inquiries", icon: <LifeBuoy aria-hidden className="size-4 shrink-0" /> },

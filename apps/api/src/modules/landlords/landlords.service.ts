@@ -1,15 +1,112 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { hashPassword } from 'better-auth/crypto';
+import { and, eq, or } from 'drizzle-orm';
 
-import type { UpsertLandlordProfileInput } from '@campushomes/shared';
+import type {
+  LandlordSelfRegisterInput,
+  PendingLandlordAccount,
+  RejectLandlordAccountInput,
+  UpsertLandlordProfileInput,
+} from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
-import { landlords, users } from '../../db/schema';
+import { accounts, landlords, users } from '../../db/schema';
+import { AuditService } from '../ops/audit.service';
+
+const SERVICE_CTX: RlsContext = {
+  userId: '00000000-0000-0000-0000-000000000000',
+  role: 'service_role',
+};
 
 @Injectable()
 export class LandlordsService {
-  constructor(private readonly rlsDb: RlsDb) {}
+  constructor(
+    private readonly rlsDb: RlsDb,
+    private readonly audit: AuditService,
+  ) {}
+
+  // Public self-registration (no session yet): creates a `users` row
+  // (role: landlord, status: pending) plus a Better Auth credential account
+  // — same shape AdminUsersService.create() writes for a staff temporary
+  // password, so authClient.signIn.email() verifies it with no special
+  // casing. No `landlords` row yet: AuthGuard rejects every /api/v1 call
+  // until an ops lead/admin flips status to 'active' below, so the KYC
+  // onboarding wizard (legal name, ID doc, property) only becomes reachable
+  // at that point, same as it always has.
+  async register(input: LandlordSelfRegisterInput) {
+    return this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const [existing] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(or(eq(users.phone, input.phone), eq(users.email, input.email)));
+      if (existing) {
+        throw new ConflictException('An account with this phone number or email already exists');
+      }
+      const [row] = await db
+        .insert(users)
+        .values({
+          phone: input.phone,
+          email: input.email,
+          name: input.name,
+          role: 'landlord',
+          status: 'pending',
+          phoneVerified: false,
+          emailVerified: false,
+        })
+        .returning({ id: users.id });
+      if (!row) throw new Error('User insert returned no row');
+      await db.insert(accounts).values({
+        id: randomUUID(),
+        accountId: row.id,
+        providerId: 'credential',
+        userId: row.id,
+        password: await hashPassword(input.password),
+      });
+      return { registered: true, userId: row.id };
+    });
+  }
+
+  // Ops lead / admin review queue (landlords.review_kyc — same permission
+  // that already gates the KYC queue; this is the earlier gate in the same
+  // reviewer's workflow, not a separate role).
+  pendingAccounts(): Promise<PendingLandlordAccount[]> {
+    return this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const rows = await db
+        .select({ userId: users.id, name: users.name, phone: users.phone, createdAt: users.createdAt })
+        .from(users)
+        .where(and(eq(users.role, 'landlord'), eq(users.status, 'pending')))
+        .orderBy(users.createdAt);
+      return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+    });
+  }
+
+  async approveAccount(actor: RlsContext, userId: string) {
+    const [row] = await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db
+        .update(users)
+        .set({ status: 'active' })
+        .where(and(eq(users.id, userId), eq(users.role, 'landlord'), eq(users.status, 'pending')))
+        .returning({ id: users.id }),
+    );
+    if (!row) throw new NotFoundException('No pending landlord account found for that user');
+    await this.audit.record(actor, 'landlord_account.approve', 'user', userId, {});
+    return { approved: true };
+  }
+
+  async rejectAccount(actor: RlsContext, userId: string, input: RejectLandlordAccountInput) {
+    const [row] = await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db
+        .update(users)
+        .set({ status: 'suspended', notes: input.reason })
+        .where(and(eq(users.id, userId), eq(users.role, 'landlord'), eq(users.status, 'pending')))
+        .returning({ id: users.id }),
+    );
+    if (!row) throw new NotFoundException('No pending landlord account found for that user');
+    await this.audit.record(actor, 'landlord_account.reject', 'user', userId, { reason: input.reason });
+    return { rejected: true };
+  }
 
   me(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (db) => {

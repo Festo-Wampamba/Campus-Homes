@@ -76,7 +76,17 @@ function Dialog({
         // native <dialog>'s default `margin: auto` centering — `m-auto`
         // restores it (the UA stylesheet already makes a shown <dialog>
         // `position: fixed; inset: 0` with auto width/height).
-        "m-auto flex max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
+        //
+        // `hidden open:flex` (not a bare `flex`) matters: an author-origin
+        // `display` declaration always wins over the UA stylesheet's
+        // `dialog:not([open]) { display: none }`, regardless of selector
+        // specificity — a bare `flex` class was therefore keeping every
+        // closed dialog laid out (display: flex, just empty since children
+        // only render when `open`), collapsing to a ~1px-tall box that still
+        // painted its own border as a stray horizontal line wherever it sat
+        // in the page — one per Dialog instance, so it multiplied on pages
+        // with several (e.g. one ReserveButton per room row).
+        "hidden open:flex m-auto max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
         DIALOG_WIDTH[size],
         "z-(--z-modal) backdrop:bg-black/50",
         "open:animate-in open:fade-in open:zoom-in-95 open:duration-150",

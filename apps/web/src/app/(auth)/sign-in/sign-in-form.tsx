@@ -179,13 +179,21 @@ export function SignInForm({ next }: { next: string | null }) {
   async function routeBySession() {
     const { data, error } = await authClient.getSession();
     if (error) throw error;
-    const sessionRole = data?.user
-      ? (data.user as { role?: string }).role
-      : undefined;
+    const user = data?.user as { role?: string; status?: string } | undefined;
+    // Better Auth's own sign-in doesn't check our custom `status` column — a
+    // pending (self-registered, unapproved) or suspended account still gets
+    // a session here. Every real API call would then 401 from AuthGuard, so
+    // route them to a page that explains that instead of their normal
+    // portal, `next` included (a pending account isn't going anywhere yet).
+    if (user?.status && user.status !== "active") {
+      router.replace("/account-pending");
+      router.refresh();
+      return;
+    }
     // Still resolves (and validates) the role-based home even when `next` is
     // set — homeForAuthenticatedRole throws for a session with no real role,
     // which is the actual point of calling it, not just the fallback value.
-    const home = homeForAuthenticatedRole(sessionRole);
+    const home = homeForAuthenticatedRole(user?.role);
     router.replace(next ?? home);
     router.refresh();
   }

@@ -32,6 +32,7 @@ const ICON_SIZE = "size-4 shrink-0";
 const NAV: (AppNavItem & { any: string[] })[] = [
   { label: "Overview", href: "/admin", icon: <Gauge aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["analytics.read"] },
   { label: "Users", href: "/admin/users", icon: <Users aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["students.read", "landlords.read", "staff.read"] },
+  { label: "Landlord accounts", href: "/admin/landlord-accounts", icon: <UserCog aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["landlords.review_kyc"] },
   { label: "Properties", href: "/admin/properties", icon: <Building2 aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["properties.read"] },
   { label: "Verifications", href: "/admin/verifications", icon: <ClipboardCheck aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["visits.read", "landlords.read"] },
   { label: "Reservations", href: "/admin/reservations", icon: <CalendarDays aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["reservations.read"] },

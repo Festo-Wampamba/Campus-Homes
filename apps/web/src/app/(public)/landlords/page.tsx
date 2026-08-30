@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowRightIcon,
   CameraIcon,
   ClockIcon,
   HomeIcon,
@@ -13,6 +12,7 @@ import {
 
 import { VerifiedBadge } from "@/components/verified-badge";
 import { api } from "@/lib/api";
+import { CreateAccountDialog } from "./create-account-dialog";
 import { OnboardingLeadForm } from "./onboarding-lead-form";
 
 export const metadata: Metadata = { title: "List your property" };
@@ -39,8 +39,8 @@ const STEPS = [
   {
     number: "01",
     icon: PersonIcon,
-    title: "We set up your account",
-    body: "A CampusHomes operations person reaches out, creates your landlord account and gets you access to your dashboard.",
+    title: "You create your account",
+    body: "Enter your name and phone number. An ops lead reviews and approves new accounts, then you sign in with the same phone number.",
   },
   {
     number: "02",
@@ -107,13 +107,7 @@ export default async function LandlordsPage() {
               so you don&apos;t have to figure out a new platform alone.
             </p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a
-                href="#request-onboarding"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-coral-500 px-6 font-bold text-teal-900 transition duration-300 hover:bg-coral-600 hover:text-white active:scale-[0.98] sm:w-auto"
-              >
-                Request onboarding
-                <ArrowRightIcon className="size-4" />
-              </a>
+              <CreateAccountDialog />
               <Link
                 href="/sign-in?next=/landlord"
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/5 px-6 font-bold text-white backdrop-blur-md transition duration-300 hover:bg-white/12 active:scale-[0.98] sm:w-auto"
@@ -162,12 +156,12 @@ export default async function LandlordsPage() {
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <p className="eyebrow text-coral-500">How onboarding works today</p>
           <h2 id="how-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] text-white sm:text-4xl">
-            A hands-on start — our team does the setup with you.
+            Create your account, then our team helps you get listed.
           </h2>
           <p className="mt-4 max-w-lg text-sm leading-6 text-white/60">
-            While CampusHomes is new, onboarding is concierge-style: a real
-            person from our operations team walks every property through these
-            three steps.
+            Creating your account takes a minute. Once an ops lead approves
+            it, a real person from our operations team walks your property
+            through verification and publishing.
           </p>
 
           <ol className="mt-10 grid gap-4 md:grid-cols-3">
