@@ -82,3 +82,47 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: false
+
+  # Staging deploys itself once CI is green; production stays a deliberate
+  # manual action. Dokploy's own GitHub auto-deploy must be turned OFF for
+  # campushomes-api-staging, or it and this job race each other every push —
+  # and Dokploy's trigger fires regardless of whether the build is green,
+  # which is the gate this job exists to add.
+  deploy-staging:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dokploy deploy
+        env:
+          # Deployments tab -> Webhook URL. Held as a secret rather than a
+          # config value: anyone holding it can deploy staging at will.
+          WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "::error::DOKPLOY_STAGING_WEBHOOK is not set — add it under Settings > Secrets > Actions"
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$WEBHOOK"
+
+      - name: Wait for staging to report healthy
+        # Catches a deploy that leaves staging broken — the failure mode that
+        # took staging down on 2026-08-29, when a Dokploy deploy overwrote the
+        # live service env with stale credentials and nothing surfaced it.
+        #
+        # Known limitation: /health carries no build identifier, so this proves
+        # something healthy is serving, not that the NEW image is. The leading
+        # sleep covers Dokploy's build so we are unlikely to be reading the
+        # outgoing container.
+        run: |
+          sleep 120
+          for attempt in $(seq 1 30); do
+            body=$(curl -s -m 10 https://api-staging.campushomes.co.ug/api/v1/health || true)
+            echo "attempt $attempt: ${body:-no response}"
+            case "$body" in
+              *'"status":"ok"'*) echo "staging healthy"; exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::staging did not report healthy within 7 minutes of the deploy"
+          exit 1
