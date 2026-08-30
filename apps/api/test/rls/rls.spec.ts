@@ -792,6 +792,100 @@ describe('inquiries (0028): student support desk is self-insert + service-only s
   });
 });
 
+describe('inquiries (0030): listing-scoped enquiries reach the landlord directly', () => {
+  let listingInquiry: string;
+
+  beforeAll(async () => {
+    listingInquiry = await seed(
+      `INSERT INTO inquiries (student_id, category, subject, message, listing_id, landlord_id)
+       SELECT $1, 'listing', 'Is the room still available?', 'I would like to view it Saturday.', $2, p.landlord_id
+       FROM listings l JOIN properties p ON p.id = l.property_id
+       WHERE l.id = $2
+       RETURNING id`,
+      [student1, listing1],
+    );
+  });
+
+  it("the addressed landlord reads the enquiry", async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [listingInquiry]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("a different landlord cannot read the enquiry", async () => {
+    const rows = await asIdentity({ userId: landlord2, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM inquiries WHERE id = $1', [listingInquiry]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('the addressed landlord can write their response fields', async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(
+        `UPDATE inquiries SET landlord_response = 'Yes, still available — Saturday works.', landlord_responded_at = now()
+         WHERE id = $1`,
+        [listingInquiry],
+      ),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it("a different landlord's UPDATE affects zero rows", async () => {
+    const res = await asIdentity({ userId: landlord2, role: 'landlord' }, async (c) =>
+      c.query(
+        `UPDATE inquiries SET landlord_response = 'Sneaky' WHERE id = $1`,
+        [listingInquiry],
+      ),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it('the addressed landlord cannot touch status/resolution — a trigger enforces the boundary', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE inquiries SET status = 'resolved' WHERE id = $1`, [listingInquiry]),
+      ),
+    ).rejects.toThrow(/landlords may only set landlord_response/i);
+  });
+});
+
+describe('product_events (0031): pilot-funnel backstop is service-only', () => {
+  let event1: string;
+
+  beforeAll(async () => {
+    event1 = await seed(
+      `INSERT INTO product_events (event_type, payload) VALUES ('listing_view', '{}'::jsonb) RETURNING id`,
+    );
+  });
+
+  it('a student cannot read events', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM product_events').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a student cannot insert an event directly (app-layer write only)', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'student' }, async (c) =>
+        c.query(`INSERT INTO product_events (event_type) VALUES ('search')`),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads and inserts events', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM product_events WHERE id = $1', [event1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+    const inserted = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query(`INSERT INTO product_events (event_type) VALUES ('search') RETURNING id`).then((r) => r.rows),
+    );
+    expect(inserted).toHaveLength(1);
+  });
+});
+
 describe('ledger (0018): finance chart of accounts + journal is service-only', () => {
   let cashAccountId: string;
   let revenueAccountId: string;
