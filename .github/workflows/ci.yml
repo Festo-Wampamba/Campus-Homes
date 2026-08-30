@@ -102,7 +102,18 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Dokploy deploy
+      - name: Set build-arg so the image can report its own commit
+        # apps/api/Dockerfile bakes GIT_COMMIT_SHA into commit_sha.txt at build
+        # time. It used to be read via `git rev-parse HEAD` inside the builder
+        # stage, but Dokploy fetches source through its GitHub App installation
+        # (a tarball, not a real `git clone`), so `.git` never existed in that
+        # build context and every build silently fell back to "unknown". Passing
+        # the SHA in explicitly as a build-arg has no such dependency.
+        #
+        # application.saveEnvironment replaces the whole stored config in one
+        # call, so the current env/createEnvFile/buildSecrets must be read back
+        # and resent unchanged alongside the new buildArgs — a partial payload
+        # would wipe the app's real secrets.
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
@@ -114,6 +125,29 @@ jobs:
               exit 1
             fi
           done
+          current=$(curl --fail --silent --show-error \
+            "$API_URL/api/application.one?applicationId=$APP_ID" \
+            -H "x-api-key: $API_KEY")
+          jq -n \
+            --arg appId "$APP_ID" \
+            --arg env "$(jq -r '.env // ""' <<<"$current")" \
+            --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
+            --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
+            --arg sha "$GITHUB_SHA" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            > /tmp/save-env-payload.json
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.saveEnvironment" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/save-env-payload.json
+
+      - name: Trigger Dokploy deploy
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_APP_ID }}
+        run: |
           curl --fail --silent --show-error \
             -X POST "$API_URL/api/application.deploy" \
             -H "x-api-key: $API_KEY" \
