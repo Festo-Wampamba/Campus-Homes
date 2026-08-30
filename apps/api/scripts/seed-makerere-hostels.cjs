@@ -8,9 +8,10 @@ const { hashPassword } = require('better-auth/crypto');
 // seed-dev.cjs, which wipes every table and is local-dev-only). Safe to run
 // against a database that already has real accounts/data on it.
 //
-// Deliberately no photos — the landlord/ops team adds real photos
-// afterward; listing_photos is left empty on purpose (listingPhotoUrl()
-// renders its placeholder until then).
+// Placeholder photos (Unsplash, same source + selection approach as
+// seed-dev.cjs) so listings look believable for demo/pilot sessions —
+// replace with real photos via the landlord portal or Ops publish flow
+// before this represents genuine inspected supply.
 //
 // GPS coordinates are hand-estimated per neighborhood (this script's author
 // has not physically visited these properties) — good enough to place a map
@@ -37,13 +38,42 @@ const FULL_CHECKLIST = {
   location_gps: { passed: true },
   rooms_capacity: { passed: true },
   amenities: { passed: true },
-  photos: { passed: true, notes: 'Photos pending — landlord/ops to add before public launch.' },
+  photos: { passed: true, notes: 'Placeholder stock photos — landlord/ops to replace with real ones before public launch.' },
   landlord_identity: { passed: true },
   safety: { passed: true },
 };
 
 const CATEGORY_CAPACITY = { single: 1, double: 2, triple: 3, quad: 4 };
 const CATEGORY_LABEL = { single: 'Single', double: 'Double', triple: 'Triple', quad: 'Quad' };
+
+// Real bedroom/living-room/exterior interiors, hand-picked (same set
+// seed-dev.cjs uses) so listings never show unrelated stock photos.
+const ROOM_PHOTO_IDS = [
+  '1522771739844-6a9f6d5f14af',
+  '1505692952047-1a78307da8f2',
+  '1540518614846-7eded433c457',
+  '1522708323590-d24dbb6b0267',
+  '1484154218962-a197022b5858',
+  '1493809842364-78817add7ffb',
+  '1616486338812-3dadae4b4ace',
+  '1595526114035-0d45ed16cfbf',
+  '1567016432779-094069958ea5',
+];
+
+function unsplashUrl(photoId, width = 1200) {
+  return `https://images.unsplash.com/photo-${photoId}?w=${width}&q=80&fit=crop`;
+}
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(hash);
+}
+
+function samplePhotoUrls(seedName, count = 4) {
+  const offset = hashString(seedName) % ROOM_PHOTO_IDS.length;
+  return Array.from({ length: count }, (_, i) => unsplashUrl(ROOM_PHOTO_IDS[(offset + i) % ROOM_PHOTO_IDS.length]));
+}
 
 function expandRoomCategories(roomCategories) {
   return roomCategories.flatMap(({ category, count, priceUgx }) =>
@@ -287,7 +317,17 @@ async function main() {
         );
       }
 
-      createdListings.push({ propertyId, listingId, versionId, name: spec.name, units: units.length });
+      const photos = samplePhotoUrls(spec.name);
+      for (let i = 0; i < photos.length; i++) {
+        await client.query(
+          `INSERT INTO listing_photos (
+              listing_version_id, storage_key, captured_by, gps_lat, gps_lon, captured_at, is_primary, sort_order
+            ) VALUES ($1, $2, $3, $4, $5, now(), $6, $7)`,
+          [versionId, photos[i], inspectorId, spec.gpsLat, spec.gpsLon, i === 0, i],
+        );
+      }
+
+      createdListings.push({ propertyId, listingId, versionId, name: spec.name, units: units.length, photos: photos.length });
     }
 
     await client.query('COMMIT');
@@ -295,7 +335,7 @@ async function main() {
     console.log(JSON.stringify({ ok: true, landlordId, semesterId, created: createdListings, skipped }, null, 2));
     console.log(`
 Created ${createdListings.length} listings (${skipped.length ? `skipped ${skipped.length} already present: ${skipped.join(', ')}` : 'none skipped'}).
-No photos attached — add real photos via the landlord portal or Ops publish flow before treating these as launch-ready.
+Photos are stock placeholders (Unsplash) — replace with real photos via the landlord portal or Ops publish flow before treating these as launch-ready.
 
 Demo landlord sign-in:
   Email    ${DEMO_LANDLORD.email}
