@@ -605,3 +605,96 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     scheduling, compare tooling (favourites = shortlist reading), landlord-
     routed student enquiries (inquiries are staff-inbox by design; landlord
     comms = reservation chat threads), self-serve landlord signup.
+
+- **Staging infra rescue + CI/CD from zero (2026-08-27 → 2026-08-31):**
+  Neon → self-hosted Postgres migration surfaced two live outages
+  mid-flight; became a full staging hardening pass plus CI/CD built from
+  scratch. **Staging only — production untouched by any of this.**
+  - Postgres: self-hosted `postgis/postgis:18-3.6-alpine` on the VPS
+    (Dokploy Raw Compose). App was connecting as `campushomes`, the
+    cluster **superuser** — superusers bypass RLS unconditionally.
+    Created `campushomes_app` (LOGIN INHERIT IN ROLE `app_user`, not
+    superuser) and repointed the app; `campushomes` is migrations-only
+    now. **FORCE ROW LEVEL SECURITY** applied — was `false` on all 54
+    RLS tables, meaning a table owner could bypass every policy with no
+    error (`0030_force_rls.sql`, driven off `pg_class` so new RLS tables
+    can't silently miss it). Daily backups to Backblaze B2, restore-verified.
+  - Redis: self-hosted `redis:7-alpine` replacing Upstash after its free
+    tier hit its request cap and crash-looped the API (mandatory startup
+    check in `redis.module.ts`). `--appendonly yes`, `--requirepass` set.
+    Gotcha: Compose `${VAR}` reads the host shell/`.env`, not the
+    service's own `environment:` block — must use literal values in
+    `command:`, and as YAML list form (a plain string mangles the
+    password token via shell splitting).
+  - PG17 → PG18 pins across `ci.yml`/`docker-compose.test.yml`/
+    `docker-compose.local.yml` (digest-pinned). **PG18 changed its
+    data-directory convention** — volumes must mount the parent
+    `/var/lib/postgresql`, not `.../data`, or the container crash-loops
+    on restart.
+  - CI/CD built from zero (`.github/workflows/ci.yml`, repo had none
+    before): `ci` job (lint/typecheck/migrate/test/both container builds
+    against digest-pinned PG18) → `deploy-staging` job (`needs: ci`, main
+    only) calls **Dokploy's REST API** (`POST /api/application.deploy`),
+    not its deploy webhook — the webhook is a git-push-event *receiver*
+    that 400s while Dokploy's own auto-deploy toggle is off, and auto-deploy
+    off is exactly what a CI gate requires. Health-gate step polls
+    `/api/v1/health` and fails the build if staging doesn't come back;
+    `/health` now returns a `commit` field (SHA baked into the image at
+    build time via `apps/api/Dockerfile` + `health.controller.ts`) so the
+    gate asserts the *new* build specifically, not just "something healthy".
+  - CI caught two real bugs invisible locally: specs read
+    `TEST_DATABASE_URL`, not `DATABASE_URL` (workflow only exported the
+    latter at first — falls back to `localhost:54329` locally, which
+    resolves to a real DB there, masking the mismatch); and a semantic
+    merge conflict where `main` and this branch each added a different
+    `StaffService` constructor arity, merging cleanly but not compiling.
+  - **Dokploy UI env edits do not reach the live Swarm service** —
+    editing Environment in the dashboard updates Dokploy's stored copy
+    only; the running service is unchanged until a deploy, and a deploy
+    then overwrites the live service *from* that stored copy. A stale
+    stored env silently reverts working credentials on the next deploy —
+    this caused a multi-hour outage. Ground truth is always
+    `docker service inspect <service> --format '...Env...'` on the VPS;
+    force a live change with `docker service update --env-add
+    KEY=value --update-monitor 60s --update-failure-action continue` (the
+    monitor window matters — Swarm's default is shorter than the
+    container's healthcheck start-period and will roll back a healthy
+    deploy).
+  - Verified end to end: `ci ✓ → deploy-staging ✓` in 2m5s; staging held
+    45/45 HTTP 200 samples over 15 minutes spanning a real deploy;
+    container creation timestamp on the VPS confirmed the new image
+    actually took over (not just the health gate's word for it).
+  - **Decided, not yet done (queued for the next work on this):**
+    production has received **none** of this (self-hosted DB/Redis, role
+    fix, FORCE RLS, backups, credential rotation, deploy gating stays
+    manual by decision) — full hardening pass required before real users;
+    Vercel retirement for `apps/web` (Dokploy wins — see below); rotate
+    the staging passwords pasted in chat before any prod data; retire
+    Neon (kept as cold fallback since 2026-08-27).
+
+- **Post-handoff decisions locked (2026-08-31):**
+  - **Web hosting: Dokploy, not Vercel.** Both were building
+    `apps/web` on every push (Vercel's own trigger + Dokploy's
+    `campus-homes-campushomeswebstaging`) — one is dead weight. Dokploy
+    wins: one platform, one CI-gated deploy pipeline, one place to check
+    health/logs, consistent with the API. Retire the Vercel project once
+    Dokploy's web service is confirmed current at the real domain.
+  - **Auth: full migration to Logto, dropping Better Auth entirely** —
+    not a side-by-side or JIT scrypt-compat migration. All existing
+    `users`/`accounts`/`sessions`/`verifications` rows get reset; every
+    user (student, landlord, staff) re-authenticates fresh through Logto.
+    Rationale (Festo): wants auth rebuilt properly this time — strong,
+    secure, reliable — rather than carrying forward Better Auth's
+    known gaps (no self-serve landlord signup, invited-staff-no-password
+    bug fixed ad hoc in PR #41, disabled email/password signup as a
+    workaround rather than a design). This supersedes the scrypt-spike
+    plan floated at handoff — the spike is now moot, since nothing is
+    being migrated, only reset.
+  - **Phone-OTP stays on Africa's Talking** — Logto integrates it as a
+    custom connector rather than switching to Logto's own SMS connector.
+    Already working and tuned for UG delivery; no reason to introduce a
+    second untested SMS deliverability/cost profile.
+  - RLS/RBAC still key on `app.user_id`/`app.user_role` session GUCs
+    (`withRlsContext()`) — the Logto migration must keep producing those
+    same two values per request; nothing about the RLS design itself
+    changes, only what issues the session.
