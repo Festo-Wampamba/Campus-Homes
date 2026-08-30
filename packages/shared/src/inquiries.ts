@@ -30,7 +30,7 @@ export const resolveInquirySchema = z.object({
 export type ResolveInquiryInput = z.infer<typeof resolveInquirySchema>;
 
 // POST /listings/:id/inquiries/:inquiryId/respond — landlord's reply to a
-// listing-scoped enquiry. Column-grant-restricted at the DB level (0030) so
+// listing-scoped enquiry. Column-grant-restricted at the DB level (0031) so
 // this can never touch status/resolution, only the landlord_response pair.
 export const respondToInquirySchema = z.object({
   response: z.string().trim().min(1).max(2000),

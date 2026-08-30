@@ -131,7 +131,7 @@ export class InquiriesService {
 
   // Landlord's own inbox — runs under the landlord's own ctx (not
   // SERVICE_CTX) so RLS itself scopes the rows via inquiries_landlord_select
-  // (0030), the same pattern as landlords_self_* elsewhere.
+  // (0031), the same pattern as landlords_self_* elsewhere.
   landlordMine(ctx: RlsContext) {
     return this.rlsDb.run(ctx, (db) =>
       db
@@ -145,8 +145,8 @@ export class InquiriesService {
   }
 
   // Landlord's reply to their own listing-scoped enquiry. Runs under the
-  // landlord's own ctx: inquiries_landlord_respond (0030) scopes the row,
-  // and the column-level GRANT (0030) means this UPDATE physically cannot
+  // landlord's own ctx: inquiries_landlord_respond (0031) scopes the row,
+  // and the column-level GRANT (0031) means this UPDATE physically cannot
   // touch status/resolution even if a bug tried — those stay staff-authored.
   async respond(ctx: RlsContext, id: string, input: RespondToInquiryInput) {
     const updated = await this.rlsDb.run(ctx, async (db) => {

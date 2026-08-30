@@ -318,10 +318,10 @@ export class AdminDashboardService {
         GROUP BY p.catchment ORDER BY p.catchment
       `);
       const usersByRole = await client.query(`SELECT role::text, count(*)::int AS count FROM users GROUP BY role ORDER BY role`);
-      // Pilot-funnel backstop (0031, workbook §10.2 daily huddle / Form 11):
+      // Pilot-funnel backstop (0032, workbook §10.2 daily huddle / Form 11):
       // searches/listingViews come from product_events (the only two funnel
       // steps with no existing table); enquiries/viewingRequests/
-      // landlordResponses/safetyReports all derive from `inquiries` (0030) —
+      // landlordResponses/safetyReports all derive from `inquiries` (0031) —
       // no separate event needed for those. "viewingRequests" is a
       // best-effort subject-prefix match (AskLandlordDialog's only signal
       // for the checkbox today, see ask-landlord-dialog.tsx) rather than a

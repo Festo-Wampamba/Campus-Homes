@@ -10,7 +10,7 @@ import { users } from './identity';
 // inquiries.read/inquiries.resolve (PermissionsGuard is the real boundary,
 // same posture as activities).
 //
-// listing_id/landlord_id (0030): an optional listing-scoped enquiry reaches
+// listing_id/landlord_id (0031): an optional listing-scoped enquiry reaches
 // the landlord directly instead of only staff. landlord_id is resolved
 // server-side from listing_id at insert time — never client-supplied.
 // landlord_response/landlord_responded_at are column-grant-restricted (see

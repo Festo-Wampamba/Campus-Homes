@@ -792,7 +792,7 @@ describe('inquiries (0028): student support desk is self-insert + service-only s
   });
 });
 
-describe('inquiries (0030): listing-scoped enquiries reach the landlord directly', () => {
+describe('inquiries (0031): listing-scoped enquiries reach the landlord directly', () => {
   let listingInquiry: string;
 
   beforeAll(async () => {
@@ -850,7 +850,7 @@ describe('inquiries (0030): listing-scoped enquiries reach the landlord directly
   });
 });
 
-describe('product_events (0031): pilot-funnel backstop is service-only', () => {
+describe('product_events (0032): pilot-funnel backstop is service-only', () => {
   let event1: string;
 
   beforeAll(async () => {

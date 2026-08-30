@@ -28,7 +28,7 @@ import { VerifiedBadge } from "@/components/verified-badge";
 // Wrapped in React's cache() so generateMetadata() and the page component
 // below (which both need this) share one call per request — without it,
 // every real page view hit GET /listings/:id twice, double-counting the
-// listing_view pilot-funnel event (0031) logged server-side on that route.
+// listing_view pilot-funnel event (0032) logged server-side on that route.
 const getDetail = cache(async (id: string): Promise<ListingDetailResponse | null> => {
   try {
     return listingDetailResponseSchema.parse(

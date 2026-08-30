@@ -3,7 +3,7 @@
 -- Deliberately NOT a general analytics platform — two event types only,
 -- written from ListingsService.search()/detail(), read back by
 -- AdminDashboardService.reports() for a pilot-funnel summary. Enquiries and
--- landlord responses already come from `inquiries` (0030); reservations
+-- landlord responses already come from `inquiries` (0031); reservations
 -- already come from `reservations` — no event needed for either.
 CREATE TABLE "product_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

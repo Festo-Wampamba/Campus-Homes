@@ -494,7 +494,7 @@ export class ListingsService {
           input.roomCategory ?? null,
         ],
       );
-      // Pilot-funnel backstop (0031) — best-effort: a logging failure must
+      // Pilot-funnel backstop (0032) — best-effort: a logging failure must
       // never break a search response. Same client/transaction, so no
       // nested-rlsDb.run risk.
       try {
@@ -591,7 +591,7 @@ export class ListingsService {
              ORDER BY sort_order, created_at`,
             [detail.listing.propertyId],
           );
-          // Pilot-funnel backstop (0031) — best-effort, same posture as the
+          // Pilot-funnel backstop (0032) — best-effort, same posture as the
           // search() event log above.
           try {
             await client.query(
