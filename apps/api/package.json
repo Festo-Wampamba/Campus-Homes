@@ -19,6 +19,7 @@
     "db:seed:year": "node --env-file=.env ./scripts/seed-landlord-year.cjs",
     "db:seed:fieldwork": "node --env-file=.env ./scripts/seed-fieldwork.cjs",
     "db:seed:makerere": "node --env-file=.env ./scripts/seed-makerere-hostels.cjs",
+    "db:seed:demo": "node --env-file=.env ./scripts/seed-demo.cjs",
     "admin:reset": "node --env-file=.env ./scripts/reset-super-admin.cjs",
     "lint": "eslint src test"
   },
