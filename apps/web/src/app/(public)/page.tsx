@@ -402,6 +402,17 @@ export default async function HomePage() {
               );
             })}
           </ol>
+
+          <p className="mt-8 max-w-2xl text-sm leading-6 text-white/54">
+            What the badge doesn&apos;t cover: day-to-day conduct after you move in, tenant
+            reviews before your stay, and anything that changes after the inspection date
+            shown on the listing. Rent and tenancy terms are still agreed directly with the
+            landlord — see something that doesn&apos;t match what was verified?{" "}
+            <Link href="/support" className="font-semibold text-white underline underline-offset-4">
+              Report it
+            </Link>
+            .
+          </p>
         </div>
       </section>
 
