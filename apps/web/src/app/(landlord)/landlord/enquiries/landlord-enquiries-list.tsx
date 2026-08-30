@@ -117,6 +117,10 @@ function EnquiryRow({
             className="w-full rounded-lg border border-input bg-background p-3 text-sm"
             required
           />
+          <p className="text-xs text-muted-foreground">
+            For everyone&apos;s safety, keep phone numbers and links out of your reply — students
+            reach you right here on CampusHomes.
+          </p>
           {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
           <Button type="submit" size="sm" disabled={pending || !response.trim()}>
             {pending ? "Sending…" : "Send reply"}

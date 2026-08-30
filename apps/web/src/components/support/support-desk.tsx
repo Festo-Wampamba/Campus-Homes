@@ -115,6 +115,9 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
               required
             />
           </div>
+          <p className="text-xs text-muted-foreground">
+            For your safety, keep phone numbers and links out of your message.
+          </p>
           {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
           <button
             type="submit"

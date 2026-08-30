@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { CONTACT_INFO_BLOCKED_MESSAGE, containsContactInfo } from './content-safety.js';
+
 export const INQUIRY_CATEGORIES = [
   'general',
   'listing',
@@ -16,7 +18,9 @@ export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
 export const createInquirySchema = z.object({
   category: z.enum(INQUIRY_CATEGORIES).default('general'),
   subject: z.string().trim().min(1).max(200),
-  message: z.string().trim().min(1).max(4000),
+  message: z.string().trim().min(1).max(4000).refine((v) => !containsContactInfo(v), {
+    message: CONTACT_INFO_BLOCKED_MESSAGE,
+  }),
   // Set when the enquiry is asked from a listing page — the server resolves
   // this to the listing's landlord (landlordId is never client-supplied).
   listingId: z.string().uuid().optional(),
@@ -33,7 +37,9 @@ export type ResolveInquiryInput = z.infer<typeof resolveInquirySchema>;
 // listing-scoped enquiry. Column-grant-restricted at the DB level (0031) so
 // this can never touch status/resolution, only the landlord_response pair.
 export const respondToInquirySchema = z.object({
-  response: z.string().trim().min(1).max(2000),
+  response: z.string().trim().min(1).max(2000).refine((v) => !containsContactInfo(v), {
+    message: CONTACT_INFO_BLOCKED_MESSAGE,
+  }),
 });
 export type RespondToInquiryInput = z.infer<typeof respondToInquirySchema>;
 

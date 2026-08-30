@@ -163,12 +163,12 @@ export function RoomCategoryList({
                   setLightbox({
                     photos,
                     index: 0,
-                    caption: "Photos from our inspection visit — general property photos.",
+                    caption: "General photos of the property.",
                   })
                 }
               >
                 <Images aria-hidden className="size-4" />
-                Inspection photos
+                Property photos
               </Button>
             )}
             {canReserve && group.firstAvailableUnitId && (

@@ -113,6 +113,10 @@ export function AskLandlordDialog({
                   required
                 />
               </div>
+              <p className="text-xs text-muted-foreground">
+                For your safety, keep phone numbers and links out of your message — reply and
+                follow-up all happen right here on CampusHomes.
+              </p>
               {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
             </form>
           )}
