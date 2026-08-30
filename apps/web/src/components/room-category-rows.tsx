@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { roomCategoryLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export type RoomCategoryRow = {
   // Local-only key for React reconciliation — never sent to the API.
@@ -16,12 +17,24 @@ export type RoomCategoryRow = {
   pricePerTermUgx: string;
   // Optional — not every property charges a deposit.
   depositUgx: string;
+  // Only rendered/meaningful when the caller passes showSelfContained — the
+  // same category can appear as two rows (self-contained doubles at one
+  // price, shared-bathroom doubles at another) rather than needing a
+  // separate, disconnected "how many are self-contained" total elsewhere.
+  selfContained: boolean;
 };
 
 let nextKey = 0;
 export function emptyRoomCategoryRow(): RoomCategoryRow {
   nextKey += 1;
-  return { key: `row-${nextKey}`, category: "single", roomCount: "", pricePerTermUgx: "", depositUgx: "" };
+  return {
+    key: `row-${nextKey}`,
+    category: "single",
+    roomCount: "",
+    pricePerTermUgx: "",
+    depositUgx: "",
+    selfContained: false,
+  };
 }
 
 /** Repeatable {category, room count, price} rows — the shared input for "I
@@ -33,10 +46,14 @@ export function RoomCategoryRows({
   rows,
   onChange,
   idPrefix,
+  showSelfContained = false,
 }: {
   rows: RoomCategoryRow[];
   onChange: (rows: RoomCategoryRow[]) => void;
   idPrefix: string;
+  // Landlord-facing forms only — the Ops publish form doesn't use this flag,
+  // so it stays hidden there rather than showing a checkbox with no effect.
+  showSelfContained?: boolean;
 }) {
   function update(key: string, patch: Partial<RoomCategoryRow>) {
     onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -51,7 +68,12 @@ export function RoomCategoryRows({
       {rows.map((row, i) => (
         <div
           key={row.key}
-          className="grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]"
+          className={cn(
+            "grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3",
+            showSelfContained
+              ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
+              : "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
+          )}
         >
           <div className="col-span-2 space-y-1.5 sm:col-span-1">
             <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>
@@ -102,6 +124,16 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { depositUgx: e.target.value })}
             />
           </div>
+          {showSelfContained && (
+            <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">
+              <input
+                type="checkbox"
+                checked={row.selfContained}
+                onChange={(e) => update(row.key, { selfContained: e.target.checked })}
+              />
+              Self-contained
+            </label>
+          )}
           <Button
             type="button"
             variant="ghost"

@@ -62,6 +62,7 @@ function roomRowsFromProperty(property: Property | null): RoomCategoryRow[] {
     roomCount: String(row.roomCount),
     pricePerTermUgx: String(row.pricePerTermUgx),
     depositUgx: row.depositUgx != null ? String(row.depositUgx) : "",
+    selfContained: row.selfContained ?? false,
   }));
 }
 
@@ -148,14 +149,24 @@ function PropertyForm({
         const { publicId } = await uploadToCloudinary(coverPhotoFile, sig);
         newCoverPhotoKey = publicId;
       }
-      const proposedRoomCategories = roomCategoryRows
-        .filter((row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0)
-        .map((row) => ({
-          category: row.category,
-          roomCount: Number(row.roomCount),
-          pricePerTermUgx: Number(row.pricePerTermUgx),
-          ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
-        }));
+      const validRoomRows = roomCategoryRows.filter(
+        (row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0,
+      );
+      const proposedRoomCategories = validRoomRows.map((row) => ({
+        category: row.category,
+        roomCount: Number(row.roomCount),
+        pricePerTermUgx: Number(row.pricePerTermUgx),
+        selfContained: row.selfContained,
+        ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
+      }));
+      // Derived from the rows above, not entered separately — see the
+      // comment on proposedRoomCategorySchema.selfContained.
+      const selfContainedRoomCount = validRoomRows
+        .filter((row) => row.selfContained)
+        .reduce((sum, row) => sum + Number(row.roomCount), 0);
+      const nonSelfContainedRoomCount = validRoomRows
+        .filter((row) => !row.selfContained)
+        .reduce((sum, row) => sum + Number(row.roomCount), 0);
       const body = JSON.stringify({
         name,
         streetAddress,
@@ -163,6 +174,8 @@ function PropertyForm({
         proposedRoomCategories,
         proposedAmenities: amenities,
         ...serializePropertyExtendedFields(extended),
+        selfContainedRoomCount,
+        nonSelfContainedRoomCount,
         // Create-only: updatePropertySchema doesn't accept `type` or the
         // 5-item declaration (fixed/one-time-consent once submitted), so
         // only send them when adding.
@@ -296,6 +309,7 @@ function PropertyForm({
               rows={roomCategoryRows}
               onChange={setRoomCategoryRows}
               idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
+              showSelfContained
             />
           </div>
           <div className="space-y-1.5">

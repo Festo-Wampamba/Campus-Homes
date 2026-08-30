@@ -181,13 +181,23 @@ export function OnboardingWizard({
         const { publicId } = await uploadToCloudinary(coverPhotoFile, sig);
         coverPhotoKey = publicId;
       }
-      const proposedRoomCategories = roomCategoryRows
-        .filter((row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0)
-        .map((row) => ({
-          category: row.category,
-          roomCount: Number(row.roomCount),
-          pricePerTermUgx: Number(row.pricePerTermUgx),
-        }));
+      const validRoomRows = roomCategoryRows.filter(
+        (row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0,
+      );
+      const proposedRoomCategories = validRoomRows.map((row) => ({
+        category: row.category,
+        roomCount: Number(row.roomCount),
+        pricePerTermUgx: Number(row.pricePerTermUgx),
+        selfContained: row.selfContained,
+      }));
+      // Derived from the rows above, not entered separately — see the
+      // comment on proposedRoomCategorySchema.selfContained.
+      const selfContainedRoomCount = validRoomRows
+        .filter((row) => row.selfContained)
+        .reduce((sum, row) => sum + Number(row.roomCount), 0);
+      const nonSelfContainedRoomCount = validRoomRows
+        .filter((row) => !row.selfContained)
+        .reduce((sum, row) => sum + Number(row.roomCount), 0);
       await api<Property>("/listings/properties", {
         method: "POST",
         body: JSON.stringify({
@@ -198,6 +208,8 @@ export function OnboardingWizard({
           proposedRoomCategories,
           proposedAmenities: amenities,
           ...serializePropertyExtendedFields(extended),
+          selfContainedRoomCount,
+          nonSelfContainedRoomCount,
           ...declaration,
           ...(coverPhotoKey ? { coverPhotoKey } : {}),
         }),
@@ -336,6 +348,7 @@ export function OnboardingWizard({
                   rows={roomCategoryRows}
                   onChange={setRoomCategoryRows}
                   idPrefix="onboarding-room"
+                  showSelfContained
                 />
               </div>
               <div className="space-y-1.5">

@@ -1,16 +1,18 @@
 "use client";
 
+import { useState } from "react";
+import { X } from "lucide-react";
 import {
   GENDER_ARRANGEMENTS,
+  NEARBY_INSTITUTIONS,
   PROPERTY_AUTHORITY_ROLES,
   RENT_PERIODS,
-  UNIVERSITIES,
   type GenderArrangement,
   type PropertyAuthorityRole,
   type RentPeriod,
-  type University,
 } from "@campushomes/shared";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,14 +24,6 @@ import {
   UTILITY_OPTIONS,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-
-const UNIVERSITY_LABELS: Record<string, string> = {
-  MUK: "Makerere University",
-  MUBS: "Makerere University Business School",
-  KIU: "Kampala International University",
-  KYU: "Kyambogo University",
-  other: "Other / not listed",
-};
 
 const selectClass = cn(
   "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
@@ -48,7 +42,10 @@ export type PropertyExtendedFieldsValue = {
   alternativeName: string;
   locationDetails: string;
   genderArrangement: GenderArrangement | "";
-  otherCatchments: University[];
+  // Free text, not the University enum — see NEARBY_INSTITUTIONS' comment in
+  // packages/shared/src/property.ts for why this stays separate from the
+  // primary `catchment` field (search/RLS scoping vs. purely informational).
+  otherCatchments: string[];
   authorityRole: PropertyAuthorityRole | "";
   authorityRoleOther: string;
   transportShuttle: boolean;
@@ -93,13 +90,20 @@ function CheckboxGrid({
   options,
   value,
   onChange,
+  bordered = true,
 }: {
   options: { key: string; label: string }[];
   value: Record<string, boolean>;
   onChange: (next: Record<string, boolean>) => void;
+  // false lets a caller combine several CheckboxGrids inside one shared
+  // border, so they read as one section instead of several visually
+  // separate boxes (2026-08-30 product review — utilities/security used to
+  // each get their own labeled box, which read as more sections than the
+  // data actually needed).
+  bordered?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
+    <div className={cn("grid grid-cols-2 gap-2 p-3 sm:grid-cols-3", bordered && "rounded-md border border-border")}>
       {options.map((option) => (
         <label key={option.key} className="flex items-center gap-2 text-sm">
           <input
@@ -123,7 +127,17 @@ export function PropertyExtendedFields({
   onChange: (patch: Partial<PropertyExtendedFieldsValue>) => void;
   idPrefix: string;
 }) {
-  const otherCatchmentOptions = UNIVERSITIES.filter((u) => u !== "other");
+  const [customInstitution, setCustomInstitution] = useState("");
+  const customInstitutions = value.otherCatchments.filter(
+    (name) => !(NEARBY_INSTITUTIONS as readonly string[]).includes(name),
+  );
+
+  function addCustomInstitution() {
+    const name = customInstitution.trim();
+    if (!name || value.otherCatchments.includes(name)) return;
+    onChange({ otherCatchments: [...value.otherCatchments, name] });
+    setCustomInstitution("");
+  }
 
   return (
     <div className="space-y-5">
@@ -166,24 +180,65 @@ export function PropertyExtendedFields({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Other universities served</Label>
-        <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-4">
-          {otherCatchmentOptions.map((u) => (
-            <label key={u} className="flex items-center gap-2 text-sm">
+        <Label>Also close to (optional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Other institutes or colleges students here might attend, beyond the nearest university.
+        </p>
+        <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
+          {NEARBY_INSTITUTIONS.map((name) => (
+            <label key={name} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={value.otherCatchments.includes(u)}
+                checked={value.otherCatchments.includes(name)}
                 onChange={(e) =>
                   onChange({
                     otherCatchments: e.target.checked
-                      ? [...value.otherCatchments, u]
-                      : value.otherCatchments.filter((x) => x !== u),
+                      ? [...value.otherCatchments, name]
+                      : value.otherCatchments.filter((x) => x !== name),
                   })
                 }
               />
-              {UNIVERSITY_LABELS[u] ?? u}
+              {name}
             </label>
           ))}
+        </div>
+        {customInstitutions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {customInstitutions.map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-foreground"
+              >
+                {name}
+                <button
+                  type="button"
+                  aria-label={`Remove ${name}`}
+                  onClick={() =>
+                    onChange({ otherCatchments: value.otherCatchments.filter((x) => x !== name) })
+                  }
+                >
+                  <X aria-hidden className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Input
+            value={customInstitution}
+            onChange={(e) => setCustomInstitution(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addCustomInstitution();
+              }
+            }}
+            placeholder="Not listed? Add it…"
+            className="h-9"
+          />
+          <Button type="button" variant="secondary" size="sm" onClick={addCustomInstitution}>
+            Add
+          </Button>
         </div>
       </div>
 
@@ -224,27 +279,12 @@ export function PropertyExtendedFields({
         )}
       </div>
 
+      {/* Self-contained/non-self-contained counts are no longer entered here —
+          they're derived from the "self-contained" checkbox on each room-type
+          row above, so a landlord enters that distinction once, in one
+          place, instead of two disconnected data-entry points that could
+          contradict each other. See RoomCategoryRows' showSelfContained. */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-selfContained`}>Self-contained rooms</Label>
-          <Input
-            id={`${idPrefix}-selfContained`}
-            type="number"
-            min={0}
-            value={value.selfContainedRoomCount}
-            onChange={(e) => onChange({ selfContainedRoomCount: e.target.value })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-nonSelfContained`}>Non-self-contained rooms</Label>
-          <Input
-            id={`${idPrefix}-nonSelfContained`}
-            type="number"
-            min={0}
-            value={value.nonSelfContainedRoomCount}
-            onChange={(e) => onChange({ nonSelfContainedRoomCount: e.target.value })}
-          />
-        </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-bookingFee`}>Booking fee (%)</Label>
           <Input
@@ -317,22 +357,28 @@ export function PropertyExtendedFields({
         </label>
       </div>
 
+      {/* Furnishing and security used to be two separately-labeled sections
+          ("Utilities included" / "Security measures") — folded into one
+          "Amenities" box so CCTV, fencing, fire extinguishers etc. sit
+          alongside furnishing instead of reading as unrelated form
+          sections. Still two underlying fields (furnishingItems,
+          securityFeatures) — only the presentation is merged. */}
       <div className="space-y-1.5">
-        <Label>Utilities included</Label>
-        <CheckboxGrid
-          options={UTILITY_OPTIONS}
-          value={value.furnishingItems}
-          onChange={(furnishingItems) => onChange({ furnishingItems })}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Security measures</Label>
-        <CheckboxGrid
-          options={SECURITY_FEATURE_OPTIONS}
-          value={value.securityFeatures}
-          onChange={(securityFeatures) => onChange({ securityFeatures })}
-        />
+        <Label>Amenities</Label>
+        <div className="divide-y divide-border rounded-md border border-border">
+          <CheckboxGrid
+            options={UTILITY_OPTIONS}
+            value={value.furnishingItems}
+            onChange={(furnishingItems) => onChange({ furnishingItems })}
+            bordered={false}
+          />
+          <CheckboxGrid
+            options={SECURITY_FEATURE_OPTIONS}
+            value={value.securityFeatures}
+            onChange={(securityFeatures) => onChange({ securityFeatures })}
+            bordered={false}
+          />
+        </div>
       </div>
 
       <div className="space-y-1.5">
@@ -398,7 +444,7 @@ export function propertyExtendedFieldsFromProperty(p: {
     alternativeName: p.alternativeName ?? "",
     locationDetails: p.locationDetails ?? "",
     genderArrangement: (p.genderArrangement ?? "") as GenderArrangement | "",
-    otherCatchments: (p.otherCatchments ?? []) as University[],
+    otherCatchments: p.otherCatchments ?? [],
     authorityRole: (p.authorityRole ?? "") as PropertyAuthorityRole | "",
     authorityRoleOther: p.authorityRoleOther ?? "",
     transportShuttle: p.transportShuttle,

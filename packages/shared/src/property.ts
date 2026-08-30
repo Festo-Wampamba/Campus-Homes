@@ -28,8 +28,42 @@ export const proposedRoomCategorySchema = z.object({
   // status as pricePerTermUgx: informational until Ops confirms it on
   // the real units at publish time.
   depositUgx: ugxAmount.optional(),
+  // Captured per row (not as a separate property-level aggregate) so a
+  // landlord can express "5 self-contained doubles at 650k, 3 shared-
+  // bathroom doubles at 500k" as two rows of the same category, one place —
+  // see selfContainedRoomCount/nonSelfContainedRoomCount below, which are
+  // now derived from these rows client-side rather than entered separately.
+  selfContained: z.boolean().default(false),
 });
 export type ProposedRoomCategory = z.infer<typeof proposedRoomCategorySchema>;
+
+// Curated pick-list for "which other institutions is this property also
+// close to" (2026-08-30 product review — students near Makerere aren't only
+// at the 4 catchment universities; institutes and colleges count too).
+// Deliberately NOT the `catchment` enum: catchment drives search bounds and
+// ops-staff RLS scoping, so it stays locked to the 4 universities the
+// platform actually operates in. This list is purely informational (stored
+// as plain text in properties.other_catchments, same free-text-array shape
+// as amenities/furnishing elsewhere in this file) — a landlord can also type
+// one not listed here, nothing server-side rejects an unlisted name.
+export const NEARBY_INSTITUTIONS = [
+  'Makerere University (MUK)',
+  'Makerere University Business School (MUBS)',
+  'Kyambogo University (KYU)',
+  'Kampala International University (KIU)',
+  'Uganda Christian University (UCU)',
+  'Nkumba University',
+  'Ndejje University',
+  'Uganda Martyrs University, Nkozi',
+  'Uganda Management Institute (UMI)',
+  'Uganda Institute of Information and Communications Technology (UICT)',
+  'Cavendish University Uganda',
+  'Victoria University Kampala',
+  'International Health Sciences University (IHSU)',
+  'Bugema University',
+  'Kampala University',
+  'Institute of Petroleum Studies, Kampala (IPSK)',
+] as const;
 
 // Same free-form shape as listing_versions.amenities (ops.ts) — a plain
 // key->boolean map, not a strict enum, so Ops can still publish a key the
@@ -50,7 +84,7 @@ export const submitPropertySchema = z
     // Which university this property serves — drives "browse by university"
     // counts/search. Same vocabulary as students.university.
     catchment: z.enum(UNIVERSITIES),
-    otherCatchments: z.array(z.enum(UNIVERSITIES)).max(10).default([]),
+    otherCatchments: z.array(z.string().trim().min(2).max(150)).max(10).default([]),
     proposedRoomCategories: z.array(proposedRoomCategorySchema).max(20).default([]),
     proposedAmenities: amenitiesSchema.default({}),
     // Google Form "Utilities Included" — furnishing-level (bathroom/
@@ -108,7 +142,7 @@ export const updatePropertySchema = z.object({
   locationDetails: z.string().trim().max(500).nullable().optional(),
   genderArrangement: z.enum(GENDER_ARRANGEMENTS).nullable().optional(),
   catchment: z.enum(UNIVERSITIES).optional(),
-  otherCatchments: z.array(z.enum(UNIVERSITIES)).max(10).optional(),
+  otherCatchments: z.array(z.string().trim().min(2).max(150)).max(10).optional(),
   proposedRoomCategories: z.array(proposedRoomCategorySchema).max(20).optional(),
   proposedAmenities: amenitiesSchema.optional(),
   furnishingItems: amenitiesSchema.optional(),
@@ -142,7 +176,7 @@ export const propertySchema = z.object({
   genderArrangement: z.enum(GENDER_ARRANGEMENTS).nullable(),
   status: z.enum(PROPERTY_STATUSES),
   catchment: z.enum(UNIVERSITIES),
-  otherCatchments: z.array(z.enum(UNIVERSITIES)),
+  otherCatchments: z.array(z.string()),
   proposedRoomCategories: z.array(proposedRoomCategorySchema).nullable(),
   proposedAmenities: amenitiesSchema.nullable(),
   furnishingItems: amenitiesSchema,

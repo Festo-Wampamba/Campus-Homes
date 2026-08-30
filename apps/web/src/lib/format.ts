@@ -91,11 +91,13 @@ export const SECURITY_FEATURE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "off_grid_light", label: "Off-grid light" },
 ];
 
+// Trimmed to what's actually common on Kampala-area student housing
+// (2026-08-30 product review) — dropped "lift" (student hostels here are
+// rarely multi-storey with an elevator) and "step-free entrance" (mostly
+// redundant with "ground floor rooms" for this housing type).
 export const ACCESSIBILITY_FEATURE_OPTIONS: Array<{ key: string; label: string }> = [
-  { key: "step_free_entrance", label: "Step-free entrance" },
   { key: "ground_floor_rooms", label: "Ground floor rooms" },
   { key: "accessible_bathroom", label: "Accessible bathroom" },
-  { key: "lift", label: "Lift" },
   { key: "wheelchair_accessible", label: "Wheelchair accessible" },
 ];
 
