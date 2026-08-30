@@ -18,6 +18,7 @@ describe('HealthController', () => {
     await expect(controller().check()).resolves.toEqual({
       status: 'ok',
       checks: { database: 'up', redis: 'up' },
+      commit: expect.any(String),
     });
   });
 
@@ -25,6 +26,7 @@ describe('HealthController', () => {
     await expect(controller(undefined, null).check()).resolves.toEqual({
       status: 'ok',
       checks: { database: 'up', redis: 'disabled' },
+      commit: expect.any(String),
     });
   });
 
@@ -43,6 +45,7 @@ describe('HealthController', () => {
     expect((failure as ServiceUnavailableException).getResponse()).toEqual({
       status: 'degraded',
       checks: expect.objectContaining({ database: expect.any(String), redis: expect.any(String) }),
+      commit: expect.any(String),
     });
   });
 });
