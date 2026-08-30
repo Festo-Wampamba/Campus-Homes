@@ -46,8 +46,8 @@ export default async function AdminOverviewPage() {
       <SectionCard title="Action queue" description={`${queueTotal} items currently need attention`}>
         <div className="divide-y divide-slate-100 dark:divide-border">
           {[
-            ["Landlord KYC", s.pendingKyc, "/admin/verifications"],
-            ["Verification visits", s.pendingVisits, "/admin/verifications"],
+            ["Landlord identity review", s.pendingKyc, "/admin/verifications"],
+            ["Properties waiting verification", s.pendingVisits, "/admin/verifications"],
             ["Pending refunds", s.pendingRefunds, "/admin/payments"],
             ["Failed notifications", s.failedNotifications, "/admin/audit-log"],
           ].map(([label, count, href]) => <Link key={String(label)} href={String(href)} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50 dark:hover:bg-muted/40"><span className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground"><Clock3 aria-hidden className="size-4" /></span><span className="text-sm font-semibold text-slate-700 dark:text-foreground">{label}</span><span className="tabular ml-auto text-sm font-bold text-slate-950 dark:text-foreground">{Number(count).toLocaleString()}</span></Link>)}

@@ -6,14 +6,17 @@ import { listingPhotoUrl } from "@/lib/cloudinary";
 import { getKycQueue } from "@/lib/ops";
 import { KycDecisionActions } from "./kyc-decision-actions";
 
-export const metadata: Metadata = { title: "Landlord KYC review" };
+export const metadata: Metadata = { title: "Landlord identity review" };
 
 export default async function LandlordKycQueuePage() {
   const queue = await getKycQueue();
 
   return (
     <>
-      <h1 className="text-2xl">Landlord KYC review</h1>
+      <h1 className="text-2xl">Landlord identity review</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Confirm who a landlord is before their properties can go live.
+      </p>
       {queue.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">No landlords awaiting review.</p>
       ) : (

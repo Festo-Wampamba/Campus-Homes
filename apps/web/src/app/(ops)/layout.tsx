@@ -19,7 +19,7 @@ export default async function OpsLayout({
         isInspector
           ? [{ label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> }]
           : [
-              { label: "Verification queue", href: "/ops", icon: <ClipboardCheck aria-hidden className="size-4 shrink-0" /> },
+              { label: "Properties waiting verification", href: "/ops", icon: <ClipboardCheck aria-hidden className="size-4 shrink-0" /> },
               // Lets a lead self-assign and run a visit end-to-end with no
               // separate inspector (MVP full-parity decision) — the same
               // checklist screen an inspector uses, reachable from the
@@ -27,7 +27,7 @@ export default async function OpsLayout({
               { label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> },
               { label: "Properties", href: "/ops/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
               { label: "Landlord accounts", href: "/ops/landlord-accounts", icon: <Users aria-hidden className="size-4 shrink-0" /> },
-              { label: "Landlord KYC", href: "/ops/landlords", icon: <UserCheck aria-hidden className="size-4 shrink-0" /> },
+              { label: "Landlord identity review", href: "/ops/landlords", icon: <UserCheck aria-hidden className="size-4 shrink-0" /> },
               { label: "Onboarding leads", href: "/ops/leads", icon: <UserPlus aria-hidden className="size-4 shrink-0" /> },
               { label: "Student inquiries", href: "/ops/inquiries", icon: <LifeBuoy aria-hidden className="size-4 shrink-0" /> },
               { label: "Issue strike", href: "/ops/strikes", icon: <ShieldAlert aria-hidden className="size-4 shrink-0" /> },

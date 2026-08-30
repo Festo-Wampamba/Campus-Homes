@@ -10,7 +10,7 @@ import { StatusChip } from "@/components/status-chip";
 import { getServerSession } from "@/lib/session";
 import { getQueue } from "@/lib/ops";
 
-export const metadata: Metadata = { title: "Verification queue" };
+export const metadata: Metadata = { title: "Properties waiting verification" };
 
 function ageTone(ageHours: number): "success" | "warning" | "destructive" {
   if (ageHours > 96) return "destructive";
@@ -98,7 +98,10 @@ export default async function OpsQueuePage() {
 
   return (
     <>
-      <h1 className="text-2xl">Verification queue</h1>
+      <h1 className="text-2xl">Properties waiting verification</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Properties a landlord has submitted, waiting for an inspection visit and a decision.
+      </p>
       {loadFailed ? (
         <div className="mt-6">
           <div className="flex flex-col items-center rounded-lg border border-dashed border-destructive/40 px-6 py-12 text-center">
