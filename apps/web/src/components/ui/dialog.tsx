@@ -14,6 +14,9 @@ import { cn } from "@/lib/utils";
  * so callers can drive it from their own create/edit state.
  */
 const DIALOG_WIDTH = {
+  // A single stacked column of fields (e.g. a 4-field signup form) reads as
+  // oddly wide and flat at "md" width, which was sized for two-up layouts.
+  sm: "w-[min(26rem,calc(100vw-2rem))]",
   // Landscape, not portrait — width comfortably exceeds height for a typical
   // form's worth of fields laid out two-up (see PropertyForm).
   md: "w-[min(38rem,calc(100vw-2rem))]",
@@ -29,7 +32,7 @@ function Dialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   // false = a backdrop click or Escape can't close this — only an explicit
   // Cancel/X click can. For a long form (the tenant-agreement builder, the
   // property form) a stray click just outside the card used to silently

@@ -71,7 +71,7 @@ export function CreateAccountDialog() {
         <UserPlus aria-hidden className="size-4" />
         Create your account
       </Button>
-      <Dialog open={open} onOpenChange={close}>
+      <Dialog open={open} onOpenChange={close} size="sm">
         <DialogHeader
           title={done ? "Account created" : "Create your landlord account"}
           description={
