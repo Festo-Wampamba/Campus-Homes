@@ -200,6 +200,20 @@ export function InquiriesManager({
 
             <p className="whitespace-pre-line text-sm">{selected.message}</p>
 
+            {/* Listing-scoped inquiries route to the landlord directly
+                (inquiries.landlordId) — staff still need to see what the
+                landlord actually told the student, otherwise CC'ing ops on
+                these is visibility in name only. */}
+            {selected.landlordResponse && (
+              <div className="space-y-1 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm dark:border-teal-900 dark:bg-teal-950">
+                <p className="text-xs font-semibold tracking-wide text-teal-800 uppercase dark:text-teal-200">
+                  Landlord replied
+                  {selected.landlordRespondedAt && ` · ${new Date(selected.landlordRespondedAt).toLocaleString()}`}
+                </p>
+                <p className="whitespace-pre-line">{selected.landlordResponse}</p>
+              </div>
+            )}
+
             {canResolve && (
               <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-border">
                 <label
