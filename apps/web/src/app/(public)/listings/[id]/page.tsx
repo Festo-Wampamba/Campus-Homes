@@ -64,7 +64,11 @@ export default async function ListingDetailPage({
     isStudent ? getStudentProfile() : Promise.resolve(null),
     isStudent ? getSavedListings() : Promise.resolve([]),
   ]);
-  const canReserve = isStudent && studentProfile !== null;
+  // Any signed-in student can reserve immediately — a missing `students` row
+  // (university/year, required by the reservations FK) is collected inline
+  // by ReserveButton's quick-registration dialog on first reserve, not as a
+  // separate blocking page a new signup has to detour through first.
+  const canReserve = isStudent;
   const needsProfile = isStudent && studentProfile === null;
   const isSaved = savedListings.some((row) => row.id === listingId);
 
@@ -211,6 +215,7 @@ export default async function ListingDetailPage({
               unitPhotos={unitPhotos}
               propertyName={property.name}
               canReserve={canReserve}
+              needsProfile={needsProfile}
             />
           </section>
 
@@ -245,9 +250,7 @@ export default async function ListingDetailPage({
         <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
           <MoneyCard
             session={session}
-            needsProfile={needsProfile}
             canReserve={canReserve}
-            listingId={listingId}
             minPriceUgx={minPriceUgx}
             maxPriceUgx={maxPriceUgx}
             bookingFeePercent={property.booking_fee_percent}
@@ -261,9 +264,7 @@ export default async function ListingDetailPage({
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/96 p-3 shadow-[0_-12px_32px_-18px_rgba(0,47,47,0.35)] backdrop-blur-xl lg:hidden">
         <MoneyCard
           session={session}
-          needsProfile={needsProfile}
           canReserve={canReserve}
-          listingId={listingId}
           minPriceUgx={minPriceUgx}
           maxPriceUgx={maxPriceUgx}
           compact
@@ -277,9 +278,7 @@ export default async function ListingDetailPage({
 
 function MoneyCard({
   session,
-  needsProfile,
   canReserve,
-  listingId,
   minPriceUgx,
   maxPriceUgx,
   bookingFeePercent,
@@ -289,9 +288,7 @@ function MoneyCard({
   compact = false,
 }: {
   session: Awaited<ReturnType<typeof getServerSession>>;
-  needsProfile: boolean;
   canReserve: boolean;
-  listingId: string;
   minPriceUgx: number;
   maxPriceUgx: number;
   bookingFeePercent?: number | null;
@@ -325,17 +322,6 @@ function MoneyCard({
           )}
         >
           Sign in to reserve
-        </Link>
-      )}
-      {needsProfile && (
-        <Link
-          href={`/profile?next=/listings/${listingId}`}
-          className={cn(
-            "inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition duration-300 hover:bg-teal-700 active:scale-[0.98]",
-            compact ? "shrink-0" : "mt-4 w-full",
-          )}
-        >
-          Complete your profile
         </Link>
       )}
       {canReserve && (

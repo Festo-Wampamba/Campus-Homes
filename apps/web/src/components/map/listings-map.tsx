@@ -119,7 +119,19 @@ export function ListingsMap({
     // size is what makes a WebGL map look cut off or blank after any of
     // those. ResizeObserver catches all of them in one place instead of
     // wiring a resize() call into every caller that can change our size.
-    const resizeObserver = new ResizeObserver(() => map.resize());
+    //
+    // Skip the call while either dimension is 0: the "Hide map" collapse
+    // animates this container down to 0×0, and resizing the WebGL canvas to
+    // zero size corrupts its framebuffer on some browsers/GPUs — it then
+    // renders blank or garbled even after "Show map" grows the container
+    // back, because the corrupted buffer is never reallocated. Skipping the
+    // zero-size resize leaves the canvas at its last valid size; the next
+    // ResizeObserver firing once the container is visible again (nonzero)
+    // still resizes it correctly.
+    const resizeObserver = new ResizeObserver(() => {
+      const el = containerRef.current;
+      if (el && el.clientWidth > 0 && el.clientHeight > 0) map.resize();
+    });
     resizeObserver.observe(containerRef.current);
     // Bounds come from the camera transform (center/zoom/container size),
     // available the instant the map is constructed — they don't need tiles

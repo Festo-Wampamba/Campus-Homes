@@ -22,7 +22,13 @@ export default async function SignInPage({
     // page itself scroll-free in the normal case while guaranteeing content
     // is never clipped/unreachable the way a blanket overflow-hidden would.
     <div className="relative h-dvh w-full overflow-hidden bg-gradient-to-br from-teal-700 via-teal-800 to-teal-950">
-      <div className="absolute inset-x-0 bottom-0 hidden p-8 sm:block sm:p-10">
+      {/* pointer-events-none here (not just inside LiveClock) matters: this
+          wrapper is `absolute`, so CSS paints it above the normal-flow card
+          below regardless of DOM order. On a viewport short enough that the
+          card's lower buttons fall inside this bottom-anchored padded band,
+          an intercepting click here would silently swallow the click — the
+          button looks normal but does nothing. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden p-8 sm:block sm:p-10">
         <LiveClock />
       </div>
       <div className="flex h-full w-full items-center justify-center overflow-y-auto p-4 py-8 sm:p-8">

@@ -88,6 +88,7 @@ export function RoomCategoryList({
   unitPhotos,
   propertyName,
   canReserve,
+  needsProfile,
 }: {
   units: Unit[];
   availability: { id: string; available: boolean }[];
@@ -95,6 +96,7 @@ export function RoomCategoryList({
   unitPhotos: UnitPhoto[];
   propertyName: string;
   canReserve: boolean;
+  needsProfile: boolean;
 }) {
   const availableByUnit = new Map(availability.map((a) => [a.id, a.available]));
   const groups = groupByCategory(units, availableByUnit, unitPhotos);
@@ -170,7 +172,7 @@ export function RoomCategoryList({
               </Button>
             )}
             {canReserve && group.firstAvailableUnitId && (
-              <ReserveButton unitId={group.firstAvailableUnitId} />
+              <ReserveButton unitId={group.firstAvailableUnitId} needsProfile={needsProfile} />
             )}
           </li>
         ))}
