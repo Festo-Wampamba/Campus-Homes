@@ -52,6 +52,16 @@ const ROOM_TYPE_OPTIONS = [
   })),
 ];
 
+// Only the 4 real catchments a property can belong to — mirrors the
+// listingSearchSchema.university restriction (packages/shared/src/listing.ts).
+const UNIVERSITY_OPTIONS: { value: University | ""; label: string }[] = [
+  { value: "", label: "Any university" },
+  { value: "MUK", label: "Makerere (MUK)" },
+  { value: "MUBS", label: "Makerere Business School (MUBS)" },
+  { value: "KIU", label: "Kampala International (KIU)" },
+  { value: "KYU", label: "Kyambogo (KYU)" },
+];
+
 // Round so panning a few metres doesn't bust the query cache key
 function roundBounds(b: MapBounds): MapBounds {
   const r = (n: number) => Math.round(n * 1e4) / 1e4;
@@ -74,6 +84,12 @@ export function SearchClient() {
   const [maxPrice, setMaxPrice] = useState("");
   const [minCapacity, setMinCapacity] = useState("");
   const [roomCategory, setRoomCategory] = useState("");
+  // Seeded from the same ?campus= param the map centers on ("Popular near"
+  // pills / home search) — filters results to that university's catchment
+  // rather than only pointing the map there. The dropdown lets a student
+  // change it afterward without re-panning the map by hand.
+  const initialUniversity = campus ? campus.code : "";
+  const [university, setUniversity] = useState<University | "">(initialUniversity);
 
   // Debounced so typing a name doesn't fire a request per keystroke.
   useEffect(() => {
@@ -82,7 +98,7 @@ export function SearchClient() {
   }, [q]);
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, minCapacity, roomCategory],
+    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, minCapacity, roomCategory, university],
     enabled: bounds !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -99,6 +115,7 @@ export function SearchClient() {
       if (maxPrice) qs.set("maxPriceUgx", maxPrice);
       if (minCapacity) qs.set("minCapacity", minCapacity);
       if (roomCategory) qs.set("roomCategory", roomCategory);
+      if (university) qs.set("university", university);
       return searchResponse.parse(await api<unknown>(`/listings/search?${qs}`));
     },
   });
@@ -202,11 +219,26 @@ export function SearchClient() {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by hostel name"
-              aria-label="Search by hostel name"
+              placeholder="Search by hostel name or area (e.g. Kikoni)"
+              aria-label="Search by hostel name or area"
               className="pl-9"
             />
           </div>
+          <select
+            value={university}
+            onChange={(e) => setUniversity(e.target.value as University | "")}
+            aria-label="University"
+            className={cn(
+              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
+              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            )}
+          >
+            {UNIVERSITY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
           <div className="flex gap-2">
             <Input
               type="number"

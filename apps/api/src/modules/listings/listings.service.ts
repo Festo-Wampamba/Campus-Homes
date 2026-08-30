@@ -463,7 +463,11 @@ export class ListingsService {
             AND ($5::int IS NULL OR lv.price_per_term_ugx <= $5)
             AND ($6::int IS NULL OR lv.price_per_term_ugx >= $6)
             AND ($7::int IS NULL OR u.max_capacity >= $7)
-            AND ($8::text IS NULL OR p.name ILIKE '%' || $8 || '%')
+            AND (
+              $8::text IS NULL
+              OR p.name ILIKE '%' || $8 || '%'
+              OR p.street_address ILIKE '%' || $8 || '%'
+            )
             AND (
               $12::text IS NULL OR EXISTS (
                 SELECT 1 FROM units uf
@@ -476,6 +480,7 @@ export class ListingsService {
                   )
               )
             )
+            AND ($13::text IS NULL OR p.catchment = $13::university)
             AND COALESCE(u.unit_count, 0) > 0
           ORDER BY lv.price_per_term_ugx ASC
           LIMIT $9`,
@@ -492,6 +497,7 @@ export class ListingsService {
           LIVE_RESERVATION_STATUSES,
           UNAVAILABLE_OPERATIONAL_STATUSES,
           input.roomCategory ?? null,
+          input.university ?? null,
         ],
       );
       // Pilot-funnel backstop (0032) — best-effort: a logging failure must
@@ -500,7 +506,7 @@ export class ListingsService {
       try {
         await client.query(
           `INSERT INTO product_events (event_type, payload) VALUES ('search', $1::jsonb)`,
-          [JSON.stringify({ q: input.q ?? null, roomCategory: input.roomCategory ?? null, resultCount: res.rows.length })],
+          [JSON.stringify({ q: input.q ?? null, roomCategory: input.roomCategory ?? null, university: input.university ?? null, resultCount: res.rows.length })],
         );
       } catch (err) {
         console.error('[analytics] search event log failed:', err);

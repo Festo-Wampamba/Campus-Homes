@@ -56,10 +56,16 @@ export const listingSearchSchema = z.object({
   // ask for "at least a 2-person room" instead of treating every hostel as
   // one undifferentiated price.
   minCapacity: z.coerce.number().int().min(1).max(20).optional(),
+  // Matches property name OR street address — a free-text "location" search
+  // (e.g. "Kikoni") works as long as the landlord's address mentions it.
   q: z.string().trim().min(1).max(100).optional(),
   // Room-type filter (single/double/studio/…) — matches any unit in the
   // listing, independent of the capacity floor above.
   roomCategory: z.enum(ROOM_CATEGORIES).optional(),
+  // Only the 4 real catchments a property can belong to — UNIVERSITIES also
+  // includes 'other' (a student's own profile can say that), which has no
+  // corresponding properties.catchment value to filter against.
+  university: z.enum(['MUK', 'MUBS', 'KIU', 'KYU']).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export type ListingSearchInput = z.infer<typeof listingSearchSchema>;
