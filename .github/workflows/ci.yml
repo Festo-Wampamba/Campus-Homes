@@ -84,10 +84,19 @@ jobs:
           push: false
 
   # Staging deploys itself once CI is green; production stays a deliberate
-  # manual action. Dokploy's own GitHub auto-deploy must be turned OFF for
-  # campushomes-api-staging, or it and this job race each other every push —
-  # and Dokploy's trigger fires regardless of whether the build is green,
-  # which is the gate this job exists to add.
+  # manual action. Dokploy's own auto-deploy must be turned OFF for
+  # campushomes-api-staging, or its ungated trigger races this one on every
+  # push — adding that gate is the whole point of this job.
+  #
+  # Deploys via Dokploy's REST API, not its deploy webhook. The webhook is
+  # built to receive a git provider's push event: it demands provider headers
+  # (x-github-event et al), branch-matches the payload, and — decisively —
+  # rejects every call with HTTP 400 while auto-deploy is disabled:
+  #   if (!application?.autoDeploy) { res.status(400)... }
+  # so "webhook" and "auto-deploy off" are mutually exclusive by design.
+  # The API path has no such coupling and is the documented way to deploy
+  # from CI. All three values are secrets: this repository is public, and
+  # the Dokploy host and application id are infrastructure detail.
   deploy-staging:
     needs: ci
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -95,15 +104,21 @@ jobs:
     steps:
       - name: Trigger Dokploy deploy
         env:
-          # Deployments tab -> Webhook URL. Held as a secret rather than a
-          # config value: anyone holding it can deploy staging at will.
-          WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WEBHOOK }}
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_APP_ID }}
         run: |
-          if [ -z "$WEBHOOK" ]; then
-            echo "::error::DOKPLOY_STAGING_WEBHOOK is not set — add it under Settings > Secrets > Actions"
-            exit 1
-          fi
-          curl --fail --silent --show-error -X POST "$WEBHOOK"
+          for name in API_KEY API_URL APP_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::DOKPLOY_$name is not set — add it under Settings > Secrets and variables > Actions"
+              exit 1
+            fi
+          done
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.deploy" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"$APP_ID\"}"
 
       - name: Wait for staging to report healthy
         # Catches a deploy that leaves staging broken — the failure mode that
