@@ -318,7 +318,33 @@ export class AdminDashboardService {
         GROUP BY p.catchment ORDER BY p.catchment
       `);
       const usersByRole = await client.query(`SELECT role::text, count(*)::int AS count FROM users GROUP BY role ORDER BY role`);
-      return { catchments: catchments.rows, usersByRole: usersByRole.rows, asOf: new Date().toISOString() };
+      // Pilot-funnel backstop (0031, workbook §10.2 daily huddle / Form 11):
+      // searches/listingViews come from product_events (the only two funnel
+      // steps with no existing table); enquiries/viewingRequests/
+      // landlordResponses/safetyReports all derive from `inquiries` (0030) —
+      // no separate event needed for those. "viewingRequests" is a
+      // best-effort subject-prefix match (AskLandlordDialog's only signal
+      // for the checkbox today, see ask-landlord-dialog.tsx) rather than a
+      // dedicated column.
+      const pilotFunnel = await client.query(`
+        WITH days AS (
+          SELECT generate_series(date_trunc('day', now()) - interval '13 days', date_trunc('day', now()), interval '1 day') AS day
+        )
+        SELECT to_char(d.day, 'Mon DD') AS date,
+          (SELECT count(*) FROM product_events e WHERE e.event_type = 'search' AND e.created_at >= d.day AND e.created_at < d.day + interval '1 day')::int AS searches,
+          (SELECT count(*) FROM product_events e WHERE e.event_type = 'listing_view' AND e.created_at >= d.day AND e.created_at < d.day + interval '1 day')::int AS "listingViews",
+          (SELECT count(*) FROM inquiries i WHERE i.created_at >= d.day AND i.created_at < d.day + interval '1 day')::int AS enquiries,
+          (SELECT count(*) FROM inquiries i WHERE i.subject ILIKE 'Viewing request%' AND i.created_at >= d.day AND i.created_at < d.day + interval '1 day')::int AS "viewingRequests",
+          (SELECT count(*) FROM inquiries i WHERE i.landlord_responded_at >= d.day AND i.landlord_responded_at < d.day + interval '1 day')::int AS "landlordResponses",
+          (SELECT count(*) FROM inquiries i WHERE i.category = 'safety' AND i.created_at >= d.day AND i.created_at < d.day + interval '1 day')::int AS "safetyReports"
+        FROM days d ORDER BY d.day
+      `);
+      return {
+        catchments: catchments.rows,
+        usersByRole: usersByRole.rows,
+        pilotFunnel: pilotFunnel.rows,
+        asOf: new Date().toISOString(),
+      };
     });
   }
 

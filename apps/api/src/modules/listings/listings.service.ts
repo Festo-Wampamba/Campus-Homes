@@ -494,6 +494,17 @@ export class ListingsService {
           input.roomCategory ?? null,
         ],
       );
+      // Pilot-funnel backstop (0031) — best-effort: a logging failure must
+      // never break a search response. Same client/transaction, so no
+      // nested-rlsDb.run risk.
+      try {
+        await client.query(
+          `INSERT INTO product_events (event_type, payload) VALUES ('search', $1::jsonb)`,
+          [JSON.stringify({ q: input.q ?? null, roomCategory: input.roomCategory ?? null, resultCount: res.rows.length })],
+        );
+      } catch (err) {
+        console.error('[analytics] search event log failed:', err);
+      }
       return res.rows as unknown[];
     });
   }
@@ -580,6 +591,16 @@ export class ListingsService {
              ORDER BY sort_order, created_at`,
             [detail.listing.propertyId],
           );
+          // Pilot-funnel backstop (0031) — best-effort, same posture as the
+          // search() event log above.
+          try {
+            await client.query(
+              `INSERT INTO product_events (event_type, payload) VALUES ('listing_view', $1::jsonb)`,
+              [JSON.stringify({ listingId })],
+            );
+          } catch (err) {
+            console.error('[analytics] listing_view event log failed:', err);
+          }
           return {
             availability: availRes.rows as { id: string; available: boolean }[],
             property: propRes.rows[0] as {

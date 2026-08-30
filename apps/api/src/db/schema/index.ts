@@ -15,3 +15,4 @@ export * from './inquiries';
 export * from './ledger';
 export * from './tenant-agreement';
 export * from './lead';
+export * from './analytics';
