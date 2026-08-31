@@ -13,7 +13,7 @@ interface LogtoSmsWebhookBody {
 // Logto's built-in HTTP SMS connector target (configured in the Admin
 // Console during Phase 1 provisioning) — reuses the same Africa's Talking
 // adapter Better Auth's phoneNumber plugin used to call directly.
-@Controller('auth/logto/sms-webhook')
+@Controller('api/auth/logto/sms-webhook')
 export class LogtoSmsWebhookController {
   constructor(@Inject(MESSAGING) private readonly messaging: MessagingAdapter) {}
 

@@ -1,8 +1,29 @@
 import { Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
-import { CookieStorage } from '@logto/node';
-import LogtoClient from '@logto/node';
 import { parse } from 'cookie';
 import type { CookieOptions, Request, Response } from 'express';
+
+// @logto/node ships ESM-only (no "require" export condition) — a static
+// import compiles to require() under this project's commonjs module target
+// (apps/api/tsconfig.json) and fails at runtime with ERR_PACKAGE_PATH_NOT_
+// EXPORTED. A plain `import(...)` expression doesn't dodge this: with
+// module: "commonjs", tsc itself downlevels dynamic import() to
+// `Promise.resolve().then(() => require(...))`, hitting the exact same
+// require()-based resolution and the exact same error — confirmed by
+// inspecting dist/ output before landing this fix. The standard escape
+// hatch is a Function-constructed import: the specifier is a runtime
+// string tsc can't see, so it can't rewrite this into a require() call,
+// and Node performs a genuine native ESM import that honors the package's
+// "import" condition. Same root cause and same fix shape as the existing
+// better-auth/crypto ESM interop workaround. Cached so the import only
+// happens once per process, not per request.
+const nativeImport = new Function('specifier', 'return import(specifier)') as (
+  specifier: string,
+) => Promise<typeof import('@logto/node')>;
+let logtoNodeModule: Promise<typeof import('@logto/node')> | null = null;
+function loadLogtoNode() {
+  logtoNodeModule ??= nativeImport('@logto/node');
+  return logtoNodeModule;
+}
 
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
@@ -31,10 +52,11 @@ function isPortal(value: unknown): value is Portal {
   return value === 'consumer' || value === 'staff';
 }
 
-function buildClient(env: ReturnType<typeof loadEnv>, portal: Portal, req: Request, res: Response) {
+async function buildClient(env: ReturnType<typeof loadEnv>, portal: Portal, req: Request, res: Response) {
   if (!env.LOGTO_COOKIE_SECRET) {
     throw new Error('AuthModule requires LOGTO_COOKIE_SECRET');
   }
+  const { default: LogtoClient, CookieStorage } = await loadLogtoNode();
   const storage = new CookieStorage({
     cookieKey: SIGN_IN_SESSION_COOKIE,
     encryptionKey: env.LOGTO_COOKIE_SECRET,
@@ -50,7 +72,7 @@ function buildClient(env: ReturnType<typeof loadEnv>, portal: Portal, req: Reque
   });
 }
 
-@Controller('auth/logto')
+@Controller('api/auth/logto')
 export class AuthController {
   constructor(
     private readonly provisioning: ProvisioningService,
@@ -82,7 +104,7 @@ export class AuthController {
         maxAge: 10 * 60 * 1000,
       });
     }
-    const client = buildClient(env, portal, req, res);
+    const client = await buildClient(env, portal, req, res);
     const redirectUri = `${apiOrigin(env)}/api/auth/logto/callback`;
     await client.signIn({
       redirectUri,
@@ -103,7 +125,7 @@ export class AuthController {
     // authorize under the wrong app.
     const portal = isPortal(portalParam) ? portalParam : 'consumer';
     const env = loadEnv();
-    const client = buildClient(env, portal, req, res);
+    const client = await buildClient(env, portal, req, res);
 
     let provisioned;
     try {
@@ -150,7 +172,7 @@ export class AuthController {
   }
 }
 
-@Controller('auth')
+@Controller('api/auth')
 export class SessionController {
   constructor(private readonly sessionStore: SessionStore) {}
 

@@ -26,7 +26,7 @@ function verificationKindFor(type: LogtoEmailWebhookBody['type']): VerificationE
 // Console during Phase 1 provisioning) — reuses the existing Resend-backed
 // email delivery rather than a Logto-native email connector, so all actual
 // email sending stays on one adapter.
-@Controller('auth/logto/email-webhook')
+@Controller('api/auth/logto/email-webhook')
 export class LogtoEmailWebhookController {
   @Post()
   @HttpCode(204)

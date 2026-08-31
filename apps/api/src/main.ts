@@ -11,12 +11,12 @@ import { RlsDb } from './db/db.module';
 // already registered as Logto/Google redirect URIs and connector webhook
 // endpoints, set during Phase 1 provisioning.
 const AUTH_ROUTES = [
-  'auth/logto/sign-in',
-  'auth/logto/callback',
-  'auth/logto/sign-out',
-  'auth/logto/sms-webhook',
-  'auth/logto/email-webhook',
-  'auth/session',
+  'api/auth/logto/sign-in',
+  'api/auth/logto/callback',
+  'api/auth/logto/sign-out',
+  'api/auth/logto/sms-webhook',
+  'api/auth/logto/email-webhook',
+  'api/auth/session',
 ];
 
 async function bootstrap() {
