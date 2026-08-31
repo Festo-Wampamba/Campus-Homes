@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { authClient } from "@/lib/auth-client";
 import { homeForAuthenticatedRole } from "@/lib/auth-routing";
+
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 function AuthCallback() {
   const router = useRouter();
@@ -17,23 +18,34 @@ function AuthCallback() {
     // ever send the browser back within the app.
     const rawNext = searchParams.get("next");
     const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
-    void authClient.getSession().then(({ data, error: sessionError }) => {
-      if (cancelled) return;
-      if (sessionError || !data?.user) {
-        setError(sessionError?.message ?? "We could not verify your new session.");
-        return;
-      }
-      try {
-        // Still resolves (and validates) the role-based home even when
-        // `next` is set — homeForAuthenticatedRole throws for a session with
-        // no real role, which is the actual point of calling it.
-        const home = homeForAuthenticatedRole((data.user as { role?: string }).role);
-        router.replace(next ?? home);
-        router.refresh();
-      } catch (routeError) {
-        setError(routeError instanceof Error ? routeError.message : "Your account role could not be verified.");
-      }
-    });
+    void fetch(`${BASE}/api/auth/session`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { user?: { role?: string; status?: string } } | null) => {
+        if (cancelled) return;
+        if (!data?.user) {
+          setError("We could not verify your new session.");
+          return;
+        }
+        // The API's own sign-in doesn't gate on our custom `status` column —
+        // a pending (self-registered, unapproved) or suspended account
+        // still gets a session here. Route them to a page that explains
+        // that instead of their normal portal, `next` included.
+        if (data.user.status && data.user.status !== "active") {
+          router.replace("/account-pending");
+          router.refresh();
+          return;
+        }
+        try {
+          const home = homeForAuthenticatedRole(data.user.role);
+          router.replace(next ?? home);
+          router.refresh();
+        } catch (routeError) {
+          setError(routeError instanceof Error ? routeError.message : "Your account role could not be verified.");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("We could not verify your new session.");
+      });
     return () => {
       cancelled = true;
     };

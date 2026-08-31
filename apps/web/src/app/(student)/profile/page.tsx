@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { getStudentProfile } from "@/lib/student";
 import { Card, CardContent } from "@/components/ui/card";
 import { StudentProfileForm } from "./student-profile-form";
-import { GoogleAccountLink } from "@/components/auth/google-account-link";
 
 export const metadata: Metadata = { title: "Complete your profile" };
 
@@ -38,7 +37,6 @@ export default async function StudentProfilePage({
               : "One quick step before you can reserve a room."}
           </p>
           <StudentProfileForm next={next ?? "/search"} profile={profile} />
-          <div className="mt-6 border-t border-border pt-6"><GoogleAccountLink /></div>
         </CardContent>
       </Card>
     </div>
