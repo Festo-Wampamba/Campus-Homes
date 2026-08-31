@@ -153,7 +153,11 @@ export class AdminDashboardService {
       const result = await client.query(`
         SELECT u.id, u.name, u.email, u.phone, u.role::text, u.status::text,
                u.email_verified AS "emailVerified", u.phone_verified AS "phoneVerified",
-               coalesce(array_agg(DISTINCT a.provider_id) FILTER (WHERE a.provider_id IS NOT NULL), '{}') AS "authProviders",
+               -- Which providers a user signed in with lived in Better Auth's
+               -- accounts table; Logto owns that now and it isn't locally
+               -- queryable per-user without a Management API round trip, so
+               -- this is deliberately empty until that's built.
+               '{}'::text[] AS "authProviders",
                u.created_at AS "createdAt", s.university::text,
                l.kyc_status::text AS "kycStatus",
                coalesce(jsonb_agg(DISTINCT jsonb_build_object(
@@ -164,7 +168,6 @@ export class AdminDashboardService {
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN landlords l ON l.user_id = u.id
-        LEFT JOIN accounts a ON a.user_id = u.id
         LEFT JOIN user_role_assignments ura ON ura.user_id = u.id AND ura.revoked_at IS NULL
           AND ura.valid_from <= now() AND (ura.valid_until IS NULL OR ura.valid_until > now())
         LEFT JOIN roles r ON r.id = ura.role_id

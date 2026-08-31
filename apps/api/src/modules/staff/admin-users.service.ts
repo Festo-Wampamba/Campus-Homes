@@ -5,9 +5,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { hashPassword } from 'better-auth/crypto';
-
 import type {
   AdminPermissionGrantInput,
   AdminRoleAssignmentInput,
@@ -17,6 +14,7 @@ import type {
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
+import { LogtoManagementClient } from '../auth/logto-management.client';
 import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
 
@@ -49,6 +47,7 @@ export class AdminUsersService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    private readonly logtoManagement: LogtoManagementClient,
   ) {}
 
   async create(actor: RlsContext, input: CreateAdminUserInput) {
@@ -139,12 +138,6 @@ export class AdminUsersService {
           ]);
         }
 
-        if (input.temporaryPassword && user.email) {
-          await client.query(`
-            INSERT INTO accounts (id, account_id, provider_id, user_id, password)
-            VALUES ($1, $2::text, 'credential', $2::uuid, $3)
-          `, [randomUUID(), user.id, await hashPassword(input.temporaryPassword)]);
-        }
         await client.query('COMMIT');
         return user;
       } catch (error) {
@@ -152,6 +145,13 @@ export class AdminUsersService {
         return conflict(error);
       }
     });
+    if (input.temporaryPassword && result.email) {
+      await this.logtoManagement.createUser({
+        primaryEmail: result.email,
+        name: result.name,
+        password: input.temporaryPassword,
+      });
+    }
     await this.audit.record(actor, 'users.create', 'user', result.id, {
       accountType: input.accountType,
       status: input.status,
@@ -173,7 +173,11 @@ export class AdminUsersService {
                l.legal_name AS "legalName", l.kyc_status::text AS "kycStatus",
                l.whatsapp_number AS "whatsappNumber", l.business_type AS "businessType",
                l.business_type_other AS "businessTypeOther",
-               coalesce((SELECT array_agg(DISTINCT a.provider_id) FROM accounts a WHERE a.user_id = u.id), '{}') AS "authProviders"
+               -- Which providers a user signed in with lived in Better Auth's
+               -- accounts table; Logto owns that now and it isn't locally
+               -- queryable per-user without a Management API round trip, so
+               -- this is deliberately empty until that's built.
+               '{}'::text[] AS "authProviders"
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN landlords l ON l.user_id = u.id

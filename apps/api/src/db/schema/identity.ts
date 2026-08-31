@@ -1,6 +1,6 @@
 import { boolean, date, pgTable, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
-import { catchment, kycStatus, opsTeam, tokenType, university, userRole, userStatus } from './enums';
+import { catchment, kycStatus, opsTeam, university, userRole, userStatus } from './enums';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -8,8 +8,16 @@ export const users = pgTable('users', {
   email: text('email').unique(), // ops/admin only; phone signups get a deterministic placeholder
   role: userRole('role').notNull(),
   status: userStatus('status').notNull().default('pending'),
-  // Better Auth core fields (added in 0002). `name` is required by Better Auth
-  // but meaningless for phone-OTP signups, hence the '' default.
+  // Secondary lookup key linking to this user's Logto identity, populated
+  // lazily via JIT provisioning at first Logto sign-in (0033_logto_migration).
+  // users.id stays the authoritative primary key everywhere — this column
+  // exists only so the auth callback can find the right row by `sub`.
+  logtoUserId: text('logto_user_id').unique(),
+  // `name`/`emailVerified`/`image`/`phoneVerified` originated as Better Auth
+  // columns (0002); kept as-is post-migration since particulars.ts,
+  // me.controller.ts, staff.service.ts, etc. all read them — only who
+  // writes them changed (Logto's provisioned profile data now, via
+  // ProvisioningService, instead of Better Auth's Drizzle adapter).
   name: text('name').notNull().default(''),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
@@ -71,8 +79,11 @@ export const opsStaff = pgTable('ops_staff', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Better Auth session storage (design-doc columns + Better Auth required
-// `token`/`updated_at`, added in 0002).
+// This app's own session store (replaces Better Auth's session table it
+// grew from — same columns, now written by session.store.ts). accounts/
+// verifications/verification_tokens (Better-Auth-owned credential/OTP
+// storage) are dropped in 0033_logto_migration.sql — Logto owns all of
+// that now.
 export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),
   userId: uuid('user_id')
@@ -84,48 +95,4 @@ export const sessions = pgTable('sessions', {
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// Better Auth credential/provider storage (0002). Holds password hashes for
-// ops/admin email sign-in; service-role only under RLS.
-export const accounts = pgTable('accounts', {
-  id: uuid('id').primaryKey(),
-  accountId: text('account_id').notNull(),
-  providerId: text('provider_id').notNull(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  idToken: text('id_token'),
-  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
-  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
-  scope: text('scope'),
-  password: text('password'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// Better Auth OTP/verification-value store (0002). Identifier/value shape is
-// Better Auth's own — the design-doc `verification_tokens` table (user-keyed)
-// stays as-is below and is not used by Better Auth.
-export const verifications = pgTable('verifications', {
-  id: uuid('id').primaryKey(),
-  identifier: text('identifier').notNull(),
-  value: text('value').notNull(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const verificationTokens = pgTable('verification_tokens', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull(), // never the raw OTP
-  type: tokenType('type').notNull(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  usedAt: timestamp('used_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

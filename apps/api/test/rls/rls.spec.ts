@@ -399,64 +399,19 @@ describe('units.operational_status (0024): off-platform-occupancy write path', (
   });
 });
 
-describe('auth infra (0002): accounts / verifications / sessions are service-only', () => {
+describe('auth infra: sessions are service-only', () => {
+  // accounts/verifications (Better-Auth-owned credential/OTP storage) were
+  // dropped in 0033_logto_migration.sql — Logto owns all of that now, and
+  // AuthGuard/SessionStore never grant a per-user RLS context onto sessions
+  // either, so there's nothing left here to test at the RLS layer beyond
+  // the service_role sign-out path below.
   beforeAll(async () => {
-    await pool.query('TRUNCATE accounts, verifications, sessions CASCADE');
-    await seed(
-      `INSERT INTO accounts (id, account_id, provider_id, user_id, password)
-       VALUES (gen_random_uuid(), $1, 'credential', $2, 'not-a-real-hash') RETURNING id`,
-      [student1, student1],
-    );
-    await seed(
-      `INSERT INTO verifications (id, identifier, value, expires_at)
-       VALUES (gen_random_uuid(), 'phone-otp-+256700000003', '123456', now() + interval '5 minutes')
-       RETURNING id`,
-    );
+    await pool.query('TRUNCATE sessions CASCADE');
     await seed(
       `INSERT INTO sessions (id, user_id, token, expires_at)
        VALUES ('rls-test-session', $1, 'rls-test-token', now() + interval '1 day') RETURNING id`,
       [student1],
     );
-  });
-
-  it('a student cannot read account rows (password hashes)', async () => {
-    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
-      c.query('SELECT * FROM accounts').then((r) => r.rows),
-    );
-    expect(rows).toHaveLength(0);
-  });
-
-  it('a student cannot read OTP verification values', async () => {
-    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
-      c.query('SELECT * FROM verifications').then((r) => r.rows),
-    );
-    expect(rows).toHaveLength(0);
-  });
-
-  it('a student cannot insert an account for themselves', async () => {
-    await expect(
-      asIdentity({ userId: student1, role: 'student' }, async (c) =>
-        c.query(
-          `INSERT INTO accounts (id, account_id, provider_id, user_id)
-           VALUES (gen_random_uuid(), $1, 'credential', $2)`,
-          [student1, student1],
-        ),
-      ),
-    ).rejects.toThrow(/row-level security/i);
-  });
-
-  it('service_role reads account rows', async () => {
-    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
-      c.query('SELECT * FROM accounts').then((r) => r.rows),
-    );
-    expect(rows).toHaveLength(1);
-  });
-
-  it('service_role can delete a consumed verification', async () => {
-    const res = await asIdentity({ role: 'service_role' }, async (c) =>
-      c.query(`DELETE FROM verifications WHERE identifier = 'phone-otp-+256700000003'`),
-    );
-    expect(res.rowCount).toBe(1);
   });
 
   it('service_role can delete a session (sign-out path)', async () => {

@@ -1,32 +1,33 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { RequestMethod } from '@nestjs/common';
-import { toNodeHandler } from 'better-auth/node';
-import { json, urlencoded } from 'express';
-import type { Express, NextFunction, Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { RlsDb } from './db/db.module';
-import type { Auth } from './modules/auth/auth.config';
-import { AUTH } from './modules/auth/auth.tokens';
+
+// Routes that must NOT get the /api/v1 prefix — their exact paths are
+// already registered as Logto/Google redirect URIs and connector webhook
+// endpoints, set during Phase 1 provisioning.
+const AUTH_ROUTES = [
+  'auth/logto/sign-in',
+  'auth/logto/callback',
+  'auth/logto/sign-out',
+  'auth/logto/sms-webhook',
+  'auth/logto/email-webhook',
+  'auth/session',
+];
 
 async function bootstrap() {
   const env = loadEnv();
-  // Better Auth reads the raw request stream itself — Nest's global body
-  // parser would consume it first, so parsing is disabled here and re-added
-  // right after the auth route (registration order keeps /api/auth unparsed).
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
   // Cookie-based auth from the web app (different origin even on localhost:
   // 3000 vs 4000) — credentials require an explicit origin, never '*'.
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
-  const auth = app.get<Auth>(AUTH);
-  const http = app.getHttpAdapter().getInstance() as Express;
-  http.all('/api/auth/{*any}', toNodeHandler(auth));
-  app.use(json());
-  app.use(urlencoded({ extended: true }));
   const rlsDb = app.get(RlsDb);
+  const http = app.getHttpAdapter().getInstance();
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
     const isExempt = req.originalUrl.startsWith('/api/v1/admin') || req.originalUrl.startsWith('/api/v1/health');
     if (isExempt || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -54,7 +55,10 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', {
     // Keep the service root useful when an operator opens the Dokploy domain
     // directly. Health/readiness still lives at /api/v1/health.
-    exclude: [{ path: '/', method: RequestMethod.GET }],
+    exclude: [
+      { path: '/', method: RequestMethod.GET },
+      ...AUTH_ROUTES.map((path) => ({ path, method: RequestMethod.ALL })),
+    ],
   });
   await app.listen(env.PORT, '0.0.0.0');
 }

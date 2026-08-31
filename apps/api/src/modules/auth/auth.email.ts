@@ -1,6 +1,7 @@
 import type { Env } from '../../config/env';
 
 export type AuthEmailKind = 'verify-email' | 'reset-password' | 'set-password';
+export type VerificationEmailKind = 'sign-in' | 'register' | 'forgot-password' | 'generic';
 
 type AuthEmailInput = {
   to: string;
@@ -49,21 +50,47 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char] ?? char);
 }
 
-export async function sendAuthEmail(env: Env, input: AuthEmailInput): Promise<void> {
-  const message = content(input);
+const VERIFICATION_TITLE: Record<VerificationEmailKind, string> = {
+  'sign-in': 'Your CampusHomes sign-in code',
+  register: 'Your CampusHomes verification code',
+  'forgot-password': 'Your CampusHomes password reset code',
+  generic: 'Your CampusHomes verification code',
+};
+
+function verificationContent(kind: VerificationEmailKind, code: string) {
+  const title = VERIFICATION_TITLE[kind];
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f8f7;color:#173b3b;font-family:Arial,sans-serif"><main style="max-width:560px;margin:32px auto;padding:36px 32px;background:#fff;border:1px solid #dce9e7;border-radius:18px"><div style="font-size:24px;font-weight:700;color:#087f80">CampusHomes</div><p style="color:#e47e7e;font-size:16px;font-style:italic;margin-top:4px">Live, Learn, Succeed.</p><p style="font-size:16px;line-height:1.6">${title}:</p><p style="margin:28px 0;font-size:32px;font-weight:700;letter-spacing:6px;color:#087f80">${escapeHtml(code)}</p><p style="font-size:13px;line-height:1.6;color:#627979">This code expires shortly. If you did not request it, you can safely ignore this email.</p><p style="font-size:12px;color:#91a3a3">CampusHomes Uganda · Live, Learn, Succeed.</p></main></body></html>`;
+  const text = `${title}: ${code}\n\nThis code expires shortly.`;
+  return { subject: title, html, text };
+}
+
+type EmailMessage = { subject: string; html: string; text: string };
+
+async function deliver(env: Env, to: string, message: EmailMessage, devLogValue: string): Promise<void> {
   if (!env.RESEND_API_KEY) {
-    console.info(`[email:dev] ${message.subject} for ${input.to}: ${input.url}`);
+    console.info(`[email:dev] ${message.subject} for ${to}: ${devLogValue}`);
     return;
   }
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [input.to], subject: message.subject, html: message.html, text: message.text }),
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [to], subject: message.subject, html: message.html, text: message.text }),
   });
   if (!response.ok) {
     throw new Error(`Resend email delivery failed: HTTP ${response.status}`);
   }
+}
+
+/** For Logto's HTTP Email connector — a plain verification code, not a
+ * clickable link (see logto-email-webhook.controller.ts). Kept separate
+ * from sendAuthEmail's link-shaped templates rather than overloading them. */
+export async function sendVerificationCodeEmail(
+  env: Env,
+  input: { to: string; code: string; kind: VerificationEmailKind },
+): Promise<void> {
+  await deliver(env, input.to, verificationContent(input.kind, input.code), input.code);
+}
+
+export async function sendAuthEmail(env: Env, input: AuthEmailInput): Promise<void> {
+  await deliver(env, input.to, content(input), input.url);
 }

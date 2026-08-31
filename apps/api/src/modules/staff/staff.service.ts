@@ -1,14 +1,16 @@
-import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import type { GrantRoleInput, InviteStaffInput, StaffRoleKey, UserRole } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
+import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
 import { roles, userRoleAssignments, users } from '../../db/schema';
-import type { Auth } from '../auth/auth.config';
+import { pickPasswordEmailKind, sendAuthEmail } from '../auth/auth.email';
+import { magicSignInUrl } from '../auth/logto.config';
 import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
-import { AUTH } from '../auth/auth.tokens';
+import { LogtoManagementClient } from '../auth/logto-management.client';
 import { AuditService } from '../ops/audit.service';
 
 const SERVICE_CTX: RlsContext = {
@@ -37,7 +39,7 @@ export class StaffService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
-    @Inject(AUTH) private readonly auth: Auth,
+    private readonly logtoManagement: LogtoManagementClient,
   ) {}
 
   async invite(
@@ -88,24 +90,24 @@ export class StaffService {
       assignmentId: result.assignment.id,
     });
     if (input.email) {
-      await this.sendSetPasswordInvite(input.email);
+      await this.sendSetPasswordInvite(input.email, input.name);
     }
     return result.user;
   }
 
-  // Emails a set-password link (Better Auth's reset flow, which creates the
-  // credential account on submit — see auth.config sendResetPassword). Sent
-  // after the user row is committed and kept non-fatal: a transient email
-  // failure must not roll back a successful invite, and the invitee can still
-  // self-serve via "forgot password".
-  private async sendSetPasswordInvite(email: string) {
-    // Mirrors env.ts's WEB_ORIGIN default; a full loadEnv() here would couple
-    // the invite path to every unrelated required secret being present.
-    const webOrigin = process.env.WEB_ORIGIN || 'http://localhost:3000';
+  // Creates the Logto identity for a newly invited staff member (staff
+  // portal — no self-serve signup exists, so this is the only way one gets
+  // created) and emails a magic-link that redeems a one-time-token to set
+  // their password and sign in. Sent after the user row is committed and
+  // kept non-fatal: a transient failure must not roll back a successful
+  // invite — an ops admin can always re-trigger this from the staff console.
+  private async sendSetPasswordInvite(email: string, name: string) {
+    const env = loadEnv();
     try {
-      await this.auth.api.requestPasswordReset({
-        body: { email, redirectTo: `${webOrigin}/reset-password` },
-      });
+      await this.logtoManagement.createUser({ primaryEmail: email, name });
+      const { token } = await this.logtoManagement.createOneTimeToken(email, 'ForgotPassword');
+      const url = magicSignInUrl(env, 'staff', token, email);
+      await sendAuthEmail(env, { to: email, name, url, kind: pickPasswordEmailKind(false) });
     } catch (error) {
       this.logger.error(
         `Staff invite created but set-password email failed for ${email}: ${
