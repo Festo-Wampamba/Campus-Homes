@@ -32,6 +32,7 @@ export class LogtoSmsWebhookController {
   @Post()
   @HttpCode(204)
   async handle(@Headers('authorization') authorization: string | undefined, @Body() body: LogtoSmsWebhookBody) {
+    console.log('[TEMP DEBUG] sms-webhook raw body:', JSON.stringify(body));
     const env = loadEnv();
     if (!env.LOGTO_SMS_WEBHOOK_SECRET || authorization !== `Bearer ${env.LOGTO_SMS_WEBHOOK_SECRET}`) {
       throw new UnauthorizedException();
