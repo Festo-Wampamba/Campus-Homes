@@ -22,6 +22,13 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Belt-and-braces with src/app/robots.ts: robots.txt is advisory and
+          // only covers crawling, while X-Robots-Tag also suppresses indexing
+          // of already-known URLs and of non-HTML responses. Same fail-safe
+          // default — blocked unless ALLOW_INDEXING=true.
+          ...(process.env.ALLOW_INDEXING === "true"
+            ? []
+            : [{ key: "X-Robots-Tag", value: "noindex, nofollow" }]),
         ],
       },
     ];
