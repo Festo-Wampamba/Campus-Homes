@@ -63,6 +63,18 @@ async function buildClient(env: ReturnType<typeof loadEnv>, portal: Portal, req:
     isSecure: env.NODE_ENV === 'production',
     getCookie: (name) => readCookie(req, name),
     setCookie: (name, value, options) => {
+      // @logto/node's CookieStorage packs every PKCE/state item under this one
+      // cookie key and calls setCookie again each time an item changes, so a
+      // single signIn() call writes this cookie 3-4 times — strip the earlier
+      // Set-Cookie entries for this name first or the response carries all of
+      // them (harmless, since the browser keeps the last one, but wasteful).
+      const existing = res.getHeader('Set-Cookie');
+      if (existing) {
+        const remaining = (Array.isArray(existing) ? existing : [existing])
+          .map(String)
+          .filter((entry) => !entry.startsWith(`${name}=`));
+        res.setHeader('Set-Cookie', remaining);
+      }
       res.cookie(name, value, options as CookieOptions);
     },
   });
