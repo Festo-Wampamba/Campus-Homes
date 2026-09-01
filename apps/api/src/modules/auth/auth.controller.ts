@@ -63,7 +63,18 @@ async function buildClient(env: ReturnType<typeof loadEnv>, portal: Portal, req:
     isSecure: env.NODE_ENV === 'production',
     getCookie: (name) => readCookie(req, name),
     setCookie: (name, value, options) => {
-      res.cookie(name, value, options as CookieOptions);
+      // @logto/node's CookieStorage sets maxAge in SECONDS (14 days =
+      // 14*24*3600), matching the `cookie` package's serialize() convention.
+      // Express's res.cookie() instead takes maxAge in MILLISECONDS, so
+      // passing the SDK's options straight through made this cookie expire
+      // in ~1,209,600ms (~20 minutes) instead of 14 days -- anyone whose
+      // sign-in took longer than 20 minutes end-to-end lost their PKCE
+      // session and hit "Sign-in session not found" on the callback.
+      const cookieOptions = options as CookieOptions;
+      res.cookie(name, value, {
+        ...cookieOptions,
+        ...(cookieOptions.maxAge != null ? { maxAge: cookieOptions.maxAge * 1000 } : {}),
+      });
     },
   });
   return new LogtoClient(logtoConfigFor(env, portal), {
