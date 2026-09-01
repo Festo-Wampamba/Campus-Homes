@@ -77,6 +77,13 @@ async function buildClient(env: ReturnType<typeof loadEnv>, portal: Portal, req:
       });
     },
   });
+  // REQUIRED. CookieStorage starts with empty in-memory sessionData and only
+  // populates it from the request's cookie inside init(); @logto/node's
+  // LogtoClient does NOT call this for you, it just forwards the storage into
+  // the adapter. Without it the callback's getSignInSession() always reads
+  // null and every sign-in dies with `sign_in_session.not_found` — the
+  // /sign-in leg still appears to work because it only ever WRITES the cookie.
+  await storage.init();
   return new LogtoClient(logtoConfigFor(env, portal), {
     storage,
     navigate: (url) => res.redirect(url),
