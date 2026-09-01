@@ -36,6 +36,14 @@ const SIGN_IN_SESSION_COOKIE = 'campushomes-signin-session';
 // across the redirect to Logto and back, since nothing else round-trips
 // through an OIDC authorization request/response.
 const NEXT_COOKIE = 'campushomes-signin-next';
+// Which OIDC application started this flow. Logto redirects to the bare
+// registered redirect_uri and does NOT round-trip custom query params, so a
+// `?portal=` on the callback is always absent — it silently defaulted to
+// 'consumer', and staff sign-in then exchanged a staff-issued code using the
+// consumer client's credentials, which Logto rejects with "Grant request is
+// invalid". The sign-in session cookie can't cover this: it stores
+// redirectUri/state/codeVerifier, never which appId/appSecret to present.
+const PORTAL_COOKIE = 'campushomes-signin-portal';
 
 function isSafeNextPath(value: string | undefined): value is string {
   // Single leading slash only — never a scheme-relative or absolute URL, or
@@ -113,6 +121,13 @@ export class AuthController {
   ) {
     const portal = isPortal(portalParam) ? portalParam : 'consumer';
     const env = loadEnv();
+    res.cookie(PORTAL_COOKIE, portal, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/api/auth/logto',
+      maxAge: 10 * 60 * 1000,
+    });
     if (isSafeNextPath(next)) {
       res.cookie(NEXT_COOKIE, next, {
         httpOnly: true,
@@ -132,17 +147,16 @@ export class AuthController {
 
   @Get('callback')
   async callback(@Query('portal') portalParam: string | undefined, @Req() req: Request, @Res() res: Response) {
-    // Portal is carried through Logto's own round-tripped `state` param in
-    // practice (both apps share this one callback URI), but the sign-in
-    // session cookie already pins which client config was used to start the
-    // flow, so we only need it here to rebuild the matching client. Default
-    // to consumer; a staff-portal callback still resolves correctly because
-    // handleSignInCallback validates against the session stored under
-    // SIGN_IN_SESSION_COOKIE regardless of which portal guess we start with
-    // — a mismatch here would fail token exchange loudly, not silently
-    // authorize under the wrong app.
-    const portal = isPortal(portalParam) ? portalParam : 'consumer';
+    // Both OIDC apps share this one callback URI, so the client must be
+    // rebuilt with the SAME appId/appSecret the flow started with — the token
+    // exchange authenticates with them. Logto strips custom query params from
+    // the redirect, so `?portal=` never arrives here; read the cookie
+    // /sign-in set instead and only fall back to the query param (then
+    // consumer) so an in-flight pre-deploy sign-in still resolves.
+    const rawPortal = readCookie(req, PORTAL_COOKIE) ?? portalParam;
+    const portal = isPortal(rawPortal) ? rawPortal : 'consumer';
     const env = loadEnv();
+    res.clearCookie(PORTAL_COOKIE, { path: '/api/auth/logto' });
     const client = await buildClient(env, portal, req, res);
 
     let provisioned;
