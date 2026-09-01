@@ -28,6 +28,25 @@ async function bootstrap() {
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   const rlsDb = app.get(RlsDb);
   const http = app.getHttpAdapter().getInstance();
+  // This API had no security headers at all, while the Logto instance it
+  // redirects into sets the full set — an audit of the live staging response
+  // headers found HSTS/nosniff/referrer/frame/CSP all absent here, plus an
+  // `X-Powered-By: Express` stack disclosure. The sign-in route is a
+  // browser-facing top-level navigation (it 302s into the OIDC flow), so
+  // these apply to real page loads, not just XHR. Hand-rolled rather than
+  // adding helmet: this is the whole policy for a service that returns JSON
+  // and redirects, never HTML that legitimately frames or loads scripts.
+  http.disable('x-powered-by');
+  http.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    // Referrer would otherwise carry OIDC state/code query params to Logto
+    // and to any error-page host on cross-origin navigations.
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    next();
+  });
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
     const isExempt = req.originalUrl.startsWith('/api/v1/admin') || req.originalUrl.startsWith('/api/v1/health');
     if (isExempt || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
