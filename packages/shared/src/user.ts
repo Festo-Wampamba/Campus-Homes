@@ -91,14 +91,16 @@ export const opsStaffProfileSchema = z.object({
 });
 export type OpsStaffProfile = z.infer<typeof opsStaffProfileSchema>;
 
-// Self-service sign-in email change (staff credential accounts). Requires the
-// caller's current password — a hijacked session alone must not be able to
-// swap the sign-in identity. Password *changes* go through Better Auth's own
-// /change-password endpoint; only the email swap needs a custom path (Better
-// Auth's changeEmail flow requires an email-verification send, and this stack
-// has no email delivery).
+// Self-service sign-in email/password change (staff credential accounts).
+// No local password hash exists to re-verify against — both require a
+// freshly established session instead (same 30-minute step-up-freshness
+// boundary as sensitive RBAC actions), enforced in me.controller.ts.
 export const changeSelfEmailSchema = z.object({
   email: z.email().max(320),
-  currentPassword: z.string().min(1).max(200),
 });
 export type ChangeSelfEmailInput = z.infer<typeof changeSelfEmailSchema>;
+
+export const changeSelfPasswordSchema = z.object({
+  newPassword: z.string().min(8).max(200),
+});
+export type ChangeSelfPasswordInput = z.infer<typeof changeSelfPasswordSchema>;

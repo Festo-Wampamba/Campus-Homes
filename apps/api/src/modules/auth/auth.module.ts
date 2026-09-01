@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { Pool } from 'pg';
 
 import {
   AfricasTalkingMessaging,
@@ -8,13 +7,17 @@ import {
 } from '../../adapters/messaging.adapter';
 import { loadEnv } from '../../config/env';
 import { assertStubAllowed } from '../../config/integration-guard';
-import { createDb } from '../../db/client';
-import { createAuth } from './auth.config';
-import { resolveAuthDatabaseUrl } from './auth-database';
+import { AuthController, SessionController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
-import { AUTH, MESSAGING } from './auth.tokens';
+import { LogtoEmailWebhookController } from './logto-email-webhook.controller';
+import { LogtoManagementClient } from './logto-management.client';
+import { LogtoSmsWebhookController } from './logto-sms-webhook.controller';
+import { MESSAGING } from './auth.tokens';
+import { ProvisioningService } from './provisioning.service';
+import { SessionStore } from './session.store';
 
 @Module({
+  controllers: [AuthController, SessionController, LogtoSmsWebhookController, LogtoEmailWebhookController],
   providers: [
     {
       provide: MESSAGING,
@@ -28,25 +31,13 @@ import { AUTH, MESSAGING } from './auth.tokens';
       },
     },
     {
-      provide: AUTH,
-      inject: [MESSAGING],
-      useFactory: (messaging: MessagingAdapter) => {
-        const env = loadEnv();
-        // Dedicated direct service-context pool for Better Auth only. Every
-        // query is pre-auth identity bootstrapping (user lookup by phone/email,
-        // OTP verify, session validate), so the RLS context is service_role.
-        // Neon PgBouncer rejects custom startup options, hence this separate
-        // direct URL while the rest of the API continues using DATABASE_URL.
-        const pool = new Pool({
-          connectionString: resolveAuthDatabaseUrl(env),
-          max: 5,
-          options: '-c app.user_role=service_role',
-        });
-        return createAuth(env, createDb(pool), messaging);
-      },
+      provide: LogtoManagementClient,
+      useFactory: () => new LogtoManagementClient(loadEnv()),
     },
+    ProvisioningService,
+    SessionStore,
     AuthGuard,
   ],
-  exports: [AUTH, MESSAGING, AuthGuard],
+  exports: [MESSAGING, LogtoManagementClient, ProvisioningService, SessionStore, AuthGuard],
 })
 export class AuthModule {}

@@ -4,11 +4,9 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { hashPassword } from 'better-auth/crypto';
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
@@ -47,8 +45,9 @@ import {
   verificationVisits,
   visitCorrections,
 } from '../../db/schema';
-import type { Auth } from '../auth/auth.config';
-import { AUTH } from '../auth/auth.tokens';
+import { pickPasswordEmailKind, sendAuthEmail } from '../auth/auth.email';
+import { LogtoManagementClient } from '../auth/logto-management.client';
+import { magicSignInUrl } from '../auth/logto.config';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from './audit.service';
 
@@ -70,7 +69,7 @@ export class OpsService {
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
-    @Inject(AUTH) private readonly auth: Auth,
+    private readonly logtoManagement: LogtoManagementClient,
   ) {}
 
   /** Verification queue: properties with no visit yet, a visit still in
@@ -888,15 +887,13 @@ export class OpsService {
   }
 
   /** Self-serve landlord registration — no schema change, reuses users/
-   * landlords/accounts/user_role_assignments plus the 0027 onboarding_leads
-   * table. For the "owners who stay very
-   * far" case the product meeting flagged: instead of an in-person
-   * concierge visit, ops emails a link and the landlord sets their own
-   * password and runs the onboarding wizard themselves. The account (plus a
-   * throwaway credential nobody is ever told) is created up front purely so
-   * Better Auth's existing requestPasswordReset flow has something to reset —
-   * reusing that flow end-to-end means no new token/email infra was needed,
-   * just this one trigger. */
+   * landlords/user_role_assignments plus the 0027 onboarding_leads table.
+   * For the "owners who stay very far" case the product meeting flagged:
+   * instead of an in-person concierge visit, ops emails a link and the
+   * landlord sets their own password and runs the onboarding wizard
+   * themselves. The Logto identity is created up front (magic-link/
+   * one-time-token invite, same pattern as staff — see StaffService) so the
+   * emailed link works before the landlord ever visits the app. */
   async inviteLandlord(ctx: RlsContext, input: InviteLandlordInput) {
     const user = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await client.query('BEGIN');
@@ -915,14 +912,6 @@ export class OpsService {
           created.id,
           input.name,
         ]);
-        // Never revealed to anyone — its only purpose is giving Better
-        // Auth's password-reset flow a credential row to reset below.
-        const throwawayPassword = crypto.randomBytes(32).toString('hex');
-        await client.query(
-          `INSERT INTO accounts (id, account_id, provider_id, user_id, password)
-           VALUES ($1, $2::text, 'credential', $2::uuid, $3)`,
-          [crypto.randomUUID(), created.id, await hashPassword(throwawayPassword)],
-        );
         await client.query(
           `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
            SELECT $1, id, 'own', $2, 'Landlord self-registration invite'
@@ -944,9 +933,10 @@ export class OpsService {
       }
     });
     const env = loadEnv();
-    await this.auth.api.requestPasswordReset({
-      body: { email: input.email, redirectTo: `${env.WEB_ORIGIN}/reset-password` },
-    });
+    await this.logtoManagement.createUser({ primaryEmail: input.email, primaryPhone: input.phone, name: input.name });
+    const { token } = await this.logtoManagement.createOneTimeToken(input.email, 'ForgotPassword');
+    const url = magicSignInUrl(env, 'consumer', token, input.email);
+    await sendAuthEmail(env, { to: input.email, name: input.name, url, kind: pickPasswordEmailKind(false) });
     await this.audit.record(ctx, 'landlord.invite', 'user', user.id, { email: input.email });
     return user;
   }

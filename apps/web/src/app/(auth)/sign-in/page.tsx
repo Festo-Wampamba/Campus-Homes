@@ -8,9 +8,10 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const rawNext = (await searchParams).next;
+  const params = await searchParams;
+  const rawNext = params.next;
   // Same open-redirect guard as /profile?next= — only ever send the browser
   // back within the app.
   const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
@@ -32,7 +33,7 @@ export default async function SignInPage({
         <LiveClock />
       </div>
       <div className="flex h-full w-full items-center justify-center overflow-y-auto p-4 py-8 sm:p-8">
-        <SignInForm next={next} />
+        <SignInForm next={next} error={params.error ?? null} />
       </div>
     </div>
   );

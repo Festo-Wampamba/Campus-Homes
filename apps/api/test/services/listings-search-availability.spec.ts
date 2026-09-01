@@ -13,7 +13,7 @@
 import { Pool } from 'pg';
 
 import { AuditService } from '../../src/modules/ops/audit.service';
-import type { Auth } from '../../src/modules/auth/auth.config';
+import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { RlsDb } from '../../src/db/db.module';
@@ -27,7 +27,7 @@ const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
 // Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
-const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as Auth);
+const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as LogtoManagementClient);
 const listings = new ListingsService(rlsDb);
 
 let listingId: string;

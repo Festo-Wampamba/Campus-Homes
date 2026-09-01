@@ -21,20 +21,26 @@ export interface Session {
   user: SessionUser;
 }
 
+type RawSessionResponse = {
+  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; email: string | null; phone: string | null };
+} | null;
+
 // Server-side session lookup for layout guards: forward the request cookies
-// to the API's Better Auth handler. UX-level gating only — RLS + API
+// to the API's session endpoint. UX-level gating only — RLS + API
 // validation are the real enforcement (FRONTEND.md §6).
 export async function getServerSession(): Promise<Session | null> {
   const cookie = (await headers()).get("cookie");
   if (!cookie) return null;
   try {
-    const res = await fetch(`${BASE}/api/auth/get-session`, {
+    const res = await fetch(`${BASE}/api/auth/session`, {
       headers: { cookie },
       cache: "no-store",
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
     if (!res.ok) return null;
-    return ((await res.json()) as Session | null) ?? null;
+    const data = (await res.json()) as RawSessionResponse;
+    if (!data) return null;
+    return { user: { ...data.user, phoneNumber: data.user.phone } };
   } catch {
     // API unreachable or hung — treat as signed out rather than crashing the
     // shell. Fails closed: a timed-out guard redirects to sign-in.
@@ -51,10 +57,10 @@ export async function requireRole(
     redirect(signInPath);
   }
   // A pending (self-registered, unapproved) or suspended account still has a
-  // valid session — Better Auth's own sign-in doesn't check this custom
-  // column. Catch it here too, not just at the sign-in form's own routing,
-  // so a bookmarked/`next`-redirected portal URL can't skip straight past
-  // it into a page whose first API call would just 401 from AuthGuard.
+  // valid session. Catch it here too, not just at the sign-in flow's own
+  // routing, so a bookmarked/`next`-redirected portal URL can't skip
+  // straight past it into a page whose first API call would just 401 from
+  // AuthGuard.
   if (session.user.status !== "active") {
     redirect("/account-pending");
   }

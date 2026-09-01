@@ -11,13 +11,9 @@
  */
 import { Pool } from 'pg';
 
-// better-auth/crypto is ESM-only (.mjs) and Jest's transform isn't configured
-// for it; AdminUsersService only calls hashPassword() from create(), which
-// this suite doesn't exercise, so a stub avoids pulling in the real ESM file.
-jest.mock('better-auth/crypto', () => ({ hashPassword: jest.fn() }));
-
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
+import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { loadPermissions } from '../../src/modules/auth/permissions';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { AdminUsersService } from '../../src/modules/staff/admin-users.service';
@@ -29,7 +25,10 @@ const TEST_DATABASE_URL =
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const adminUsers = new AdminUsersService(rlsDb, audit);
+// This suite exercises role assignment/revocation only, never create() with
+// a temporaryPassword — the Management API client is never actually called.
+const logtoManagement = {} as LogtoManagementClient;
+const adminUsers = new AdminUsersService(rlsDb, audit, logtoManagement);
 
 let superAdmin: string;
 let mukAdmin: string;

@@ -6,7 +6,7 @@
 import { Pool } from 'pg';
 
 import { RlsDb } from '../../src/db/db.module';
-import type { Auth } from '../../src/modules/auth/auth.config';
+import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
@@ -21,7 +21,7 @@ const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
 const notify = jest.fn().mockResolvedValue(undefined);
 const notifications = { notify } as unknown as NotificationsService;
-const ops = new OpsService(rlsDb, audit, notifications, {} as Auth);
+const ops = new OpsService(rlsDb, audit, notifications, {} as LogtoManagementClient);
 
 let opsLead: string;
 let inspector: string;

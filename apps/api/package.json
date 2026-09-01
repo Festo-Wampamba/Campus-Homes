@@ -24,13 +24,13 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@better-auth/infra": "^0.3.4",
     "@campushomes/shared": "workspace:*",
+    "@logto/node": "^3.1.10",
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-express": "^11.1.6",
-    "better-auth": "^1.6.23",
     "bullmq": "^5.79.2",
+    "cookie": "^0.7.2",
     "docx": "^9.7.1",
     "drizzle-orm": "^0.44.5",
     "exceljs": "^4.4.0",
@@ -48,6 +48,7 @@
   "devDependencies": {
     "@campushomes/config": "workspace:*",
     "@nestjs/cli": "^11.0.10",
+    "@types/cookie": "^0.6.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.3.1",
@@ -65,9 +66,6 @@
       "<rootDir>/src",
       "<rootDir>/test"
     ],
-    "moduleNameMapper": {
-      "^better-auth/crypto$": "<rootDir>/test/mocks/better-auth-crypto.js"
-    },
     "testTimeout": 30000
   }
 }

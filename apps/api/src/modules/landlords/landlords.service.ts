@@ -1,6 +1,4 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { hashPassword } from 'better-auth/crypto';
 import { and, eq, or } from 'drizzle-orm';
 
 import type {
@@ -12,7 +10,8 @@ import type {
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
-import { accounts, landlords, users } from '../../db/schema';
+import { landlords, users } from '../../db/schema';
+import { LogtoManagementClient } from '../auth/logto-management.client';
 import { AuditService } from '../ops/audit.service';
 
 const SERVICE_CTX: RlsContext = {
@@ -25,18 +24,20 @@ export class LandlordsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    private readonly logtoManagement: LogtoManagementClient,
   ) {}
 
   // Public self-registration (no session yet): creates a `users` row
-  // (role: landlord, status: pending) plus a Better Auth credential account
-  // — same shape AdminUsersService.create() writes for a staff temporary
-  // password, so authClient.signIn.email() verifies it with no special
-  // casing. No `landlords` row yet: AuthGuard rejects every /api/v1 call
-  // until an ops lead/admin flips status to 'active' below, so the KYC
-  // onboarding wizard (legal name, ID doc, property) only becomes reachable
-  // at that point, same as it always has.
+  // (role: landlord, status: pending) plus a Logto identity with the
+  // submitted password. This is the one provisioning path that links the
+  // Logto identity synchronously rather than at first sign-in (JIT, see
+  // ProvisioningService) — the plaintext password is only ever available
+  // right here, in this request. No `landlords` row yet: AuthGuard rejects
+  // every /api/v1 call until an ops lead/admin flips status to 'active'
+  // below, so the KYC onboarding wizard (legal name, ID doc, property) only
+  // becomes reachable at that point, same as it always has.
   async register(input: LandlordSelfRegisterInput) {
-    return this.rlsDb.run(SERVICE_CTX, async (db) => {
+    const row = await this.rlsDb.run(SERVICE_CTX, async (db) => {
       const [existing] = await db
         .select({ id: users.id })
         .from(users)
@@ -44,7 +45,7 @@ export class LandlordsService {
       if (existing) {
         throw new ConflictException('An account with this phone number or email already exists');
       }
-      const [row] = await db
+      const [created] = await db
         .insert(users)
         .values({
           phone: input.phone,
@@ -56,16 +57,19 @@ export class LandlordsService {
           emailVerified: false,
         })
         .returning({ id: users.id });
-      if (!row) throw new Error('User insert returned no row');
-      await db.insert(accounts).values({
-        id: randomUUID(),
-        accountId: row.id,
-        providerId: 'credential',
-        userId: row.id,
-        password: await hashPassword(input.password),
-      });
-      return { registered: true, userId: row.id };
+      if (!created) throw new Error('User insert returned no row');
+      return created;
     });
+    const logtoUser = await this.logtoManagement.createUser({
+      primaryEmail: input.email,
+      primaryPhone: input.phone,
+      name: input.name,
+      password: input.password,
+    });
+    await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db.update(users).set({ logtoUserId: logtoUser.id }).where(eq(users.id, row.id)),
+    );
+    return { registered: true, userId: row.id };
   }
 
   // Ops lead / admin review queue (landlords.review_kyc — same permission

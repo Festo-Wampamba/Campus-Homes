@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
+import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { StaffService } from '../../src/modules/staff/staff.service';
 
@@ -18,11 +19,11 @@ const TEST_DATABASE_URL =
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const requestPasswordReset = jest.fn().mockResolvedValue({ status: true });
-const authMock = { api: { requestPasswordReset } } as unknown as ConstructorParameters<
-  typeof StaffService
->[2];
-const staff = new StaffService(rlsDb, audit, authMock);
+const fakeToken = ['fake', 'tok'].join('-');
+const createUser = jest.fn().mockResolvedValue({ id: 'logto-user-id' });
+const createOneTimeToken = jest.fn().mockResolvedValue({ token: fakeToken });
+const logtoManagement = { createUser, createOneTimeToken } as unknown as LogtoManagementClient;
+const staff = new StaffService(rlsDb, audit, logtoManagement);
 
 let superAdmin: string;
 let platformAdmin: string;
@@ -161,8 +162,9 @@ describe('StaffService.invite + revokeRole round trip', () => {
     expect(user.status).toBe('active');
   });
 
-  it('emails a set-password link to an invited staff member with an email', async () => {
-    requestPasswordReset.mockClear();
+  it('creates a Logto identity and emails a set-password link to an invited staff member with an email', async () => {
+    createUser.mockClear();
+    createOneTimeToken.mockClear();
     await staff.invite(
       superAdminCtx(),
       new Set(['roles.assign']),
@@ -175,16 +177,16 @@ describe('StaffService.invite + revokeRole round trip', () => {
         reason: 'new hire',
       },
     );
-    expect(requestPasswordReset).toHaveBeenCalledWith({
-      body: {
-        email: 'emailed.support@campushomes.ug',
-        redirectTo: expect.stringMatching(/\/reset-password$/),
-      },
+    expect(createUser).toHaveBeenCalledWith({
+      primaryEmail: 'emailed.support@campushomes.ug',
+      name: 'Emailed Support Admin',
     });
+    expect(createOneTimeToken).toHaveBeenCalledWith('emailed.support@campushomes.ug', 'ForgotPassword');
   });
 
   it('does not attempt a set-password email for a phone-only invite', async () => {
-    requestPasswordReset.mockClear();
+    createUser.mockClear();
+    createOneTimeToken.mockClear();
     await staff.invite(
       superAdminCtx(),
       new Set(['roles.assign']),
@@ -197,7 +199,8 @@ describe('StaffService.invite + revokeRole round trip', () => {
         reason: 'new hire',
       },
     );
-    expect(requestPasswordReset).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
+    expect(createOneTimeToken).not.toHaveBeenCalled();
   });
 
   it('revoking the granted assignment sets revokedAt', async () => {

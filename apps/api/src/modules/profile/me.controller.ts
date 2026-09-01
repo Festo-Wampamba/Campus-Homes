@@ -10,20 +10,33 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
-import { verifyPassword } from 'better-auth/crypto';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
-import { changeSelfEmailSchema, updateSelfParticularsSchema } from '@campushomes/shared';
+import { changeSelfEmailSchema, changeSelfPasswordSchema, updateSelfParticularsSchema } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
-import { accounts, users } from '../../db/schema';
+import { users } from '../../db/schema';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
+import { LogtoManagementClient } from '../auth/logto-management.client';
 import { rlsCtx } from '../auth/roles';
 import { updateSelfParticulars } from './particulars';
 
 class UpdateSelfParticularsDto extends createZodDto(updateSelfParticularsSchema) {}
 class ChangeSelfEmailDto extends createZodDto(changeSelfEmailSchema) {}
+class ChangeSelfPasswordDto extends createZodDto(changeSelfPasswordSchema) {}
+
+/** Same 30-minute step-up-freshness boundary PermissionsGuard enforces for
+ * sensitive RBAC actions — no local password hash exists post-Logto to
+ * re-verify against, so a recent sign-in is the substitute check: a
+ * hijacked long-lived session alone can't swap the sign-in identity or
+ * credential, since it would also have to be recent. */
+function assertFreshSignIn(req: AuthenticatedRequest, action: string): void {
+  const signedInAt = new Date(req.session.session.createdAt).getTime();
+  if (!Number.isFinite(signedInAt) || Date.now() - signedInAt > 30 * 60_000) {
+    throw new UnauthorizedException(`${action} requires a fresh sign-in`);
+  }
+}
 
 /**
  * Role-agnostic "my account" particulars — the student and landlord portals
@@ -35,7 +48,10 @@ class ChangeSelfEmailDto extends createZodDto(changeSelfEmailSchema) {}
 @Controller('me')
 @UseGuards(AuthGuard)
 export class MeController {
-  constructor(private readonly rlsDb: RlsDb) {}
+  constructor(
+    private readonly rlsDb: RlsDb,
+    private readonly logtoManagement: LogtoManagementClient,
+  ) {}
 
   @Get('particulars')
   particulars(@Req() req: AuthenticatedRequest) {
@@ -64,32 +80,12 @@ export class MeController {
     return updateSelfParticulars(this.rlsDb, rlsCtx(req), body);
   }
 
-  /**
-   * Sign-in email change for staff credential accounts. Re-verifies the
-   * current password against the stored Better Auth hash — a hijacked
-   * session alone must never be able to swap the sign-in identity. Password
-   * changes themselves go through Better Auth's own /api/auth/change-password
-   * (which enforces the same current-password check); only the email swap
-   * needs this custom path, because Better Auth's changeEmail on a verified
-   * email requires an email-verification send and no email delivery exists.
-   */
   @Patch('email')
   async changeEmail(@Req() req: AuthenticatedRequest, @Body() body: ChangeSelfEmailDto) {
+    assertFreshSignIn(req, 'Changing your sign-in email');
     const ctx = rlsCtx(req);
     const svcCtx: RlsContext = { userId: ctx.userId, role: 'service_role' };
     return this.rlsDb.run(svcCtx, async (db) => {
-      // accounts is svc_all-only under RLS (0002) — hash never leaves here.
-      const [account] = await db
-        .select({ password: accounts.password })
-        .from(accounts)
-        .where(and(eq(accounts.userId, ctx.userId), eq(accounts.providerId, 'credential')));
-      if (!account?.password) {
-        throw new ForbiddenException('This account signs in with phone OTP, not email and password');
-      }
-      const valid = await verifyPassword({ hash: account.password, password: body.currentPassword });
-      if (!valid) {
-        throw new UnauthorizedException('Current password is incorrect');
-      }
       try {
         const [row] = await db
           .update(users)
@@ -105,5 +101,22 @@ export class MeController {
         throw err;
       }
     });
+  }
+
+  @Patch('password')
+  async changePassword(@Req() req: AuthenticatedRequest, @Body() body: ChangeSelfPasswordDto) {
+    assertFreshSignIn(req, 'Changing your password');
+    const ctx = rlsCtx(req);
+    const svcCtx: RlsContext = { userId: ctx.userId, role: 'service_role' };
+    const [row] = await this.rlsDb.run(svcCtx, (db) =>
+      db.select({ logtoUserId: users.logtoUserId, email: users.email }).from(users).where(eq(users.id, ctx.userId)),
+    );
+    // Password sign-in is email-identified in Logto — a phone-only identity
+    // has no email/password credential to set one on.
+    if (!row?.logtoUserId || !row.email) {
+      throw new ForbiddenException('This account signs in with phone OTP, not email and password');
+    }
+    await this.logtoManagement.setPassword(row.logtoUserId, body.newPassword);
+    return { changed: true };
   }
 }
