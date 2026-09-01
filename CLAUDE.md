@@ -698,3 +698,62 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     (`withRlsContext()`) — the Logto migration must keep producing those
     same two values per request; nothing about the RLS design itself
     changes, only what issues the session.
+
+- **Safe Browsing "Dangerous site" incident + security-header/indexing
+  hardening (2026-09-01):** Chrome showed a red "Dangerous site"
+  interstitial on `api-staging.../api/auth/logto/sign-in`. Root cause was
+  NOT that URL. Google's Transparency Report showed
+  `api-staging.campushomes.co.ug` = **"No unsafe content found"** while the
+  apex `campushomes.co.ug` = **"Some pages on this site are unsafe — try to
+  trick visitors into sharing personal info"** (data as of Aug 14).
+  Site-level Safe Browsing verdicts propagate to every subdomain, which is
+  why a clean host still showed the interstitial.
+  - **Compromise ruled out with evidence,** not assumption: 8 containers all
+    expected, no rogue Traefik route (only 5 legitimate Host rules), no
+    privileged containers, `docker.sock` only in dokploy/traefik, no miner/
+    cron/webshell, SSH only `festo` from UG IPs, Postgres/Redis/app ports
+    **not externally reachable** (verified by off-host scan; only 22/80/443),
+    valid per-host Let's Encrypt certs, **no cloaking** (byte-identical 302
+    to Chrome/Googlebot/Google-Safety/curl), CT + subdomain enumeration
+    found zero unexpected hosts. `svhd/logto` is the **official** image
+    (svhd = Silverhand, Logto's vendor) — pinned to `:latest`, worth pinning.
+  - **Actual exposure found: `staging.campushomes.co.ug` had no robots.txt
+    and no `X-Robots-Tag`** — the whole staging site (sign-in, reservation,
+    profile, admin flows) was openly crawlable on a ~1-month-old domain.
+    That is the corpus a classifier would read as credential harvesting.
+    Fixed via `apps/web/src/app/robots.ts` (`force-dynamic`, since one image
+    is promoted across environments) + an `X-Robots-Tag` header.
+    **Indexing now fails safe: OFF unless `ALLOW_INDEXING=true`.**
+    ⚠️ **PRODUCTION MUST SET `ALLOW_INDEXING=true` or the public site will
+    never rank.** Deliberate tradeoff — accidental staging indexing is what
+    caused this incident, so a new environment must opt in, never opt out.
+  - **Both first-party apps served zero security headers** while the Logto
+    instance they redirect into set the full set. Added HSTS/nosniff/
+    X-Frame-Options/Referrer-Policy to api + web, restrictive CSP
+    (`default-src 'none'`) on the API, and removed the `X-Powered-By` stack
+    disclosure from both. Hand-rolled (~6 lines) rather than adding helmet.
+    Web CSP deliberately omitted: Next runs inline bootstrap scripts and a
+    guessed policy breaks the page silently — needs its own nonce pass.
+  - **Real auth bug fixed en route:** `@logto/node`'s `CookieStorage` sets
+    `maxAge` in **seconds**, Express's `res.cookie()` expects
+    **milliseconds** — passed through unchanged the PKCE sign-in cookie
+    expired in ~20 minutes instead of 14 days, so any slower sign-in died at
+    the callback with "Sign-in session not found". Verified fixed on the
+    wire (`Max-Age=1209600`). Note the 4 duplicate `Set-Cookie` headers per
+    sign-in are **normal** `@logto/node` behaviour (it re-serialises the
+    same key per stored PKCE item); an earlier attempt to dedupe them broke
+    the Google callback and was reverted — do not "fix" that again.
+  - **Known-unfixed, needs a decision: `AUTH_COOKIE_DOMAIN=.campushomes.co.ug`**
+    means the session cookie is transmitted to *every* subdomain including
+    `deploy.campushomes.co.ug` (Dokploy admin) and future production. It
+    cannot simply be removed — `staging.` and `api-staging.` are different
+    hosts whose only shared parent is the apex. Real fixes: restructure to
+    `web.staging.`/`api.staging.` so the cookie can scope to
+    `.staging.campushomes.co.ug`, or proxy `/api/*` through Next so the
+    cookie becomes host-only. Both need DNS + Logto redirect-URI changes.
+  - Apex `campushomes.co.ug` currently 526s (Cloudflare proxied → Traefik has
+    no route/cert for it, serves self-signed). Staging hosts are DNS-only
+    (grey cloud) so the origin IP is public and unprotected by Cloudflare;
+    apex + `deploy` are proxied. Inconsistent — worth aligning.
+  - Clearing the flag requires **Search Console → Security Issues → Request
+    Review** on the apex; nothing in the codebase can do it.
