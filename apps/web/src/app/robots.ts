@@ -22,7 +22,17 @@ export const dynamic = "force-dynamic";
  */
 export default function robots(): MetadataRoute.Robots {
   if (process.env.ALLOW_INDEXING !== "true") {
-    return { rules: [{ userAgent: "*", disallow: "/" }] };
+    // Deliberately ALLOW crawling here, with de-indexing carried entirely by
+    // the `X-Robots-Tag: noindex, nofollow` header in next.config.ts.
+    //
+    // `Disallow: /` looks stricter but is the wrong tool and actively harmful
+    // right now: a blocked crawl means Google never fetches the page, so it
+    // never sees the noindex directive, so already-indexed pages stay in the
+    // index — and, while a Safe Browsing "Deceptive pages" issue is open on
+    // this domain, it also stops the review crawler from re-checking those
+    // pages and confirming they are clean. Crawl-allowed + noindex is the
+    // documented way to actually remove content from the index.
+    return { rules: [{ userAgent: "*", allow: "/" }] };
   }
   return {
     rules: [
