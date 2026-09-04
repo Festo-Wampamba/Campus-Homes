@@ -22,6 +22,12 @@ export type RoomCategoryRow = {
   // price, shared-bathroom doubles at another) rather than needing a
   // separate, disconnected "how many are self-contained" total elsewhere.
   selfContained: boolean;
+  // Ops publish form only (2026-09 permanent rooms): existing physical room
+  // ids this row represents, when it was pre-filled from the property's
+  // already-created rooms rather than typed fresh. `roomCount` beds worth
+  // get zipped against these at submit time — the first N reuse an existing
+  // room (just priced for this semester), any extra create new ones.
+  unitIds?: string[];
 };
 
 let nextKey = 0;

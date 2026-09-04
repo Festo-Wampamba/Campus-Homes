@@ -59,6 +59,7 @@ let landlord2: string;
 let opsLead: string;
 let inspectorId: string;
 let listingId: string;
+let semester: string;
 let unitId: string;
 let bedId: string; // the sole bed on unitId (capacity 1)
 
@@ -81,10 +82,19 @@ async function seed(sql: string, params: unknown[] = []): Promise<string> {
  * one bed, for tests that need inventory beyond the beforeAll-seeded Room 1A. */
 async function seedUnitWithBed(label: string): Promise<{ unitId: string; bedId: string }> {
   const newUnitId = await seed(
-    `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-     SELECT listing_id, $2, 1, room_category, price_per_term_ugx, available_for_semester_id
+    `INSERT INTO units (property_id, label, capacity, room_category)
+     SELECT property_id, $2, 1, room_category
      FROM units WHERE id = $1 RETURNING id`,
     [unitId, label],
+  );
+  const priceRes = await pool.query(
+    `SELECT price_per_term_ugx, deposit_ugx FROM unit_semester_pricing WHERE unit_id = $1 AND semester_id = $2`,
+    [unitId, semester],
+  );
+  await pool.query(
+    `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx, deposit_ugx)
+     VALUES ($1, $2, $3, $4)`,
+    [newUnitId, semester, priceRes.rows[0].price_per_term_ugx, priceRes.rows[0].deposit_ugx],
   );
   const newBedId = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [
     newUnitId,
@@ -134,7 +144,7 @@ beforeAll(async () => {
     [opsLead, inspectorId],
   );
 
-  const semester = await seed(
+  semester = await seed(
     `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
      VALUES ('Sem 1 26/27', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
   );
@@ -162,7 +172,7 @@ beforeAll(async () => {
     units: [{ label: 'Room 1A', capacity: 1, roomCategory: 'single', pricePerTermUgx: 800_000 }],
   });
   expect(published.listing.status).toBe('verified');
-  const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
+  const unitRes = await pool.query(`SELECT id FROM units WHERE property_id = $1`, [property]);
   unitId = unitRes.rows[0].id as string;
   const bedRes = await pool.query(`SELECT id FROM beds WHERE unit_id = $1`, [unitId]);
   bedId = bedRes.rows[0].id as string;
@@ -252,6 +262,7 @@ describe('reserve -> book -> move-in (bed-level state machine, §6-8)', () => {
 
   it('creates a reserved bed with a 24h expiry, no payment involved', async () => {
     const reservation = await reservationsService.reserve(studentCtx(student1), {
+      listingId,
       bedId,
       idempotencyKey: KEY_1,
     });
@@ -263,6 +274,7 @@ describe('reserve -> book -> move-in (bed-level state machine, §6-8)', () => {
   it('replays the same idempotency key onto the same reservation', async () => {
     const first = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
     const replay = await reservationsService.reserve(studentCtx(student1), {
+      listingId,
       bedId,
       idempotencyKey: KEY_1,
     });
@@ -272,6 +284,7 @@ describe('reserve -> book -> move-in (bed-level state machine, §6-8)', () => {
   it('rejects a second live reservation on the same bed', async () => {
     await expect(
       reservationsService.reserve(studentCtx(student2), {
+        listingId,
         bedId,
         idempotencyKey: 'reserve-key-0000000002',
       }),
@@ -339,6 +352,7 @@ describe('reserve -> book -> move-in (bed-level state machine, §6-8)', () => {
     ]);
     const { bedId: bed2 } = await seedUnitWithBed('Room 1B');
     const reserved = await reservationsService.reserve(studentCtx(landlordMoveInStudent), {
+      listingId,
       bedId: bed2,
       idempotencyKey: 'reserve-key-landlord-movein',
     });
@@ -379,6 +393,7 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('releases a Reserved bed with a reason, no refund flagged when nothing was collected', async () => {
     const { bedId: bed5 } = await seedUnitWithBed('Room 2A');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bed5,
       idempotencyKey: 'reserve-key-release-1',
     });
@@ -401,6 +416,7 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('releasing a Booked bed defaults refundRequired to true when money was collected', async () => {
     const { bedId: bed6 } = await seedUnitWithBed('Room 2B');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bed6,
       idempotencyKey: 'reserve-key-release-2',
     });
@@ -423,6 +439,7 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('a different landlord cannot release a bed on someone else\'s property', async () => {
     const { bedId: bed7 } = await seedUnitWithBed('Room 2C');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bed7,
       idempotencyKey: 'reserve-key-release-3',
     });
@@ -437,6 +454,7 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('cannot release an already-released reservation', async () => {
     const { bedId: bed8 } = await seedUnitWithBed('Room 2D');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bed8,
       idempotencyKey: 'reserve-key-release-4',
     });
@@ -455,6 +473,7 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('releasing a bed frees it for a new reservation', async () => {
     const { bedId: bed9 } = await seedUnitWithBed('Room 2E');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bed9,
       idempotencyKey: 'reserve-key-release-5',
     });
@@ -463,6 +482,7 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
       refundRequired: false,
     });
     const rereserved = await reservationsService.reserve(studentCtx(student3), {
+      listingId,
       bedId: bed9,
       idempotencyKey: 'reserve-key-release-5-again',
     });
@@ -488,6 +508,7 @@ describe('3 active reservations per student, platform-wide (§12-13)', () => {
 
     for (const [i, bed] of [bedCap1, bedCap2, bedCap3].entries()) {
       const r = await reservationsService.reserve(ctx, {
+        listingId,
         bedId: bed.bedId,
         idempotencyKey: `reserve-key-cap-${i}`,
       });
@@ -496,6 +517,7 @@ describe('3 active reservations per student, platform-wide (§12-13)', () => {
 
     await expect(
       reservationsService.reserve(ctx, {
+        listingId,
         bedId: bedCap4.bedId,
         idempotencyKey: 'reserve-key-cap-3',
       }),
@@ -535,6 +557,7 @@ describe('cancel (student cancels their own Reserved bed, §6)', () => {
   it('lets a student cancel their own reserved bed', async () => {
     const { bedId: bedC1 } = await seedUnitWithBed('Cancel A');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bedC1,
       idempotencyKey: 'reserve-key-cancel-1',
     });
@@ -545,6 +568,7 @@ describe('cancel (student cancels their own Reserved bed, §6)', () => {
   it('a student cannot cancel a reservation that is not theirs', async () => {
     const { bedId: bedC2 } = await seedUnitWithBed('Cancel B');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bedC2,
       idempotencyKey: 'reserve-key-cancel-2',
     });
@@ -556,6 +580,7 @@ describe('cancel (student cancels their own Reserved bed, §6)', () => {
   it('a student cannot cancel a reservation once it is booked (only Release can free it)', async () => {
     const { bedId: bedC3 } = await seedUnitWithBed('Cancel C');
     const reserved = await reservationsService.reserve(studentCtx(student2), {
+      listingId,
       bedId: bedC3,
       idempotencyKey: 'reserve-key-cancel-3',
     });
@@ -576,7 +601,7 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
   /** A whole one-bed verified listing on a semester ending on `endsOn` —
    * isolated from the shared fixture listing so each test controls its own
    * term end date precisely. */
-  async function seedListingEndingOn(endsOn: string): Promise<{ bedId: string }> {
+  async function seedListingEndingOn(endsOn: string): Promise<{ bedId: string; listingId: string }> {
     const semesterId = await seed(
       `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
        VALUES ('Lock-in test semester', '2026-01-01', $1, '2026-01-01') RETURNING id`,
@@ -606,12 +631,15 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
     );
     await pool.query(`UPDATE listings SET current_version_id = $1 WHERE id = $2`, [versionId, listingId]);
     const unitId = await seed(
-      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-       VALUES ($1, 'Room X', 1, 'single', 500000, $2) RETURNING id`,
-      [listingId, semesterId],
+      `INSERT INTO units (property_id, label, capacity, room_category) VALUES ($1, 'Room X', 1, 'single') RETURNING id`,
+      [propertyId],
+    );
+    await pool.query(
+      `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx) VALUES ($1, $2, 500000)`,
+      [unitId, semesterId],
     );
     const bedId = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unitId]);
-    return { bedId };
+    return { bedId, listingId };
   }
 
   async function seedStudent(phone: string): Promise<string> {
@@ -625,8 +653,9 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
 
   it('blocks a new reservation while occupying a bed on a term ending far away', async () => {
     const student = await seedStudent('+256710000090');
-    const { bedId: currentBed } = await seedListingEndingOn(isoDaysFromNow(60));
+    const { bedId: currentBed, listingId: currentListingId } = await seedListingEndingOn(isoDaysFromNow(60));
     const reserved = await reservationsService.reserve(studentCtx(student), {
+      listingId: currentListingId,
       bedId: currentBed,
       idempotencyKey: 'reserve-key-lockin-1',
     });
@@ -638,6 +667,7 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
     const { bedId: nextBed } = await seedUnitWithBed('Lock-in Next A');
     await expect(
       reservationsService.reserve(studentCtx(student), {
+        listingId,
         bedId: nextBed,
         idempotencyKey: 'reserve-key-lockin-2',
       }),
@@ -646,8 +676,9 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
 
   it('allows a new reservation once the occupied term is within 3 weeks of ending', async () => {
     const student = await seedStudent('+256710000091');
-    const { bedId: currentBed } = await seedListingEndingOn(isoDaysFromNow(10));
+    const { bedId: currentBed, listingId: currentListingId } = await seedListingEndingOn(isoDaysFromNow(10));
     const reserved = await reservationsService.reserve(studentCtx(student), {
+      listingId: currentListingId,
       bedId: currentBed,
       idempotencyKey: 'reserve-key-lockin-3',
     });
@@ -658,6 +689,7 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
 
     const { bedId: nextBed } = await seedUnitWithBed('Lock-in Next B');
     const next = await reservationsService.reserve(studentCtx(student), {
+      listingId,
       bedId: nextBed,
       idempotencyKey: 'reserve-key-lockin-4',
     });
@@ -666,8 +698,9 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
 
   it('a walk-in Book is also blocked by current occupancy on a far-away term', async () => {
     const student = await seedStudent('+256710000092');
-    const { bedId: currentBed } = await seedListingEndingOn(isoDaysFromNow(90));
+    const { bedId: currentBed, listingId: currentListingId } = await seedListingEndingOn(isoDaysFromNow(90));
     const reserved = await reservationsService.reserve(studentCtx(student), {
+      listingId: currentListingId,
       bedId: currentBed,
       idempotencyKey: 'reserve-key-lockin-5',
     });
@@ -710,6 +743,7 @@ describe('reservation expiry (JobsRunner, 24h)', () => {
   it('a reserved bed past its expiry flips to expired', async () => {
     const { bedId: bedE1 } = await seedUnitWithBed('Expire A');
     const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      listingId,
       bedId: bedE1,
       idempotencyKey: 'reserve-key-expire-1',
     });
@@ -724,6 +758,7 @@ describe('reservation expiry (JobsRunner, 24h)', () => {
   it('a booked reservation is left untouched by expiry (never auto-expires once booked)', async () => {
     const { bedId: bedE2 } = await seedUnitWithBed('Expire B');
     const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      listingId,
       bedId: bedE2,
       idempotencyKey: 'reserve-key-expire-2',
     });
@@ -738,6 +773,7 @@ describe('reservation expiry (JobsRunner, 24h)', () => {
   it('an expired bed can be reserved again', async () => {
     const { bedId: bedE3 } = await seedUnitWithBed('Expire C');
     const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      listingId,
       bedId: bedE3,
       idempotencyKey: 'reserve-key-expire-3',
     });
@@ -746,6 +782,7 @@ describe('reservation expiry (JobsRunner, 24h)', () => {
     ]);
     await expireReservation(reserved.id);
     const rereserved = await reservationsService.reserve(studentCtx(expireStudentB), {
+      listingId,
       bedId: bedE3,
       idempotencyKey: 'reserve-key-expire-3-again',
     });

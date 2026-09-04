@@ -23,7 +23,15 @@ function errorMessage(err: unknown, fallback: string): string {
 // but that's collected here, inline, on first reserve (one required field)
 // rather than redirecting to a separate /profile page before Reserve even
 // becomes clickable. Full particulars stay editable later at /profile.
-export function ReserveButton({ bedId, needsProfile }: { bedId: string; needsProfile: boolean }) {
+export function ReserveButton({
+  bedId,
+  listingId,
+  needsProfile,
+}: {
+  bedId: string;
+  listingId: string;
+  needsProfile: boolean;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +46,7 @@ export function ReserveButton({ bedId, needsProfile }: { bedId: string; needsPro
       // no payment/checkout step here at all.
       await api("/reservations/reserve", {
         method: "POST",
-        body: JSON.stringify({ bedId, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({ bedId, listingId, idempotencyKey: crypto.randomUUID() }),
       });
       router.push("/reservations");
     } catch (err) {

@@ -106,14 +106,20 @@ beforeAll(async () => {
     [listing1, opsLead],
   );
   unit1 = await seed(
-    `INSERT INTO units (listing_id, label, room_category, price_per_term_ugx, available_for_semester_id)
-     VALUES ($1, 'Room 1A', 'single', 800000, $2) RETURNING id`,
-    [listing1, semester],
+    `INSERT INTO units (property_id, label, room_category) VALUES ($1, 'Room 1A', 'single') RETURNING id`,
+    [property1],
+  );
+  await pool.query(
+    `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx) VALUES ($1, $2, 800000)`,
+    [unit1, semester],
   );
   unit2 = await seed(
-    `INSERT INTO units (listing_id, label, room_category, price_per_term_ugx, available_for_semester_id)
-     VALUES ($1, 'Room 2A', 'single', 700000, $2) RETURNING id`,
-    [listing2, semester],
+    `INSERT INTO units (property_id, label, room_category) VALUES ($1, 'Room 2A', 'single') RETURNING id`,
+    [property2],
+  );
+  await pool.query(
+    `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx) VALUES ($1, $2, 700000)`,
+    [unit2, semester],
   );
   bed1 = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unit1]);
   bed2 = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unit2]);
@@ -128,8 +134,8 @@ beforeAll(async () => {
 
   reservation1 = await seed(
     `INSERT INTO reservations
-       (student_id, bed_id, listing_version_id, status, idempotency_key, reserved_expires_at)
-     VALUES ($1, $2, $3, 'reserved', 'seed-hold-s1-000000', now() + interval '24 hours') RETURNING id`,
+       (student_id, bed_id, listing_version_id, status, idempotency_key, reserved_expires_at, price_per_term_ugx)
+     VALUES ($1, $2, $3, 'reserved', 'seed-hold-s1-000000', now() + interval '24 hours', 800000) RETURNING id`,
     [student1, bed1, version1],
   );
   payment1 = await seed(
@@ -212,8 +218,8 @@ describe('reservations & payments isolation', () => {
     await expect(
       asIdentity({ userId: student2, role: 'student' }, async (c) =>
         c.query(
-          `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
-           VALUES ($1, $2, $3, 'reserved', 'attack-key-00000000')`,
+          `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+           VALUES ($1, $2, $3, 'reserved', 'attack-key-00000000', 800000)`,
           [student2, bed1, version1],
         ),
       ),
@@ -238,8 +244,8 @@ describe('double-booking lock', () => {
     await expect(
       asIdentity({ userId: opsLead, role: 'service_role' }, async (c) =>
         c.query(
-          `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
-           SELECT $1, bed_id, listing_version_id, 'reserved', 'second-hold-0000000'
+          `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+           SELECT $1, bed_id, listing_version_id, 'reserved', 'second-hold-0000000', price_per_term_ugx
            FROM reservations WHERE id = $2`,
           [student2, reservation1],
         ),
@@ -357,6 +363,36 @@ describe('unit_photos isolation (0008)', () => {
   });
 });
 
+describe('unit_semester_pricing (2026-09 permanent rooms): read scoped like units_read', () => {
+  it("the public can see a verified listing's room pricing", async () => {
+    const rows = await asIdentity({}, async (c) =>
+      (await c.query('SELECT id FROM unit_semester_pricing WHERE unit_id = $1', [unit1])).rows,
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("the public cannot see a draft listing's room pricing", async () => {
+    const rows = await asIdentity({}, async (c) =>
+      (await c.query('SELECT id FROM unit_semester_pricing WHERE unit_id = $1', [unit2])).rows,
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord can see their own room pricing even before verification', async () => {
+    const rows = await asIdentity({ userId: landlord2, role: 'landlord' }, async (c) =>
+      (await c.query('SELECT id FROM unit_semester_pricing WHERE unit_id = $1', [unit2])).rows,
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("a landlord cannot see another landlord's draft room pricing", async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      (await c.query('SELECT id FROM unit_semester_pricing WHERE unit_id = $1', [unit2])).rows,
+    );
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe('units.operational_status (0024): off-platform-occupancy write path', () => {
   it("a landlord can flip their own room's operational_status", async () => {
     const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
@@ -375,7 +411,7 @@ describe('units.operational_status (0024): off-platform-occupancy write path', (
   it("a landlord cannot write any other units column, even on their own room", async () => {
     await expect(
       asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
-        c.query(`UPDATE units SET price_per_term_ugx = 1 WHERE id = $1`, [unit1]),
+        c.query(`UPDATE units SET room_category = 'double' WHERE id = $1`, [unit1]),
       ),
     ).rejects.toThrow(/permission denied/i);
   });
@@ -390,7 +426,7 @@ describe('units.operational_status (0024): off-platform-occupancy write path', (
   it('ops_lead is also restricted to the operational_status column', async () => {
     await expect(
       asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
-        c.query(`UPDATE units SET price_per_term_ugx = 1 WHERE id = $1`, [unit1]),
+        c.query(`UPDATE units SET room_category = 'double' WHERE id = $1`, [unit1]),
       ),
     ).rejects.toThrow(/permission denied/i);
   });

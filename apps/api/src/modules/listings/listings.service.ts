@@ -22,6 +22,7 @@ import {
   reservations,
   unitPhotos,
   units,
+  unitSemesterPricing,
 } from '../../db/schema';
 
 /** A bed still counts as "live" (not available) under these statuses —
@@ -214,7 +215,25 @@ export class ListingsService {
             .orderBy(asc(listingPhotos.sortOrder))
         : [];
 
-      const roomRows = await db.select().from(units).where(eq(units.listingId, listing.id));
+      // Rooms are permanent/property-level (2026-09) — which ones belong to
+      // "this listing" is now whichever of the property's rooms have been
+      // priced for this listing's semester, not a listing_id column on units.
+      const roomRows = await db
+        .select({
+          id: units.id,
+          label: units.label,
+          capacity: units.capacity,
+          roomCategory: units.roomCategory,
+          operationalStatus: units.operationalStatus,
+          pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
+          depositUgx: unitSemesterPricing.depositUgx,
+        })
+        .from(units)
+        .innerJoin(
+          unitSemesterPricing,
+          and(eq(unitSemesterPricing.unitId, units.id), eq(unitSemesterPricing.semesterId, listing.semesterId)),
+        )
+        .where(eq(units.propertyId, propertyId));
       const unitIds = roomRows.map((u) => u.id);
 
       const bedRows = unitIds.length
@@ -461,10 +480,11 @@ export class ListingsService {
            -- partially-let double still contributes its one free bed. MIN/MAX
            -- capacity describe the room itself and are unaffected by the fan-out.
            SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, MAX(un.price_per_term_ugx) AS max_price
+                  COUNT(*) AS unit_count, MAX(usp.price_per_term_ugx) AS max_price
            FROM units un
+           JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
            JOIN beds bd ON bd.unit_id = un.id
-           WHERE un.listing_id = l.id
+           WHERE un.property_id = l.property_id
              AND un.operational_status <> ALL($11::text[])
              AND NOT bd.blocked
              AND NOT EXISTS (
@@ -482,17 +502,18 @@ export class ListingsService {
                   ) AS categories
            FROM (
              -- Same available-bed-count fan-out as above, grouped per category.
-             SELECT un.room_category AS category, un.price_per_term_ugx, COUNT(*) AS unit_count
+             SELECT un.room_category AS category, usp.price_per_term_ugx, COUNT(*) AS unit_count
              FROM units un
+             JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
              JOIN beds bd ON bd.unit_id = un.id
-             WHERE un.listing_id = l.id
+             WHERE un.property_id = l.property_id
                AND un.operational_status <> ALL($11::text[])
                AND NOT bd.blocked
                AND NOT EXISTS (
                  SELECT 1 FROM reservations r
                  WHERE r.bed_id = bd.id AND r.status = ANY($10::reservation_status[])
                )
-             GROUP BY un.room_category, un.price_per_term_ugx
+             GROUP BY un.room_category, usp.price_per_term_ugx
            ) grouped
          ) rc ON true
           WHERE l.status = 'verified'
@@ -508,8 +529,9 @@ export class ListingsService {
             AND (
               $12::text IS NULL OR EXISTS (
                 SELECT 1 FROM units uf
+                JOIN unit_semester_pricing uspf ON uspf.unit_id = uf.id AND uspf.semester_id = l.semester_id
                 JOIN beds bf ON bf.unit_id = uf.id
-                WHERE uf.listing_id = l.id
+                WHERE uf.property_id = l.property_id
                   AND uf.room_category = $12::room_category
                   AND uf.operational_status <> ALL($11::text[])
                   AND NOT bf.blocked
@@ -571,7 +593,25 @@ export class ListingsService {
         .from(listingPhotos)
         .where(eq(listingPhotos.listingVersionId, listing.currentVersionId))
         .orderBy(listingPhotos.sortOrder);
-      const unitRows = await db.select().from(units).where(eq(units.listingId, listingId));
+      // Rooms are permanent/property-level (2026-09) — scope to this
+      // listing's property + semester via unit_semester_pricing rather than
+      // a listing_id column on units.
+      const unitRows = await db
+        .select({
+          id: units.id,
+          label: units.label,
+          capacity: units.capacity,
+          roomCategory: units.roomCategory,
+          operationalStatus: units.operationalStatus,
+          pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
+          depositUgx: unitSemesterPricing.depositUgx,
+        })
+        .from(units)
+        .innerJoin(
+          unitSemesterPricing,
+          and(eq(unitSemesterPricing.unitId, units.id), eq(unitSemesterPricing.semesterId, listing.semesterId)),
+        )
+        .where(eq(units.propertyId, listing.propertyId));
       // unit_photos_read (0008) allows public read once the parent listing is
       // verified — same PUBLIC_CTX this whole block already runs under.
       const unitIds = unitRows.map((u) => u.id);
@@ -608,8 +648,12 @@ export class ListingsService {
              ) AS available
              FROM beds b
              JOIN units u ON u.id = b.unit_id
-             WHERE u.listing_id = $1`,
-            [listingId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES],
+             WHERE u.property_id = $1
+               AND EXISTS (
+                 SELECT 1 FROM unit_semester_pricing usp
+                 WHERE usp.unit_id = u.id AND usp.semester_id = $4
+               )`,
+            [detail.listing.propertyId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES, detail.listing.semesterId],
           );
           // Custodian contact rides along here too — landlords has no public
           // SELECT policy either, and a student deciding whether to reserve
@@ -753,9 +797,11 @@ export class ListingsService {
            LIMIT 1
          ) ph ON true
          LEFT JOIN LATERAL (
-           SELECT MIN(capacity) AS min_capacity, MAX(capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, MAX(price_per_term_ugx) AS max_price
-           FROM units WHERE listing_id = l.id
+           SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
+                  COUNT(*) AS unit_count, MAX(usp.price_per_term_ugx) AS max_price
+           FROM units un
+           JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
+           WHERE un.property_id = l.property_id
          ) u ON true
          LEFT JOIN LATERAL (
            SELECT jsonb_agg(
@@ -766,9 +812,11 @@ export class ListingsService {
                     ) ORDER BY price_per_term_ugx ASC
                   ) AS categories
            FROM (
-             SELECT room_category AS category, price_per_term_ugx, COUNT(*) AS unit_count
-             FROM units WHERE listing_id = l.id
-             GROUP BY room_category, price_per_term_ugx
+             SELECT un.room_category AS category, usp.price_per_term_ugx, COUNT(*) AS unit_count
+             FROM units un
+             JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
+             WHERE un.property_id = l.property_id
+             GROUP BY un.room_category, usp.price_per_term_ugx
            ) grouped
          ) rc ON true
          WHERE sl.student_id = $1 AND l.status = 'verified'

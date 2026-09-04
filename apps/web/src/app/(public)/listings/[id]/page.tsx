@@ -209,6 +209,7 @@ export default async function ListingDetailPage({
               Room types
             </h2>
             <RoomCategoryList
+              listingId={listingId}
               units={units}
               availability={availability}
               photos={orderedPhotos}

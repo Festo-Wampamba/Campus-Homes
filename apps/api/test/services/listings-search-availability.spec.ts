@@ -117,8 +117,8 @@ beforeAll(async () => {
   versionId = published.listing.currentVersionId!;
 
   const unitRows = await pool.query(
-    `SELECT id, label FROM units WHERE listing_id = $1 ORDER BY label`,
-    [listingId],
+    `SELECT id, label FROM units WHERE property_id = $1 ORDER BY label`,
+    [propertyId],
   );
   const byLabel = new Map(unitRows.rows.map((r: { id: string; label: string }) => [r.label, r.id]));
   unitOccupied = byLabel.get('Unit Occupied')!;
@@ -138,18 +138,18 @@ beforeAll(async () => {
   // gap one status earlier. A 'cancelled' one on the third bed, to prove the
   // fix doesn't over-hide beds that freed up.
   await pool.query(
-    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
-     VALUES ($1, $2, $3, 'occupied', 'avail-test-occupied-01')`,
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+     VALUES ($1, $2, $3, 'occupied', 'avail-test-occupied-01', 500000)`,
     [studentId, bedOccupied, versionId],
   );
   await pool.query(
-    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
-     VALUES ($1, $2, $3, 'reserved', 'avail-test-reserved-01')`,
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+     VALUES ($1, $2, $3, 'reserved', 'avail-test-reserved-01', 500000)`,
     [studentId, bedReserved, versionId],
   );
   await pool.query(
-    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
-     VALUES ($1, $2, $3, 'cancelled', 'avail-test-cancelled-01')`,
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+     VALUES ($1, $2, $3, 'cancelled', 'avail-test-cancelled-01', 500000)`,
     [studentId, bedCancelled, versionId],
   );
 });

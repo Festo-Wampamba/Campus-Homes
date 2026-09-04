@@ -42,6 +42,7 @@ import {
   properties,
   semesters,
   units,
+  unitSemesterPricing,
   users,
   verificationVisits,
   visitCorrections,
@@ -332,6 +333,33 @@ export class OpsService {
       );
       return res.rows as unknown[];
     });
+  }
+
+  /** A property's existing permanent rooms (2026-09: rooms outlive any one
+   * listing/semester) — lets the publish form default to "these already
+   * exist, just confirm this semester's price" instead of re-typing the
+   * whole room list from scratch every semester. pricePerTermUgx/depositUgx
+   * come back null when the room hasn't been priced for `semesterId` yet
+   * (a brand-new room, or one skipped in a prior semester). */
+  propertyRooms(ctx: RlsContext, propertyId: string, semesterId: string) {
+    return this.rlsDb.run(ctx, async (db) =>
+      db
+        .select({
+          id: units.id,
+          label: units.label,
+          capacity: units.capacity,
+          roomCategory: units.roomCategory,
+          pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
+          depositUgx: unitSemesterPricing.depositUgx,
+        })
+        .from(units)
+        .leftJoin(
+          unitSemesterPricing,
+          and(eq(unitSemesterPricing.unitId, units.id), eq(unitSemesterPricing.semesterId, semesterId)),
+        )
+        .where(eq(units.propertyId, propertyId))
+        .orderBy(asc(units.label)),
+    );
   }
 
   /** Creates the draft listing a property needs before publish. Ops can't
@@ -646,28 +674,65 @@ export class OpsService {
         .returning(),
       );
 
-      const insertedUnits = await db.insert(units).values(
-        input.units.map((u) => ({
-          listingId: input.listingId,
-          label: u.label,
-          capacity: u.capacity,
-          roomCategory: u.roomCategory,
-          pricePerTermUgx: u.pricePerTermUgx,
-          depositUgx: u.depositUgx ?? null,
-          availableForSemesterId: listing.semesterId,
-        })),
-      ).returning();
+      // Rooms are permanent/property-level (2026-09) — reused across every
+      // future semester instead of recreated at each publish. `unitId`
+      // present = one of the property's existing rooms, just being priced
+      // for this semester (no new units/beds row); absent = a brand-new
+      // physical room, created once here along with its beds.
+      const existingUnitInputs = input.units.filter((u) => u.unitId);
+      const newUnitInputs = input.units.filter((u) => !u.unitId);
 
-      // Bed-level inventory (2026-09 redesign): every unit needs its
+      const insertedUnits = newUnitInputs.length
+        ? await db.insert(units).values(
+            newUnitInputs.map((u) => ({
+              propertyId: listing.propertyId,
+              label: u.label,
+              capacity: u.capacity,
+              roomCategory: u.roomCategory,
+            })),
+          ).returning()
+        : [];
+
+      // Bed-level inventory (2026-09 redesign): every new unit needs its
       // capacity's worth of beds or it's created entirely unreservable.
-      await db.insert(beds).values(
-        insertedUnits.flatMap((u) =>
-          Array.from({ length: u.capacity }, (_, i) => ({
-            unitId: u.id,
-            label: `Bed ${i + 1}`,
-          })),
-        ),
-      );
+      // Existing units already have theirs from whenever they were first
+      // created — beds are never recreated, only reused.
+      if (insertedUnits.length > 0) {
+        await db.insert(beds).values(
+          insertedUnits.flatMap((u) =>
+            Array.from({ length: u.capacity }, (_, i) => ({
+              unitId: u.id,
+              label: `Bed ${i + 1}`,
+            })),
+          ),
+        );
+      }
+
+      // Price every room — new and existing — for this semester. Immutable
+      // per (unit, semester): a re-publish of the same semester (e.g. fixing
+      // amenities) with an unchanged price is idempotent; a genuinely
+      // different price for a unit already priced this semester is a
+      // logic error upstream (the publish form only offers unpriced rooms
+      // or the room's current price back), so it's left to surface as a
+      // unique-constraint conflict rather than silently overwritten.
+      const pricingRows = [
+        ...insertedUnits.map((u, i) => ({ unitId: u.id, input: newUnitInputs[i]! })),
+        ...existingUnitInputs.map((u) => ({ unitId: u.unitId!, input: u })),
+      ];
+      if (pricingRows.length > 0) {
+        await db
+          .insert(unitSemesterPricing)
+          .values(
+            pricingRows.map((row) => ({
+              unitId: row.unitId,
+              semesterId: listing.semesterId,
+              pricePerTermUgx: row.input.pricePerTermUgx,
+              depositUgx: row.input.depositUgx ?? null,
+            })),
+          )
+          .onConflictDoNothing({ target: [unitSemesterPricing.unitId, unitSemesterPricing.semesterId] });
+      }
+
       return { listing: updated, version, approvedVisit };
     });
     await this.audit.record(ctx, 'listing.publish', 'listing', input.listingId, {
