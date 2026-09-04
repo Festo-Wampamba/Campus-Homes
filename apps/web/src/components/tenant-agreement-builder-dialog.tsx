@@ -305,8 +305,20 @@ function TenantAgreementBuilderBody({
           setFields(defaultFieldRows());
         }
       })
-      .catch(() => {
-        if (!cancelled) setError("Couldn't load the current template.");
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 403) {
+          // A real permission mismatch (not your property) — showing the
+          // default fields here would invite editing a form the save call
+          // will just reject, so leave the list empty instead.
+          setError("You don't have permission to manage this property's tenant agreement.");
+          return;
+        }
+        // Any other failure (network blip, 401, 500) shouldn't strand the
+        // landlord on a blank dialog with no way to start — fall back to the
+        // same starter template a property with no saved form would get.
+        setFields(defaultFieldRows());
+        setError("Couldn't check for a saved template, so you're seeing the starting template below.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

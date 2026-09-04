@@ -234,17 +234,17 @@ export class AdminDashboardService {
   reservations() {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const result = await client.query(`
-        SELECT r.id, r.status::text, r.fee_amount_ugx AS "feeAmountUgx",
-               r.hold_expires_at AS "holdExpiresAt", r.cooling_off_expires_at AS "coolingOffExpiresAt",
+        SELECT r.id, r.status::text, r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
+               r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method::text AS "paymentMethod",
+               r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
                r.created_at AS "createdAt", coalesce(nullif(su.name, ''), su.email, su.phone) AS student,
-               p.name AS property, un.label AS unit,
-               pay.status::text AS "paymentStatus", pay.payment_method::text AS "paymentMethod"
+               p.name AS property, un.label AS unit, b.label AS bed
         FROM reservations r
         JOIN users su ON su.id = r.student_id
-        JOIN units un ON un.id = r.unit_id
+        JOIN beds b ON b.id = r.bed_id
+        JOIN units un ON un.id = b.unit_id
         JOIN listings li ON li.id = un.listing_id
         JOIN properties p ON p.id = li.property_id
-        LEFT JOIN LATERAL (SELECT * FROM payments x WHERE x.reservation_id = r.id ORDER BY x.created_at DESC LIMIT 1) pay ON true
         ORDER BY r.created_at DESC LIMIT 250
       `);
       return { rows: result.rows, asOf: new Date().toISOString(), limit: 250 };
@@ -316,7 +316,8 @@ export class AdminDashboardService {
         FROM properties p
         LEFT JOIN listings li ON li.property_id = p.id
         LEFT JOIN units un ON un.listing_id = li.id
-        LEFT JOIN reservations r ON r.unit_id = un.id
+        LEFT JOIN beds bd ON bd.unit_id = un.id
+        LEFT JOIN reservations r ON r.bed_id = bd.id
         LEFT JOIN payments pay ON pay.reservation_id = r.id
         GROUP BY p.catchment ORDER BY p.catchment
       `);

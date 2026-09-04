@@ -12,14 +12,16 @@ export default async function LandlordTenantsPage() {
   const [reservations, properties] = await Promise.all([getLandlordReservations(), getMyProperties()]);
   const details = await Promise.all(properties.map((p) => getPropertyDetail(p.id)));
 
-  const roomsByUnitId = new Map<string, { label: string; propertyName: string }>();
+  const roomsByBedId = new Map<string, { label: string; propertyName: string }>();
   details.forEach((detail, i) => {
     for (const room of detail?.rooms ?? []) {
-      roomsByUnitId.set(room.id, { label: room.label, propertyName: properties[i].name });
+      for (const bed of room.beds) {
+        roomsByBedId.set(bed.id, { label: room.label, propertyName: properties[i].name });
+      }
     }
   });
 
-  const occupants = reservations.filter((r) => r.status === "fulfilled");
+  const occupants = reservations.filter((r) => r.status === "occupied");
 
   return (
     <>
@@ -51,7 +53,7 @@ export default async function LandlordTenantsPage() {
             body="Once a booking is fully paid and confirmed, the room shows here as occupied."
           />
         ) : (
-          <TenantsList occupants={occupants} roomsByUnitId={roomsByUnitId} />
+          <TenantsList occupants={occupants} roomsByBedId={roomsByBedId} />
         )}
       </div>
     </>

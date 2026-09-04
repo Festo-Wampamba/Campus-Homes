@@ -1,7 +1,7 @@
-import type { Reservation } from "@campushomes/shared";
+import type { StudentReservationView } from "@campushomes/shared";
 
 import { apiServer } from "@/lib/server-api";
 
-export function getMyReservations(): Promise<Reservation[]> {
-  return apiServer<Reservation[]>("/reservations/mine").then((rows) => rows ?? []);
+export function getMyReservations(): Promise<StudentReservationView[]> {
+  return apiServer<StudentReservationView[]>("/reservations/mine").then((rows) => rows ?? []);
 }

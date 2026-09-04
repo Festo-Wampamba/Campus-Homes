@@ -129,14 +129,21 @@ export const LISTING_STATUSES = [
   'suspended',
 ] as const;
 
+// Reserve -> Book -> Move-in (bed-level redesign, 2026-09). 'reserved' and
+// 'booked' are the only "active" states — count toward a student's 3-
+// reservation platform-wide limit and block the bed for other students.
+// 'refunded' is kept for the future automated-refund phase even though no
+// Phase-1 code path produces it yet (release/expiry both stop at
+// 'released'/'expired' — a human records any actual refund out of band for
+// now, same posture as booking payment itself).
 export const RESERVATION_STATUSES = [
-  'held',
-  'payment_pending',
-  'payment_failed',
-  'fulfilled',
+  'reserved',
+  'booked',
+  'occupied',
+  'released',
+  'expired',
   'cancelled',
   'refunded',
-  'expired',
 ] as const;
 export const PAYMENT_PROVIDERS = ['flutterwave'] as const;
 export const PAYMENT_METHODS = ['mtn_momo', 'airtel_money', 'card', 'bank_transfer'] as const;

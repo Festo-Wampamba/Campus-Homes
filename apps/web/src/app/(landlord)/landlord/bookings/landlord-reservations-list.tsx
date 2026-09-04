@@ -4,10 +4,11 @@ import { useMemo, useState } from "react";
 import type { LandlordReservationView } from "@campushomes/shared";
 import { CheckCircle2, Search } from "lucide-react";
 
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { StatusChip } from "@/components/status-chip";
 import { PaginationControls } from "@/components/pagination-controls";
 import { usePagination } from "@/lib/use-pagination";
@@ -16,23 +17,23 @@ import { MessageButton } from "@/components/chat/message-button";
 type RoomInfo = { label: string; propertyName: string; roomCategory: string; pricePerTermUgx: number };
 
 const STATUS_LABEL: Record<LandlordReservationView["status"], string> = {
-  held: "Holding",
-  payment_pending: "Payment pending",
-  payment_failed: "Payment failed",
-  fulfilled: "Reserved",
+  reserved: "Reserved",
+  booked: "Booked",
+  occupied: "Moved in",
+  released: "Released",
   cancelled: "Cancelled",
   refunded: "Refunded",
-  expired: "Hold expired",
+  expired: "Expired",
 };
 
 const STATUS_TONE: Record<
   LandlordReservationView["status"],
   "success" | "warning" | "destructive" | "neutral"
 > = {
-  held: "warning",
-  payment_pending: "warning",
-  payment_failed: "destructive",
-  fulfilled: "success",
+  reserved: "warning",
+  booked: "warning",
+  occupied: "success",
+  released: "destructive",
   cancelled: "neutral",
   refunded: "neutral",
   expired: "neutral",
@@ -40,31 +41,117 @@ const STATUS_TONE: Record<
 
 const FILTERS: { key: "all" | LandlordReservationView["status"]; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "held", label: "Holding" },
-  { key: "payment_pending", label: "Payment pending" },
-  { key: "fulfilled", label: "Reserved" },
+  { key: "reserved", label: "Reserved" },
+  { key: "booked", label: "Booked" },
+  { key: "occupied", label: "Moved in" },
+  { key: "released", label: "Released" },
   { key: "cancelled", label: "Cancelled" },
-  { key: "expired", label: "Hold expired" },
-  { key: "refunded", label: "Refunded" },
+  { key: "expired", label: "Expired" },
 ];
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function holdCountdown(holdExpiresAt: string) {
-  const ms = new Date(holdExpiresAt).getTime() - Date.now();
+function reserveCountdown(reservedExpiresAt: string) {
+  const ms = new Date(reservedExpiresAt).getTime() - Date.now();
   if (ms <= 0) return "expiring";
   const hours = Math.round(ms / (60 * 60 * 1000));
   return hours < 24 ? `${hours}h left` : `${Math.round(hours / 24)}d left`;
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: string | string[] } | null;
+    if (typeof body?.message === "string") return body.message;
+    if (Array.isArray(body?.message)) return body.message.join(", ");
+  }
+  return fallback;
+}
+
+function ReleaseButton({
+  reservationId,
+  onReleased,
+}: {
+  reservationId: string;
+  onReleased: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [refundRequired, setRefundRequired] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      await api(`/reservations/${reservationId}/release`, {
+        method: "POST",
+        body: JSON.stringify({ reason: reason.trim(), refundRequired }),
+      });
+      setOpen(false);
+      onReleased();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't release this bed — try again."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        Release
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogHeader
+          title="Release this bed"
+          description="Frees the bed for someone else to reserve. Always recorded with a reason."
+          onClose={() => setOpen(false)}
+        />
+        <DialogBody>
+          <form id="release-form" onSubmit={submit} className="space-y-3">
+            <label className="block text-sm font-semibold text-foreground">
+              Reason
+              <textarea
+                required
+                autoFocus
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={refundRequired}
+                onChange={(e) => setRefundRequired(e.target.checked)}
+              />
+              A refund is owed for money already collected
+            </label>
+            {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
+          </form>
+        </DialogBody>
+        <DialogFooter>
+          <Button type="submit" form="release-form" disabled={pending || !reason.trim()}>
+            {pending ? "Releasing…" : "Release bed"}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    </>
+  );
+}
+
 export function LandlordReservationsList({
   reservations,
-  roomsByUnitId,
+  roomsByBedId,
 }: {
   reservations: LandlordReservationView[];
-  roomsByUnitId: Map<string, RoomInfo>;
+  roomsByBedId: Map<string, RoomInfo>;
 }) {
   const [rows, setRows] = useState(reservations);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
@@ -82,12 +169,12 @@ export function LandlordReservationsList({
     return rows.filter((r) => {
       if (filter !== "all" && r.status !== filter) return false;
       if (!q) return true;
-      const room = roomsByUnitId.get(r.unitId);
+      const room = roomsByBedId.get(r.bedId);
       return (
         room?.label.toLowerCase().includes(q) || room?.propertyName.toLowerCase().includes(q) || false
       );
     });
-  }, [rows, filter, query, roomsByUnitId]);
+  }, [rows, filter, query, roomsByBedId]);
 
   const { page, setPage, totalPages, pageItems, total, pageSize } = usePagination(filtered, 12);
 
@@ -95,9 +182,7 @@ export function LandlordReservationsList({
     setConfirming((prev) => new Set(prev).add(id));
     try {
       await api(`/reservations/${id}/move-in`, { method: "POST" });
-      setRows((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, moveInConfirmedAt: new Date().toISOString() } : r)),
-      );
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "occupied" } : r)));
     } finally {
       setConfirming((prev) => {
         const next = new Set(prev);
@@ -105,6 +190,10 @@ export function LandlordReservationsList({
         return next;
       });
     }
+  }
+
+  function onReleased(id: string) {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "released" } : r)));
   }
 
   return (
@@ -156,12 +245,12 @@ export function LandlordReservationsList({
             </thead>
             <tbody className="divide-y divide-border">
               {pageItems.map((reservation) => {
-                const room = roomsByUnitId.get(reservation.unitId);
+                const room = roomsByBedId.get(reservation.bedId);
                 const isPending = confirming.has(reservation.id);
                 return (
                   <tr key={reservation.id}>
                     <td className="px-3 py-2.5">
-                      <p className="font-semibold text-foreground">{room?.label ?? reservation.unitId.slice(0, 8)}</p>
+                      <p className="font-semibold text-foreground">{room?.label ?? reservation.bedId.slice(0, 8)}</p>
                       <p className="text-xs text-muted-foreground">
                         {room?.propertyName ?? "—"}
                         {room && ` · ${roomCategoryLabel(room.roomCategory)}`}
@@ -171,9 +260,9 @@ export function LandlordReservationsList({
                       <StatusChip tone={STATUS_TONE[reservation.status]}>
                         {STATUS_LABEL[reservation.status]}
                       </StatusChip>
-                      {reservation.status === "held" && reservation.holdExpiresAt && (
+                      {reservation.status === "reserved" && reservation.reservedExpiresAt && (
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          {holdCountdown(reservation.holdExpiresAt)}
+                          {reserveCountdown(reservation.reservedExpiresAt)}
                         </p>
                       )}
                     </td>
@@ -183,23 +272,29 @@ export function LandlordReservationsList({
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-2">
-                        {reservation.status === "fulfilled" &&
-                          (reservation.moveInConfirmedAt ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
-                              <CheckCircle2 aria-hidden className="size-3.5" />
-                              Moved in
-                            </span>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={isPending}
-                              onClick={() => confirmMoveIn(reservation.id)}
-                            >
-                              {isPending ? "Confirming…" : "Confirm move-in"}
-                            </Button>
-                          ))}
+                        {reservation.status === "booked" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={isPending}
+                            onClick={() => confirmMoveIn(reservation.id)}
+                          >
+                            {isPending ? "Confirming…" : "Confirm move-in"}
+                          </Button>
+                        )}
+                        {reservation.status === "occupied" && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
+                            <CheckCircle2 aria-hidden className="size-3.5" />
+                            Moved in
+                          </span>
+                        )}
+                        {(reservation.status === "reserved" || reservation.status === "booked") && (
+                          <ReleaseButton
+                            reservationId={reservation.id}
+                            onReleased={() => onReleased(reservation.id)}
+                          />
+                        )}
                         <MessageButton reservationId={reservation.id} messagesHref="/landlord/messages" />
                       </div>
                     </td>

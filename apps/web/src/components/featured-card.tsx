@@ -57,7 +57,7 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
               )}
               {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
             </p>
-            <span className="text-xs text-muted-foreground">per semester</span>
+            <span className="text-xs text-muted-foreground">per bed, per semester</span>
           </div>
         </div>
       </Link>

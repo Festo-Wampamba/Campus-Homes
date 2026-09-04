@@ -71,7 +71,7 @@ export function SavedListingsList({ initial }: { initial: ListingSearchResult[] 
                 )}
                 <p className="tabular mt-3 font-display text-lg font-semibold text-foreground">
                   {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
-                  <span className="text-sm font-normal text-muted-foreground"> / semester</span>
+                  <span className="text-sm font-normal text-muted-foreground"> / bed / semester</span>
                 </p>
               </div>
             </Link>

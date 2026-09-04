@@ -59,7 +59,7 @@ beforeAll(async () => {
   await pool.query(
     `TRUNCATE users, students, landlords, ops_staff, semesters, properties,
      property_documents, verification_visits, listings, listing_versions,
-     units, reservations, chat_threads, chat_messages CASCADE`,
+     units, beds, reservations, chat_threads, chat_messages CASCADE`,
   );
 
   participantStudent = await seed(
@@ -121,11 +121,13 @@ beforeAll(async () => {
   );
   const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
   const unitId = unitRes.rows[0].id as string;
+  const bedRes = await pool.query(`SELECT id FROM beds WHERE unit_id = $1`, [unitId]);
+  const bedId = bedRes.rows[0].id as string;
 
   const reservationId = await seed(
-    `INSERT INTO reservations (student_id, unit_id, listing_version_id, idempotency_key)
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, idempotency_key)
      VALUES ($1, $2, $3, 'chat-test-res-0001') RETURNING id`,
-    [participantStudent, unitId, published.listing.currentVersionId],
+    [participantStudent, bedId, published.listing.currentVersionId],
   );
 
   const thread = await chat.ensureThread(participantCtx(), reservationId);

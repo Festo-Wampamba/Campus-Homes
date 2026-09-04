@@ -247,7 +247,7 @@ export function SearchClient() {
               value={minPrice}
               onChange={(e) => setMinPrice(e.target.value)}
               placeholder="Min UGX"
-              aria-label="Minimum price per semester"
+              aria-label="Minimum price per bed per semester"
               className="w-28"
             />
             <Input
@@ -257,7 +257,7 @@ export function SearchClient() {
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
               placeholder="Max UGX"
-              aria-label="Maximum price per semester"
+              aria-label="Maximum price per bed per semester"
               className="w-28"
             />
           </div>

@@ -232,6 +232,13 @@
       "when": 1788160000000,
       "tag": "0033_logto_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788220000000,
+      "tag": "0034_bed_level_reservations",
+      "breakpoints": true
     }
   ]
 }

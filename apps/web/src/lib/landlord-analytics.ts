@@ -17,14 +17,18 @@ export function flattenRooms(details: (PropertyDetail | null)[]) {
   );
 }
 
+// Bed-level now (0033) — a partially-let double still has a free bed
+// counted as "Available", not the whole room lumped into one bucket.
 export function roomStatusBreakdown(rooms: ReturnType<typeof flattenRooms>): RoomStatusSlice[] {
   let available = 0;
   let inProgress = 0;
   let occupied = 0;
   for (const room of rooms) {
-    if (room.reservationStatus === "fulfilled") occupied += 1;
-    else if (room.reservationStatus === "held" || room.reservationStatus === "payment_pending") inProgress += 1;
-    else if (room.reservationStatus === null) available += 1;
+    for (const bed of room.beds) {
+      if (bed.status === "occupied") occupied += 1;
+      else if (bed.status === "reserved" || bed.status === "booked") inProgress += 1;
+      else available += 1;
+    }
   }
   return [
     { name: "Available", value: available, color: "var(--color-muted-foreground)" },
@@ -37,13 +41,14 @@ export function propertyOccupancy(details: (PropertyDetail | null)[]): PropertyO
   return details
     .filter((d): d is PropertyDetail => d !== null && d.rooms.length > 0)
     .map((d) => {
-      const total = d.rooms.length;
-      const occupied = d.rooms.filter((r) => r.reservationStatus === "fulfilled").length;
+      const beds = d.rooms.flatMap((r) => r.beds);
+      const total = beds.length;
+      const occupied = beds.filter((b) => b.status === "occupied").length;
       return {
         name: d.property.name,
         occupied,
         total,
-        occupancyRate: Math.round((occupied / total) * 100),
+        occupancyRate: total > 0 ? Math.round((occupied / total) * 100) : 0,
       };
     })
     .sort((a, b) => b.occupancyRate - a.occupancyRate);
@@ -114,7 +119,7 @@ export function rentValueTrend(
   months = 12,
   now = new Date(),
 ): RentValuePoint[] {
-  const priceByUnit = new Map(rooms.map((r) => [r.id, r.pricePerTermUgx]));
+  const priceByBed = new Map(rooms.flatMap((r) => r.beds.map((b) => [b.id, r.pricePerTermUgx] as const)));
 
   const monthStart = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
   const buckets: { start: Date; label: string; rentValueUgx: number }[] = [];
@@ -130,8 +135,8 @@ export function rentValueTrend(
   }
 
   for (const r of reservations) {
-    if (r.status !== "fulfilled") continue;
-    const price = priceByUnit.get(r.unitId);
+    if (r.status !== "occupied") continue;
+    const price = priceByBed.get(r.bedId);
     if (price === undefined) continue;
     const created = monthStart(new Date(r.createdAt));
     const bucket = buckets.find((b) => b.start.getTime() === created.getTime());
@@ -161,13 +166,13 @@ export function campusDistribution(properties: Property[]): CampusSlice[] {
 // status donut shows.
 export function bookingOutcomes(reservations: LandlordReservationView[]): BookingOutcomeRow[] {
   const labels: Record<string, string> = {
-    fulfilled: "Fulfilled",
+    occupied: "Moved in",
+    booked: "Booked",
+    reserved: "Reserved",
+    released: "Released",
     cancelled: "Cancelled",
     expired: "Expired",
     refunded: "Refunded",
-    held: "Held",
-    payment_pending: "Payment pending",
-    payment_failed: "Payment failed",
   };
   const counts = new Map<string, number>();
   for (const r of reservations) {

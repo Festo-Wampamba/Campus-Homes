@@ -305,7 +305,7 @@ function MoneyCard({
             <span className="mr-1 text-base font-normal text-muted-foreground">From</span>
           )}
           {formatPriceRange(minPriceUgx, maxPriceUgx)}
-          <span className="text-sm font-normal text-muted-foreground"> / semester</span>
+          <span className="text-sm font-normal text-muted-foreground"> / bed / semester</span>
         </p>
         {!compact && (
           <p className="mt-2 text-sm text-muted-foreground">

@@ -12,25 +12,27 @@ export default async function LandlordBookingsPage() {
   const [reservations, properties] = await Promise.all([getLandlordReservations(), getMyProperties()]);
   const details = await Promise.all(properties.map((p) => getPropertyDetail(p.id)));
 
-  const roomsByUnitId = new Map<
+  const roomsByBedId = new Map<
     string,
     { label: string; propertyName: string; roomCategory: string; pricePerTermUgx: number }
   >();
   details.forEach((detail, i) => {
     for (const room of detail?.rooms ?? []) {
-      roomsByUnitId.set(room.id, {
-        label: room.label,
-        propertyName: properties[i].name,
-        roomCategory: room.roomCategory,
-        pricePerTermUgx: room.pricePerTermUgx,
-      });
+      for (const bed of room.beds) {
+        roomsByBedId.set(bed.id, {
+          label: room.label,
+          propertyName: properties[i].name,
+          roomCategory: room.roomCategory,
+          pricePerTermUgx: room.pricePerTermUgx,
+        });
+      }
     }
   });
 
-  const activeCount = reservations.filter((r) => r.status === "held" || r.status === "payment_pending").length;
-  const fulfilledCount = reservations.filter((r) => r.status === "fulfilled").length;
+  const activeCount = reservations.filter((r) => r.status === "reserved" || r.status === "booked").length;
+  const fulfilledCount = reservations.filter((r) => r.status === "occupied").length;
   const fellThroughCount = reservations.filter((r) =>
-    ["cancelled", "expired", "payment_failed"].includes(r.status),
+    ["cancelled", "expired", "released"].includes(r.status),
   ).length;
 
   return (
@@ -45,7 +47,7 @@ export default async function LandlordBookingsPage() {
           <EmptyState
             icon={Inbox}
             title="No bookings yet"
-            body="When a student places a hold on one of your units, it appears here."
+            body="When a student reserves one of your beds, it appears here."
           />
         </div>
       ) : (
@@ -57,7 +59,7 @@ export default async function LandlordBookingsPage() {
             <StatCard label="Fell through" value={String(fellThroughCount)} icon={XCircle} tone="neutral" />
           </div>
 
-          <LandlordReservationsList reservations={reservations} roomsByUnitId={roomsByUnitId} />
+          <LandlordReservationsList reservations={reservations} roomsByBedId={roomsByBedId} />
         </>
       )}
     </>

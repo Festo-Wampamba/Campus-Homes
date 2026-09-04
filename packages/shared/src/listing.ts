@@ -174,7 +174,10 @@ export const listingDetailResponseSchema = z.object({
   // gallery above (Ops-captured). One row per photo; group by unitId to
   // show "view photos" per room.
   unitPhotos: z.array(z.object({ unitId: uuid, storageKey: z.string() })),
-  availability: z.array(z.object({ id: uuid, available: z.boolean() })),
+  // Per-bed now (0033) — a partially-let room still has a free bed to
+  // reserve. `id` is the bed id (not the unit id); group by `unit_id` to
+  // roll up into a unit/category-level available-bed count.
+  availability: z.array(z.object({ id: uuid, unit_id: uuid, available: z.boolean() })),
   // Whole-property gallery — distinct from `photos` above (Ops-captured
   // listing_photos) and unitPhotos (per-room). Landlord-uploadable (0026).
   propertyMedia: z.array(z.object({ id: uuid, storage_key: z.string(), caption: z.string().nullable() })),

@@ -30,6 +30,7 @@ import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import {
+  beds,
   campusPhotos,
   landlordStrikes,
   landlords,
@@ -645,7 +646,7 @@ export class OpsService {
         .returning(),
       );
 
-      await db.insert(units).values(
+      const insertedUnits = await db.insert(units).values(
         input.units.map((u) => ({
           listingId: input.listingId,
           label: u.label,
@@ -655,6 +656,17 @@ export class OpsService {
           depositUgx: u.depositUgx ?? null,
           availableForSemesterId: listing.semesterId,
         })),
+      ).returning();
+
+      // Bed-level inventory (2026-09 redesign): every unit needs its
+      // capacity's worth of beds or it's created entirely unreservable.
+      await db.insert(beds).values(
+        insertedUnits.flatMap((u) =>
+          Array.from({ length: u.capacity }, (_, i) => ({
+            unitId: u.id,
+            label: `Bed ${i + 1}`,
+          })),
+        ),
       );
       return { listing: updated, version, approvedVisit };
     });

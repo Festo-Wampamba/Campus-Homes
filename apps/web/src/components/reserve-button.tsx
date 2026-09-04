@@ -2,20 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UNIVERSITIES, type University } from "@campushomes/shared";
+import type { University } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { UniversitySelectField } from "@/components/university-select-field";
 import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
-
-const UNIVERSITY_LABELS: Record<University, string> = {
-  MUK: "Makerere University (MUK)",
-  MUBS: "Makerere University Business School (MUBS)",
-  KIU: "Kampala International University (KIU)",
-  KYU: "Kyambogo University (KYU)",
-  other: "Other",
-};
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -27,32 +19,27 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 // `needsProfile` = signed-in student has no `students` row yet. Reservations
-// FK to students.user_id, so one must exist before a hold can be created —
+// FK to students.user_id, so one must exist before a Reserve can be created —
 // but that's collected here, inline, on first reserve (one required field)
 // rather than redirecting to a separate /profile page before Reserve even
 // becomes clickable. Full particulars stay editable later at /profile.
-export function ReserveButton({ unitId, needsProfile }: { unitId: string; needsProfile: boolean }) {
+export function ReserveButton({ bedId, needsProfile }: { bedId: string; needsProfile: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProfileStep, setShowProfileStep] = useState(false);
   const [university, setUniversity] = useState<University | "">("");
 
-  async function startHold() {
+  async function startReserve() {
     setError(null);
     setPending(true);
     try {
-      // checkoutUrl is only set on the paid path (RESERVATION_FEE_UGX > 0
-      // via platform_settings) — the Phase 1 default is a free reservation,
-      // already 'fulfilled' by the time this call returns, nothing to pay.
-      const { checkoutUrl } = await api<{ checkoutUrl: string | null }>("/reservations/holds", {
+      // Reserve is a 24h temporary claim (§6) — landlord Books it offline,
+      // no payment/checkout step here at all.
+      await api("/reservations/reserve", {
         method: "POST",
-        body: JSON.stringify({ unitId, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({ bedId, idempotencyKey: crypto.randomUUID() }),
       });
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
-        return;
-      }
       router.push("/reservations");
     } catch (err) {
       setError(errorMessage(err, "Couldn't start your reservation — try again."));
@@ -66,7 +53,7 @@ export function ReserveButton({ unitId, needsProfile }: { unitId: string; needsP
       setShowProfileStep(true);
       return;
     }
-    void startHold();
+    void startReserve();
   }
 
   async function submitProfileAndReserve(e: React.FormEvent) {
@@ -85,7 +72,7 @@ export function ReserveButton({ unitId, needsProfile }: { unitId: string; needsP
       return;
     }
     setShowProfileStep(false);
-    await startHold();
+    await startReserve();
   }
 
   return (
@@ -106,25 +93,7 @@ export function ReserveButton({ unitId, needsProfile }: { unitId: string; needsP
         />
         <DialogBody>
           <form id="reserve-profile-form" onSubmit={submitProfileAndReserve} className="space-y-3">
-            <select
-              required
-              autoFocus
-              value={university}
-              onChange={(e) => setUniversity(e.target.value as University)}
-              className={cn(
-                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
-                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
-            >
-              <option value="" disabled>
-                Select your university
-              </option>
-              {UNIVERSITIES.map((id) => (
-                <option key={id} value={id}>
-                  {UNIVERSITY_LABELS[id]}
-                </option>
-              ))}
-            </select>
+            <UniversitySelectField value={university} onChange={setUniversity} autoFocus />
             {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
           </form>
         </DialogBody>

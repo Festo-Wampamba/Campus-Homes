@@ -17,8 +17,8 @@ export function StatCard({ label, value, detail, icon: Icon, trend, tone = "teal
 
 export function StatusBadge({ value }: { value: unknown }) {
   const text = String(value ?? "unknown").replaceAll("_", " ");
-  const good = ["active", "verified", "passed", "succeeded", "fulfilled", "processed", "sent", "delivered", "configured", "issued"].includes(String(value));
-  const bad = ["suspended", "failed", "rejected", "cancelled", "expired", "unconfigured"].includes(String(value));
+  const good = ["active", "verified", "passed", "succeeded", "fulfilled", "occupied", "processed", "sent", "delivered", "configured", "issued"].includes(String(value));
+  const bad = ["suspended", "failed", "rejected", "cancelled", "expired", "released", "unconfigured"].includes(String(value));
   return <span className={cn("inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-bold capitalize", good ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950" : bad ? "bg-red-50 text-red-700 dark:bg-red-950" : "bg-amber-50 text-amber-700 dark:bg-amber-950")}>{text}</span>;
 }
 

@@ -25,8 +25,10 @@ type CategoryGroup = {
   depositUgx: number | null;
   capacity: number;
   roomCount: number;
+  // Sum of available BEDS across every unit in this category (bed-level
+  // inventory, 0033) — a partially-let double still counts its one free bed.
   availableCount: number;
-  firstAvailableUnitId: string | null;
+  firstAvailableBedId: string | null;
   // Room-specific photos across every unit in this category — a student
   // reserves "a Double", not one numbered room, so photos from any double
   // in the category are representative of what they'd get.
@@ -36,10 +38,10 @@ type CategoryGroup = {
 // A category can back hundreds of physical rooms — rendering one row per
 // room would be both unusable and pointless (a student reserves "a Double",
 // not a specific numbered room). One row per category; reserving auto-picks
-// any available unit in that category server-side identity, same hold logic.
+// any available bed in that category server-side, same reserve() logic.
 function groupByCategory(
   units: Unit[],
-  availableByUnit: Map<string, boolean>,
+  availableBedsByUnit: Map<string, { id: string; available: boolean }[]>,
   unitPhotos: UnitPhoto[],
 ): CategoryGroup[] {
   const photosByUnit = new Map<string, LightboxPhoto[]>();
@@ -52,16 +54,15 @@ function groupByCategory(
   const groups = new Map<string, CategoryGroup>();
   for (const unit of units) {
     const key = `${unit.roomCategory}-${unit.pricePerTermUgx}`;
-    const isAvailable = availableByUnit.get(unit.id) ?? false;
+    const beds = availableBedsByUnit.get(unit.id) ?? [];
+    const availableBeds = beds.filter((b) => b.available);
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
     const existing = groups.get(key);
     if (existing) {
       existing.roomCount += 1;
       existing.roomPhotos.push(...unitPhotoList);
-      if (isAvailable) {
-        existing.availableCount += 1;
-        existing.firstAvailableUnitId ??= unit.id;
-      }
+      existing.availableCount += availableBeds.length;
+      existing.firstAvailableBedId ??= availableBeds[0]?.id ?? null;
     } else {
       groups.set(key, {
         key,
@@ -70,8 +71,8 @@ function groupByCategory(
         depositUgx: unit.depositUgx,
         capacity: unit.capacity,
         roomCount: 1,
-        availableCount: isAvailable ? 1 : 0,
-        firstAvailableUnitId: isAvailable ? unit.id : null,
+        availableCount: availableBeds.length,
+        firstAvailableBedId: availableBeds[0]?.id ?? null,
         roomPhotos: [...unitPhotoList],
       });
     }
@@ -91,15 +92,20 @@ export function RoomCategoryList({
   needsProfile,
 }: {
   units: Unit[];
-  availability: { id: string; available: boolean }[];
+  availability: { id: string; unit_id: string; available: boolean }[];
   photos: LightboxPhoto[];
   unitPhotos: UnitPhoto[];
   propertyName: string;
   canReserve: boolean;
   needsProfile: boolean;
 }) {
-  const availableByUnit = new Map(availability.map((a) => [a.id, a.available]));
-  const groups = groupByCategory(units, availableByUnit, unitPhotos);
+  const availableBedsByUnit = new Map<string, { id: string; available: boolean }[]>();
+  for (const bed of availability) {
+    const list = availableBedsByUnit.get(bed.unit_id) ?? [];
+    list.push({ id: bed.id, available: bed.available });
+    availableBedsByUnit.set(bed.unit_id, list);
+  }
+  const groups = groupByCategory(units, availableBedsByUnit, unitPhotos);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   if (groups.length === 0) {
@@ -125,7 +131,7 @@ export function RoomCategoryList({
             </div>
             <p className="tabular text-sm font-semibold text-foreground">
               {formatUgx(group.pricePerTermUgx)}
-              <span className="font-normal text-muted-foreground"> / semester</span>
+              <span className="font-normal text-muted-foreground"> / bed / semester</span>
               {group.depositUgx != null && (
                 <span className="block text-xs font-normal text-muted-foreground">
                   + {formatUgx(group.depositUgx)} deposit
@@ -171,8 +177,8 @@ export function RoomCategoryList({
                 Property photos
               </Button>
             )}
-            {canReserve && group.firstAvailableUnitId && (
-              <ReserveButton unitId={group.firstAvailableUnitId} needsProfile={needsProfile} />
+            {canReserve && group.firstAvailableBedId && (
+              <ReserveButton bedId={group.firstAvailableBedId} needsProfile={needsProfile} />
             )}
           </li>
         ))}
