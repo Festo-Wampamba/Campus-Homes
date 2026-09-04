@@ -310,11 +310,17 @@ async function main() {
       );
 
       for (const unit of units) {
-        await client.query(
+        const unitRes = await client.query(
           `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, deposit_ugx, available_for_semester_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
           [listingId, unit.label, unit.capacity, unit.roomCategory, unit.priceUgx, unit.depositUgx, semesterId],
         );
+        const unitId = unitRes.rows[0].id;
+        // Bed-level inventory (2026-09 redesign) — every unit needs its
+        // capacity's worth of beds or it's seeded entirely unreservable.
+        for (let i = 1; i <= unit.capacity; i++) {
+          await client.query(`INSERT INTO beds (unit_id, label) VALUES ($1, $2)`, [unitId, `Bed ${i}`]);
+        }
       }
 
       const photos = samplePhotoUrls(spec.name);

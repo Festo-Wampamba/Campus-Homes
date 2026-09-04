@@ -1,9 +1,9 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { BedDouble, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
 import {
-  UNIT_OPERATIONAL_STATUSES,
   type Property,
   type PropertyDetail,
   type TenantAgreementForPropertyRow,
@@ -11,7 +11,7 @@ import {
 } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogBody, DialogHeader } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { PropertyQrCode } from "@/components/property-qr-code";
 import { StatusChip } from "@/components/status-chip";
@@ -38,11 +38,24 @@ const PROPERTY_STATUS_LABEL: Record<string, string> = {
   suspended: "Suspended",
 };
 
+// 'vacant'/'held'/'occupied' predate bed-level inventory (0033) — actual
+// occupancy is now tracked per-bed via the reservation state machine (the
+// Status column), not here. Only the 3 values below are still selectable;
+// the others render read-only if a room somehow still carries one, so the
+// dropdown doesn't silently show something misleading next to real bed
+// status ("Bed 1: Occupied" beside an unrelated "Available" dropdown was
+// exactly the confusing pairing this narrows down).
+const SELECTABLE_OPERATIONAL_STATUSES: UnitOperationalStatus[] = [
+  'available',
+  'under_maintenance',
+  'blocked',
+];
+
 const OPERATIONAL_STATUS_LABEL: Record<UnitOperationalStatus, string> = {
   available: "Available",
-  vacant: "Vacant",
-  held: "Held (manual)",
-  occupied: "Taken off-platform",
+  vacant: "Vacant (legacy)",
+  held: "Held (legacy)",
+  occupied: "Occupied (legacy)",
   under_maintenance: "Maintenance",
   blocked: "Blocked",
 };
@@ -191,16 +204,57 @@ function TenantAgreementsList({ propertyId }: { propertyId: string }) {
   );
 }
 
-function reservationChip(status: PropertyDetail["rooms"][number]["reservationStatus"]) {
-  switch (status) {
-    case "held":
-      return <StatusChip tone="warning">Held</StatusChip>;
-    case "payment_pending":
-      return <StatusChip tone="warning">Payment pending</StatusChip>;
-    case "fulfilled":
-      return <StatusChip tone="neutral">Occupied</StatusChip>;
+function isBedAvailable(bed: PropertyDetail["rooms"][number]["beds"][number]): boolean {
+  return !bed.blocked && bed.status === null;
+}
+
+// A hostel can have 100+ rooms — burying the few still-free beds under a
+// long run of fully-booked rooms (sorted however Ops originally entered
+// them) makes the landlord scroll past everything occupied first. Rooms
+// with more available beds sort to the top; a fully-let room sinks toward
+// the bottom. Ties keep their original relative order.
+function sortRoomsByAvailability(rooms: PropertyDetail["rooms"]): PropertyDetail["rooms"] {
+  return [...rooms]
+    .map((room, index) => ({ room, index, available: room.beds.filter(isBedAvailable).length }))
+    .sort((a, b) => b.available - a.available || a.index - b.index)
+    .map(({ room }) => room);
+}
+
+// One chip per bed (0033) — a room's beds can each be in a different state,
+// so there's no single "the room's status" anymore.
+function bedStatusChip(bed: PropertyDetail["rooms"][number]["beds"][number]) {
+  if (bed.blocked) {
+    return (
+      <StatusChip key={bed.id} tone="neutral">
+        {bed.label}: Blocked
+      </StatusChip>
+    );
+  }
+  switch (bed.status) {
+    case "reserved":
+      return (
+        <StatusChip key={bed.id} tone="warning">
+          {bed.label}: Reserved
+        </StatusChip>
+      );
+    case "booked":
+      return (
+        <StatusChip key={bed.id} tone="warning">
+          {bed.label}: Booked
+        </StatusChip>
+      );
+    case "occupied":
+      return (
+        <StatusChip key={bed.id} tone="neutral">
+          {bed.label}: Occupied
+        </StatusChip>
+      );
     default:
-      return <StatusChip tone="success">Available</StatusChip>;
+      return (
+        <StatusChip key={bed.id} tone="success">
+          {bed.label}: Available
+        </StatusChip>
+      );
   }
 }
 
@@ -244,13 +298,459 @@ function RoomOccupancyControl({
         onChange={(e) => void handleChange(e.target.value as UnitOperationalStatus)}
         className="h-8 rounded-md border border-input bg-background px-1.5 text-xs text-foreground disabled:opacity-60"
       >
-        {UNIT_OPERATIONAL_STATUSES.map((status) => (
+        {!SELECTABLE_OPERATIONAL_STATUSES.includes(room.operationalStatus) && (
+          <option value={room.operationalStatus} disabled>
+            {OPERATIONAL_STATUS_LABEL[room.operationalStatus]}
+          </option>
+        )}
+        {SELECTABLE_OPERATIONAL_STATUSES.map((status) => (
           <option key={status} value={status}>
             {OPERATIONAL_STATUS_LABEL[status]}
           </option>
         ))}
       </select>
       {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  );
+}
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  mtn_momo: "MTN MoMo",
+  airtel_money: "Airtel Money",
+  card: "Card",
+  bank_transfer: "Bank transfer",
+};
+
+/** Book an Available bed directly with no prior Reserve — the walk-in path
+ * (§7 of the redesign doc): a landlord covering a tenant who showed up
+ * in person rather than through the app. */
+function WalkInBookDialog({
+  bedId,
+  bedLabel,
+  open,
+  onOpenChange,
+  onBooked,
+}: {
+  bedId: string;
+  bedLabel: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onBooked: () => void;
+}) {
+  const [studentPhone, setStudentPhone] = useState("");
+  const [bookingFeeCollectedUgx, setBookingFeeCollectedUgx] = useState("");
+  const [depositCollectedUgx, setDepositCollectedUgx] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!studentPhone.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      await api("/reservations/book", {
+        method: "POST",
+        body: JSON.stringify({
+          bedId,
+          studentPhone: studentPhone.trim(),
+          bookingFeeCollectedUgx: bookingFeeCollectedUgx ? Number(bookingFeeCollectedUgx) : undefined,
+          depositCollectedUgx: depositCollectedUgx ? Number(depositCollectedUgx) : undefined,
+          paymentMethod: paymentMethod || undefined,
+        }),
+      });
+      onOpenChange(false);
+      setStudentPhone("");
+      setBookingFeeCollectedUgx("");
+      setDepositCollectedUgx("");
+      setPaymentMethod("");
+      onBooked();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't book this bed — try again."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  // Portaled to <body> — this dialog is invoked from inside the outer
+  // property dialog's own native <dialog>, and two nested <dialog>
+  // elements calling showModal()/close() on each other causes the browser
+  // to close the OUTER one too (a real bug caught live-testing this).
+  // Portaling makes this a DOM sibling instead of a descendant; it still
+  // promotes to the top layer via its own showModal() call, so it stacks
+  // above the outer dialog correctly.
+  return createPortal(
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogHeader
+        title={`Book ${bedLabel}`}
+        description="For a tenant who showed up in person — no prior Reserve needed. The student must already have a CampusHomes account with their university set."
+        onClose={() => onOpenChange(false)}
+      />
+      <DialogBody>
+        <form id={`walkin-book-form-${bedId}`} onSubmit={submit} className="space-y-3">
+          <label className="block text-sm font-semibold text-foreground">
+            Student&apos;s phone number
+            <input
+              required
+              autoFocus
+              type="tel"
+              value={studentPhone}
+              onChange={(e) => setStudentPhone(e.target.value)}
+              placeholder="+2567…"
+              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm font-semibold text-foreground">
+              Booking fee collected (UGX)
+              <input
+                type="number"
+                min={0}
+                value={bookingFeeCollectedUgx}
+                onChange={(e) => setBookingFeeCollectedUgx(e.target.value)}
+                placeholder="Optional"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-foreground">
+              Deposit collected (UGX)
+              <input
+                type="number"
+                min={0}
+                value={depositCollectedUgx}
+                onChange={(e) => setDepositCollectedUgx(e.target.value)}
+                placeholder="Optional"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-foreground">
+            Payment method
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <option value="">Not recorded</option>
+              {Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
+        </form>
+      </DialogBody>
+      <DialogFooter>
+        <Button
+          type="submit"
+          form={`walkin-book-form-${bedId}`}
+          disabled={pending || !studentPhone.trim()}
+          // This dialog is nested inside the outer property dialog's native
+          // <dialog> — without stopping propagation, submitting closes this
+          // dialog AND bubbles a click into the outer one, closing that too.
+          onClick={(e) => e.stopPropagation()}
+        >
+          {pending ? "Booking…" : "Book bed"}
+        </Button>
+      </DialogFooter>
+    </Dialog>,
+    document.body,
+  );
+}
+
+/** Confirms a Reserved bed into Booked (§7's other path — a student already
+ * holds the bed through `reserve()`, so unlike WalkInBookDialog there's no
+ * student to identify, just what the landlord collected in person). */
+function ConfirmBookingDialog({
+  reservationId,
+  bedLabel,
+  open,
+  onOpenChange,
+  onBooked,
+}: {
+  reservationId: string;
+  bedLabel: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onBooked: () => void;
+}) {
+  const [bookingFeeCollectedUgx, setBookingFeeCollectedUgx] = useState("");
+  const [depositCollectedUgx, setDepositCollectedUgx] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      await api("/reservations/book", {
+        method: "POST",
+        body: JSON.stringify({
+          reservationId,
+          bookingFeeCollectedUgx: bookingFeeCollectedUgx ? Number(bookingFeeCollectedUgx) : undefined,
+          depositCollectedUgx: depositCollectedUgx ? Number(depositCollectedUgx) : undefined,
+          paymentMethod: paymentMethod || undefined,
+        }),
+      });
+      onOpenChange(false);
+      setBookingFeeCollectedUgx("");
+      setDepositCollectedUgx("");
+      setPaymentMethod("");
+      onBooked();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't confirm this booking — try again."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  // Portaled for the same reason as WalkInBookDialog above — nested <dialog>
+  // elements would otherwise close the outer property dialog too.
+  return createPortal(
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogHeader
+        title={`Book ${bedLabel}`}
+        description="Confirm this reservation into a booking — record whatever you collected from the student in person or by mobile money."
+        onClose={() => onOpenChange(false)}
+      />
+      <DialogBody>
+        <form id={`confirm-book-form-${reservationId}`} onSubmit={submit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm font-semibold text-foreground">
+              Booking fee collected (UGX)
+              <input
+                type="number"
+                min={0}
+                value={bookingFeeCollectedUgx}
+                onChange={(e) => setBookingFeeCollectedUgx(e.target.value)}
+                placeholder="Optional"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-foreground">
+              Deposit collected (UGX)
+              <input
+                type="number"
+                min={0}
+                value={depositCollectedUgx}
+                onChange={(e) => setDepositCollectedUgx(e.target.value)}
+                placeholder="Optional"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-foreground">
+            Payment method
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <option value="">Not recorded</option>
+              {Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
+        </form>
+      </DialogBody>
+      <DialogFooter>
+        <Button
+          type="submit"
+          form={`confirm-book-form-${reservationId}`}
+          disabled={pending}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {pending ? "Booking…" : "Book bed"}
+        </Button>
+      </DialogFooter>
+    </Dialog>,
+    document.body,
+  );
+}
+
+/** Frees a Reserved or Booked bed back up — always with a reason (§15-16). */
+function ReleaseBedDialog({
+  reservationId,
+  bedLabel,
+  open,
+  onOpenChange,
+  onReleased,
+}: {
+  reservationId: string;
+  bedLabel: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onReleased: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [refundRequired, setRefundRequired] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      await api(`/reservations/${reservationId}/release`, {
+        method: "POST",
+        body: JSON.stringify({ reason: reason.trim(), refundRequired }),
+      });
+      onOpenChange(false);
+      setReason("");
+      setRefundRequired(false);
+      onReleased();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't release this bed — try again."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  // Portaled — same nested-<dialog> reasoning as WalkInBookDialog above.
+  return createPortal(
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogHeader
+        title={`Release ${bedLabel}`}
+        description="Frees the bed for someone else to reserve. Always recorded with a reason."
+        onClose={() => onOpenChange(false)}
+      />
+      <DialogBody>
+        <form id={`release-form-${reservationId}`} onSubmit={submit} className="space-y-3">
+          <label className="block text-sm font-semibold text-foreground">
+            Reason
+            <textarea
+              required
+              autoFocus
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={refundRequired}
+              onChange={(e) => setRefundRequired(e.target.checked)}
+            />
+            A refund is owed for money already collected
+          </label>
+          {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
+        </form>
+      </DialogBody>
+      <DialogFooter>
+        <Button
+          type="submit"
+          form={`release-form-${reservationId}`}
+          disabled={pending || !reason.trim()}
+          // Same nested-<dialog> propagation fix as WalkInBookDialog's submit.
+          onClick={(e) => e.stopPropagation()}
+        >
+          {pending ? "Releasing…" : "Release bed"}
+        </Button>
+      </DialogFooter>
+    </Dialog>,
+    document.body,
+  );
+}
+
+function ConfirmMoveInButton({ reservationId, onConfirmed }: { reservationId: string; onConfirmed: () => void }) {
+  const [pending, setPending] = useState(false);
+
+  async function confirm() {
+    setPending(true);
+    try {
+      await api(`/reservations/${reservationId}/move-in`, { method: "POST" });
+      onConfirmed();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Button type="button" size="sm" disabled={pending} onClick={confirm}>
+      {pending ? "Confirming…" : "Confirm move-in"}
+    </Button>
+  );
+}
+
+/** Per-bed action row (0033) — Available beds can be walk-in Booked;
+ * Reserved/Booked beds can be Released (and Booked ones moved in); an
+ * Occupied bed has no action here (future tenancy rules are out of scope,
+ * §19). A manually blocked bed has none either — unblock via operational
+ * status isn't wired here since blocking is bed-level, not room-level. */
+function BedActions({
+  bed,
+  onChanged,
+}: {
+  bed: PropertyDetail["rooms"][number]["beds"][number];
+  onChanged: () => void;
+}) {
+  const [showBook, setShowBook] = useState(false);
+  const [showRelease, setShowRelease] = useState(false);
+
+  if (bed.blocked || bed.status === "occupied") return null;
+
+  if (bed.status === null) {
+    return (
+      <>
+        <Button type="button" variant="secondary" size="sm" onClick={() => setShowBook(true)}>
+          Book
+        </Button>
+        <WalkInBookDialog
+          bedId={bed.id}
+          bedLabel={bed.label}
+          open={showBook}
+          onOpenChange={setShowBook}
+          onBooked={onChanged}
+        />
+      </>
+    );
+  }
+
+  // reserved or booked — reservationId is always set once status is non-null.
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {bed.status === "reserved" && bed.reservationId && (
+        <>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setShowBook(true)}>
+            Book
+          </Button>
+          <ConfirmBookingDialog
+            reservationId={bed.reservationId}
+            bedLabel={bed.label}
+            open={showBook}
+            onOpenChange={setShowBook}
+            onBooked={onChanged}
+          />
+        </>
+      )}
+      {bed.status === "booked" && bed.reservationId && (
+        <ConfirmMoveInButton reservationId={bed.reservationId} onConfirmed={onChanged} />
+      )}
+      <Button type="button" variant="secondary" size="sm" onClick={() => setShowRelease(true)}>
+        Release
+      </Button>
+      {bed.reservationId && (
+        <ReleaseBedDialog
+          reservationId={bed.reservationId}
+          bedLabel={bed.label}
+          open={showRelease}
+          onOpenChange={setShowRelease}
+          onReleased={onChanged}
+        />
+      )}
     </div>
   );
 }
@@ -492,6 +992,19 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
     };
   }, [detail]);
 
+  // Book/Release/Confirm-move-in all change bed state server-side in ways
+  // that ripple beyond a single field (status, reservationId, bookedAt,
+  // fee/deposit) — a full refetch is simpler and safer than reconciling
+  // partial state client-side.
+  async function refreshDetail() {
+    try {
+      const refreshed = await api<PropertyDetail>(`/listings/properties/${propertyId}/detail`);
+      setDetail(refreshed);
+    } catch {
+      // Transient — the bed grid just keeps showing its pre-action state.
+    }
+  }
+
   async function requestListing() {
     if (!semesterId) return;
     setRequesting(true);
@@ -539,19 +1052,20 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
   }
 
   const rooms = detail.rooms;
+  const beds = rooms.flatMap((r) =>
+    r.beds.map((b) => ({ ...b, roomOperationalStatus: r.operationalStatus })),
+  );
   const stats = {
-    total: rooms.length,
-    available: rooms.filter(
-      (r) =>
-        r.reservationStatus === null &&
-        (r.operationalStatus === "available" || r.operationalStatus === "vacant"),
+    total: beds.length,
+    available: beds.filter(
+      (b) =>
+        !b.blocked &&
+        b.status === null &&
+        (b.roomOperationalStatus === "available" || b.roomOperationalStatus === "vacant"),
     ).length,
-    occupied: rooms.filter(
-      (r) => r.reservationStatus === "fulfilled" || r.operationalStatus === "occupied",
-    ).length,
-    pending: rooms.filter(
-      (r) => r.reservationStatus === "held" || r.reservationStatus === "payment_pending",
-    ).length,
+    occupied: beds.filter((b) => b.status === "occupied" || b.roomOperationalStatus === "occupied")
+      .length,
+    pending: beds.filter((b) => b.status === "reserved" || b.status === "booked").length,
   };
 
   return (
@@ -632,15 +1146,15 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                 <th scope="col" className="px-3 py-2">Room</th>
                 <th scope="col" className="px-3 py-2">Type</th>
                 <th scope="col" className="px-3 py-2">Sleeps</th>
-                <th scope="col" className="px-3 py-2">Price / semester</th>
+                <th scope="col" className="px-3 py-2">Price / bed / semester</th>
                 <th scope="col" className="px-3 py-2">Deposit</th>
                 <th scope="col" className="px-3 py-2">Status</th>
-                <th scope="col" className="px-3 py-2">Occupancy</th>
+                <th scope="col" className="px-3 py-2">Room override</th>
                 <th scope="col" className="px-3 py-2">Photos</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {detail.rooms.map((room) => {
+              {sortRoomsByAvailability(detail.rooms).map((room) => {
                 const expanded = expandedRoomId === room.id;
                 return (
                   <Fragment key={room.id}>
@@ -656,7 +1170,13 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                       <td className="px-3 py-2 text-muted-foreground">
                         {room.depositUgx != null ? formatUgx(room.depositUgx) : "—"}
                       </td>
-                      <td className="px-3 py-2">{reservationChip(room.reservationStatus)}</td>
+                      <td className="px-3 py-2">
+                        {/* Compact by default — a quad's 4 beds shouldn't force
+                            4 rows of buttons into view for every room in a
+                            100-room hostel. Expand for the actual Book/
+                            Release/Confirm controls. */}
+                        <div className="flex flex-wrap gap-1">{room.beds.map(bedStatusChip)}</div>
+                      </td>
                       <td className="px-3 py-2">
                         <RoomOccupancyControl
                           room={room}
@@ -682,7 +1202,20 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                     </tr>
                     {expanded && (
                       <tr>
-                        <td colSpan={8} className="bg-muted/10 px-3 py-3">
+                        <td colSpan={8} className="space-y-4 bg-muted/10 px-3 py-3">
+                          <div>
+                            <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase">
+                              Beds
+                            </p>
+                            <div className="space-y-1.5">
+                              {room.beds.map((bed) => (
+                                <div key={bed.id} className="flex flex-wrap items-center gap-1.5">
+                                  {bedStatusChip(bed)}
+                                  <BedActions bed={bed} onChanged={refreshDetail} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                           <RoomPhotoManager
                             room={room}
                             onPhotosChange={(photos) => setRoomPhotos(room.id, photos)}

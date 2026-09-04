@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { StudentProfileInlineStep } from "@/components/student-profile-inline-step";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
 import { getMyTenantAgreement, getPropertySummary, getTenantAgreementTemplate } from "@/lib/tenant-agreement";
@@ -54,12 +55,11 @@ export default async function TenantAgreementPage({
   }
 
   const profile = await getStudentProfile();
-  if (!profile) {
-    redirect(`/profile?next=/agreement/${propertyId}`);
-  }
-
   const template = await getTenantAgreementTemplate(propertyId);
-  const existing = template ? await getMyTenantAgreement(propertyId) : null;
+  // A signed-up-but-profile-less student can't have an existing agreement
+  // (the FK requires a students row), so skip the lookup rather than firing
+  // a request that can only ever come back empty.
+  const existing = template && profile ? await getMyTenantAgreement(propertyId) : null;
 
   return (
     <div className="flex flex-1 items-center justify-center py-8">
@@ -81,6 +81,8 @@ export default async function TenantAgreementPage({
                 Use the paper form instead
               </a>
             </>
+          ) : !profile ? (
+            <StudentProfileInlineStep />
           ) : existing ? (
             <>
               <h1 className="font-display text-lg font-bold text-foreground">

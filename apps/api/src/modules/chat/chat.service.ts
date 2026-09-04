@@ -37,7 +37,8 @@ export class ChatService {
       const partiesRes = await client.query(
         `SELECT r.student_id, p.landlord_id
          FROM reservations r
-         JOIN units u ON u.id = r.unit_id
+         JOIN beds b ON b.id = r.bed_id
+         JOIN units u ON u.id = b.unit_id
          JOIN listings l ON l.id = u.listing_id
          JOIN properties p ON p.id = l.property_id
          WHERE r.id = $1`,

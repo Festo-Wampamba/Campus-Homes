@@ -65,6 +65,10 @@ export function RoomCategoryRows({
 
   return (
     <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Price is per bed, not per room — for a Double or Triple, enter what one bed costs, the same
+        number you&apos;d quote a student moving into just one space in that room.
+      </p>
       {rows.map((row, i) => (
         <div
           key={row.key}
@@ -103,7 +107,7 @@ export function RoomCategoryRows({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-price-${i}`}>Price / semester (UGX)</Label>
+            <Label htmlFor={`${idPrefix}-price-${i}`}>Price per bed / semester (UGX)</Label>
             <Input
               id={`${idPrefix}-price-${i}`}
               type="number"

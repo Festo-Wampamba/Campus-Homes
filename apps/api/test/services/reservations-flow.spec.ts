@@ -1,14 +1,15 @@
 /**
- * Service-level flow tests (brief §18): the reservation-hold state machine,
- * payment-webhook idempotency, and the offline-sync checklist endpoint's
- * idempotency. Runs against the docker test DB through the real services.
+ * Service-level flow tests (brief §18, redesigned 2026-09 for the bed-level
+ * Reserve -> Book -> Move-in state machine): reservation state transitions,
+ * the 3-active-reservations-platform-wide cap, walk-in booking, release, and
+ * expiry. Runs against the docker test DB through the real services.
  */
 import { Pool } from 'pg';
+import { eq } from 'drizzle-orm';
 
-import { StubPayments } from '../../src/adapters/payments.adapter';
 import { RlsDb } from '../../src/db/db.module';
 import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
-import { LedgerService } from '../../src/modules/finance/ledger.service';
+import { reservations } from '../../src/db/schema';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
@@ -19,41 +20,50 @@ const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
   'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
 
-// Must be set before ReservationsService is constructed below — it reads
-// PAYMENTS_ENABLED once via loadEnv() at construction time. This suite
-// specifically exercises the paid/held flow (platform_settings overrides
-// the fee back to a nonzero value in beforeAll), so it needs the gate open,
-// unlike the app's real Phase 1 default (RESERVATION_FEE_UGX = 0, gate
-// irrelevant since a free reservation never reaches it).
-process.env.PAYMENTS_ENABLED = 'true';
-// Same construction-time loadEnv() also requires DATABASE_URL; bare
-// `pnpm test` doesn't export one, so fall back to the docker test DB.
+// ReservationsService reads DATABASE_URL once via loadEnv() at construction
+// time; bare `pnpm test` doesn't export one, so fall back to the docker test DB.
 process.env.DATABASE_URL = process.env.DATABASE_URL || TEST_DATABASE_URL;
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-// Only inviteLandlord() touches auth.api — unused by anything these tests exercise.
+// Only inviteLandlord() touches Logto's management API — unused by anything these tests exercise.
 const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as LogtoManagementClient);
-const ledger = new LedgerService();
-const reservationsService = new ReservationsService(
-  rlsDb,
-  audit,
-  new StubPayments('http://localhost:3000'),
-  null,
-  null,
-  ledger,
-);
+const reservationsService = new ReservationsService(rlsDb, audit, null, null);
+
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+/** Mirrors JobsRunner.expireReservation (jobs.module.ts) exactly, without
+ * importing the real module — that pulls in AuthModule and its Logto
+ * client setup, more weight than this suite needs to construct just to
+ * exercise the expiry transition. Only 'reserved' expires; 'booked' is
+ * left untouched. */
+async function expireReservation(reservationId: string): Promise<void> {
+  await rlsDb.run({ userId: NIL_UUID, role: 'service_role' }, async (db) => {
+    const reservation = await db.query.reservations.findFirst({
+      where: eq(reservations.id, reservationId),
+    });
+    if (!reservation || reservation.status !== 'reserved') return;
+    await db
+      .update(reservations)
+      .set({ status: 'expired', updatedAt: new Date() })
+      .where(eq(reservations.id, reservationId));
+  });
+}
 
 let student1: string;
 let student2: string;
+let student3: string;
 let landlord1: string;
+let landlord2: string;
 let opsLead: string;
 let inspectorId: string;
 let listingId: string;
 let unitId: string;
+let bedId: string; // the sole bed on unitId (capacity 1)
 
-const studentCtx = (): RlsContext => ({ userId: student1, role: 'student' });
+const studentCtx = (userId: string): RlsContext => ({ userId, role: 'student' });
+const landlordCtx = (userId: string): RlsContext => ({ userId, role: 'landlord' });
 const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
 
 const FULL_CHECKLIST = Object.fromEntries(
@@ -67,22 +77,27 @@ async function seed(sql: string, params: unknown[] = []): Promise<string> {
   return res.rows[0]?.id as string;
 }
 
+/** Clones a fresh single-bed unit off the same listing as unitId, with its
+ * one bed, for tests that need inventory beyond the beforeAll-seeded Room 1A. */
+async function seedUnitWithBed(label: string): Promise<{ unitId: string; bedId: string }> {
+  const newUnitId = await seed(
+    `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
+     SELECT listing_id, $2, 1, room_category, price_per_term_ugx, available_for_semester_id
+     FROM units WHERE id = $1 RETURNING id`,
+    [unitId, label],
+  );
+  const newBedId = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [
+    newUnitId,
+  ]);
+  return { unitId: newUnitId, bedId: newBedId };
+}
+
 beforeAll(async () => {
   await pool.query(
     `TRUNCATE users, students, landlords, ops_staff, semesters, properties,
      property_documents, verification_visits, listings, listing_versions,
-     units, reservations, payments, refunds, move_ins, audit_log,
-     notifications CASCADE`,
-  );
-
-  // The Phase 1 default (RESERVATION_FEE_UGX = 0) skips the whole paid
-  // flow — this describe block specifically tests that flow, so it needs
-  // the platform_settings override a real deployment would use to turn
-  // the fee back on, same mechanism, not a test-only shortcut.
-  await pool.query(
-    `INSERT INTO platform_settings (key, value, description)
-     VALUES ('reservation_fee_ugx', '5000'::jsonb, 'test override')
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+     units, beds, reservations, reservation_releases, payments, refunds,
+     move_ins, audit_log, notifications CASCADE`,
   );
 
   student1 = await seed(
@@ -91,8 +106,14 @@ beforeAll(async () => {
   student2 = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000002', 'student', 'active') RETURNING id`,
   );
+  student3 = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000006', 'student', 'active') RETURNING id`,
+  );
   landlord1 = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000003', 'landlord', 'active') RETURNING id`,
+  );
+  landlord2 = await seed(
+    `INSERT INTO users (phone, role, status) VALUES ('+256710000007', 'landlord', 'active') RETURNING id`,
   );
   opsLead = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000004', 'ops_lead', 'active') RETURNING id`,
@@ -100,10 +121,13 @@ beforeAll(async () => {
   inspectorId = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000005', 'ops_inspector', 'active') RETURNING id`,
   );
-  await pool.query(`INSERT INTO students (user_id, university) VALUES ($1), ($2)`.replace('($1), ($2)', `($1, 'MUK'), ($2, 'MUK')`), [student1, student2]);
   await pool.query(
-    `INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'LL One', 'verified')`,
-    [landlord1],
+    `INSERT INTO students (user_id, university) VALUES ($1, 'MUK'), ($2, 'MUK'), ($3, 'MUK')`,
+    [student1, student2, student3],
+  );
+  await pool.query(
+    `INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'LL One', 'verified'), ($2, 'LL Two', 'verified')`,
+    [landlord1, landlord2],
   );
   await pool.query(
     `INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`,
@@ -130,7 +154,7 @@ beforeAll(async () => {
     [property, semester],
   );
 
-  // Publish through the real ops path: version snapshot + verified flip + unit.
+  // Publish through the real ops path: version snapshot + verified flip + unit + beds.
   const published = await ops.publishListing(leadCtx(), {
     listingId,
     amenities: { water: true, power: true },
@@ -140,6 +164,8 @@ beforeAll(async () => {
   expect(published.listing.status).toBe('verified');
   const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
   unitId = unitRes.rows[0].id as string;
+  const bedRes = await pool.query(`SELECT id FROM beds WHERE unit_id = $1`, [unitId]);
+  bedId = bedRes.rows[0].id as string;
 });
 
 afterAll(async () => {
@@ -155,6 +181,11 @@ describe('listing publish (ops path)', () => {
       [listingId],
     );
     expect(res.rows[0].version_number).toBe(1);
+  });
+
+  it("publishing creates a bed per unit of capacity (bed-level inventory, §5)", async () => {
+    const res = await pool.query(`SELECT label FROM beds WHERE unit_id = $1 ORDER BY label`, [unitId]);
+    expect(res.rows.map((r) => r.label)).toEqual(['Bed 1']);
   });
 
   it("promotes the approving visit's staged photos into listing_photos", async () => {
@@ -204,8 +235,6 @@ describe('listing publish (ops path)', () => {
   });
 
   it('publishing a listing with no staged photos leaves listing_photos empty (no crash)', async () => {
-    // The very first describe's listingId/version — beforeAll seeded that
-    // visit with no photo_storage_keys at all (column left null).
     const version = await pool.query(
       `SELECT current_version_id FROM listings WHERE id = $1`,
       [listingId],
@@ -218,233 +247,509 @@ describe('listing publish (ops path)', () => {
   });
 });
 
-describe('reservation hold state machine', () => {
-  const KEY_1 = 'hold-key-0000000001';
+describe('reserve -> book -> move-in (bed-level state machine, §6-8)', () => {
+  const KEY_1 = 'reserve-key-0000000001';
 
-  it('creates a held reservation with a pending payment and checkout url', async () => {
-    const result = await reservationsService.createHold(
-      studentCtx(),
-      { unitId, idempotencyKey: KEY_1 },
-      'http://localhost:3000/r',
-    );
-    expect({
-      status: result.reservation.status,
-      paymentStatus: result.payment?.status,
-      hasCheckout: 'checkoutUrl' in result && Boolean(result.checkoutUrl && result.checkoutUrl.length > 0),
-    }).toEqual({ status: 'held', paymentStatus: 'pending', hasCheckout: true });
+  it('creates a reserved bed with a 24h expiry, no payment involved', async () => {
+    const reservation = await reservationsService.reserve(studentCtx(student1), {
+      bedId,
+      idempotencyKey: KEY_1,
+    });
+    expect(reservation.status).toBe('reserved');
+    expect(reservation.reservedExpiresAt).not.toBeNull();
+    expect(reservation.bookedAt).toBeNull();
   });
 
   it('replays the same idempotency key onto the same reservation', async () => {
-    const first = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [
-      KEY_1,
-    ]);
-    const replay = await reservationsService.createHold(
-      studentCtx(),
-      { unitId, idempotencyKey: KEY_1 },
-      'http://localhost:3000/r',
-    );
-    expect(replay.reservation.id).toBe(first.rows[0].id);
+    const first = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
+    const replay = await reservationsService.reserve(studentCtx(student1), {
+      bedId,
+      idempotencyKey: KEY_1,
+    });
+    expect(replay.id).toBe(first.rows[0].id);
   });
 
-  it('rejects a second live hold on the same unit', async () => {
+  it('rejects a second live reservation on the same bed', async () => {
     await expect(
-      reservationsService.createHold(
-        { userId: student2, role: 'student' },
-        { unitId, idempotencyKey: 'hold-key-0000000002' },
-        'http://localhost:3000/r',
-      ),
-    ).rejects.toThrow(/live hold/i);
+      reservationsService.reserve(studentCtx(student2), {
+        bedId,
+        idempotencyKey: 'reserve-key-0000000002',
+      }),
+    ).rejects.toThrow(/live reservation/i);
   });
 
-  it('fulfills the reservation when the payment webhook succeeds', async () => {
-    const payment = await pool.query(
-      `SELECT p.provider_ref FROM payments p
-       JOIN reservations r ON r.id = p.reservation_id
-       WHERE r.idempotency_key = $1`,
-      [KEY_1],
-    );
-    const outcome = await reservationsService.applyPaymentWebhook({
-      txRef: payment.rows[0].provider_ref as string,
-      providerTxnId: 'fw-txn-1001',
-      status: 'successful',
-      paymentMethod: 'mobilemoneyug',
-      raw: { test: true },
-    });
-    expect(outcome).toEqual({ applied: true, outcome: 'fulfilled' });
+  it("a different landlord cannot Book someone else's bed", async () => {
+    const r = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
+    await expect(
+      reservationsService.book(landlordCtx(landlord2), { reservationId: r.rows[0].id as string }),
+    ).rejects.toThrow(/permission/i);
   });
 
-  it('posts a balanced hold-fee revenue journal entry alongside the succeeded payment', async () => {
-    const rows = await pool.query(
-      `SELECT a.code, jl.debit_ugx AS "debitUgx", jl.credit_ugx AS "creditUgx"
-       FROM journal_lines jl
-       JOIN journal_entries je ON je.id = jl.entry_id
-       JOIN ledger_accounts a ON a.id = jl.account_id
-       JOIN payments p ON p.id = je.payment_id
-       WHERE p.provider_txn_id = 'fw-txn-1001'
-       ORDER BY a.code`,
-    );
-    expect(rows.rows).toEqual([
-      { code: '1000', debitUgx: 5000, creditUgx: 0 },
-      { code: '4000', debitUgx: 0, creditUgx: 5000 },
-    ]);
+  it('the bed\'s landlord Books the reserved bed, recording an offline fee', async () => {
+    const r = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: r.rows[0].id as string,
+      bookingFeeCollectedUgx: 50_000,
+      paymentMethod: 'bank_transfer',
+    }))!;
+    expect(booked.status).toBe('booked');
+    expect(booked.bookedBy).toBe(landlord1);
+    expect(booked.reservedExpiresAt).toBeNull();
+    expect(booked.bookingFeeCollectedUgx).toBe(50_000);
   });
 
-  it('ignores a duplicate webhook for the same transaction', async () => {
-    const payment = await pool.query(
-      `SELECT p.provider_ref FROM payments p
-       JOIN reservations r ON r.id = p.reservation_id
-       WHERE r.idempotency_key = $1`,
-      [KEY_1],
-    );
-    const outcome = await reservationsService.applyPaymentWebhook({
-      txRef: payment.rows[0].provider_ref as string,
-      providerTxnId: 'fw-txn-1001',
-      status: 'successful',
-      raw: {},
-    });
-    expect(outcome).toEqual({ applied: false, reason: 'duplicate webhook' });
+  it('cannot Book a reservation that is already booked', async () => {
+    const r = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
+    await expect(
+      reservationsService.book(landlordCtx(landlord1), { reservationId: r.rows[0].id as string }),
+    ).rejects.toThrow(/cannot book/i);
   });
 
-  it('confirms move-in by the student on the fulfilled reservation', async () => {
+  it('confirms move-in by the student on the booked reservation, flipping to occupied', async () => {
     const r = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
     const moveIn = await reservationsService.confirmMoveIn(
-      studentCtx(),
+      studentCtx(student1),
       r.rows[0].id as string,
     );
     expect(moveIn).toMatchObject({ confirmedByRole: 'student' });
-  });
 
-  it('refunds instead of activating when the webhook lands on an expired hold', async () => {
-    // Free the unit, then build an already-expired hold directly.
-    await pool.query(
-      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-       SELECT listing_id, 'Room 2B', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
-      [unitId],
-    );
-    const unit2 = (
-      await pool.query(`SELECT id FROM units WHERE label = 'Room 2B'`)
-    ).rows[0].id as string;
-
-    const hold = await reservationsService.createHold(
-      { userId: student2, role: 'student' },
-      { unitId: unit2, idempotencyKey: 'hold-key-0000000003' },
-      'http://localhost:3000/r',
-    );
-    await pool.query(
-      `UPDATE reservations SET hold_expires_at = now() - interval '1 hour' WHERE id = $1`,
-      [hold.reservation.id],
-    );
-    const payment = await pool.query(
-      `SELECT provider_ref FROM payments WHERE reservation_id = $1`,
-      [hold.reservation.id],
-    );
-    const outcome = await reservationsService.applyPaymentWebhook({
-      txRef: payment.rows[0].provider_ref as string,
-      providerTxnId: 'fw-txn-2002',
-      status: 'successful',
-      raw: {},
-    });
-    expect(outcome).toEqual({ applied: true, outcome: 'refunded_expired_hold' });
-  });
-
-  it('records the refund row for the expired-hold payment', async () => {
-    const res = await pool.query(
-      `SELECT reason FROM refunds rf
-       JOIN payments p ON p.id = rf.payment_id
-       WHERE p.provider_txn_id = 'fw-txn-2002'`,
-    );
-    expect(res.rows[0].reason).toBe('cooling_off');
-  });
-
-  it('posts a balanced refund journal entry for the expired-hold payment, linked to the refund row', async () => {
-    const rows = await pool.query(
-      `SELECT a.code, jl.debit_ugx AS "debitUgx", jl.credit_ugx AS "creditUgx"
-       FROM journal_lines jl
-       JOIN ledger_accounts a ON a.id = jl.account_id
-       JOIN journal_entries je ON je.id = jl.entry_id
-       JOIN refunds rf ON rf.id = je.refund_id
-       JOIN payments p ON p.id = rf.payment_id
-       WHERE p.provider_txn_id = 'fw-txn-2002'
-       ORDER BY a.code`,
-    );
-    expect(rows.rows).toEqual([
-      { code: '1000', debitUgx: 0, creditUgx: 5000 },
-      { code: '4900', debitUgx: 5000, creditUgx: 0 },
+    const status = await pool.query(`SELECT status FROM reservations WHERE id = $1`, [
+      r.rows[0].id,
     ]);
+    expect(status.rows[0].status).toBe('occupied');
   });
 
-  it('lets a student cancel their own held reservation', async () => {
-    await pool.query(
-      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-       SELECT listing_id, 'Room 3C', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
-      [unitId],
+  it('cannot confirm move-in twice (already occupied, not booked)', async () => {
+    const r = await pool.query(`SELECT id FROM reservations WHERE idempotency_key = $1`, [KEY_1]);
+    await expect(
+      reservationsService.confirmMoveIn(studentCtx(student1), r.rows[0].id as string),
+    ).rejects.toThrow(/only a booked reservation/i);
+  });
+
+  it('the landlord can also confirm move-in (not just the student)', async () => {
+    // A dedicated student, never reused after this test — moving into
+    // 'occupied' on the default far-future semester would otherwise trip
+    // the new occupancy-lock-in rule for every later reserve() call student2
+    // makes in this file.
+    const landlordMoveInStudent = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000095', 'student', 'active') RETURNING id`,
     );
-    const unit3 = (
-      await pool.query(`SELECT id FROM units WHERE label = 'Room 3C'`)
-    ).rows[0].id as string;
-    const hold = await reservationsService.createHold(
-      studentCtx(),
-      { unitId: unit3, idempotencyKey: 'hold-key-0000000004' },
-      'http://localhost:3000/r',
-    );
-    const result = await reservationsService.cancel(studentCtx(), hold.reservation.id);
-    expect(result).toEqual({ outcome: 'cancelled' });
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [
+      landlordMoveInStudent,
+    ]);
+    const { bedId: bed2 } = await seedUnitWithBed('Room 1B');
+    const reserved = await reservationsService.reserve(studentCtx(landlordMoveInStudent), {
+      bedId: bed2,
+      idempotencyKey: 'reserve-key-landlord-movein',
+    });
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: reserved.id,
+    }))!;
+    const moveIn = await reservationsService.confirmMoveIn(landlordCtx(landlord1), booked.id);
+    expect(moveIn).toMatchObject({ confirmedByRole: 'landlord' });
   });
 });
 
-describe('free reservation (Phase 1 default: reservation_fee_ugx = 0)', () => {
-  beforeAll(async () => {
-    // Overrides this file's own paid-flow setup back to the app's real
-    // Phase 1 default for this block only — subsequent describes below
-    // don't call createHold(), so nothing needs restoring after.
-    await pool.query(
-      `UPDATE platform_settings SET value = '0'::jsonb WHERE key = 'reservation_fee_ugx'`,
-    );
+describe('walk-in booking (Book directly on an Available bed, §7)', () => {
+  it('a landlord can Book an available bed directly with no prior Reserve', async () => {
+    const { bedId: bed3 } = await seedUnitWithBed('Room 1C');
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      bedId: bed3,
+      studentPhone: '+256710000006', // student3
+      depositCollectedUgx: 100_000,
+      paymentMethod: 'mtn_momo',
+    }))!;
+    expect(booked.status).toBe('booked');
+    expect(booked.studentId).toBe(student3);
+    expect(booked.depositCollectedUgx).toBe(100_000);
   });
 
-  it('creates a reservation as fulfilled immediately, no payment or checkout', async () => {
-    await pool.query(
-      `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-       SELECT listing_id, 'Room 4D', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
-      [unitId],
+  it('rejects walk-in booking for a phone number with no student profile', async () => {
+    const { bedId: bed4 } = await seedUnitWithBed('Room 1D');
+    await expect(
+      reservationsService.book(landlordCtx(landlord1), {
+        bedId: bed4,
+        studentPhone: '+256799999999',
+      }),
+    ).rejects.toThrow(/no student account/i);
+  });
+});
+
+describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
+  it('releases a Reserved bed with a reason, no refund flagged when nothing was collected', async () => {
+    const { bedId: bed5 } = await seedUnitWithBed('Room 2A');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bed5,
+      idempotencyKey: 'reserve-key-release-1',
+    });
+    const outcome = await reservationsService.release(landlordCtx(landlord1), reserved.id, {
+      reason: 'Student never showed up',
+      refundRequired: false,
+    });
+    expect(outcome).toEqual({ outcome: 'released' });
+
+    const row = await pool.query(`SELECT status FROM reservations WHERE id = $1`, [reserved.id]);
+    expect(row.rows[0].status).toBe('released');
+
+    const release = await pool.query(
+      `SELECT reason, refund_required FROM reservation_releases WHERE reservation_id = $1`,
+      [reserved.id],
     );
-    const freeUnit = (
-      await pool.query(`SELECT id FROM units WHERE label = 'Room 4D'`)
-    ).rows[0].id as string;
+    expect(release.rows[0]).toEqual({ reason: 'Student never showed up', refund_required: false });
+  });
 
-    const result = await reservationsService.createHold(
-      studentCtx(),
-      { unitId: freeUnit, idempotencyKey: 'hold-key-free-0000001' },
-      'http://localhost:3000/r',
+  it('releasing a Booked bed defaults refundRequired to true when money was collected', async () => {
+    const { bedId: bed6 } = await seedUnitWithBed('Room 2B');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bed6,
+      idempotencyKey: 'reserve-key-release-2',
+    });
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: reserved.id,
+      bookingFeeCollectedUgx: 20_000,
+    }))!;
+    // refundRequired deliberately omitted — testing the service's own
+    // hadMoneyCollected default, not the zod-schema default (bypassed here).
+    await reservationsService.release(landlordCtx(landlord1), booked.id, {
+      reason: 'Property double-let by mistake',
+    } as never);
+    const release = await pool.query(
+      `SELECT refund_required FROM reservation_releases WHERE reservation_id = $1`,
+      [booked.id],
     );
+    expect(release.rows[0].refund_required).toBe(true);
+  });
 
-    expect(result.reservation.status).toBe('fulfilled');
-    expect(result.reservation.holdExpiresAt).toBeNull();
-    expect(result.payment).toBeNull();
-    expect('checkoutUrl' in result && result.checkoutUrl).toBeNull();
+  it('a different landlord cannot release a bed on someone else\'s property', async () => {
+    const { bedId: bed7 } = await seedUnitWithBed('Room 2C');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bed7,
+      idempotencyKey: 'reserve-key-release-3',
+    });
+    await expect(
+      reservationsService.release(landlordCtx(landlord2), reserved.id, {
+        reason: 'attack',
+        refundRequired: false,
+      }),
+    ).rejects.toThrow(/permission/i);
+  });
 
-    const paymentRow = await pool.query(`SELECT id FROM payments WHERE reservation_id = $1`, [
-      result.reservation.id,
+  it('cannot release an already-released reservation', async () => {
+    const { bedId: bed8 } = await seedUnitWithBed('Room 2D');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bed8,
+      idempotencyKey: 'reserve-key-release-4',
+    });
+    await reservationsService.release(landlordCtx(landlord1), reserved.id, {
+      reason: 'first release',
+      refundRequired: false,
+    });
+    await expect(
+      reservationsService.release(landlordCtx(landlord1), reserved.id, {
+        reason: 'second release',
+        refundRequired: false,
+      }),
+    ).rejects.toThrow(/cannot release/i);
+  });
+
+  it('releasing a bed frees it for a new reservation', async () => {
+    const { bedId: bed9 } = await seedUnitWithBed('Room 2E');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bed9,
+      idempotencyKey: 'reserve-key-release-5',
+    });
+    await reservationsService.release(landlordCtx(landlord1), reserved.id, {
+      reason: 'freed up',
+      refundRequired: false,
+    });
+    const rereserved = await reservationsService.reserve(studentCtx(student3), {
+      bedId: bed9,
+      idempotencyKey: 'reserve-key-release-5-again',
+    });
+    expect(rereserved.status).toBe('reserved');
+  });
+});
+
+describe('3 active reservations per student, platform-wide (§12-13)', () => {
+  it('allows exactly 3 concurrent reserved/booked reservations, rejects the 4th', async () => {
+    // A fresh student with none of the above describe blocks' reservations.
+    const freshStudent = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000099', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
+    const ctx = studentCtx(freshStudent);
+
+    const [bedCap1, bedCap2, bedCap3, bedCap4] = await Promise.all([
+      seedUnitWithBed('Cap 1'),
+      seedUnitWithBed('Cap 2'),
+      seedUnitWithBed('Cap 3'),
+      seedUnitWithBed('Cap 4'),
     ]);
-    expect(paymentRow.rows).toHaveLength(0);
+
+    for (const [i, bed] of [bedCap1, bedCap2, bedCap3].entries()) {
+      const r = await reservationsService.reserve(ctx, {
+        bedId: bed.bedId,
+        idempotencyKey: `reserve-key-cap-${i}`,
+      });
+      expect(r.status).toBe('reserved');
+    }
+
+    await expect(
+      reservationsService.reserve(ctx, {
+        bedId: bedCap4.bedId,
+        idempotencyKey: 'reserve-key-cap-3',
+      }),
+    ).rejects.toThrow(/3 active reservations/i);
   });
 
-  it('lets the student confirm move-in immediately, with no payment step in between', async () => {
+  it('a walk-in Book also counts against the platform-wide cap', async () => {
+    const freshStudent = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000098', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
+    const phone = '+256710000098';
+
+    const [bedWalk1, bedWalk2, bedWalk3, bedWalk4] = await Promise.all([
+      seedUnitWithBed('Walk 1'),
+      seedUnitWithBed('Walk 2'),
+      seedUnitWithBed('Walk 3'),
+      seedUnitWithBed('Walk 4'),
+    ]);
+    for (const bed of [bedWalk1, bedWalk2, bedWalk3]) {
+      await reservationsService.book(landlordCtx(landlord1), {
+        bedId: bed.bedId,
+        studentPhone: phone,
+      });
+    }
+
+    await expect(
+      reservationsService.book(landlordCtx(landlord1), {
+        bedId: bedWalk4.bedId,
+        studentPhone: phone,
+      }),
+    ).rejects.toThrow(/3 active reservations/i);
+  });
+});
+
+describe('cancel (student cancels their own Reserved bed, §6)', () => {
+  it('lets a student cancel their own reserved bed', async () => {
+    const { bedId: bedC1 } = await seedUnitWithBed('Cancel A');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bedC1,
+      idempotencyKey: 'reserve-key-cancel-1',
+    });
+    const result = await reservationsService.cancel(studentCtx(student2), reserved.id);
+    expect(result).toEqual({ outcome: 'cancelled' });
+  });
+
+  it('a student cannot cancel a reservation that is not theirs', async () => {
+    const { bedId: bedC2 } = await seedUnitWithBed('Cancel B');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bedC2,
+      idempotencyKey: 'reserve-key-cancel-2',
+    });
+    await expect(
+      reservationsService.cancel(studentCtx(student3), reserved.id),
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it('a student cannot cancel a reservation once it is booked (only Release can free it)', async () => {
+    const { bedId: bedC3 } = await seedUnitWithBed('Cancel C');
+    const reserved = await reservationsService.reserve(studentCtx(student2), {
+      bedId: bedC3,
+      idempotencyKey: 'reserve-key-cancel-3',
+    });
+    await reservationsService.book(landlordCtx(landlord1), { reservationId: reserved.id });
+    await expect(
+      reservationsService.cancel(studentCtx(student2), reserved.id),
+    ).rejects.toThrow(/cannot cancel/i);
+  });
+});
+
+describe('occupancy lock-in: an occupied student can only rebook within 3 weeks of term end', () => {
+  function isoDaysFromNow(days: number): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  /** A whole one-bed verified listing on a semester ending on `endsOn` —
+   * isolated from the shared fixture listing so each test controls its own
+   * term end date precisely. */
+  async function seedListingEndingOn(endsOn: string): Promise<{ bedId: string }> {
+    const semesterId = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Lock-in test semester', '2026-01-01', $1, '2026-01-01') RETURNING id`,
+      [endsOn],
+    );
+    const propertyId = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+       VALUES ($1, 'Lock-in Test Hostel', 'Wandegeya', 'active', 0.33, 32.57, 'MUK') RETURNING id`,
+      [landlord1],
+    );
+    // enforce_listing_verification (0001) requires a lead-approved, complete-
+    // checklist visit before a listing can be inserted/updated as 'verified'.
     await pool.query(
+      `INSERT INTO verification_visits
+         (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at, completed_at)
+       VALUES ($1, $2, $3, $4, 'passed', $5, now(), now())`,
+      [propertyId, inspectorId, JSON.stringify(FULL_CHECKLIST), `lockin-visit-${propertyId}`, opsLead],
+    );
+    const listingId = await seed(
+      `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'verified') RETURNING id`,
+      [propertyId, semesterId],
+    );
+    const versionId = await seed(
+      `INSERT INTO listing_versions (listing_id, version_number, price_per_term_ugx, amenities, verified_at, verified_by)
+       VALUES ($1, 1, 500000, '{}'::jsonb, now(), $2) RETURNING id`,
+      [listingId, opsLead],
+    );
+    await pool.query(`UPDATE listings SET current_version_id = $1 WHERE id = $2`, [versionId, listingId]);
+    const unitId = await seed(
       `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-       SELECT listing_id, 'Room 4E', 1, room_category, price_per_term_ugx, available_for_semester_id FROM units WHERE id = $1`,
-      [unitId],
+       VALUES ($1, 'Room X', 1, 'single', 500000, $2) RETURNING id`,
+      [listingId, semesterId],
     );
-    const freeUnit = (
-      await pool.query(`SELECT id FROM units WHERE label = 'Room 4E'`)
-    ).rows[0].id as string;
-    const hold = await reservationsService.createHold(
-      studentCtx(),
-      { unitId: freeUnit, idempotencyKey: 'hold-key-free-0000002' },
-      'http://localhost:3000/r',
+    const bedId = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unitId]);
+    return { bedId };
+  }
+
+  async function seedStudent(phone: string): Promise<string> {
+    const id = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ($1, 'student', 'active') RETURNING id`,
+      [phone],
     );
-    const moveIn = await reservationsService.confirmMoveIn(studentCtx(), hold.reservation.id);
-    expect(moveIn).toMatchObject({ confirmedByRole: 'student' });
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [id]);
+    return id;
+  }
+
+  it('blocks a new reservation while occupying a bed on a term ending far away', async () => {
+    const student = await seedStudent('+256710000090');
+    const { bedId: currentBed } = await seedListingEndingOn(isoDaysFromNow(60));
+    const reserved = await reservationsService.reserve(studentCtx(student), {
+      bedId: currentBed,
+      idempotencyKey: 'reserve-key-lockin-1',
+    });
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: reserved.id,
+    }))!;
+    await reservationsService.confirmMoveIn(studentCtx(student), booked.id);
+
+    const { bedId: nextBed } = await seedUnitWithBed('Lock-in Next A');
+    await expect(
+      reservationsService.reserve(studentCtx(student), {
+        bedId: nextBed,
+        idempotencyKey: 'reserve-key-lockin-2',
+      }),
+    ).rejects.toThrow(/already moved into a bed/i);
+  });
+
+  it('allows a new reservation once the occupied term is within 3 weeks of ending', async () => {
+    const student = await seedStudent('+256710000091');
+    const { bedId: currentBed } = await seedListingEndingOn(isoDaysFromNow(10));
+    const reserved = await reservationsService.reserve(studentCtx(student), {
+      bedId: currentBed,
+      idempotencyKey: 'reserve-key-lockin-3',
+    });
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: reserved.id,
+    }))!;
+    await reservationsService.confirmMoveIn(studentCtx(student), booked.id);
+
+    const { bedId: nextBed } = await seedUnitWithBed('Lock-in Next B');
+    const next = await reservationsService.reserve(studentCtx(student), {
+      bedId: nextBed,
+      idempotencyKey: 'reserve-key-lockin-4',
+    });
+    expect(next.status).toBe('reserved');
+  });
+
+  it('a walk-in Book is also blocked by current occupancy on a far-away term', async () => {
+    const student = await seedStudent('+256710000092');
+    const { bedId: currentBed } = await seedListingEndingOn(isoDaysFromNow(90));
+    const reserved = await reservationsService.reserve(studentCtx(student), {
+      bedId: currentBed,
+      idempotencyKey: 'reserve-key-lockin-5',
+    });
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: reserved.id,
+    }))!;
+    await reservationsService.confirmMoveIn(studentCtx(student), booked.id);
+
+    const { bedId: nextBed } = await seedUnitWithBed('Lock-in Next C');
+    await expect(
+      reservationsService.book(landlordCtx(landlord1), {
+        bedId: nextBed,
+        studentPhone: '+256710000092',
+      }),
+    ).rejects.toThrow(/already moved into a bed/i);
+  });
+});
+
+describe('reservation expiry (JobsRunner, 24h)', () => {
+  // Dedicated students — student2/student3 accumulate leftover active
+  // reservations from earlier describe blocks' rejection-path tests (a
+  // reserve/book that a failed cancel/release never resolved), and this
+  // block's own reserve() calls would otherwise trip the 3-active cap.
+  let expireStudentA: string;
+  let expireStudentB: string;
+
+  beforeAll(async () => {
+    expireStudentA = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000097', 'student', 'active') RETURNING id`,
+    );
+    expireStudentB = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000096', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO students (user_id, university) VALUES ($1, 'MUK'), ($2, 'MUK')`,
+      [expireStudentA, expireStudentB],
+    );
+  });
+
+  it('a reserved bed past its expiry flips to expired', async () => {
+    const { bedId: bedE1 } = await seedUnitWithBed('Expire A');
+    const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      bedId: bedE1,
+      idempotencyKey: 'reserve-key-expire-1',
+    });
+    await pool.query(`UPDATE reservations SET reserved_expires_at = now() - interval '1 hour' WHERE id = $1`, [
+      reserved.id,
+    ]);
+    await expireReservation(reserved.id);
+    const row = await pool.query(`SELECT status FROM reservations WHERE id = $1`, [reserved.id]);
+    expect(row.rows[0].status).toBe('expired');
+  });
+
+  it('a booked reservation is left untouched by expiry (never auto-expires once booked)', async () => {
+    const { bedId: bedE2 } = await seedUnitWithBed('Expire B');
+    const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      bedId: bedE2,
+      idempotencyKey: 'reserve-key-expire-2',
+    });
+    const booked = (await reservationsService.book(landlordCtx(landlord1), {
+      reservationId: reserved.id,
+    }))!;
+    await expireReservation(booked.id);
+    const row = await pool.query(`SELECT status FROM reservations WHERE id = $1`, [booked.id]);
+    expect(row.rows[0].status).toBe('booked');
+  });
+
+  it('an expired bed can be reserved again', async () => {
+    const { bedId: bedE3 } = await seedUnitWithBed('Expire C');
+    const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      bedId: bedE3,
+      idempotencyKey: 'reserve-key-expire-3',
+    });
+    await pool.query(`UPDATE reservations SET reserved_expires_at = now() - interval '1 hour' WHERE id = $1`, [
+      reserved.id,
+    ]);
+    await expireReservation(reserved.id);
+    const rereserved = await reservationsService.reserve(studentCtx(expireStudentB), {
+      bedId: bedE3,
+      idempotencyKey: 'reserve-key-expire-3-again',
+    });
+    expect(rereserved.status).toBe('reserved');
   });
 });
 

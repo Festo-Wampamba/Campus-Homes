@@ -13,11 +13,11 @@ import type { Redis } from 'ioredis';
 
 import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
-import { payments, refunds, reservations } from '../../db/schema';
+import { reservations } from '../../db/schema';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { NotificationsService } from '../notifications/notifications.service';
-import { HOLD_EXPIRY_QUEUE_NAME } from '../reservations/reservations.tokens';
+import { RESERVATION_EXPIRY_QUEUE_NAME } from '../reservations/reservations.tokens';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const MAINTENANCE_QUEUE = 'maintenance';
@@ -42,11 +42,11 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
     }
     const connection = this.redis;
 
-    // hold_expiry: fired per-hold at hold_expires_at (§11).
+    // reservation_expiry: fired per-reservation at reserved_expires_at (§11).
     this.workers.push(
       new Worker(
-        HOLD_EXPIRY_QUEUE_NAME,
-        async (job) => this.expireHold((job.data as { reservationId: string }).reservationId),
+        RESERVATION_EXPIRY_QUEUE_NAME,
+        async (job) => this.expireReservation((job.data as { reservationId: string }).reservationId),
         { connection },
       ),
     );
@@ -76,34 +76,24 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
     await this.maintenanceQueue?.close();
   }
 
-  /** Still held past expiry → expired; a succeeded payment on it → refund (§11). */
-  async expireHold(reservationId: string): Promise<void> {
+  /** Still Reserved past its 24h window → Expired (§11). A Booked
+   * reservation never reaches this state (reservedExpiresAt is cleared the
+   * moment a landlord Books it), so there's nothing to refund here — no
+   * online payment was ever taken for a mere reservation. */
+  async expireReservation(reservationId: string): Promise<void> {
     await this.rlsDb.run({ userId: NIL_UUID, role: 'service_role' }, async (db) => {
       const reservation = await db.query.reservations.findFirst({
         where: eq(reservations.id, reservationId),
       });
-      if (!reservation || reservation.status !== 'held') {
-        return; // already fulfilled/cancelled — nothing to do
+      if (!reservation || reservation.status !== 'reserved') {
+        return; // already booked/cancelled — nothing to do
       }
       await db
         .update(reservations)
         .set({ status: 'expired', updatedAt: new Date() })
         .where(eq(reservations.id, reservationId));
-
-      const [payment] = await db
-        .select()
-        .from(payments)
-        .where(eq(payments.reservationId, reservationId));
-      if (payment?.status === 'succeeded') {
-        await db.insert(refunds).values({
-          paymentId: payment.id,
-          reservationId,
-          reason: 'cooling_off',
-          amountUgx: payment.amountUgx,
-        });
-      }
     });
-    this.logger.log(`hold_expiry processed for reservation ${reservationId}`);
+    this.logger.log(`reservation_expiry processed for reservation ${reservationId}`);
   }
 
   /** Visits pending past 48h of their 72h SLA → SMS the assigned inspector (§11). */

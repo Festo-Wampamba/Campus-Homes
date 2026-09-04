@@ -7,42 +7,37 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { desc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 
-import { RESERVATION_FEE_UGX, type CreateHoldInput } from '@campushomes/shared';
+import type { BookReservationInput, ReleaseReservationInput, ReserveInput } from '@campushomes/shared';
 
-import type { PaymentsAdapter } from '../../adapters/payments.adapter';
 import { loadEnv } from '../../config/env';
-import { assertPaymentsEnabled } from '../../config/payment-guard';
 import type { RlsContext } from '../../db/rls-context';
-import { firstRow } from '../../db/client';
+import { firstRow, type Db } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
-import { moveIns, payments, refunds, reservations } from '../../db/schema';
-import { LedgerService } from '../finance/ledger.service';
+import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
-import { HOLD_EXPIRY_QUEUE, PAYMENTS } from './reservations.tokens';
+import { RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
-const DEFAULT_HOLD_HOURS = 72;
+const DEFAULT_RESERVE_HOURS = 24;
+const MAX_ACTIVE_RESERVATIONS = 3;
+// A student already moved in (occupied) can't reserve a new bed until their
+// current term is within this many days of ending — reserving a second home
+// mid-semester makes no sense; reserving next semester's place as this one
+// winds down does.
+const REBOOK_WINDOW_DAYS = 21;
 
 const SERVICE = (userId: string): RlsContext => ({ userId, role: 'service_role' });
 
-/** Flutterwave `payment_type` → our payment_method enum. */
-function toPaymentMethod(
-  providerType: string | undefined,
-): 'mtn_momo' | 'airtel_money' | 'card' | 'bank_transfer' | null {
-  if (!providerType) return null;
-  if (providerType === 'card') return 'card';
-  if (providerType === 'banktransfer') return 'bank_transfer';
-  if (providerType.startsWith('mobilemoney')) return 'mtn_momo';
-  return null;
-}
-
 /**
- * The reservation state machine (§9 flow 4) — the only write path to
- * reservations/payments/move_ins (RLS: service_role only). Caller identity is
- * verified in-code here because RLS can't do it for service writes.
+ * Reserve -> Book -> Move-in (§4-8 of the bed-level redesign doc, 2026-09) —
+ * the only write path to reservations/reservation_releases/move_ins (RLS:
+ * service_role only). Caller identity is verified in-code here because RLS
+ * can't do it for service writes. Booking payment is offline; this service
+ * only records what a landlord/custodian reports collecting, it never gates
+ * a state transition on it.
  */
 @Injectable()
 export class ReservationsService {
@@ -51,56 +46,120 @@ export class ReservationsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
-    @Inject(PAYMENTS) private readonly paymentsAdapter: PaymentsAdapter,
     @Optional() @Inject(REDIS) private readonly redis: Redis | null,
-    @Optional() @Inject(HOLD_EXPIRY_QUEUE) private readonly holdExpiryQueue: Queue | null,
-    private readonly ledger: LedgerService,
+    @Optional() @Inject(RESERVATION_EXPIRY_QUEUE) private readonly expiryQueue: Queue | null,
   ) {}
 
-  /** Redis lock (optimization) → DB transaction (guarantee: the partial unique
-   * index allows at most one live hold per unit, no matter what). */
-  async createHold(ctx: RlsContext, input: CreateHoldInput, redirectUrl: string) {
-    const lockKey = `hold-lock:${input.unitId}`;
+  /** Landlord (own property) or an actively-assigned custodian — the two
+   * roles allowed to Book/Release/confirm move-in on a bed. Ops/admin
+   * always allowed too (oversight parity with everything else ops touches).
+   * Mirrors tenant-agreements.service.ts's assertCanManageProperty. */
+  private async assertCanManageProperty(ctx: RlsContext, propertyId: string): Promise<void> {
+    if (ctx.role === 'ops_lead' || ctx.role === 'admin') return;
+    const allowed = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      if (ctx.role === 'landlord') {
+        const res = await client.query('SELECT 1 FROM properties WHERE id = $1 AND landlord_id = $2', [
+          propertyId,
+          ctx.userId,
+        ]);
+        return res.rowCount! > 0;
+      }
+      if (ctx.role === 'custodian') {
+        const res = await client.query(
+          `SELECT 1 FROM property_memberships
+           WHERE property_id = $1 AND user_id = $2 AND role = 'custodian' AND revoked_at IS NULL`,
+          [propertyId, ctx.userId],
+        );
+        return res.rowCount! > 0;
+      }
+      return false;
+    });
+    if (!allowed) {
+      throw new ForbiddenException("You don't have permission to manage this property's beds");
+    }
+  }
+
+  /** A student who has already moved into a bed (status 'occupied') can't
+   * start a new reservation until that term is within REBOOK_WINDOW_DAYS of
+   * ending — otherwise nothing stops someone mid-semester from reserving a
+   * second home. Checked against every currently-occupied reservation's own
+   * semester end date, not just the newest one. */
+  private async assertNotLockedInByCurrentOccupancy(
+    client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: { endsOn: string }[] }> },
+    studentId: string,
+  ): Promise<void> {
+    const res = await client.query(
+      // ::text — node-pg parses a bare `date` column into a JS Date, whose
+      // default toString() is a verbose "Tue Dec 15 2026 00:00:00 GMT+..."
+      // in this error message; casting keeps it a plain 'YYYY-MM-DD'.
+      `SELECT s.ends_on::text AS "endsOn"
+       FROM reservations r
+       JOIN listing_versions lv ON lv.id = r.listing_version_id
+       JOIN listings l ON l.id = lv.listing_id
+       JOIN semesters s ON s.id = l.semester_id
+       WHERE r.student_id = $1
+         AND r.status = 'occupied'
+         AND s.ends_on > (CURRENT_DATE + $2::int * INTERVAL '1 day')
+       ORDER BY s.ends_on DESC
+       LIMIT 1`,
+      [studentId, REBOOK_WINDOW_DAYS],
+    );
+    const blocking = res.rows[0];
+    if (blocking) {
+      throw new ConflictException(
+        `You're already moved into a bed through ${blocking.endsOn} — you can reserve a new one once that term is within ${REBOOK_WINDOW_DAYS} days of ending.`,
+      );
+    }
+  }
+
+  /** Student selects an available bed and reserves it — a temporary,
+   * time-boxed claim (§6), not a completed booking. */
+  async reserve(ctx: RlsContext, input: ReserveInput) {
+    const lockKey = `reserve-lock:${input.bedId}`;
     const locked = this.redis
       ? await this.redis.set(lockKey, ctx.userId, 'PX', 10_000, 'NX')
       : 'OK';
     if (!locked) {
-      throw new ConflictException('Unit is being reserved by someone else — try again');
+      throw new ConflictException('Bed is being reserved by someone else — try again');
     }
 
     try {
       const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
-        // Idempotent replay: same client key returns the original hold.
+        // Idempotent replay: same client key returns the original reservation.
         const existing = await db.query.reservations.findFirst({
           where: eq(reservations.idempotencyKey, input.idempotencyKey),
         });
         if (existing) {
-          const [payment] = await db
-            .select()
-            .from(payments)
-            .where(eq(payments.reservationId, existing.id));
-          return { reservation: existing, payment, replayed: true as const };
+          return { reservation: existing, replayed: true as const };
         }
 
-        // Unit must belong to a verified listing.
-        const unitRes = await client.query(
-          `SELECT u.id, p.phone
-           FROM units u
+        // Bed must belong to a verified listing and not be manually blocked.
+        const bedRes = await client.query(
+          `SELECT b.id, l.property_id, l.id AS listing_id
+           FROM beds b
+           JOIN units u ON u.id = b.unit_id
            JOIN listings l ON l.id = u.listing_id AND l.status = 'verified'
-           LEFT JOIN users p ON p.id = $2
-           WHERE u.id = $1`,
-          [input.unitId, ctx.userId],
+           WHERE b.id = $1 AND b.blocked = false`,
+          [input.bedId],
         );
-        if (unitRes.rowCount === 0) {
-          throw new NotFoundException('Unit not found on a verified listing');
+        if (bedRes.rowCount === 0) {
+          throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
         }
+        const listingId = bedRes.rows[0].listing_id as string;
 
-        const versionRes = await client.query(
-          `SELECT l.current_version_id FROM units u
-           JOIN listings l ON l.id = u.listing_id WHERE u.id = $1`,
-          [input.unitId],
+        await this.assertNotLockedInByCurrentOccupancy(client, ctx.userId);
+
+        // One active reservation per student, platform-wide (§12-13 of the
+        // redesign doc) — active means 'reserved' or 'booked'.
+        const activeCountRes = await client.query(
+          `SELECT count(*) FROM reservations WHERE student_id = $1 AND status IN ('reserved', 'booked')`,
+          [ctx.userId],
         );
-        const listingVersionId = versionRes.rows[0].current_version_id as string;
+        if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
+          throw new ConflictException(
+            `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations — cancel or complete one before reserving another.`,
+          );
+        }
 
         // reservations.student_id FKs to students.user_id — a signed-up
         // student who never completed their profile would otherwise hit a
@@ -109,120 +168,64 @@ export class ReservationsService {
           ctx.userId,
         ]);
         if (studentRes.rowCount === 0) {
-          throw new ForbiddenException('Complete your student profile before reserving a room');
+          throw new ForbiddenException('Complete your student profile before reserving a bed');
         }
 
-        const policyRows = await client.query<{ key: string; value: unknown }>(`
-          SELECT key, value FROM platform_settings
-          WHERE key IN ('reservation_hold_hours', 'reservation_fee_ugx')
-        `);
-        const policy = Object.fromEntries(policyRows.rows.map((row) => [row.key, row.value]));
-        const configuredHoldHours = Number(policy.reservation_hold_hours ?? DEFAULT_HOLD_HOURS);
-        const configuredFeeUgx = Number(policy.reservation_fee_ugx ?? RESERVATION_FEE_UGX);
-        const holdHours = Number.isFinite(configuredHoldHours) ? configuredHoldHours : DEFAULT_HOLD_HOURS;
-        const feeUgx = Number.isFinite(configuredFeeUgx) ? configuredFeeUgx : RESERVATION_FEE_UGX;
+        // The listing_version snapshot active at reserve time.
+        const versionRes = await client.query('SELECT current_version_id FROM listings WHERE id = $1', [
+          listingId,
+        ]);
+        const listingVersionId = versionRes.rows[0].current_version_id as string;
+
+        const policyRes = await client.query<{ value: unknown }>(
+          `SELECT value FROM platform_settings WHERE key = 'reservation_hold_hours'`,
+        );
+        const configuredHours = Number(policyRes.rows[0]?.value);
+        const holdHours = Number.isFinite(configuredHours) ? configuredHours : DEFAULT_RESERVE_HOURS;
 
         const now = new Date();
-        const isFree = feeUgx <= 0;
         const reservation = firstRow(
           await db
             .insert(reservations)
             .values({
               studentId: ctx.userId,
-              unitId: input.unitId,
+              bedId: input.bedId,
               listingVersionId,
-              // No fee means nothing to wait on — go straight to fulfilled
-              // instead of a 'held' state that would just sit there with no
-              // payment ever arriving to release it.
-              status: isFree ? 'fulfilled' : 'held',
-              feeAmountUgx: feeUgx,
-              holdStartsAt: isFree ? null : now,
-              holdExpiresAt: isFree ? null : new Date(now.getTime() + holdHours * 3600_000),
+              status: 'reserved',
+              reservedAt: now,
+              reservedExpiresAt: new Date(now.getTime() + holdHours * 3600_000),
               idempotencyKey: input.idempotencyKey,
             })
             .returning()
             .catch((err: { code?: string; cause?: { code?: string } }) => {
-              // The partial unique index — someone else holds this unit now.
-              // (drizzle wraps the pg error; the code sits on `cause`.)
+              // The partial unique index — someone else has a live claim on this bed.
               if (err.code === '23505' || err.cause?.code === '23505') {
-                throw new ConflictException('Unit already has a live hold');
+                throw new ConflictException('Bed already has a live reservation');
               }
               throw err;
             }),
         );
 
-        // A free reservation never touches the payment adapter or webhook —
-        // no payments row needed, nothing to reconcile later.
-        const payment = isFree
-          ? null
-          : firstRow(
-              await db
-                .insert(payments)
-                .values({
-                  reservationId: reservation.id,
-                  amountUgx: feeUgx,
-                  // Actual method is chosen on the provider's checkout page; the
-                  // webhook overwrites this with what the student really used.
-                  paymentMethod: 'mtn_momo',
-                })
-                .returning(),
-            );
-
-        return {
-          reservation,
-          payment,
-          isFree,
-          phone: (unitRes.rows[0].phone as string | null) ?? null,
-          holdHours,
-          feeUgx,
-          replayed: false as const,
-        };
+        return { reservation, holdHours, replayed: false as const };
       });
 
       if (result.replayed) {
-        return result;
+        return result.reservation;
       }
 
-      await this.audit.record(ctx, 'reservation.hold', 'reservation', result.reservation.id, {
-        unitId: input.unitId,
-        feeUgx: result.feeUgx,
+      await this.audit.record(ctx, 'reservation.reserve', 'reservation', result.reservation.id, {
+        bedId: input.bedId,
       });
 
-      // No fee, no checkout: the reservation is already 'fulfilled' from the
-      // insert above — never touches the payment adapter, the provider
-      // webhook, or the hold-expiry queue (nothing to expire).
-      if (result.isFree) {
-        return { ...result, checkoutUrl: null };
-      }
-
-      // Money is only ever real once this line is reachable — matches
-      // assertPaymentsEnabled's original controller-level guard, just moved
-      // here so a free reservation can skip it entirely.
-      assertPaymentsEnabled(this.env);
-
-      const { checkoutUrl } = await this.paymentsAdapter.initiate({
-        txRef: result.payment!.id,
-        amountUgx: result.payment!.amountUgx,
-        phone: result.phone,
-        redirectUrl,
-      });
-
-      await this.rlsDb.run(SERVICE(ctx.userId), async (db) => {
-        await db
-          .update(payments)
-          .set({ providerRef: result.payment!.id })
-          .where(eq(payments.id, result.payment!.id));
-      });
-
-      if (this.holdExpiryQueue) {
-        await this.holdExpiryQueue.add(
-          'hold_expiry',
+      if (this.expiryQueue) {
+        await this.expiryQueue.add(
+          'reservation_expiry',
           { reservationId: result.reservation.id },
-          { delay: result.holdHours * 3600_000, jobId: `hold-expiry-${result.reservation.id}` },
+          { delay: result.holdHours * 3600_000, jobId: `reservation-expiry-${result.reservation.id}` },
         );
       }
 
-      return { ...result, checkoutUrl };
+      return result.reservation;
     } finally {
       if (this.redis) {
         await this.redis.del(lockKey);
@@ -230,118 +233,188 @@ export class ReservationsService {
     }
   }
 
-  /** Flutterwave webhook (§9 flow 4). Idempotent on provider_txn_id; if the
-   * hold expired before the webhook arrived, auto-refund instead of activating. */
-  async applyPaymentWebhook(payload: {
-    txRef: string;
-    providerTxnId: string;
-    status: 'successful' | 'failed';
-    paymentMethod?: string;
-    raw: Record<string, unknown>;
-  }) {
-    return this.rlsDb.run(
-      SERVICE('00000000-0000-0000-0000-000000000000'),
-      async (db) => {
-        const payment = await db.query.payments.findFirst({
-          where: eq(payments.providerRef, payload.txRef),
-        });
-        if (!payment) {
-          throw new NotFoundException('Unknown tx_ref');
-        }
-        if (payment.providerTxnId) {
-          return { applied: false, reason: 'duplicate webhook' }; // replay — no-op
-        }
+  /** Landlord/custodian confirms a booking (§7) — either against an
+   * existing Reserved row, or directly against an Available bed with no
+   * prior Reserve step at all (the walk-in path, identified by the
+   * student's phone). Booking payment is offline; this just records what
+   * was reported collected. */
+  async book(ctx: RlsContext, input: BookReservationInput) {
+    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
+      let bedId: string;
+      let propertyId: string;
+      let existingReservationId: string | null = null;
+      let studentId: string;
+      let listingVersionId: string;
 
+      if (input.reservationId) {
         const reservation = await db.query.reservations.findFirst({
-          where: eq(reservations.id, payment.reservationId),
+          where: eq(reservations.id, input.reservationId),
         });
-        if (!reservation) {
-          throw new NotFoundException('Reservation missing');
+        if (!reservation) throw new NotFoundException('Reservation not found');
+        if (reservation.status !== 'reserved') {
+          throw new ConflictException(`Cannot book a reservation that is ${reservation.status}`);
         }
-
-        if (payload.status === 'failed') {
-          await db
-            .update(payments)
-            .set({
-              providerTxnId: payload.providerTxnId,
-              status: 'failed',
-              webhookVerified: true,
-              rawWebhook: payload.raw,
-              verifiedAt: new Date(),
-            })
-            .where(eq(payments.id, payment.id));
-          await db
-            .update(reservations)
-            .set({ status: 'payment_failed', updatedAt: new Date() })
-            .where(eq(reservations.id, reservation.id));
-          return { applied: true, outcome: 'payment_failed' };
+        const bedRes = await client.query(
+          `SELECT l.property_id FROM beds b
+           JOIN units u ON u.id = b.unit_id JOIN listings l ON l.id = u.listing_id
+           WHERE b.id = $1`,
+          [reservation.bedId],
+        );
+        bedId = reservation.bedId;
+        propertyId = bedRes.rows[0].property_id as string;
+        existingReservationId = reservation.id;
+        studentId = reservation.studentId;
+        listingVersionId = reservation.listingVersionId;
+      } else {
+        // Walk-in: book an Available bed directly, no prior Reserve.
+        const bedRes = await client.query(
+          `SELECT b.id, l.property_id, l.id AS listing_id, l.current_version_id
+           FROM beds b
+           JOIN units u ON u.id = b.unit_id
+           JOIN listings l ON l.id = u.listing_id AND l.status = 'verified'
+           WHERE b.id = $1 AND b.blocked = false`,
+          [input.bedId],
+        );
+        if (bedRes.rowCount === 0) {
+          throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
         }
+        bedId = bedRes.rows[0].id as string;
+        propertyId = bedRes.rows[0].property_id as string;
+        listingVersionId = bedRes.rows[0].current_version_id as string;
 
-        await db
-          .update(payments)
-          .set({
-            providerTxnId: payload.providerTxnId,
-            status: 'succeeded',
-            webhookVerified: true,
-            rawWebhook: payload.raw,
-            verifiedAt: new Date(),
-            paymentMethod: toPaymentMethod(payload.paymentMethod) ?? payment.paymentMethod,
-          })
-          .where(eq(payments.id, payment.id));
-
-        await this.ledger.postAutoEntry(db, {
-          memo: `Hold fee received — reservation ${reservation.id}`,
-          reservationId: reservation.id,
-          paymentId: payment.id,
-          lines: [
-            { accountCode: '1000', debitUgx: payment.amountUgx },
-            { accountCode: '4000', creditUgx: payment.amountUgx },
-          ],
-        });
-
-        const holdExpired =
-          reservation.status === 'expired' ||
-          (reservation.holdExpiresAt !== null && reservation.holdExpiresAt < new Date());
-
-        if (holdExpired) {
-          // Money arrived for a dead hold — refund, never activate (§9 flow 4).
-          const [refund] = await db
-            .insert(refunds)
-            .values({
-              paymentId: payment.id,
-              reservationId: reservation.id,
-              reason: 'cooling_off',
-              amountUgx: payment.amountUgx,
-            })
-            .returning();
-          await this.ledger.postAutoEntry(db, {
-            memo: `Refund — expired hold paid anyway, reservation ${reservation.id}`,
-            reservationId: reservation.id,
-            paymentId: payment.id,
-            refundId: refund?.id,
-            lines: [
-              { accountCode: '4900', debitUgx: payment.amountUgx },
-              { accountCode: '1000', creditUgx: payment.amountUgx },
-            ],
-          });
-          await db
-            .update(reservations)
-            .set({ status: 'refunded', updatedAt: new Date() })
-            .where(eq(reservations.id, reservation.id));
-          return { applied: true, outcome: 'refunded_expired_hold' };
+        const studentRes = await client.query(
+          `SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE u.phone = $1`,
+          [input.studentPhone],
+        );
+        if (studentRes.rowCount === 0) {
+          throw new NotFoundException(
+            'No student account with a completed profile found for that phone number',
+          );
         }
+        studentId = studentRes.rows[0].user_id as string;
 
+        await this.assertNotLockedInByCurrentOccupancy(client, studentId);
+
+        // Walk-in creates a brand-new active reservation for this student —
+        // the same platform-wide cap reserve() enforces (§12-13), or a
+        // landlord could Book past it for a student who's already at 3.
+        const activeCountRes = await client.query(
+          `SELECT count(*) FROM reservations WHERE student_id = $1 AND status IN ('reserved', 'booked')`,
+          [studentId],
+        );
+        if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
+          throw new ConflictException(
+            `This student already has ${MAX_ACTIVE_RESERVATIONS} active reservations — release or complete one before booking another.`,
+          );
+        }
+      }
+
+      await this.assertCanManageProperty(ctx, propertyId);
+
+      const now = new Date();
+      let reservationRow;
+      if (existingReservationId) {
         await db
           .update(reservations)
-          .set({ status: 'fulfilled', updatedAt: new Date() })
-          .where(eq(reservations.id, reservation.id));
-        return { applied: true, outcome: 'fulfilled' };
-      },
-    );
+          .set({
+            status: 'booked',
+            bookedAt: now,
+            bookedBy: ctx.userId,
+            reservedExpiresAt: null,
+            bookingFeeCollectedUgx: input.bookingFeeCollectedUgx ?? null,
+            depositCollectedUgx: input.depositCollectedUgx ?? null,
+            paymentMethod: input.paymentMethod ?? null,
+            paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
+            updatedAt: now,
+          })
+          .where(eq(reservations.id, existingReservationId));
+        reservationRow = await this.selectById(db, existingReservationId);
+      } else {
+        const inserted = firstRow(
+          await db
+            .insert(reservations)
+            .values({
+              studentId,
+              bedId,
+              listingVersionId,
+              status: 'booked',
+              bookedAt: now,
+              bookedBy: ctx.userId,
+              bookingFeeCollectedUgx: input.bookingFeeCollectedUgx ?? null,
+              depositCollectedUgx: input.depositCollectedUgx ?? null,
+              paymentMethod: input.paymentMethod ?? null,
+              paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
+              idempotencyKey: `walkin-${bedId}-${now.getTime()}`,
+            })
+            .returning()
+            .catch((err: { code?: string; cause?: { code?: string } }) => {
+              if (err.code === '23505' || err.cause?.code === '23505') {
+                throw new ConflictException('Bed already has a live reservation');
+              }
+              throw err;
+            }),
+        );
+        reservationRow = inserted;
+      }
+      return reservationRow;
+    });
+
+    await this.audit.record(ctx, 'reservation.book', 'reservation', result!.id, {
+      bedId: result!.bedId,
+      walkIn: !input.reservationId,
+    });
+    return result;
   }
 
-  /** Student cancels their own hold. Paid-but-unfulfilled edge goes through
-   * the same refund path the webhook uses. */
+  /** Landlord/custodian/ops frees up a Reserved or Booked bed the student
+   * didn't end up taking (§15-16). Always recorded with a reason — money
+   * may already have changed hands offline for a Booked bed. */
+  async release(ctx: RlsContext, reservationId: string, input: ReleaseReservationInput) {
+    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
+      const reservation = await db.query.reservations.findFirst({
+        where: eq(reservations.id, reservationId),
+      });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (!['reserved', 'booked'].includes(reservation.status)) {
+        throw new ConflictException(`Cannot release a reservation that is ${reservation.status}`);
+      }
+
+      const bedRes = await client.query(
+        `SELECT l.property_id FROM beds b
+         JOIN units u ON u.id = b.unit_id JOIN listings l ON l.id = u.listing_id
+         WHERE b.id = $1`,
+        [reservation.bedId],
+      );
+      await this.assertCanManageProperty(ctx, bedRes.rows[0].property_id as string);
+
+      await db
+        .update(reservations)
+        .set({ status: 'released', updatedAt: new Date() })
+        .where(eq(reservations.id, reservationId));
+
+      const hadMoneyCollected = Boolean(
+        reservation.bookingFeeCollectedUgx || reservation.depositCollectedUgx,
+      );
+      await db.insert(reservationReleases).values({
+        reservationId,
+        releasedBy: ctx.userId,
+        reason: input.reason,
+        refundRequired: input.refundRequired ?? hadMoneyCollected,
+        notes: input.notes ?? null,
+      });
+
+      return { outcome: 'released' as const };
+    });
+
+    await this.audit.record(ctx, 'reservation.release', 'reservation', reservationId, {
+      reason: input.reason,
+    });
+    return result;
+  }
+
+  /** Student cancels their own Reserved bed — only while still Reserved.
+   * Once a landlord has Booked it (and possibly collected money offline),
+   * only the landlord's own Release can free it back up. */
   async cancel(ctx: RlsContext, reservationId: string) {
     const outcome = await this.rlsDb.run(SERVICE(ctx.userId), async (db) => {
       const reservation = await db.query.reservations.findFirst({
@@ -350,47 +423,21 @@ export class ReservationsService {
       if (!reservation || reservation.studentId !== ctx.userId) {
         throw new NotFoundException('Reservation not found');
       }
-      if (!['held', 'payment_pending'].includes(reservation.status)) {
-        throw new ConflictException(`Cannot cancel a ${reservation.status} reservation`);
+      if (reservation.status !== 'reserved') {
+        throw new ConflictException(`Cannot cancel a reservation that is ${reservation.status}`);
       }
       await db
         .update(reservations)
         .set({ status: 'cancelled', updatedAt: new Date() })
         .where(eq(reservations.id, reservationId));
-
-      const [payment] = await db
-        .select()
-        .from(payments)
-        .where(eq(payments.reservationId, reservationId));
-      if (payment?.status === 'succeeded') {
-        const [refund] = await db
-          .insert(refunds)
-          .values({
-            paymentId: payment.id,
-            reservationId,
-            reason: 'student_cancel',
-            amountUgx: payment.amountUgx,
-          })
-          .returning();
-        await this.ledger.postAutoEntry(db, {
-          memo: `Refund — student cancelled, reservation ${reservationId}`,
-          reservationId,
-          paymentId: payment.id,
-          refundId: refund?.id,
-          lines: [
-            { accountCode: '4900', debitUgx: payment.amountUgx },
-            { accountCode: '1000', creditUgx: payment.amountUgx },
-          ],
-        });
-        return 'cancelled_with_refund';
-      }
       return 'cancelled';
     });
     await this.audit.record(ctx, 'reservation.cancel', 'reservation', reservationId, { outcome });
     return { outcome };
   }
 
-  /** Move-in confirmation (§9 flow 5): student or the unit's landlord. */
+  /** Move-in confirmation (§8): student or the bed's landlord/custodian.
+   * Only a Booked reservation can move in. */
   async confirmMoveIn(ctx: RlsContext, reservationId: string) {
     const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
       const reservation = await db.query.reservations.findFirst({
@@ -399,78 +446,94 @@ export class ReservationsService {
       if (!reservation) {
         throw new NotFoundException('Reservation not found');
       }
-      if (reservation.status !== 'fulfilled') {
-        throw new ConflictException('Only a fulfilled reservation can be moved into');
+      if (reservation.status !== 'booked') {
+        throw new ConflictException('Only a booked reservation can be moved into');
       }
 
       let confirmerRole: 'student' | 'landlord';
       if (reservation.studentId === ctx.userId) {
         confirmerRole = 'student';
       } else {
-        const landlordRes = await client.query(
-          `SELECT 1 FROM units u
-           JOIN listings l ON l.id = u.listing_id
-           JOIN properties p ON p.id = l.property_id
-           WHERE u.id = $1 AND p.landlord_id = $2`,
-          [reservation.unitId, ctx.userId],
+        const bedRes = await client.query(
+          `SELECT l.property_id FROM beds b
+           JOIN units u ON u.id = b.unit_id JOIN listings l ON l.id = u.listing_id
+           WHERE b.id = $1`,
+          [reservation.bedId],
         );
-        if (landlordRes.rowCount === 0) {
-          throw new ForbiddenException('Not a party to this reservation');
-        }
+        await this.assertCanManageProperty(ctx, bedRes.rows[0].property_id as string);
         confirmerRole = 'landlord';
       }
 
       const [moveIn] = await db
         .insert(moveIns)
-        .values({
-          reservationId,
-          confirmedAt: new Date(),
-          confirmedByRole: confirmerRole,
-        })
+        .values({ reservationId, confirmedAt: new Date(), confirmedByRole: confirmerRole })
         .onConflictDoNothing()
         .returning();
+
+      // Occupied is a first-class reservation status now (§9.4), not just
+      // inferred from a move_ins row existing.
+      await db
+        .update(reservations)
+        .set({ status: 'occupied', updatedAt: new Date() })
+        .where(eq(reservations.id, reservationId));
+
       return moveIn ?? { alreadyConfirmed: true };
     });
     await this.audit.record(ctx, 'move_in.confirm', 'reservation', reservationId, {});
     return result;
   }
 
-  /** Student's own reservations — plain RLS read as the caller. */
+  /** Student's own reservations, joined with enough of the bed/unit/property
+   * to tell one card apart from another in the list — `properties` has no
+   * public/self-student SELECT policy (owner+ops only), so this runs under
+   * service_role with the student scope enforced in code via the WHERE
+   * clause instead of RLS. */
   mine(ctx: RlsContext) {
-    return this.rlsDb.run(ctx, (db) =>
-      db.select().from(reservations).orderBy(desc(reservations.createdAt)),
-    );
-  }
-
-  /** Landlord inbox — RLS exposes reservations on their units, and the
-   * payments table is invisible to landlords entirely. */
-  landlordInbox(ctx: RlsContext) {
-    return this.rlsDb.run(ctx, (db) =>
-      db
-        .select({
-          id: reservations.id,
-          unitId: reservations.unitId,
-          status: reservations.status,
-          holdExpiresAt: reservations.holdExpiresAt,
-          createdAt: reservations.createdAt,
-          moveInConfirmedAt: moveIns.confirmedAt,
-        })
-        .from(reservations)
-        .leftJoin(moveIns, eq(moveIns.reservationId, reservations.id))
-        .orderBy(desc(reservations.createdAt)),
-    );
-  }
-
-  paymentStatus(ctx: RlsContext, reservationId: string) {
-    return this.rlsDb.run(ctx, async (db) => {
-      const [payment] = await db
-        .select({ status: payments.status })
-        .from(payments)
-        .where(eq(payments.reservationId, reservationId));
-      if (!payment) {
-        throw new NotFoundException('No payment for this reservation');
-      }
-      return { reservationId, status: payment.status };
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const res = await client.query(
+        `SELECT
+           r.id, r.student_id AS "studentId", r.bed_id AS "bedId",
+           r.listing_version_id AS "listingVersionId", r.status,
+           r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
+           r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
+           r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
+           l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",
+           b.label AS "bedLabel", u.room_category AS "roomCategory", u.capacity AS "roomCapacity",
+           u.price_per_term_ugx AS "rentPerTermUgx", u.deposit_ugx AS "depositUgx"
+         FROM reservations r
+         JOIN beds b ON b.id = r.bed_id
+         JOIN units u ON u.id = b.unit_id
+         JOIN listings l ON l.id = u.listing_id
+         JOIN properties p ON p.id = l.property_id
+         WHERE r.student_id = $1
+         ORDER BY r.created_at DESC`,
+        [ctx.userId],
+      );
+      return res.rows;
     });
+  }
+
+  /** Landlord inbox — RLS exposes reservations on their beds via
+   * reservations_landlord_read; payments detail was never landlord-visible
+   * and there's nothing left to hide (booking info is theirs, they entered it). */
+  landlordInbox(ctx: RlsContext) {
+    return this.rlsDb.run(ctx, async (db, client) => {
+      const res = await client.query(
+        `SELECT
+           r.id, r.bed_id AS "bedId", r.status, r.reserved_expires_at AS "reservedExpiresAt",
+           r.booked_at AS "bookedAt", r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
+           r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
+           r.created_at AS "createdAt", b.label AS "bedLabel", m.confirmed_at AS "moveInConfirmedAt"
+         FROM reservations r
+         JOIN beds b ON b.id = r.bed_id
+         LEFT JOIN move_ins m ON m.reservation_id = r.id
+         ORDER BY r.created_at DESC`,
+      );
+      return res.rows;
+    });
+  }
+
+  private selectById(db: Db, id: string) {
+    return db.query.reservations.findFirst({ where: eq(reservations.id, id) });
   }
 }

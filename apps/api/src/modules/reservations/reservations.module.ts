@@ -16,7 +16,7 @@ import { FinanceModule } from '../finance/finance.module';
 import { OpsModule } from '../ops/ops.module';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
-import { HOLD_EXPIRY_QUEUE, HOLD_EXPIRY_QUEUE_NAME, PAYMENTS } from './reservations.tokens';
+import { PAYMENTS, RESERVATION_EXPIRY_QUEUE, RESERVATION_EXPIRY_QUEUE_NAME } from './reservations.tokens';
 import { WebhookController } from './webhook.controller';
 
 @Module({
@@ -39,10 +39,10 @@ import { WebhookController } from './webhook.controller';
       },
     },
     {
-      provide: HOLD_EXPIRY_QUEUE,
+      provide: RESERVATION_EXPIRY_QUEUE,
       inject: [{ token: REDIS, optional: true }],
       useFactory: (redis: Redis | null): Queue | null =>
-        redis ? new Queue(HOLD_EXPIRY_QUEUE_NAME, { connection: redis }) : null,
+        redis ? new Queue(RESERVATION_EXPIRY_QUEUE_NAME, { connection: redis }) : null,
     },
   ],
   exports: [ReservationsService, PAYMENTS],

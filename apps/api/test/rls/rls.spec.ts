@@ -19,8 +19,10 @@ let listing1: string; // verified
 let listing2: string; // draft
 let unit1: string;
 let unit2: string; // owned by landlord2, on the draft listing (listing2)
+let bed1: string; // on unit1
+let bed2: string; // on unit2, owned by landlord2
 let version1: string;
-let reservation1: string; // student1's held reservation on unit1
+let reservation1: string; // student1's reserved reservation on bed1
 let payment1: string;
 let unitPhoto1: string; // on unit1 (verified listing, landlord1)
 let unitPhoto2: string; // on unit2 (draft listing, landlord2)
@@ -44,8 +46,8 @@ beforeAll(async () => {
   await pool.query(
     `TRUNCATE users, students, landlords, ops_staff, semesters, properties,
      property_documents, verification_visits, listings, listing_versions,
-     units, unit_photos, reservations, payments, refunds, move_ins, reviews,
-     landlord_strikes, student_flags, audit_log CASCADE`,
+     units, beds, unit_photos, reservations, reservation_releases, payments,
+     refunds, move_ins, reviews, landlord_strikes, student_flags, audit_log CASCADE`,
   );
 
   landlord1 = await seedUser('landlord', '+256700000001');
@@ -113,6 +115,8 @@ beforeAll(async () => {
      VALUES ($1, 'Room 2A', 'single', 700000, $2) RETURNING id`,
     [listing2, semester],
   );
+  bed1 = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unit1]);
+  bed2 = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unit2]);
   unitPhoto1 = await seed(
     `INSERT INTO unit_photos (unit_id, storage_key, uploaded_by) VALUES ($1, 'room1-photo', $2) RETURNING id`,
     [unit1, landlord1],
@@ -124,9 +128,9 @@ beforeAll(async () => {
 
   reservation1 = await seed(
     `INSERT INTO reservations
-       (student_id, unit_id, listing_version_id, status, idempotency_key, hold_expires_at)
-     VALUES ($1, $2, $3, 'held', 'seed-hold-s1-000000', now() + interval '72 hours') RETURNING id`,
-    [student1, unit1, version1],
+       (student_id, bed_id, listing_version_id, status, idempotency_key, reserved_expires_at)
+     VALUES ($1, $2, $3, 'reserved', 'seed-hold-s1-000000', now() + interval '24 hours') RETURNING id`,
+    [student1, bed1, version1],
   );
   payment1 = await seed(
     `INSERT INTO payments (reservation_id, amount_ugx, payment_method, status)
@@ -208,9 +212,9 @@ describe('reservations & payments isolation', () => {
     await expect(
       asIdentity({ userId: student2, role: 'student' }, async (c) =>
         c.query(
-          `INSERT INTO reservations (student_id, unit_id, listing_version_id, status, idempotency_key)
-           VALUES ($1, $2, $3, 'held', 'attack-key-00000000')`,
-          [student2, unit1, version1],
+          `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
+           VALUES ($1, $2, $3, 'reserved', 'attack-key-00000000')`,
+          [student2, bed1, version1],
         ),
       ),
     ).rejects.toThrow(/row-level security|violates/i);
@@ -220,27 +224,27 @@ describe('reservations & payments isolation', () => {
     const rows = await asIdentity({ userId: opsLead, role: 'service_role' }, async (c) =>
       (
         await c.query(
-          `UPDATE reservations SET status = 'payment_pending' WHERE id = $1 RETURNING status`,
+          `UPDATE reservations SET status = 'booked' WHERE id = $1 RETURNING status`,
           [reservation1],
         )
       ).rows,
     );
-    expect(rows[0]?.status).toBe('payment_pending');
+    expect(rows[0]?.status).toBe('booked');
   });
 });
 
 describe('double-booking lock', () => {
-  it('a second live hold on the same unit is rejected by the DB', async () => {
+  it('a second live reservation on the same bed is rejected by the DB', async () => {
     await expect(
       asIdentity({ userId: opsLead, role: 'service_role' }, async (c) =>
         c.query(
-          `INSERT INTO reservations (student_id, unit_id, listing_version_id, status, idempotency_key)
-           SELECT $1, unit_id, listing_version_id, 'held', 'second-hold-0000000'
+          `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
+           SELECT $1, bed_id, listing_version_id, 'reserved', 'second-hold-0000000'
            FROM reservations WHERE id = $2`,
           [student2, reservation1],
         ),
       ),
-    ).rejects.toThrow(/reservations_one_live_hold_per_unit/);
+    ).rejects.toThrow(/reservations_one_live_hold_per_bed/);
   });
 });
 
@@ -279,7 +283,7 @@ describe('verification invariant (6-component checklist)', () => {
 });
 
 describe('reviews', () => {
-  it('a student cannot review a reservation that is not fulfilled', async () => {
+  it('a student cannot review a reservation that is not occupied', async () => {
     await expect(
       asIdentity({ userId: student1, role: 'student' }, async (c) =>
         c.query(
@@ -289,7 +293,7 @@ describe('reviews', () => {
           [reservation1],
         ),
       ),
-    ).rejects.toThrow(/row-level security|fulfilled/i);
+    ).rejects.toThrow(/row-level security|occupied/i);
   });
 });
 
@@ -396,6 +400,133 @@ describe('units.operational_status (0024): off-platform-occupancy write path', (
       c.query(`UPDATE units SET operational_status = 'occupied' WHERE id = $1`, [unit1]),
     );
     expect(res.rowCount).toBe(0);
+  });
+});
+
+describe('beds.blocked (0034): bed-level manual override, column-restricted grant', () => {
+  it("a landlord can flip their own bed's blocked status", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`UPDATE beds SET blocked = true, blocked_reason = 'repairs' WHERE id = $1`, [bed1]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it("a landlord cannot flip another landlord's bed", async () => {
+    const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query(`UPDATE beds SET blocked = true WHERE id = $1`, [bed2]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it('a landlord cannot write any other beds column, even on their own bed', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE beds SET label = 'Bed 9' WHERE id = $1`, [bed1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('ops_lead can flip blocked on any bed', async () => {
+    const res = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query(`UPDATE beds SET blocked = true, blocked_reason = 'ops hold' WHERE id = $1`, [bed2]),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it('ops_lead is also restricted to the blocked/blocked_reason columns', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(`UPDATE beds SET label = 'Bed 9' WHERE id = $1`, [bed1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('a student cannot write blocked at all', async () => {
+    const res = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE beds SET blocked = true WHERE id = $1`, [bed1]),
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
+  it('a landlord cannot INSERT a new bed directly (ops/service only)', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 2')`, [unit1]),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+});
+
+describe('reservation_releases (0033): landlord reads own, lead reads all, service-only write', () => {
+  let release1: string; // release of reservation1 (bed1, landlord1's property)
+
+  beforeAll(async () => {
+    release1 = await seed(
+      `INSERT INTO reservation_releases (reservation_id, released_by, reason, refund_required)
+       VALUES ($1, $2, 'student no-show', false) RETURNING id`,
+      [reservation1, landlord1],
+    );
+  });
+
+  it('a student cannot read any reservation_releases row', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT id FROM reservation_releases').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("the bed's landlord can read the release", async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT id FROM reservation_releases WHERE id = $1', [release1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('another landlord cannot read the release', async () => {
+    const rows = await asIdentity({ userId: landlord2, role: 'landlord' }, async (c) =>
+      c.query('SELECT id FROM reservation_releases WHERE id = $1', [release1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('ops_lead can read all releases', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+      c.query('SELECT id FROM reservation_releases WHERE id = $1', [release1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a landlord cannot INSERT a release directly (service-only writes)', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(
+          `INSERT INTO reservation_releases (reservation_id, released_by, reason)
+           VALUES ($1, $2, 'attack')`,
+          [reservation1, landlord1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('nobody can UPDATE a release, not even service_role (append-only)', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'service_role' }, async (c) =>
+        c.query(`UPDATE reservation_releases SET reason = 'tampered' WHERE id = $1`, [release1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('service_role can insert a release (the state machine path)', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'service_role' }, async (c) =>
+      c
+        .query(
+          `INSERT INTO reservation_releases (reservation_id, released_by, reason)
+           VALUES ($1, $2, 'landlord released') RETURNING id`,
+          [reservation1, landlord1],
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
   });
 });
 

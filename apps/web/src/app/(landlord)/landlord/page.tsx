@@ -15,16 +15,17 @@ import { BookingsTrendChart } from "@/components/landlord/analytics/bookings-tre
 export const metadata: Metadata = { title: "Landlord dashboard" };
 
 const RESERVATION_STATUS_LABEL: Record<string, string> = {
-  held: "Held",
-  payment_pending: "Payment pending",
-  fulfilled: "Occupied",
+  reserved: "Reserved",
+  booked: "Booked",
+  occupied: "Occupied",
+  released: "Released",
   cancelled: "Cancelled",
   expired: "Expired",
 };
 
 function reservationTone(status: string): "success" | "warning" | "neutral" {
-  if (status === "fulfilled") return "neutral";
-  if (status === "held" || status === "payment_pending") return "warning";
+  if (status === "occupied") return "neutral";
+  if (status === "reserved" || status === "booked") return "warning";
   return "success";
 }
 
@@ -39,8 +40,8 @@ export default async function LandlordDashboardPage() {
     redirect("/landlord/onboarding");
   }
 
-  const activeBookings = reservations.filter((r) => r.status === "held" || r.status === "payment_pending");
-  const occupied = reservations.filter((r) => r.status === "fulfilled");
+  const activeBookings = reservations.filter((r) => r.status === "reserved" || r.status === "booked");
+  const occupied = reservations.filter((r) => r.status === "occupied");
   const recent = reservations.slice(0, 5);
   const trend = bookingsTrend(reservations);
 
@@ -95,7 +96,7 @@ export default async function LandlordDashboardPage() {
           <div className="mt-3 divide-y divide-border rounded-md border border-border">
             {recent.map((r) => (
               <div key={r.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span className="text-muted-foreground">Room {r.unitId.slice(0, 8)}</span>
+                <span className="text-muted-foreground">Bed {r.bedId.slice(0, 8)}</span>
                 <StatusChip tone={reservationTone(r.status)}>
                   {RESERVATION_STATUS_LABEL[r.status] ?? r.status}
                 </StatusChip>

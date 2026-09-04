@@ -6,10 +6,10 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { usePagination } from "@/lib/use-pagination";
 
-type Occupant = { id: string; unitId: string };
+type Occupant = { id: string; bedId: string };
 type Room = { label: string; propertyName: string };
 
-export function TenantsList({ occupants, roomsByUnitId }: { occupants: Occupant[]; roomsByUnitId: Map<string, Room> }) {
+export function TenantsList({ occupants, roomsByBedId }: { occupants: Occupant[]; roomsByBedId: Map<string, Room> }) {
   const [view, setView] = useState<ViewMode>("grid");
   const { page, setPage, totalPages, pageItems, total, pageSize } = usePagination(occupants, 10);
 
@@ -30,11 +30,11 @@ export function TenantsList({ occupants, roomsByUnitId }: { occupants: Occupant[
             </thead>
             <tbody className="divide-y divide-border">
               {pageItems.map((occupant) => {
-                const room = roomsByUnitId.get(occupant.unitId);
+                const room = roomsByBedId.get(occupant.bedId);
                 return (
                   <tr key={occupant.id}>
                     <td className="px-3 py-2 text-muted-foreground">{room?.propertyName ?? "—"}</td>
-                    <td className="px-3 py-2 font-semibold text-foreground">{room?.label ?? occupant.unitId.slice(0, 8)}</td>
+                    <td className="px-3 py-2 font-semibold text-foreground">{room?.label ?? occupant.bedId.slice(0, 8)}</td>
                   </tr>
                 );
               })}
@@ -46,10 +46,10 @@ export function TenantsList({ occupants, roomsByUnitId }: { occupants: Occupant[
       {view === "rows" && (
         <div className="divide-y divide-border rounded-md border border-border">
           {pageItems.map((occupant) => {
-            const room = roomsByUnitId.get(occupant.unitId);
+            const room = roomsByBedId.get(occupant.bedId);
             return (
               <div key={occupant.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
-                <span className="font-semibold text-foreground">{room?.label ?? occupant.unitId.slice(0, 8)}</span>
+                <span className="font-semibold text-foreground">{room?.label ?? occupant.bedId.slice(0, 8)}</span>
                 <span className="text-xs text-muted-foreground">{room?.propertyName ?? "—"}</span>
               </div>
             );
@@ -60,10 +60,10 @@ export function TenantsList({ occupants, roomsByUnitId }: { occupants: Occupant[
       {view === "grid" && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {pageItems.map((occupant) => {
-            const room = roomsByUnitId.get(occupant.unitId);
+            const room = roomsByBedId.get(occupant.bedId);
             return (
               <div key={occupant.id} className="rounded-md border border-border p-3.5">
-                <p className="font-semibold text-foreground">{room?.label ?? occupant.unitId.slice(0, 8)}</p>
+                <p className="font-semibold text-foreground">{room?.label ?? occupant.bedId.slice(0, 8)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{room?.propertyName ?? "—"}</p>
               </div>
             );

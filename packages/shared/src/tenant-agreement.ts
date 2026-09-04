@@ -71,20 +71,25 @@ export type TenantAgreementTemplate = z.infer<typeof tenantAgreementTemplateSche
 // field-for-field match of CampusHomes' original paper/Google-Forms student
 // registration form, so a landlord (or ops, under the MVP concierge model)
 // starts from something already shaped like what students expect instead of
-// a blank page. Two deviations from that source form, both deliberate:
+// a blank page. Deviations from that source form, all deliberate:
 // "Date of Registration" and "Date Signed" are dropped (the submission's own
-// timestamp already captures this automatically), and "Medical Conditions /
+// timestamp already captures this automatically); "Medical Conditions /
 // Allergies" is optional rather than required (product decision — still
-// important to collect, but shouldn't block submission). Declaration and
-// signature are never template fields at all — see TENANT_AGREEMENT_
-// DECLARATION_TEXT below and the field-types comment at the top of this
-// file. Landlords can still freely edit or remove any of these afterward;
-// this is only the pre-filled starting point.
+// important to collect, but shouldn't block submission); "Property / Hostel
+// Name" and "Landlord / Caretaker Name/Phone Number" are dropped too — on
+// the paper form there's no other way to know which property a submission
+// belongs to, but the digital flow always starts from a property-scoped QR
+// code (the property name/address is already shown right above this form),
+// and the landlord's own contact details live on their account, not
+// something the student should have to type in by hand. "Room / Unit
+// Number" stays — the digital flow isn't linked to a specific reservation,
+// so it's the one piece of context the system genuinely doesn't have yet.
+// Declaration and signature are never template fields at all — see
+// TENANT_AGREEMENT_DECLARATION_TEXT below and the field-types comment at
+// the top of this file. Landlords can still freely edit or remove any of
+// these afterward; this is only the pre-filled starting point.
 export const DEFAULT_TENANT_AGREEMENT_TEMPLATE_FIELDS: TenantAgreementFieldInput[] = [
-  { fieldType: 'heading', label: 'Property & Landlord Details', required: false },
-  { fieldType: 'fill_in', label: 'Property / Hostel Name', required: true },
-  { fieldType: 'fill_in', label: 'Landlord / Caretaker Name', required: true },
-  { fieldType: 'fill_in', label: 'Landlord / Caretaker Phone Number', required: true },
+  { fieldType: 'heading', label: 'Your Room', required: false },
   { fieldType: 'fill_in', label: 'Room / Unit Number', required: true },
   { fieldType: 'heading', label: 'Student Personal Details', required: false },
   { fieldType: 'fill_in', label: 'Student Full Name', required: true },

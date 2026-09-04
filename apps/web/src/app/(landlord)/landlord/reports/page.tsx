@@ -30,11 +30,12 @@ export default async function LandlordReportsPage() {
   const details = await Promise.all(properties.map((p) => getPropertyDetail(p.id)));
   const rooms = flattenRooms(details);
 
-  const totalRooms = rooms.length;
-  const occupiedRooms = rooms.filter((r) => r.reservationStatus === "fulfilled").length;
+  const beds = rooms.flatMap((r) => r.beds);
+  const totalRooms = beds.length;
+  const occupiedRooms = beds.filter((b) => b.status === "occupied").length;
   const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : null;
   const activeBookings = reservations.filter(
-    (r) => r.status === "held" || r.status === "payment_pending",
+    (r) => r.status === "reserved" || r.status === "booked",
   ).length;
 
   const statusData = roomStatusBreakdown(rooms);
@@ -53,7 +54,7 @@ export default async function LandlordReportsPage() {
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" />
-        <StatCard label="Total rooms" value={String(totalRooms)} icon={BedDouble} tone="teal" />
+        <StatCard label="Total beds" value={String(totalRooms)} icon={BedDouble} tone="teal" />
         <StatCard
           label="Occupancy rate"
           value={occupancyRate === null ? "—" : `${occupancyRate}%`}
@@ -93,8 +94,8 @@ export default async function LandlordReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Room status</CardTitle>
-            <CardDescription>Every room across your properties, right now.</CardDescription>
+            <CardTitle>Bed status</CardTitle>
+            <CardDescription>Every bed across your properties, right now.</CardDescription>
           </CardHeader>
           <RoomStatusChart data={statusData} />
         </Card>
@@ -102,7 +103,7 @@ export default async function LandlordReportsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Occupancy by property</CardTitle>
-            <CardDescription>Share of rooms currently occupied, per property.</CardDescription>
+            <CardDescription>Share of beds currently occupied, per property.</CardDescription>
           </CardHeader>
           <PropertyOccupancyChart data={occupancyByProperty} />
         </Card>

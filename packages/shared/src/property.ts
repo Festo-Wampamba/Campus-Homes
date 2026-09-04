@@ -209,16 +209,31 @@ export const propertyDocumentSchema = z.object({
 });
 export type PropertyDocument = z.infer<typeof propertyDocumentSchema>;
 
-// One row per unit (room) — `reservationStatus` is the unit's current live
-// reservation if any ('held'/'payment_pending'/'fulfilled'), null meaning no
-// reservation. Read-only except `operationalStatus`, itself writable only
-// through PATCH /listings/units/:id/operational-status (0024) — everything
-// else here is the landlord's rooms + reservations view (GET
-// /listings/properties/:id/detail); reservations stay a student-initiated,
-// service_role-only state machine (brief §8). `operationalStatus` is the
-// manual side of availability: a room taken outside the reservation flow
-// entirely (no reservations row) still needs a way to stop showing as
-// available, hence this independent field.
+// One row per bed (0033) — a room's beds each carry their own live
+// reservation, if any (reserved/booked/occupied only; cancelled/released/
+// expired/refunded reservations are terminal and omitted, `status: null`).
+// `blocked`/`blockedReason` is the manual side of availability: a bed taken
+// out of service with no reservation at all (repairs, deliberately held
+// back) still needs a way to stop showing as available.
+export const propertyRoomBedSchema = z.object({
+  id: uuid,
+  label: z.string(),
+  blocked: z.boolean(),
+  blockedReason: z.string().nullable(),
+  reservationId: uuid.nullable(),
+  status: z.enum(RESERVATION_STATUSES).nullable(),
+  reservedExpiresAt: z.iso.datetime().nullable(),
+  bookedAt: z.iso.datetime().nullable(),
+  bookingFeeCollectedUgx: z.number().nullable(),
+  depositCollectedUgx: z.number().nullable(),
+});
+export type PropertyRoomBed = z.infer<typeof propertyRoomBedSchema>;
+
+// One row per unit (room) — read-only except `operationalStatus`, itself
+// writable only through PATCH /listings/units/:id/operational-status (0024)
+// — everything else here is the landlord's rooms + reservations view (GET
+// /listings/properties/:id/detail); reservations stay a student-initiated
+// (Reserve) or landlord-initiated (Book), service_role-only state machine.
 export const propertyRoomSchema = z.object({
   id: uuid,
   label: z.string(),
@@ -227,7 +242,7 @@ export const propertyRoomSchema = z.object({
   pricePerTermUgx: z.number(),
   depositUgx: z.number().nullable(),
   operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES),
-  reservationStatus: z.enum(RESERVATION_STATUSES).nullable(),
+  beds: z.array(propertyRoomBedSchema),
   // Landlord-uploaded, per this specific room (unit_photos) — separate from
   // the whole-listing `photos` array above, which is Ops-captured. Carries
   // the photo row's own id (not just storageKey) since removing one calls

@@ -11,6 +11,7 @@ import type {
 import type { RlsContext } from '../../db/rls-context';
 import { RlsDb } from '../../db/db.module';
 import {
+  beds,
   landlords,
   listingPhotos,
   listingVersions,
@@ -23,17 +24,19 @@ import {
   units,
 } from '../../db/schema';
 
-/** A unit still counts as "live" (not available) under these statuses —
- * cancelled/refunded/expired holds free the room back up. Mirrors the
- * `reservations_one_live_hold_per_unit` partial unique index (0001). */
-const LIVE_RESERVATION_STATUSES = ['held', 'payment_pending', 'fulfilled'] as const;
+/** A bed still counts as "live" (not available) under these statuses —
+ * cancelled/expired/released reservations free the bed back up. An occupied
+ * bed stays live indefinitely (no lease-end/renewal flow yet — out of scope
+ * per the redesign doc §19). Mirrors the `reservations_one_live_hold_per_bed`
+ * partial unique index (0033). */
+const LIVE_RESERVATION_STATUSES = ['reserved', 'booked', 'occupied'] as const;
 
-/** units.operational_status values that make a room unavailable independent
- * of any reservation — the manual side of occupancy (0024): a tenant found
- * outside the reservation flow, or a room pulled for maintenance, has no
- * `reservations` row at all, so LIVE_RESERVATION_STATUSES alone can't catch
- * it. 'available'/'vacant' both mean free and are deliberately excluded. */
-const UNAVAILABLE_OPERATIONAL_STATUSES = ['held', 'occupied', 'blocked', 'under_maintenance'] as const;
+/** units.operational_status values that make every bed in a room unavailable
+ * independent of any reservation (room-level manual override — maintenance,
+ * deliberately blocked). Walk-in occupancy now goes through Book-on-Available
+ * (0033) instead of an operational_status value, so 'available' is the only
+ * "free" state left here. */
+const UNAVAILABLE_OPERATIONAL_STATUSES = ['blocked', 'under_maintenance'] as const;
 
 /** Anonymous/public reads: RLS only exposes `status = 'verified'` rows to a
  * non-ops, non-owner identity, so the nil uuid sees exactly the public set. */
@@ -213,22 +216,26 @@ export class ListingsService {
 
       const roomRows = await db.select().from(units).where(eq(units.listingId, listing.id));
       const unitIds = roomRows.map((u) => u.id);
-      const liveReservations = unitIds.length
+
+      const bedRows = unitIds.length
+        ? await db.select().from(beds).where(inArray(beds.unitId, unitIds)).orderBy(asc(beds.label))
+        : [];
+      const bedIds = bedRows.map((b) => b.id);
+
+      // A bed's current non-terminal reservation, if any — reserved/booked/
+      // occupied are the only states worth showing the landlord here.
+      const liveReservations = bedIds.length
         ? await db
-            .select({ unitId: reservations.unitId, status: reservations.status })
+            .select()
             .from(reservations)
             .where(
               and(
-                inArray(reservations.unitId, unitIds),
-                inArray(reservations.status, LIVE_RESERVATION_STATUSES),
+                inArray(reservations.bedId, bedIds),
+                inArray(reservations.status, ['reserved', 'booked', 'occupied']),
               ),
             )
-            .orderBy(asc(reservations.createdAt))
         : [];
-      // Later rows overwrite earlier ones, so each unit ends up with its
-      // most recent live reservation — the partial unique index means
-      // there's realistically at most one anyway.
-      const statusByUnit = new Map(liveReservations.map((r) => [r.unitId, r.status]));
+      const reservationByBed = new Map(liveReservations.map((r) => [r.bedId, r]));
 
       const roomPhotoRows = unitIds.length
         ? await db
@@ -242,6 +249,13 @@ export class ListingsService {
         const list = photosByUnit.get(row.unitId) ?? [];
         list.push({ id: row.id, storageKey: row.storageKey });
         photosByUnit.set(row.unitId, list);
+      }
+
+      const bedsByUnit = new Map<string, (typeof bedRows)[number][]>();
+      for (const bed of bedRows) {
+        const list = bedsByUnit.get(bed.unitId) ?? [];
+        list.push(bed);
+        bedsByUnit.set(bed.unitId, list);
       }
 
       return {
@@ -262,8 +276,22 @@ export class ListingsService {
           pricePerTermUgx: u.pricePerTermUgx,
           depositUgx: u.depositUgx,
           operationalStatus: u.operationalStatus,
-          reservationStatus: statusByUnit.get(u.id) ?? null,
           photos: photosByUnit.get(u.id) ?? [],
+          beds: (bedsByUnit.get(u.id) ?? []).map((b) => {
+            const r = reservationByBed.get(b.id);
+            return {
+              id: b.id,
+              label: b.label,
+              blocked: b.blocked,
+              blockedReason: b.blockedReason,
+              reservationId: r?.id ?? null,
+              status: r?.status ?? null,
+              reservedExpiresAt: r?.reservedExpiresAt ?? null,
+              bookedAt: r?.bookedAt ?? null,
+              bookingFeeCollectedUgx: r?.bookingFeeCollectedUgx ?? null,
+              depositCollectedUgx: r?.depositCollectedUgx ?? null,
+            };
+          }),
         })),
       };
     });
@@ -428,14 +456,20 @@ export class ListingsService {
            LIMIT 1
          ) ph ON true
          LEFT JOIN LATERAL (
+           -- Joining beds fans a room out to one row per available bed, so
+           -- COUNT(*) here is an available-BED count, not a room count — a
+           -- partially-let double still contributes its one free bed. MIN/MAX
+           -- capacity describe the room itself and are unaffected by the fan-out.
            SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
                   COUNT(*) AS unit_count, MAX(un.price_per_term_ugx) AS max_price
            FROM units un
+           JOIN beds bd ON bd.unit_id = un.id
            WHERE un.listing_id = l.id
              AND un.operational_status <> ALL($11::text[])
+             AND NOT bd.blocked
              AND NOT EXISTS (
                SELECT 1 FROM reservations r
-               WHERE r.unit_id = un.id AND r.status = ANY($10::reservation_status[])
+               WHERE r.bed_id = bd.id AND r.status = ANY($10::reservation_status[])
              )
          ) u ON true
          LEFT JOIN LATERAL (
@@ -447,13 +481,16 @@ export class ListingsService {
                     ) ORDER BY price_per_term_ugx ASC
                   ) AS categories
            FROM (
+             -- Same available-bed-count fan-out as above, grouped per category.
              SELECT un.room_category AS category, un.price_per_term_ugx, COUNT(*) AS unit_count
              FROM units un
+             JOIN beds bd ON bd.unit_id = un.id
              WHERE un.listing_id = l.id
                AND un.operational_status <> ALL($11::text[])
+               AND NOT bd.blocked
                AND NOT EXISTS (
                  SELECT 1 FROM reservations r
-                 WHERE r.unit_id = un.id AND r.status = ANY($10::reservation_status[])
+                 WHERE r.bed_id = bd.id AND r.status = ANY($10::reservation_status[])
                )
              GROUP BY un.room_category, un.price_per_term_ugx
            ) grouped
@@ -471,12 +508,14 @@ export class ListingsService {
             AND (
               $12::text IS NULL OR EXISTS (
                 SELECT 1 FROM units uf
+                JOIN beds bf ON bf.unit_id = uf.id
                 WHERE uf.listing_id = l.id
                   AND uf.room_category = $12::room_category
                   AND uf.operational_status <> ALL($11::text[])
+                  AND NOT bf.blocked
                   AND NOT EXISTS (
                     SELECT 1 FROM reservations rf
-                    WHERE rf.unit_id = uf.id AND rf.status = ANY($10::reservation_status[])
+                    WHERE rf.bed_id = bf.id AND rf.status = ANY($10::reservation_status[])
                   )
               )
             )
@@ -553,22 +592,23 @@ export class ListingsService {
       const { availability, property, propertyMedia } = await this.rlsDb.run(
         SERVICE_CTX,
         async (_db, client) => {
-          // Bug fixed here: this used to only check status = 'held', so a
-          // unit with a 'payment_pending' or already-'fulfilled' reservation
-          // still showed as available to a browsing student — matches
-          // LIVE_RESERVATION_STATUSES now, same set the owner-facing detail
-          // query (above) and search() already use. Also now checks
-          // operational_status (0024) — a unit taken outside the reservation
-          // flow entirely has no reservations row to catch it otherwise.
+          // Availability is per-bed now (0033) — a partially-let room still
+          // has a free bed to reserve. A bed is available when it isn't
+          // manually blocked, its room isn't under a room-level override
+          // (maintenance/blocked), and it has no live (reserved/booked)
+          // reservation on it.
           const availRes = await client.query(
-            `SELECT u.id, (
-               NOT EXISTS (
-                 SELECT 1 FROM reservations r
-                  WHERE r.unit_id = u.id AND r.status = ANY($2::reservation_status[])
-               )
+            `SELECT b.id, b.unit_id, (
+               NOT b.blocked
                AND u.operational_status <> ALL($3::text[])
+               AND NOT EXISTS (
+                 SELECT 1 FROM reservations r
+                  WHERE r.bed_id = b.id AND r.status = ANY($2::reservation_status[])
+               )
              ) AS available
-             FROM units u WHERE u.listing_id = $1`,
+             FROM beds b
+             JOIN units u ON u.id = b.unit_id
+             WHERE u.listing_id = $1`,
             [listingId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES],
           );
           // Custodian contact rides along here too — landlords has no public
@@ -608,7 +648,7 @@ export class ListingsService {
             console.error('[analytics] listing_view event log failed:', err);
           }
           return {
-            availability: availRes.rows as { id: string; available: boolean }[],
+            availability: availRes.rows as { id: string; unit_id: string; available: boolean }[],
             property: propRes.rows[0] as {
               id: string;
               name: string;

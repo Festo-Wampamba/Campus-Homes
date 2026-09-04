@@ -1,14 +1,17 @@
 /**
  * Regression coverage for a real bug: the public detail() availability
- * query only excluded units with a 'held' reservation, so a unit that was
+ * query only excluded beds with a 'held' reservation, so a bed that was
  * 'payment_pending' or already 'fulfilled' (i.e. genuinely occupied) still
  * showed as available to a browsing student. search() had the same gap one
- * level up — unit_count/room_categories were computed from every unit on a
+ * level up — unit_count/room_categories were computed from every bed on a
  * listing regardless of reservation status, and a fully-booked listing
- * still appeared in results with nothing actually reservable. Both now use
- * LIVE_RESERVATION_STATUSES ('held' | 'payment_pending' | 'fulfilled'),
- * matching the meeting requirement that occupied rooms never appear
- * available to students.
+ * still appeared in results with nothing actually reservable.
+ *
+ * Redesigned 2026-09 for the bed-level Reserve -> Book -> Move-in model:
+ * availability is now per-bed (LIVE_RESERVATION_STATUSES = 'reserved' |
+ * 'booked' | 'occupied'), matching the requirement that occupied beds never
+ * appear available to students — including once a reservation reaches the
+ * terminal 'occupied' state (not just while 'reserved'/'booked').
  */
 import { Pool } from 'pg';
 
@@ -32,9 +35,12 @@ const listings = new ListingsService(rlsDb);
 
 let listingId: string;
 let versionId: string;
-let unitFulfilled: string;
-let unitPending: string;
+let unitOccupied: string;
+let unitReserved: string;
 let unitCancelled: string;
+let bedOccupied: string;
+let bedReserved: string;
+let bedCancelled: string;
 let studentId: string;
 
 const FULL_CHECKLIST = Object.fromEntries(
@@ -51,7 +57,8 @@ async function seed(sql: string, params: unknown[] = []): Promise<string> {
 beforeAll(async () => {
   await pool.query(
     `TRUNCATE users, students, landlords, ops_staff, semesters, properties,
-     verification_visits, listings, listing_versions, units, reservations CASCADE`,
+     verification_visits, listings, listing_versions, units, beds,
+     reservations CASCADE`,
   );
 
   const landlordId = await seed(
@@ -102,8 +109,8 @@ beforeAll(async () => {
     amenities: { water: true },
     description: 'Availability test listing',
     units: [
-      { label: 'Unit Fulfilled', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 },
-      { label: 'Unit Pending', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 },
+      { label: 'Unit Occupied', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 },
+      { label: 'Unit Reserved', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 },
       { label: 'Unit Cancelled', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 },
     ],
   });
@@ -114,27 +121,36 @@ beforeAll(async () => {
     [listingId],
   );
   const byLabel = new Map(unitRows.rows.map((r: { id: string; label: string }) => [r.label, r.id]));
-  unitFulfilled = byLabel.get('Unit Fulfilled')!;
-  unitPending = byLabel.get('Unit Pending')!;
+  unitOccupied = byLabel.get('Unit Occupied')!;
+  unitReserved = byLabel.get('Unit Reserved')!;
   unitCancelled = byLabel.get('Unit Cancelled')!;
 
-  // A 'fulfilled' reservation — the exact case the old `status = 'held'`
-  // check missed. A 'payment_pending' one, same gap. A 'cancelled' one on
-  // the third unit, to prove the fix doesn't over-hide rooms that freed up.
+  const bedRows = await pool.query(`SELECT id, unit_id FROM beds WHERE unit_id = ANY($1)`, [
+    [unitOccupied, unitReserved, unitCancelled],
+  ]);
+  const bedByUnit = new Map(bedRows.rows.map((r: { id: string; unit_id: string }) => [r.unit_id, r.id]));
+  bedOccupied = bedByUnit.get(unitOccupied)!;
+  bedReserved = bedByUnit.get(unitReserved)!;
+  bedCancelled = bedByUnit.get(unitCancelled)!;
+
+  // An 'occupied' reservation — the terminal state, the exact case the old
+  // `status = 'held'`-only check missed. A 'reserved' one, same live-hold
+  // gap one status earlier. A 'cancelled' one on the third bed, to prove the
+  // fix doesn't over-hide beds that freed up.
   await pool.query(
-    `INSERT INTO reservations (student_id, unit_id, listing_version_id, status, idempotency_key)
-     VALUES ($1, $2, $3, 'fulfilled', 'avail-test-fulfilled-01')`,
-    [studentId, unitFulfilled, versionId],
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
+     VALUES ($1, $2, $3, 'occupied', 'avail-test-occupied-01')`,
+    [studentId, bedOccupied, versionId],
   );
   await pool.query(
-    `INSERT INTO reservations (student_id, unit_id, listing_version_id, status, idempotency_key)
-     VALUES ($1, $2, $3, 'payment_pending', 'avail-test-pending-01')`,
-    [studentId, unitPending, versionId],
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
+     VALUES ($1, $2, $3, 'reserved', 'avail-test-reserved-01')`,
+    [studentId, bedReserved, versionId],
   );
   await pool.query(
-    `INSERT INTO reservations (student_id, unit_id, listing_version_id, status, idempotency_key)
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key)
      VALUES ($1, $2, $3, 'cancelled', 'avail-test-cancelled-01')`,
-    [studentId, unitCancelled, versionId],
+    [studentId, bedCancelled, versionId],
   );
 });
 
@@ -143,17 +159,17 @@ afterAll(async () => {
 });
 
 describe('detail() public availability', () => {
-  it('marks a fulfilled unit as unavailable, not just a held one', async () => {
+  it('marks an occupied bed as unavailable, not just a reserved one', async () => {
     const detail = await listings.detail(listingId);
-    const availability = new Map(detail.availability.map((a) => [a.id, a.available]));
-    expect(availability.get(unitFulfilled)).toBe(false);
-    expect(availability.get(unitPending)).toBe(false);
+    const availability = new Map(detail.availability.map((a) => [a.unit_id, a.available]));
+    expect(availability.get(unitOccupied)).toBe(false);
+    expect(availability.get(unitReserved)).toBe(false);
     expect(availability.get(unitCancelled)).toBe(true);
   });
 });
 
 describe('search() availability', () => {
-  it('only counts still-available units, and keeps a partially-booked listing visible', async () => {
+  it('only counts still-available beds, and keeps a partially-booked listing visible', async () => {
     const rows = (await listings.search({
       minLon: 32.5,
       minLat: 0.25,
@@ -163,14 +179,14 @@ describe('search() availability', () => {
     } as never)) as { id: string; unit_count: number }[];
     const row = rows.find((r) => r.id === listingId);
     expect(row).toBeDefined();
-    // 3 units total, 2 occupied (fulfilled + payment_pending), 1 free (cancelled doesn't count).
+    // 3 beds total, 2 occupied (occupied + reserved), 1 free (cancelled doesn't count).
     // search() returns raw snake_case SQL rows — COUNT(*) arrives as a string;
     // the shared listingSearchResultSchema coerces it at the wire boundary.
     expect(Number(row!.unit_count)).toBe(1);
   });
 
-  it('excludes a listing entirely once every unit is occupied', async () => {
-    await pool.query(`UPDATE reservations SET status = 'fulfilled' WHERE unit_id = $1`, [unitCancelled]);
+  it('excludes a listing entirely once every bed is occupied', async () => {
+    await pool.query(`UPDATE reservations SET status = 'occupied' WHERE bed_id = $1`, [bedCancelled]);
     const rows = (await listings.search({
       minLon: 32.5,
       minLat: 0.25,
