@@ -29,10 +29,16 @@ export function logtoConfigFor(env: Env, portal: Portal): LogtoConfig {
   };
 }
 
-/** This API's own public origin — used to build the Logto redirect_uri and
- * magic-link sign-in URLs. Falls back to localhost for local dev. */
-export function apiOrigin(env: Env): string {
-  return (env.AUTH_API_URL ?? `http://localhost:${env.PORT}`).replace(/\/$/, '');
+/** The web app's public origin. The Logto redirect_uri and magic-link
+ * sign-in URLs point here instead of at this API directly — apps/web's
+ * next.config.ts rewrites /api/auth/* and /api/v1/* to the real API
+ * server-side, so from the browser's perspective every request in the
+ * OIDC flow, including the one that sets the session cookie, is
+ * same-origin with the web app. That's what lets the session cookie be
+ * host-only instead of needing AUTH_COOKIE_DOMAIN scoped to the whole
+ * apex (see auth.controller.ts's callback handler). */
+export function webOrigin(env: Env): string {
+  return env.WEB_ORIGIN.replace(/\/$/, '');
 }
 
 /** A magic-link URL that redeems a Management-API-issued one-time-token —
@@ -41,5 +47,5 @@ export function apiOrigin(env: Env): string {
  * `extraParams.one_time_token`. */
 export function magicSignInUrl(env: Env, portal: Portal, token: string, email: string): string {
   const params = new URLSearchParams({ portal, token, email });
-  return `${apiOrigin(env)}/api/auth/logto/sign-in?${params.toString()}`;
+  return `${webOrigin(env)}/api/auth/logto/sign-in?${params.toString()}`;
 }

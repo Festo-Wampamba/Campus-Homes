@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { homeForAuthenticatedRole } from "@/lib/auth-routing";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Relative, not absolute — see lib/api.ts's BASE for why.
+const BASE = "";
 
 function AuthCallback() {
   const router = useRouter();

@@ -26,22 +26,26 @@ afterAll((done) => {
   server.close(() => done());
 });
 
-async function importApi(base: string) {
-  jest.resetModules();
-  process.env.NEXT_PUBLIC_API_BASE_URL = base;
-  return import("./api");
-}
+// api.ts's BASE is a hardcoded relative path now (proxied through
+// next.config.ts's rewrites in the browser), not env-configurable, so this
+// redirects whatever URL api() constructs to the dummy server instead —
+// still a real fetch against a real hung connection, just not reached via
+// BASE indirection.
+const realFetch = globalThis.fetch;
 
 it("rejects instead of hanging when the API accepts the connection but never responds", async () => {
-  const { api } = await importApi(baseUrl);
+  const { api } = await import("./api");
+  jest.spyOn(globalThis, "fetch").mockImplementation((_input, init) => realFetch(baseUrl, init));
 
   await expect(
     api("/listings/campuses", { signal: AbortSignal.timeout(250) }),
   ).rejects.toThrow(/abort|timeout/i);
+
+  (globalThis.fetch as jest.Mock).mockRestore();
 });
 
 it("applies a default timeout signal when the caller supplies none", async () => {
-  const { api } = await importApi(baseUrl);
+  const { api } = await import("./api");
   const fetchSpy = jest
     .spyOn(globalThis, "fetch")
     .mockResolvedValue(new Response("{}", { status: 200 }));

@@ -5,7 +5,8 @@ import { useState } from "react";
 
 import { AdminField, adminFieldClass } from "./admin-modal";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Relative, not absolute — see lib/api.ts's BASE for why.
+const API_BASE = "";
 
 const LABELS: Record<string, string> = {
   platform: "Platform summary", catchments: "Catchment performance", users: "Users",
