@@ -16,8 +16,9 @@ import { cn } from "@/lib/utils";
 
 // Same duplicated-constant precedent as admin-export-panel.tsx's download
 // flow — a raw fetch (not the api() wrapper) is needed here since the
-// response is a PDF blob, not JSON.
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// response is a PDF blob, not JSON. Relative, not absolute — see
+// lib/api.ts's BASE for why.
+const API_BASE = "";
 
 const FIELD_TYPE_LABEL: Record<TenantAgreementFieldType, string> = {
   heading: "Heading (section title — not fillable)",

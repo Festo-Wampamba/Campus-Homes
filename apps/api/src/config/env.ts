@@ -14,11 +14,6 @@ const envSchema = z.object({
   // one tenant: consumer (students + landlords) and staff (admin/ops),
   // isolated by client_id/secret for blast-radius separation — see
   // apps/api/src/modules/auth/logto.config.ts.
-  // This API's own public origin — used to build the Logto redirect_uri
-  // (`${AUTH_API_URL}/api/auth/logto/callback`, already registered with
-  // both Logto applications during provisioning). Falls back to localhost
-  // for local dev, same pattern BETTER_AUTH_URL used to serve.
-  AUTH_API_URL: z.string().url().optional(),
   LOGTO_ENDPOINT: z.string().url().optional(),
   LOGTO_CONSUMER_APP_ID: z.string().min(1).optional(),
   LOGTO_CONSUMER_APP_SECRET: z.string().min(1).optional(),
@@ -44,8 +39,11 @@ const envSchema = z.object({
   // production for the email leg of the support desk.
   SUPPORT_NOTIFY_EMAILS: z.string().min(1).optional(),
   AUTH_APP_URL: z.string().url().default('http://localhost:3000'),
-  // Required when the browser-facing web app and this API use sibling
-  // subdomains. Omit locally so development cookies remain host-only.
+  // Should stay unset everywhere now that apps/web's next.config.ts
+  // proxies /api/auth/* and /api/v1/* server-side — the browser is always
+  // same-origin with the web app, so the session cookie is host-only
+  // without this. Only exists as an escape hatch if a future deployment
+  // ever needs the web app and API on true sibling subdomains again.
   AUTH_COOKIE_DOMAIN: z
     .string()
     .regex(/^(?:\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i)

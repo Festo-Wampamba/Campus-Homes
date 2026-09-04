@@ -13,6 +13,19 @@ const nextConfig: NextConfig = {
   // Next bootstrap scripts, and a wrong CSP breaks the page silently, so it
   // needs its own nonce-based pass rather than being guessed at here.
   poweredByHeader: false,
+  // Proxies every browser-facing API call through this app's own origin so
+  // the session cookie the API sets can be host-only instead of scoped to
+  // the whole apex (AUTH_COOKIE_DOMAIN) — see apps/api's logto.config.ts
+  // webOrigin() and auth.controller.ts's callback handler. Server
+  // components (lib/server-api.ts, lib/session.ts) call the API directly
+  // and are unaffected — this only matters for browser fetches.
+  async rewrites() {
+    const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000").replace(/\/$/, "");
+    return [
+      { source: "/api/v1/:path*", destination: `${apiOrigin}/api/v1/:path*` },
+      { source: "/api/auth/:path*", destination: `${apiOrigin}/api/auth/:path*` },
+    ];
+  },
   async headers() {
     return [
       {

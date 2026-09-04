@@ -1,4 +1,6 @@
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Relative, not absolute: next.config.ts's rewrites() proxy this same-origin
+// to the real API, which is what lets the session cookie be host-only.
+const BASE = "";
 
 // 400s carry Zod issue detail in nestjs-zod format (FRONTEND.md §1).
 export class ApiError extends Error {

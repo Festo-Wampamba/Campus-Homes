@@ -27,7 +27,7 @@ function loadLogtoNode() {
 
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
-import { apiOrigin, logtoConfigFor, type Portal } from './logto.config';
+import { logtoConfigFor, webOrigin, type Portal } from './logto.config';
 import { ProvisioningService } from './provisioning.service';
 import { SESSION_COOKIE_NAME, SessionStore } from './session.store';
 
@@ -138,7 +138,7 @@ export class AuthController {
       });
     }
     const client = await buildClient(env, portal, req, res);
-    const redirectUri = `${apiOrigin(env)}/api/auth/logto/callback`;
+    const redirectUri = `${webOrigin(env)}/api/auth/logto/callback`;
     await client.signIn({
       redirectUri,
       ...(token ? { extraParams: { one_time_token: token }, ...(email ? { loginHint: email } : {}) } : {}),
@@ -161,7 +161,7 @@ export class AuthController {
 
     let provisioned;
     try {
-      const callbackUrl = `${apiOrigin(env)}${req.originalUrl}`;
+      const callbackUrl = `${webOrigin(env)}${req.originalUrl}`;
       await client.handleSignInCallback(callbackUrl);
       const claims = await client.getIdTokenClaims();
       provisioned = await this.provisioning.provision(
@@ -217,8 +217,4 @@ export class SessionController {
     const token = readSessionCookie(req);
     return token ? await this.sessionStore.find(token) : null;
   }
-}
-
-function webOrigin(env: ReturnType<typeof loadEnv>): string {
-  return env.WEB_ORIGIN.replace(/\/$/, '');
 }
