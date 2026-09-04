@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets deploy-production (below) be triggered by hand from the Actions tab.
+  # Production deploys stay a deliberate action, not an on-push one — this
+  # only replaces manually clicking through the Dokploy UI with a gated,
+  # health-checked run of the same steps deploy-staging already automates.
+  workflow_dispatch:
 
 # Repo had zero CI before this — Dokploy's GitHub App was the only build
 # trigger, and pre-merge discipline was the only quality gate (see the
@@ -174,4 +179,71 @@ jobs:
             sleep 10
           done
           echo "::error::staging did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          exit 1
+
+  # Manual-only (see workflow_dispatch above) — production has stayed a
+  # deliberate action since the 3-hour launch cutover, when every deploy was
+  # clicked through the Dokploy UI by hand with no health-gate or commit-SHA
+  # verification. Same steps as deploy-staging, same Dokploy instance
+  # (DOKPLOY_API_KEY/API_URL are instance-level, not per-app — only the
+  # app id and target host differ), pointed at campushomes-api instead of
+  # campushomes-api-staging.
+  deploy-production:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Set build-arg so the image can report its own commit
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_PROD_APP_ID }}
+        run: |
+          for name in API_KEY API_URL APP_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::DOKPLOY_$name is not set — add it under Settings > Secrets and variables > Actions"
+              exit 1
+            fi
+          done
+          current=$(curl --fail --silent --show-error \
+            "$API_URL/api/application.one?applicationId=$APP_ID" \
+            -H "x-api-key: $API_KEY")
+          jq -n \
+            --arg appId "$APP_ID" \
+            --arg env "$(jq -r '.env // ""' <<<"$current")" \
+            --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
+            --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
+            --arg sha "$GITHUB_SHA" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            > /tmp/save-env-payload.json
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.saveEnvironment" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/save-env-payload.json
+
+      - name: Trigger Dokploy deploy
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_PROD_APP_ID }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.deploy" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"$APP_ID\"}"
+
+      - name: Wait for production to report healthy on this commit
+        run: |
+          sleep 120
+          for attempt in $(seq 1 30); do
+            body=$(curl -s -m 10 https://api.campushomes.co.ug/api/v1/health || true)
+            echo "attempt $attempt: ${body:-no response}"
+            case "$body" in
+              *'"status":"ok"'*"\"commit\":\"${GITHUB_SHA}\""*) echo "production healthy on ${GITHUB_SHA}"; exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::production did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
           exit 1
