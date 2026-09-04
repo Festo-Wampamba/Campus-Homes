@@ -119,14 +119,14 @@ beforeAll(async () => {
       units: [{ label: 'Room 1A', capacity: 1, roomCategory: 'single', pricePerTermUgx: 800_000 }],
     },
   );
-  const unitRes = await pool.query(`SELECT id FROM units WHERE listing_id = $1`, [listingId]);
+  const unitRes = await pool.query(`SELECT id FROM units WHERE property_id = $1`, [property]);
   const unitId = unitRes.rows[0].id as string;
   const bedRes = await pool.query(`SELECT id FROM beds WHERE unit_id = $1`, [unitId]);
   const bedId = bedRes.rows[0].id as string;
 
   const reservationId = await seed(
-    `INSERT INTO reservations (student_id, bed_id, listing_version_id, idempotency_key)
-     VALUES ($1, $2, $3, 'chat-test-res-0001') RETURNING id`,
+    `INSERT INTO reservations (student_id, bed_id, listing_version_id, idempotency_key, price_per_term_ugx)
+     VALUES ($1, $2, $3, 'chat-test-res-0001', 800000) RETURNING id`,
     [participantStudent, bedId, published.listing.currentVersionId],
   );
 

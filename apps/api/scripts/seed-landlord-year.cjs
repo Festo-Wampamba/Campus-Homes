@@ -83,11 +83,15 @@ async function main() {
     const landlordId = landlordRows[0].id;
     const studentId = studentRows[0].id;
 
+    // Rooms are permanent/property-level (2026-09) — price comes from
+    // unit_semester_pricing, joined to whichever of the property's listings
+    // covers that same semester.
     const { rows: units } = await client.query(
-      `SELECT u.id AS unit_id, u.price_per_term_ugx, l.current_version_id
+      `SELECT u.id AS unit_id, usp.price_per_term_ugx, l.current_version_id
        FROM units u
-       JOIN listings l ON l.id = u.listing_id
-       JOIN properties p ON p.id = l.property_id
+       JOIN unit_semester_pricing usp ON usp.unit_id = u.id
+       JOIN listings l ON l.property_id = u.property_id AND l.semester_id = usp.semester_id
+       JOIN properties p ON p.id = u.property_id
        WHERE p.landlord_id = $1 AND l.current_version_id IS NOT NULL`,
       [landlordId],
     );

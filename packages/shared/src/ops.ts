@@ -65,13 +65,17 @@ export const publishListingSchema = z.object({
   listingId: uuid,
   amenities: z.record(z.string(), z.boolean()),
   description: z.string().max(5000).optional(),
-  // Bed-level units go live with the version. Ops-created: RLS only lets ops
-  // insert units, so they ride the publish payload rather than the draft.
+  // Rooms are permanent/property-level (2026-09) — reused across every
+  // future semester, not recreated at every publish. `unitId` present means
+  // "this is one of the property's existing rooms, just price it for this
+  // semester"; omitted means "this is a brand-new physical room," which gets
+  // created (with its beds) once and then behaves the same going forward.
   // At least one unit is required — a verified listing needs real inventory
   // to reserve, and price only exists at the unit/category level now.
   units: z
     .array(
       z.object({
+        unitId: uuid.optional(),
         label: z.string().min(1).max(100),
         capacity: z.number().int().min(1).max(20).default(1),
         roomCategory: z.enum(ROOM_CATEGORIES),

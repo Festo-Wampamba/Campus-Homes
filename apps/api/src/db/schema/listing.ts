@@ -77,11 +77,17 @@ export const listingPhotos = pgTable('listing_photos', {
   metadata: jsonb('metadata'),
 });
 
+// Physical rooms — permanent, property-level (2026-09 redesign). A room is
+// created once and reused across every future semester; it is never
+// recreated at publish time. Pricing is NOT here — see unitSemesterPricing
+// below — because rent legitimately changes between semesters and a room
+// row must stay stable for reservations/history to keep pointing at "the
+// same room" indefinitely.
 export const units = pgTable('units', {
   id: uuid('id').primaryKey().defaultRandom(),
-  listingId: uuid('listing_id')
+  propertyId: uuid('property_id')
     .notNull()
-    .references(() => listings.id, { onDelete: 'restrict' }),
+    .references(() => properties.id, { onDelete: 'restrict' }),
   label: text('label').notNull(), // "Room 2A"
   // Total occupancy positions in the room — the source of truth for how
   // many `beds` rows get created under it (bed-level redesign, 2026-09).
@@ -89,16 +95,6 @@ export const units = pgTable('units', {
   // Room type (single/double/triple/...) — priced independently per category,
   // not one flat price for the whole listing. CHECK price > 0 in SQL migration.
   roomCategory: roomCategory('room_category').notNull().default('other'),
-  // Per BED, not per room — a Double at 1,100,000 means each of its 2 beds
-  // costs 1,100,000, not 550,000 each. Never divide/multiply this by
-  // `capacity`; every revenue/display calc treats it as the bed's own price.
-  pricePerTermUgx: integer('price_per_term_ugx').notNull(),
-  // Nullable — not every room charges a deposit, and older units predate
-  // this column. CHECK >= 0 in SQL migration, same as price's > 0 check.
-  depositUgx: integer('deposit_ugx'),
-  availableForSemesterId: uuid('available_for_semester_id')
-    .notNull()
-    .references(() => semesters.id),
   // Room-level manual override (maintenance/blocked take the whole room out
   // of service regardless of individual beds) — walk-in occupancy itself
   // moved to bed-level `beds.blocked` + direct Book-on-Available (0033); this
@@ -113,6 +109,32 @@ export const units = pgTable('units', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// One row per (room, semester) it's been priced for (2026-09 redesign,
+// replacing units.pricePerTermUgx/depositUgx/availableForSemesterId).
+// IMMUTABLE like listingVersions — never updated, only superseded by a new
+// row for a later semester, so a reservation's snapshotted price never
+// drifts when a landlord raises next semester's rent.
+export const unitSemesterPricing = pgTable(
+  'unit_semester_pricing',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    unitId: uuid('unit_id')
+      .notNull()
+      .references(() => units.id, { onDelete: 'cascade' }),
+    semesterId: uuid('semester_id')
+      .notNull()
+      .references(() => semesters.id),
+    // Per BED, not per room — a Double at 1,100,000 means each of its 2 beds
+    // costs 1,100,000, not 550,000 each. Never divide/multiply this by
+    // `capacity`; every revenue/display calc treats it as the bed's own price.
+    pricePerTermUgx: integer('price_per_term_ugx').notNull(), // CHECK > 0 in SQL migration
+    // Nullable — not every room charges a deposit.
+    depositUgx: integer('deposit_ugx'), // CHECK >= 0 in SQL migration
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('unit_semester_pricing_unit_semester_uk').on(t.unitId, t.semesterId)],
+);
 
 // One row per occupancy position within a room (bed-level redesign, 2026-09)
 // — a double's `units.capacity = 2` backs exactly two of these. Reservations

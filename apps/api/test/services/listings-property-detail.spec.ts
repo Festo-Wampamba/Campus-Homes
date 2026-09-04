@@ -87,10 +87,13 @@ beforeAll(async () => {
     `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'verified') RETURNING id`,
     [propertyId, semester],
   );
+  const unitId = await seed(
+    `INSERT INTO units (property_id, label, capacity, room_category) VALUES ($1, 'Single 1', 1, 'single') RETURNING id`,
+    [propertyId],
+  );
   await pool.query(
-    `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, available_for_semester_id)
-     VALUES ($1, 'Single 1', 1, 'single', 800000, $2)`,
-    [verifiedListingId, semester],
+    `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx) VALUES ($1, $2, 800000)`,
+    [unitId, semester],
   );
 
   // A newer re-verification draft for a fresh semester — created after the

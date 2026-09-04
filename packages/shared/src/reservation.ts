@@ -12,6 +12,11 @@ import { idempotencyKey, ugPhone, ugxAmount, uuid } from './common.js';
 
 export const reserveSchema = z.object({
   bedId: uuid,
+  // Rooms are permanent/property-level (2026-09) — a single unit can carry
+  // pricing for more than one semester, so `bedId` alone no longer pins down
+  // which listing/semester/price the student actually saw and agreed to.
+  // This is the listing the student was viewing when they clicked Reserve.
+  listingId: uuid,
   // Generated client-side so a retried request can never create two holds.
   idempotencyKey,
 });
