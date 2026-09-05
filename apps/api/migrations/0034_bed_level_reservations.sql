@@ -3,6 +3,13 @@
 -- held/payment_pending/fulfilled machine, and moving inventory from
 -- room-level to bed-level so a partially-let double/triple still shows its
 -- free beds instead of the whole room disappearing.
+--
+-- The backfill below is capacity/recency-aware for `fulfilled` reservations
+-- specifically: the old schema had no "tenant moved out" step, so a unit's
+-- historical `fulfilled` rows can outnumber its physical beds after normal
+-- term-to-term turnover. Naively assigning every reservation on a unit to
+-- the same first bed (then requiring bed_id uniqueness among live
+-- reservations) fails the instant a unit's turnover exceeds its capacity.
 
 -- ── beds ──────────────────────────────────────────────────────────────────
 CREATE TABLE "beds" (
@@ -29,12 +36,34 @@ FROM units u, generate_series(1, u.capacity) AS gs(n);
 -- ── reservations: unit_id -> bed_id ──────────────────────────────────────
 ALTER TABLE reservations ADD COLUMN bed_id uuid;
 --> statement-breakpoint
--- Old model was room-level — every existing reservation maps onto its
+-- Old model was room-level — default every existing reservation onto its
 -- unit's first bed (deterministic by label, "Bed 1" sorts first).
 UPDATE reservations r
 SET bed_id = (
   SELECT b.id FROM beds b WHERE b.unit_id = r.unit_id ORDER BY b.label LIMIT 1
 );
+--> statement-breakpoint
+-- Fix over the default above, `fulfilled` only: a unit's history can hold
+-- more `fulfilled` reservations than it has beds (turnover across terms,
+-- see the note at the top of this file). Distribute each unit's `fulfilled`
+-- reservations across distinct beds by recency — the most recent one gets
+-- Bed 1, the next-most-recent Bed 2, and so on; anything older than the
+-- unit's capacity collapses onto the last bed slot, which is safe because
+-- those rows become 'released' below and aren't subject to the live-only
+-- uniqueness constraint.
+UPDATE reservations r
+SET bed_id = (
+  SELECT b.id FROM beds b
+  WHERE b.unit_id = r.unit_id
+  ORDER BY b.label
+  OFFSET LEAST(
+    (SELECT count(*) FROM reservations r2
+     WHERE r2.unit_id = r.unit_id AND r2.status = 'fulfilled' AND r2.created_at > r.created_at),
+    (SELECT capacity FROM units u WHERE u.id = r.unit_id) - 1
+  )
+  LIMIT 1
+)
+WHERE r.status = 'fulfilled';
 --> statement-breakpoint
 ALTER TABLE reservations ALTER COLUMN bed_id SET NOT NULL;
 --> statement-breakpoint
@@ -59,7 +88,7 @@ ALTER TABLE reservations DROP COLUMN unit_id;
 DROP POLICY reviews_student_insert ON reviews;
 --> statement-breakpoint
 
--- ── reservations: status enum, held/payment_pending/fulfilled -> reserved/booked/occupied ──
+-- ── reservations: status enum, held/payment_pending/fulfilled -> reserved/booked/occupied/released ──
 -- Staged through a plain text column first — no correlated-subquery
 -- gymnastics inside an ALTER COLUMN ... USING expression.
 ALTER TABLE reservations ADD COLUMN status_migrated text;
@@ -69,8 +98,22 @@ UPDATE reservations SET status_migrated = CASE status::text
   WHEN 'payment_pending' THEN 'reserved'
   WHEN 'payment_failed' THEN 'reserved'
   WHEN 'fulfilled' THEN (
-    CASE WHEN EXISTS (SELECT 1 FROM move_ins m WHERE m.reservation_id = reservations.id)
-      THEN 'occupied' ELSE 'booked' END
+    -- reservations.unit_id is already gone by this point in the file — go
+    -- through bed_id (set correctly above, before the column was dropped)
+    -- to reach the unit instead.
+    CASE
+      -- Beyond the unit's capacity-most-recent fulfilled reservations, this
+      -- row is historical turnover, not a current occupant.
+      WHEN (
+        SELECT count(*) FROM reservations r2
+        WHERE r2.status = 'fulfilled' AND r2.created_at > reservations.created_at
+          AND r2.bed_id IN (SELECT id FROM beds WHERE unit_id = (SELECT unit_id FROM beds WHERE id = reservations.bed_id))
+      ) >= (SELECT capacity FROM units WHERE id = (SELECT unit_id FROM beds WHERE id = reservations.bed_id))
+        THEN 'released'
+      WHEN EXISTS (SELECT 1 FROM move_ins m WHERE m.reservation_id = reservations.id)
+        THEN 'occupied'
+      ELSE 'booked'
+    END
   )
   WHEN 'cancelled' THEN 'cancelled'
   WHEN 'refunded' THEN 'refunded'
