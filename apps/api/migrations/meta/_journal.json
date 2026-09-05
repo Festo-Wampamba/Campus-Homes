@@ -239,6 +239,13 @@
       "when": 1788220000000,
       "tag": "0034_bed_level_reservations",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788230000000,
+      "tag": "0035_bed_level_reservations_fix",
+      "breakpoints": true
     }
   ]
 }
