@@ -142,7 +142,10 @@ export class AuthController {
         this.logger.warn(JSON.stringify({ event: 'auth.callback.identity_conflict', requestId }));
         return fail('identity_conflict');
       }
-      this.logger.warn(JSON.stringify({ event: 'auth.callback.failed', requestId }));
+      this.logger.warn(JSON.stringify({
+        event: 'auth.callback.failed', requestId,
+        error: error instanceof Error ? error.message : String(error),
+      }));
       return fail('sign_in_failed');
     }
   }
