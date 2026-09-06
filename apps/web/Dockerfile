@@ -30,9 +30,15 @@ RUN pnpm --filter @campushomes/web build
 
 FROM node:24-bookworm-slim AS runner
 
+ARG NEXT_PUBLIC_API_BASE_URL
+
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+# The web app's server components call the API directly. Dokploy provides this
+# value as a build argument, so carry it into the final stage instead of
+# falling back to localhost inside the isolated web container.
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
 WORKDIR /app
 
