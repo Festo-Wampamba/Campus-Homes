@@ -7,7 +7,7 @@ import { safeAuthDestination } from '@campushomes/shared';
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
 import { AuthTransactions, AUTH_TRANSACTION_TTL_SECONDS, transactionCookie } from './auth-transactions';
-import { digest, matchesSecret, providerAssurance } from './auth-security';
+import { digest, matchesSecret, providerAssurance, redactSecrets } from './auth-security';
 import { LogtoClientFactory } from './logto-client.factory';
 import { webOrigin, type Portal } from './logto.config';
 import { ProvisioningService } from './provisioning.service';
@@ -142,7 +142,10 @@ export class AuthController {
         this.logger.warn(JSON.stringify({ event: 'auth.callback.identity_conflict', requestId }));
         return fail('identity_conflict');
       }
-      this.logger.warn(JSON.stringify({ event: 'auth.callback.failed', requestId }));
+      this.logger.warn(JSON.stringify({
+        event: 'auth.callback.failed', requestId,
+        error: redactSecrets(error instanceof Error ? error.message : String(error)),
+      }));
       return fail('sign_in_failed');
     }
   }
