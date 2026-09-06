@@ -1,6 +1,10 @@
-// Relative, not absolute: next.config.ts's rewrites() proxy this same-origin
-// to the real API, which is what lets the session cookie be host-only.
-const BASE = "";
+// Relative in the browser: next.config.ts's rewrites() proxy this same-origin
+// to the real API, which is what lets the session cookie be host-only. But
+// this helper is also called from server components (e.g. the public listing
+// detail page, for its typed ApiError/404 handling) — Node's fetch, unlike a
+// browser's, can't resolve a relative URL, so it needs the real absolute
+// origin server-side. Same BASE logic as lib/server-api.ts.
+const BASE = typeof window === "undefined" ? (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000") : "";
 
 // 400s carry Zod issue detail in nestjs-zod format (FRONTEND.md §1).
 export class ApiError extends Error {
