@@ -49,12 +49,15 @@ interface Invitation extends AssignmentInput {
   status: 'pending' | 'accepted' | 'cancelled';
   deliveryAttempts: number;
   lastDeliveryError: string | null;
+  deliveredAt: Date | null;
+  createdAt: Date;
 }
 
 const INVITATION_COLUMNS = `id, name, email, phone, role_key AS "roleKey", scope_type AS "scopeType",
   scope_id AS "scopeId", valid_until AS "validUntil", reason, invited_by AS "invitedBy",
   target_user_id AS "targetUserId", expires_at AS "expiresAt", status,
-  delivery_attempts AS "deliveryAttempts", last_delivery_error AS "lastDeliveryError"`;
+  delivery_attempts AS "deliveryAttempts", last_delivery_error AS "lastDeliveryError",
+  delivered_at AS "deliveredAt", created_at AS "createdAt"`;
 
 /** Identity verification is the invitation proof. The emailed URL only opens
  * hosted sign-in; it is not a bearer grant or a password-reset credential.
@@ -65,7 +68,14 @@ export async function pendingInvitationsForIdentity(client: PoolClient, claims: 
   return (await client.query<Invitation>(`SELECT ${INVITATION_COLUMNS} FROM auth_invitations
     WHERE status = 'pending' AND expires_at > now()
       AND (valid_until IS NULL OR valid_until > now())
-      AND ((email IS NOT NULL AND email = $1) OR (email IS NULL AND phone = $2))
+      AND (
+        (target_user_id IS NOT NULL AND (
+          (email IS NOT NULL AND email = $1) OR (phone IS NOT NULL AND phone = $2)
+        )) OR
+        (target_user_id IS NULL
+          AND (email IS NULL OR email = $1)
+          AND (phone IS NULL OR phone = $2))
+      )
     ORDER BY id FOR UPDATE`, [email, phone])).rows;
 }
 

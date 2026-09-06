@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
+import { ConflictException, Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
 import type { Prompt } from '@logto/node';
@@ -137,7 +137,11 @@ export class AuthController {
       this.logger.log(JSON.stringify({ event: 'auth.callback.success', requestId, portal: transaction.portal }));
       const next = transaction.next ? `?next=${encodeURIComponent(transaction.next)}` : '';
       return res.redirect(`${webOrigin(env)}/auth/callback${next}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        this.logger.warn(JSON.stringify({ event: 'auth.callback.identity_conflict', requestId }));
+        return fail('identity_conflict');
+      }
       this.logger.warn(JSON.stringify({ event: 'auth.callback.failed', requestId }));
       return fail('sign_in_failed');
     }

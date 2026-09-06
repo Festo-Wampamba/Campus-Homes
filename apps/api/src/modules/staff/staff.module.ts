@@ -17,6 +17,8 @@ import { AdminActivitiesController } from './admin-activities.controller';
 import { AdminActivitiesService } from './admin-activities.service';
 import { StaffController } from './staff.controller';
 import { StaffService } from './staff.service';
+import { InvitationDeliveryService, InvitationsService } from './invitations.service';
+import { RoleAssignmentService } from './role-assignment.service';
 
 @Module({
   imports: [AuthModule, OpsModule],
@@ -32,6 +34,9 @@ import { StaffService } from './staff.service';
   ],
   providers: [
     StaffService,
+    RoleAssignmentService,
+    InvitationDeliveryService,
+    InvitationsService,
     AdminDashboardService,
     AdminUsersService,
     AdminPropertiesService,
@@ -42,6 +47,6 @@ import { StaffService } from './staff.service';
   // StaffService.list() is the staff roster other modules reuse rather than
   // duplicating the query — activities' assignee picker (same module) and
   // now inquiries' forward-target picker (InquiriesModule).
-  exports: [StaffService],
+  exports: [StaffService, RoleAssignmentService, InvitationsService],
 })
 export class StaffModule {}

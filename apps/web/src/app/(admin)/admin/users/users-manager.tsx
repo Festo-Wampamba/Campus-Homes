@@ -8,7 +8,6 @@ import { AdminField, AdminModal, adminFieldClass, adminTextareaClass } from "@/c
 import { StatusBadge } from "@/components/admin/admin-ui";
 import { PaginationControls } from "@/components/pagination-controls";
 import { PhoneField } from "@/components/phone-field";
-import { PasswordInput } from "@/components/ui/password-input";
 import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { usePagination } from "@/lib/use-pagination";
@@ -21,7 +20,7 @@ type Assignment = { id: string; roleKey?: string; roleName?: string; key?: strin
 type DirectPermission = { id: string; permissionKey: string; description: string; scopeType: string; scopeId: string | null; reason: string };
 type UserDetail = { user: Record<string, unknown> & { id: string; accountType: string; name: string; status: string; emailVerified?: boolean; phoneVerified?: boolean; authProviders?: string[] }; assignments: Assignment[]; directPermissions: DirectPermission[]; memberships: { id: string; propertyName: string; role: string; workerType?: string | null; status: string }[] };
 
-const ACCOUNT_TYPES = ["student", "landlord", "custodian", "property_worker", "ops_inspector", "ops_lead", "admin"];
+const ACCOUNT_TYPES = ["student", "landlord", "custodian", "property_worker"];
 const UNIVERSITIES = ["MUK", "MUBS", "KIU", "KYU", "other"];
 const STUDY_YEARS = [1, 2, 3, 4, 5, 6];
 const emptyUser = { name: "", email: "", phone: "", accountType: "student", status: "active", temporaryPassword: "", university: "MUK", yearOfStudy: "", legalName: "", dateOfBirth: "", gender: "", nationality: "Ugandan", address: "", emergencyContactName: "", emergencyContactPhone: "", notes: "" };
@@ -67,11 +66,10 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
     } catch { setNotice("Could not load this user record."); } finally { setPending(false); }
   }
 
-  function payload(includePassword: boolean) {
+  function payload(includeAccountType: boolean) {
     return {
       name: form.name, email: form.email || undefined, phone: form.phone || undefined,
-      accountType: form.accountType, status: form.status,
-      ...(includePassword && form.temporaryPassword ? { temporaryPassword: form.temporaryPassword } : {}),
+      ...(includeAccountType ? { accountType: form.accountType } : {}), status: form.status,
       ...(form.accountType === "student" ? { university: form.university, yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : null } : {}),
       ...(form.accountType === "landlord" ? { legalName: form.legalName || form.name } : {}),
       dateOfBirth: form.dateOfBirth || null, gender: form.gender || null, nationality: form.nationality || null,
@@ -216,15 +214,14 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
             <input type="email" autoComplete="email" className={adminFieldClass} placeholder="john.doe@example.com" value={form.email} onChange={(event) => setField("email", event.target.value)} />
           </AdminField>
           <PhoneField key={`phone-${selected?.id ?? "new"}`} label="Phone" value={form.phone} onChange={(value) => setField("phone", value)} />
-          <AdminField label="Account type">
+          {mode === "create" ? <AdminField label="Initial profile type">
             <select className={adminFieldClass} value={form.accountType} onChange={(event) => setField("accountType", event.target.value)}>{ACCOUNT_TYPES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select>
-          </AdminField>
+          </AdminField> : <AdminField label="Profile type" hint="Access is changed in Roles and permissions.">
+            <input className={adminFieldClass} value={form.accountType.replaceAll("_", " ")} disabled />
+          </AdminField>}
           <AdminField label="Status">
             <select className={adminFieldClass} value={form.status} onChange={(event) => setField("status", event.target.value)}>{["active", "pending", "suspended"].map((item) => <option key={item}>{item}</option>)}</select>
           </AdminField>
-          {mode === "create" && <AdminField label="Temporary password" htmlFor="create-user-temporary-password" hint="Optional; minimum 16 characters and requires email.">
-            <PasswordInput id="create-user-temporary-password" minLength={16} autoComplete="new-password" className={adminFieldClass} placeholder="At least 16 characters" value={form.temporaryPassword} onChange={(event) => setField("temporaryPassword", event.target.value)} />
-          </AdminField>}
           {form.accountType === "student" && <>
             <AdminField label="University" required>
               <select required className={adminFieldClass} value={form.university} onChange={(event) => setField("university", event.target.value)}>{UNIVERSITIES.map((item) => <option key={item}>{item}</option>)}</select>

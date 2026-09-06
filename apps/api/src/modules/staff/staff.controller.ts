@@ -28,6 +28,24 @@ export class StaffController {
     return this.staffService.list();
   }
 
+  @Get('invitations')
+  @RequirePermission('staff.read')
+  listInvitations(@Req() req: PermissionedRequest) {
+    return this.staffService.listInvitations(req.assignments);
+  }
+
+  @Post('invitations/:id/retry')
+  @RequirePermission('staff.invite')
+  retryInvitation(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.staffService.retryInvitation(rlsCtx(req), req.permissions, req.assignments, id);
+  }
+
+  @Delete('invitations/:id')
+  @RequirePermission('staff.invite')
+  cancelInvitation(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.staffService.cancelInvitation(rlsCtx(req), req.permissions, req.assignments, id);
+  }
+
   @Patch(':id/deactivate')
   @RequirePermission('staff.deactivate')
   deactivate(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {

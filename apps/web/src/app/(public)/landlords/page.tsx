@@ -40,7 +40,7 @@ const STEPS = [
     number: "01",
     icon: PersonIcon,
     title: "You create your account",
-    body: "Enter your name and phone number. An ops lead reviews and approves new accounts, then you sign in with the same phone number.",
+    body: "Sign in securely, then add a landlord workspace to your existing CampusHomes account. You keep any student access you already have.",
   },
   {
     number: "02",
@@ -154,14 +154,14 @@ export default async function LandlordsPage() {
 
       <section aria-labelledby="how-heading" className="bg-teal-900 text-white">
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-          <p className="eyebrow text-coral-500">How onboarding works today</p>
+          <p className="eyebrow text-coral-500">How onboarding works</p>
           <h2 id="how-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] text-white sm:text-4xl">
             Create your account, then our team helps you get listed.
           </h2>
           <p className="mt-4 max-w-lg text-sm leading-6 text-white/60">
-            Creating your account takes a minute. Once an ops lead approves
-            it, a real person from our operations team walks your property
-            through verification and publishing.
+            Creating or reusing your secure account takes a minute. A real
+            person from our operations team then walks your property through
+            verification and publishing.
           </p>
 
           <ol className="mt-10 grid gap-4 md:grid-cols-3">

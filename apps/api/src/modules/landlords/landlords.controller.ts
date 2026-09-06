@@ -15,6 +15,11 @@ export class LandlordsController {
     private readonly rlsDb: RlsDb,
   ) {}
 
+  @Post('enroll')
+  enroll(@Req() req: AuthenticatedRequest) {
+    return this.landlords.enroll(rlsCtx(req));
+  }
+
   @Get('me')
   @Roles('landlord')
   me(@Req() req: AuthenticatedRequest) {

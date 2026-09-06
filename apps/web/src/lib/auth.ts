@@ -15,6 +15,14 @@ export function signInUrl(portal: Portal, next?: string): string {
   return `${BASE}/api/auth/logto/sign-in?${params.toString()}`;
 }
 
-export async function signOut(): Promise<void> {
-  await fetch(`${BASE}/api/auth/logto/sign-out`, { method: "POST", credentials: "include" });
+export async function signOut(): Promise<string> {
+  const response = await fetch(`${BASE}/api/auth/logto/sign-out`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Sign-out failed");
+  const body = (await response.json()) as { redirectUrl?: unknown };
+  return typeof body.redirectUrl === "string" && body.redirectUrl
+    ? body.redirectUrl
+    : "/sign-in";
 }

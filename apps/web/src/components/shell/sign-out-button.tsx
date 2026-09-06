@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LogOut } from "lucide-react";
 
@@ -8,7 +7,6 @@ import { signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 export function SignOutButton() {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
 
   return (
@@ -18,9 +16,15 @@ export function SignOutButton() {
       disabled={pending}
       onClick={async () => {
         setPending(true);
-        await signOut();
-        router.push("/");
-        router.refresh();
+        try {
+          const redirectUrl = await signOut();
+          // Navigate through Logto's end-session endpoint so logging out also
+          // clears the provider SSO session. A client-side route change would
+          // immediately reuse the previous identity on the next sign-in.
+          window.location.assign(redirectUrl);
+        } catch {
+          setPending(false);
+        }
       }}
     >
       <LogOut aria-hidden />
