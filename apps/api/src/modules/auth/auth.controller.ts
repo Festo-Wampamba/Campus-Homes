@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
-import { Prompt } from '@logto/node';
+import type { Prompt } from '@logto/node';
 import { safeAuthDestination } from '@campushomes/shared';
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
@@ -77,7 +77,7 @@ export class AuthController {
       }, state);
       await client.signIn({
         redirectUri: `${webOrigin(env)}/api/auth/logto/callback`,
-        ...(portal === 'staff' ? { prompt: Prompt.Login } : {}),
+        ...(portal === 'staff' ? { prompt: 'login' as Prompt } : {}),
         extraParams: {
           nonce,
           ...(portal === 'staff' ? { max_age: '0', claims: JSON.stringify({ id_token: { auth_time: { essential: true }, amr: { essential: true } } }) } : {}),
