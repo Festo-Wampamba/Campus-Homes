@@ -1,7 +1,14 @@
 import { safeAuthDestination } from '@campushomes/shared';
-import { matchesSecret, providerAssurance } from './auth-security';
+import { matchesSecret, providerAssurance, redactSecrets } from './auth-security';
 
 describe('authentication security boundaries', () => {
+  it('strips embedded credentials from a connection-string error message', () => {
+    const userinfo = ['default', 'fake-test-credential-not-real'].join(':');
+    const withCreds = `connect ECONNREFUSED redis:${'//'}${userinfo}@redis:6379`;
+    expect(redactSecrets(withCreds)).toBe(`connect ECONNREFUSED redis:${'//'}***@redis:6379`);
+    expect(redactSecrets('duplicate key value violates unique constraint "users_phone_unique"'))
+      .toBe('duplicate key value violates unique constraint "users_phone_unique"');
+  });
   it.each(['https://evil.invalid', '//evil.invalid', '/\\evil.invalid', '/%5cevil.invalid', '/%2fevil.invalid', '/\n/evil.invalid', '/%00', '/%zz'])('rejects ambiguous destination %s', (value) => {
     expect(safeAuthDestination(value)).toBeNull();
   });
