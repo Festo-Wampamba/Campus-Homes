@@ -1,16 +1,17 @@
 import { Calendar, CalendarCheck, Clock, Heart, LifeBuoy, MessageCircle, Search, User } from "lucide-react";
 
-import { requireRole } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
 
 export default async function StudentLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await requireRole(["student"]);
+  const session = await requireWorkspace("student");
   return (
     <AppShell
       portalLabel="Student"
       user={session.user}
+      access={session.access}
       homeHref="/"
       nav={[
         { label: "Find housing", href: "/search", icon: <Search aria-hidden className="size-4 shrink-0" /> },

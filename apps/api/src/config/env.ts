@@ -26,6 +26,9 @@ const envSchema = z.object({
   // Encrypts the transient sign-in-session cookie (PKCE verifier/state)
   // between the /logto/sign-in redirect and the /logto/callback request.
   LOGTO_COOKIE_SECRET: z.string().min(32).optional(),
+  // Fail closed until the deployed staff MFA policy and signed auth_time/amr
+  // claims have been acceptance-tested. An application session is not proof.
+  LOGTO_MFA_POLICY_VERIFIED: z.string().optional().transform((v) => v === 'true'),
   // Shared bearer secrets Logto's HTTP SMS/Email connectors present when
   // calling back into our webhooks — rejects any caller who doesn't have it.
   LOGTO_SMS_WEBHOOK_SECRET: z.string().min(1).optional(),

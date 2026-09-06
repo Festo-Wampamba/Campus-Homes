@@ -59,7 +59,7 @@ export default async function ListingDetailPage({
   const listingId = (await params).id;
   const [detail, session] = await Promise.all([getDetail(listingId), getServerSession()]);
   if (!detail) notFound();
-  const isStudent = session?.user.role === "student";
+  const isStudent = session?.user.status === "active" && session.access.workspaces.includes("student");
   const [studentProfile, savedListings] = await Promise.all([
     isStudent ? getStudentProfile() : Promise.resolve(null),
     isStudent ? getSavedListings() : Promise.resolve([]),

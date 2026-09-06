@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@campushomes/config": "workspace:*",
+    "@types/node": "^24.3.1",
     "typescript": "catalog:"
   }
 }

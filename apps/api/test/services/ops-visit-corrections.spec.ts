@@ -28,9 +28,12 @@ let inspector: string;
 let otherInspector: string;
 let visit: string;
 
-const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
-const inspectorCtx = (): RlsContext => ({ userId: inspector, role: 'ops_inspector' });
-const otherInspectorCtx = (): RlsContext => ({ userId: otherInspector, role: 'ops_inspector' });
+// app_staff_scope() (0035) requires provider-verified MFA before granting any
+// staff RLS access — these tests exercise the correction workflow, not MFA
+// enforcement itself, so assume it's present.
+const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead', mfaVerified: true });
+const inspectorCtx = (): RlsContext => ({ userId: inspector, role: 'ops_inspector', mfaVerified: true });
+const otherInspectorCtx = (): RlsContext => ({ userId: otherInspector, role: 'ops_inspector', mfaVerified: true });
 
 async function seed(sql: string, params: unknown[] = []): Promise<string> {
   const res = await pool.query(sql, params);
@@ -63,6 +66,15 @@ beforeAll(async () => {
   ]);
   await pool.query(
     `INSERT INTO ops_staff (user_id, team, active) VALUES ($1, 'lead', true), ($2, 'inspector', true), ($3, 'inspector', true)`,
+    [opsLead, inspector, otherInspector],
+  );
+  // app_staff_scope() (0035) grants access from real user_role_assignments
+  // rows, not users.role — these tests need an actual platform-wide grant.
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT u.id, r.id, 'platform_wide', NULL, u.id, 'test fixture'
+     FROM users u JOIN roles r ON r.key = u.role::text
+     WHERE u.id IN ($1, $2, $3)`,
     [opsLead, inspector, otherInspector],
   );
   const property = await seed(

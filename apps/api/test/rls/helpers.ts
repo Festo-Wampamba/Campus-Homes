@@ -30,6 +30,10 @@ export async function asIdentity<T>(
     }
     if (identity.role) {
       await client.query(`SELECT set_config('app.user_role', $1, true)`, [identity.role]);
+      // app_staff_scope() (0035) requires provider-verified MFA before it grants
+      // any staff RLS access — these tests exercise row visibility, not MFA
+      // enforcement itself (that's covered separately), so assume it's present.
+      await client.query(`SELECT set_config('app.mfa_verified', 'true', true)`);
     }
     return await fn(client);
   } finally {
@@ -42,4 +46,16 @@ export async function asIdentity<T>(
 export async function seed(sql: string, params: unknown[] = []): Promise<string> {
   const res = await pool.query(sql, params);
   return res.rows[0]?.id ?? res.rows[0]?.user_id;
+}
+
+/** app_staff_scope() (0035) reads real user_role_assignments rows, not
+ * users.role — a staff test identity needs one of these platform-wide,
+ * active grants or every app_is_ops()/app_is_lead() check denies it. */
+export async function grantPlatformRole(userId: string, roleKey: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT $1, id, 'platform_wide', NULL, $1, 'test fixture'
+     FROM roles WHERE key = $2`,
+    [userId, roleKey],
+  );
 }

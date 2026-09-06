@@ -78,6 +78,15 @@ beforeAll(async () => {
     `INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`,
     [opsLeadId, inspectorId],
   );
+  // app_staff_scope() (0035) grants access from real user_role_assignments
+  // rows, not users.role — these tests need an actual platform-wide grant.
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT u.id, r.id, 'platform_wide', NULL, u.id, 'test fixture'
+     FROM users u JOIN roles r ON r.key = u.role::text
+     WHERE u.id IN ($1, $2)`,
+    [opsLeadId, inspectorId],
+  );
   const studentUserId = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000033', 'student', 'active') RETURNING id`,
   );
@@ -104,7 +113,7 @@ beforeAll(async () => {
     [propertyId, semesterId],
   );
 
-  const published = await ops.publishListing({ userId: opsLeadId, role: 'ops_lead' }, {
+  const published = await ops.publishListing({ userId: opsLeadId, role: 'ops_lead', mfaVerified: true }, {
     listingId,
     amenities: { water: true },
     description: 'Availability test listing',

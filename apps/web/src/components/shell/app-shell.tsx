@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeftRight,
   Bell,
   ChevronDown,
   Menu,
@@ -14,6 +15,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { AccountAccess } from "@campushomes/shared";
 
 import { api } from "@/lib/api";
 import type { SessionUser } from "@/lib/session";
@@ -144,6 +146,7 @@ export function AppShell({
   children,
   nav,
   user,
+  access,
   portalLabel,
   homeHref,
   profileHref,
@@ -155,6 +158,9 @@ export function AppShell({
   children: React.ReactNode;
   nav: AppNavItem[];
   user: SessionUser;
+  /** Drives the "Switch workspace" account-menu link — shown only when the
+   * account actually has more than one workspace to switch between. */
+  access: AccountAccess;
   portalLabel: string;
   homeHref: string;
   /** Shows a "Profile settings" link in the account menu when provided. */
@@ -168,6 +174,7 @@ export function AppShell({
   /** Portal-specific header widget (e.g. ops' offline-sync indicator). */
   headerExtra?: React.ReactNode;
 }) {
+  const canSwitchWorkspace = new Set(access.workspaces).size > 1;
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeSidebarCollapsed, getSidebarCollapsed, getSidebarCollapsedServerSnapshot);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -323,6 +330,12 @@ export function AppShell({
                     <Link role="menuitem" href={settingsHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
                       <Settings aria-hidden className="size-4 text-slate-400" />
                       Settings
+                    </Link>
+                  )}
+                  {canSwitchWorkspace && (
+                    <Link role="menuitem" href="/choose-workspace" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
+                      <ArrowLeftRight aria-hidden className="size-4 text-slate-400" />
+                      Switch workspace
                     </Link>
                   )}
                 </div>

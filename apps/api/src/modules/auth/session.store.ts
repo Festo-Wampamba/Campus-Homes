@@ -3,11 +3,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 
-import type { UserRole, UserStatus } from '@campushomes/shared';
+import type { AccountAccess, AuthenticationAssurance, UserRole, UserStatus } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { sessions, users } from '../../db/schema';
+import { normalizeAssurance, resolveAccountAccess } from './access-resolver';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -23,6 +24,7 @@ const SESSION_TTL_MS = 60 * 60 * 24 * 7 * 1000;
 export const SESSION_COOKIE_NAME = 'campushomes-session-v1';
 
 export interface SessionData {
+  access: AccountAccess;
   user: {
     id: string;
     role: UserRole;
@@ -44,9 +46,10 @@ export interface SessionData {
 export class SessionStore {
   constructor(private readonly rlsDb: RlsDb) {}
 
-  async create(userId: string, ipAddress?: string, userAgent?: string): Promise<{ token: string }> {
+  async create(userId: string, ipAddress?: string, userAgent?: string, assurance?: AuthenticationAssurance): Promise<{ token: string }> {
     const token = randomBytes(32).toString('hex');
     const now = new Date();
+    const verified = normalizeAssurance(assurance);
     await this.rlsDb.run(SERVICE_CTX, (db) =>
       db.insert(sessions).values({
         id: randomUUID(),
@@ -55,6 +58,8 @@ export class SessionStore {
         expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
         ipAddress,
         userAgent,
+        authenticatedAt: verified.authenticatedAt ? new Date(verified.authenticatedAt) : null,
+        mfaVerified: verified.mfaVerified,
       }),
     );
     return { token };
@@ -68,9 +73,12 @@ export class SessionStore {
           sessionId: sessions.id,
           sessionCreatedAt: sessions.createdAt,
           expiresAt: sessions.expiresAt,
+          authenticatedAt: sessions.authenticatedAt,
+          mfaVerified: sessions.mfaVerified,
           userId: users.id,
           role: users.role,
           status: users.status,
+          deletedAt: users.deletedAt,
           name: users.name,
           email: users.email,
           phone: users.phone,
@@ -79,8 +87,14 @@ export class SessionStore {
         .innerJoin(users, eq(users.id, sessions.userId))
         .where(eq(sessions.token, token)),
     );
-    if (!row || row.expiresAt.getTime() < Date.now()) return null;
+    if (!row || row.expiresAt.getTime() <= Date.now() || row.deletedAt || row.status !== 'active') return null;
+    const access = await resolveAccountAccess(this.rlsDb, row.userId, {
+      authenticatedAt: row.authenticatedAt?.toISOString() ?? null,
+      mfaVerified: row.mfaVerified,
+    });
+    if (!access) return null;
     return {
+      access,
       user: { id: row.userId, role: row.role, status: row.status, name: row.name, email: row.email, phone: row.phone },
       session: {
         id: row.sessionId,

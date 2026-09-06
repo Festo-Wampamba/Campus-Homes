@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Clock3, ShieldAlert } from "lucide-react";
 
 import { getServerSession } from "@/lib/session";
-import { homeForAuthenticatedRole } from "@/lib/auth-routing";
+import { authDestination } from "@/lib/auth-routing";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 import { Wordmark } from "@/components/shell/wordmark";
@@ -21,7 +21,7 @@ export const metadata: Metadata = { title: "Account pending" };
 export default async function AccountPendingPage() {
   const session = await getServerSession();
   if (!session) redirect("/sign-in");
-  if (session.user.status === "active") redirect(homeForAuthenticatedRole(session.user.role));
+  if (session.user.status === "active") redirect(authDestination(session));
 
   const suspended = session.user.status === "suspended";
 
@@ -46,7 +46,7 @@ export default async function AccountPendingPage() {
             <p className="mt-2 text-sm text-muted-foreground">
               {suspended
                 ? "An ops lead has suspended this account. Contact support if you believe this is a mistake."
-                : "An ops lead reviews new landlord accounts before they can sign in. You'll be able to sign in normally once yours is approved — no need to do anything else in the meantime."}
+                : "Your account is awaiting review. Contact support if you need help with your access."}
             </p>
           </div>
           <SignOutButton />

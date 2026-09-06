@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Support" };
 
 export default async function SupportPage() {
   const session = await getServerSession();
-  const isStudent = session?.user.role === "student";
+  const isStudent = session?.user.status === "active" && session.access.workspaces.includes("student");
 
   // Signed-in students get the inquiry desk (form + their threads); everyone
   // else gets the public contact card. Both still see the contact info.

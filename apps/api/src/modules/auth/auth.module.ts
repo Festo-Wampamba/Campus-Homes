@@ -9,6 +9,8 @@ import { loadEnv } from '../../config/env';
 import { assertStubAllowed } from '../../config/integration-guard';
 import { AuthController, SessionController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
+import { AuthTransactions } from './auth-transactions';
+import { LogtoClientFactory } from './logto-client.factory';
 import { LogtoEmailWebhookController } from './logto-email-webhook.controller';
 import { LogtoManagementClient } from './logto-management.client';
 import { LogtoSmsWebhookController } from './logto-sms-webhook.controller';
@@ -37,6 +39,8 @@ import { SessionStore } from './session.store';
     ProvisioningService,
     SessionStore,
     AuthGuard,
+    AuthTransactions,
+    LogtoClientFactory,
   ],
   exports: [MESSAGING, LogtoManagementClient, ProvisioningService, SessionStore, AuthGuard],
 })

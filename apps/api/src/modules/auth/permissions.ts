@@ -17,6 +17,7 @@ import {
   userRoleAssignments,
 } from '../../db/schema';
 import type { AuthenticatedRequest } from './auth.guard';
+import { effectiveRoles } from './access-resolver';
 
 export const PERMISSION_KEY = 'permission';
 
@@ -28,6 +29,24 @@ export const RequireAnyPermission = (...permissions: string[]) => SetMetadata(PE
 export interface RoleAssignment {
   scopeType: string;
   scopeId: string | null;
+}
+
+export interface PermissionGrant extends RoleAssignment {
+  permissionKey: string;
+  requiresStepUp: boolean;
+}
+
+export interface LoadedPermissions {
+  permissions: Set<string>;
+  stepUpRequired: Set<string>;
+  assignments: RoleAssignment[];
+  grants: PermissionGrant[];
+}
+
+/** Scope-aware consumers must name the permission whose scope they enforce. */
+export function assignmentsForPermission(grants: PermissionGrant[], permission: string): RoleAssignment[] {
+  return grants.filter((grant) => grant.permissionKey === permission)
+    .map(({ scopeType, scopeId }) => ({ scopeType, scopeId }));
 }
 
 export interface PermissionedRequest extends AuthenticatedRequest {
@@ -46,7 +65,8 @@ const SERVICE_CTX: RlsContext = {
 export async function loadPermissions(
   rlsDb: RlsDb,
   userId: string,
-): Promise<{ permissions: Set<string>; stepUpRequired: Set<string>; assignments: RoleAssignment[] }> {
+  permission?: string,
+): Promise<LoadedPermissions> {
   const [roleRows, directRows] = await rlsDb.run(SERVICE_CTX, async (db) => {
     // RlsDb deliberately pins one pg client for the whole callback. Keep
     // queries sequential: node-postgres does not support concurrent queries
@@ -88,7 +108,15 @@ export async function loadPermissions(
         );
     return [roleRows, directRows] as const;
   });
-  const rows = [...roleRows, ...directRows];
+  const grants = [...roleRows, ...directRows].filter((row) =>
+    (row.scopeType === 'platform_wide' && row.scopeId === null) ||
+    (row.scopeType === 'property' && row.scopeId !== null) ||
+    (row.scopeType === 'catchment' && row.scopeId !== null));
+  // Legacy consumers use this set to run unrestricted service-role queries.
+  // Only explicitly permission-scoped callers may receive narrower grants.
+  const rows = grants.filter((row) => permission
+    ? row.permissionKey === permission
+    : row.scopeType === 'platform_wide' && row.scopeId === null);
 
   const assignments = new Map<string, RoleAssignment>();
   for (const row of rows) {
@@ -99,6 +127,7 @@ export async function loadPermissions(
   }
 
   return {
+    grants,
     permissions: new Set(rows.map((r) => r.permissionKey)),
     stepUpRequired: new Set(rows.filter((r) => r.requiresStepUp).map((r) => r.permissionKey)),
     assignments: [...assignments.values()],
@@ -113,11 +142,11 @@ export function hasCoveringScope(
   targetScopeId: string | null,
 ): boolean {
   return assignments.some((a) => {
-    if (a.scopeType === 'platform_wide') return true;
+    if (a.scopeType === 'platform_wide') return a.scopeId === null;
     if (targetScopeType === 'platform_wide') return false;
     if (a.scopeType !== targetScopeType) return false;
     if (targetScopeType === 'catchment' && a.scopeId === 'all') return true;
-    return a.scopeId === targetScopeId;
+    return a.scopeId !== null && a.scopeId === targetScopeId;
   });
 }
 
@@ -138,28 +167,35 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const req = context.switchToHttp().getRequest<PermissionedRequest>();
-    const { permissions: granted, stepUpRequired, assignments } = await loadPermissions(
+    req.assignments = [];
+    req.permissions = new Set();
+    const staffRole = effectiveRoles(req.session.access.roles)
+      .find((role) => ['admin', 'ops_lead', 'ops_inspector'].includes(role));
+    if (!staffRole || !req.session.access.assurance.mfaVerified) return false;
+    const { permissions: granted, grants } = await loadPermissions(
       this.rlsDb,
       req.session.user.id,
     );
-    req.permissions = granted;
-    req.assignments = assignments;
-
     const alternatives = Array.isArray(required) ? required : [required];
-    const matched = alternatives.find((permission) => granted.has(permission));
+    // These existing service methods enforce req.assignments against each
+    // mutation target. Other staff endpoints perform unrestricted service-role
+    // queries, so scoped grants must fail closed until those callers are scoped.
+    const scopeAware = new Set(['roles.assign', 'roles.revoke', 'staff.invite',
+      'staff.deactivate', 'users.permissions_manage']);
+    const matched = alternatives.find((permission) => granted.has(permission) ||
+      (scopeAware.has(permission) && grants.some((grant) => grant.permissionKey === permission)));
     if (!matched) {
       return false;
     }
-    if (stepUpRequired.has(matched)) {
-      // A freshly authenticated session is the MVP step-up boundary. Older
-      // sessions must sign in again before a sensitive mutation can proceed.
-      // This remains fail-closed and can be upgraded to MFA without changing
-      // controller contracts.
-      const signedInAt = new Date(req.session.session.createdAt).getTime();
-      if (!Number.isFinite(signedInAt) || Date.now() - signedInAt > 30 * 60_000) {
+    if (grants.some((grant) => grant.permissionKey === matched && grant.requiresStepUp)) {
+      const signedInAt = Date.parse(req.session.access.assurance.authenticatedAt ?? '');
+      if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > 30 * 60_000) {
         throw new UnauthorizedException(`${matched} requires a fresh sign-in`);
       }
     }
+    req.effectiveRole = staffRole;
+    req.permissions = new Set([...granted, matched]);
+    req.assignments = assignmentsForPermission(grants, matched);
     return true;
   }
 }

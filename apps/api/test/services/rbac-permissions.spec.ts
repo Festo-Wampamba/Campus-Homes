@@ -84,8 +84,13 @@ describe('loadPermissions', () => {
     expect(permissions.size).toBe(0);
   });
 
-  it('loads direct user grants with their exact scope', async () => {
-    const { permissions, assignments } = await loadPermissions(rlsDb, directGrantUser);
+  it('does not surface a property-scoped grant in the unscoped default (fail closed for unscoped callers)', async () => {
+    const { permissions } = await loadPermissions(rlsDb, directGrantUser);
+    expect(permissions.has('users.update')).toBe(false);
+  });
+
+  it('loads a direct user grant with its exact scope when the caller names the permission', async () => {
+    const { permissions, assignments } = await loadPermissions(rlsDb, directGrantUser, 'users.update');
     expect(permissions.has('users.update')).toBe(true);
     expect(assignments).toContainEqual({
       scopeType: 'property',

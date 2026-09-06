@@ -11,6 +11,8 @@ function context(cookieHeader?: string): ExecutionContext {
 }
 
 const activeSession: SessionData = {
+  access: { roles: ['student'], workspaces: ['student'], onboarding: { student: true, landlord: false },
+    assurance: { authenticatedAt: null, mfaVerified: false } },
   user: { id: 'u1', role: 'student', status: 'active', name: 'Amina', email: null, phone: '+256700000001' },
   session: { id: 's1', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() },
 };

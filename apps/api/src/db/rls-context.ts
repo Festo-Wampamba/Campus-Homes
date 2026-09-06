@@ -5,6 +5,7 @@ import type { UserRole } from '@campushomes/shared';
 export interface RlsContext {
   userId: string;
   role: UserRole | 'service_role';
+  mfaVerified?: boolean;
 }
 
 /**
@@ -35,9 +36,10 @@ export async function withRlsContext<T>(
     // returns every row, no error, no warning.
     await client.query('SET LOCAL ROLE app_user');
     // set_config with parameters — identity values are never string-interpolated.
-    await client.query(`SELECT set_config('app.user_id', $1, true), set_config('app.user_role', $2, true)`, [
+    await client.query(`SELECT set_config('app.user_id', $1, true), set_config('app.user_role', $2, true), set_config('app.mfa_verified', $3, true)`, [
       ctx.userId,
       ctx.role,
+      ctx.mfaVerified === true ? 'true' : 'false',
     ]);
     const result = await fn(client);
     await client.query('COMMIT');
