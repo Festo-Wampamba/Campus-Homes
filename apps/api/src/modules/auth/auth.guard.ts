@@ -1,6 +1,7 @@
 import { type CanActivate, type ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { parse } from 'cookie';
 import type { Request } from 'express';
+import type { UserRole } from '@campushomes/shared';
 
 import { SESSION_COOKIE_NAME, SessionStore, type SessionData } from './session.store';
 
@@ -8,6 +9,7 @@ export type { SessionData };
 
 export interface AuthenticatedRequest extends Request {
   session: SessionData;
+  effectiveRole?: UserRole;
 }
 
 export function readSessionCookie(req: Request): string | undefined {
@@ -33,6 +35,8 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('This account is not active');
     }
     req.session = session;
+    // A new authentication pass clears any identity chosen by a previous guard.
+    req.effectiveRole = undefined;
     return true;
   }
 }

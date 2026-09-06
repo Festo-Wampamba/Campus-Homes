@@ -89,6 +89,15 @@ beforeAll(async () => {
     opsLead,
     inspector,
   ]);
+  // app_staff_scope() (0035) grants access from real user_role_assignments
+  // rows, not users.role — these tests need an actual platform-wide grant.
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT u.id, r.id, 'platform_wide', NULL, u.id, 'test fixture'
+     FROM users u JOIN roles r ON r.key = u.role::text
+     WHERE u.id IN ($1, $2)`,
+    [opsLead, inspector],
+  );
 
   const semester = await seed(
     `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
@@ -111,7 +120,7 @@ beforeAll(async () => {
   );
 
   const published = await ops.publishListing(
-    { userId: opsLead, role: 'ops_lead' },
+    { userId: opsLead, role: 'ops_lead', mfaVerified: true },
     {
       listingId,
       amenities: { water: true, power: true },

@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+import { safeAuthDestination } from "@campushomes/shared";
+import { redirect } from "next/navigation";
+import { getServerSession } from "@/lib/session";
+import { authDestination } from "@/lib/auth-routing";
 
 import { LiveClock } from "./live-clock";
 import { SignInForm } from "./sign-in-form";
@@ -11,10 +15,9 @@ export default async function SignInPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const rawNext = params.next;
-  // Same open-redirect guard as /profile?next= — only ever send the browser
-  // back within the app.
-  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  const next = safeAuthDestination(params.next);
+  const session = await getServerSession();
+  if (session && !params.error) redirect(authDestination(session, next));
 
   return (
     // The gradient/clock backdrop is fixed to the viewport (overflow-hidden)

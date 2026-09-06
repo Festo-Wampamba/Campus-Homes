@@ -19,6 +19,10 @@ export interface LogtoIdentityClaims {
   email?: string | null;
   phoneNumber?: string | null;
   name?: string | null;
+  /** Provider-verified, not merely "a value was supplied" — an unverified
+   * contact must never be recorded as verified locally. */
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
 }
 
 export interface ProvisionedUser {
@@ -41,7 +45,7 @@ export class ProvisioningService {
   async provision(claims: LogtoIdentityClaims, portal: Portal): Promise<ProvisionedUser | null> {
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
       const linked = await this.byLogtoId(db, claims.sub);
-      if (linked) return linked;
+      if (linked) return this.isEligible(linked, portal) ? linked : null;
 
       // First-ever sign-in for this Logto identity — try to link an
       // existing (pre-migration or admin-provisioned) unlinked local user
@@ -51,6 +55,7 @@ export class ProvisioningService {
       // re-matches by email again.
       const candidate = await this.findUnlinkedCandidate(db, claims);
       if (candidate) {
+        if (!this.isEligible(candidate, portal)) return null;
         const [row] = await db
           .update(users)
           .set({ logtoUserId: claims.sub })
@@ -76,8 +81,8 @@ export class ProvisioningService {
             name: claims.name ?? '',
             role: 'student',
             status: 'active',
-            phoneVerified: Boolean(claims.phoneNumber),
-            emailVerified: Boolean(claims.email),
+            phoneVerified: claims.phoneVerified === true,
+            emailVerified: claims.emailVerified === true,
           })
           .returning({ id: users.id, role: users.role, status: users.status });
         return created ?? null;
@@ -109,22 +114,31 @@ export class ProvisioningService {
   private async findUnlinkedCandidate(
     db: Db,
     claims: LogtoIdentityClaims,
-  ): Promise<{ id: string } | null> {
+  ): Promise<ProvisionedUser | null> {
     if (claims.phoneNumber) {
       const [byPhone] = await db
-        .select({ id: users.id })
+        .select({ id: users.id, role: users.role, status: users.status })
         .from(users)
         .where(and(eq(users.phone, claims.phoneNumber), isNull(users.logtoUserId)));
       if (byPhone) return byPhone;
     }
     if (claims.email) {
       const [byEmail] = await db
-        .select({ id: users.id })
+        .select({ id: users.id, role: users.role, status: users.status })
         .from(users)
         .where(and(eq(users.email, claims.email), isNull(users.logtoUserId)));
       if (byEmail) return byEmail;
     }
     return null;
+  }
+
+  /** An account must be active, and staff sign-in must never admit a
+   * consumer-only identity — the two are independent workspaces, but the
+   * staff portal itself is invite-gated and requires an actual staff role. */
+  private isEligible(user: ProvisionedUser, portal: Portal): boolean {
+    if (user.status !== 'active') return false;
+    if (portal === 'staff' && !['admin', 'ops_lead', 'ops_inspector'].includes(user.role)) return false;
+    return true;
   }
 }
 

@@ -145,7 +145,7 @@ describe('AdminUsersService.assignRole/revokeRole — round trip', () => {
       reason: 'onboarding',
     });
 
-    const granted = await loadPermissions(rlsDb, target);
+    const granted = await loadPermissions(rlsDb, target, 'visits.read');
     expect(granted.permissions.has('visits.read')).toBe(true);
 
     const { rows } = await pool.query(
@@ -250,7 +250,7 @@ describe('AdminUsersService.grantPermissions/revokePermission — round trip', (
       reason: 'direct exception',
     });
 
-    const granted = await loadPermissions(rlsDb, target);
+    const granted = await loadPermissions(rlsDb, target, 'audit.read');
     expect(granted.permissions.has('audit.read')).toBe(true);
 
     const revoked = await adminUsers.revokePermission(

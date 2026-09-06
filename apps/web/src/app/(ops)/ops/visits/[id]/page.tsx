@@ -39,7 +39,7 @@ export default async function VisitDetailPage({
   // not-yet-approved visits, so an approved one links here) — approve/publish
   // stay lead-only actions, the API would 403 an inspector anyway, but there
   // is no reason to render controls they can't legally use.
-  const isLead = session?.user.role === "ops_lead" || session?.user.role === "admin";
+  const isLead = session?.access.roles.includes("ops_lead") || session?.access.workspaces.includes("admin");
 
   const listings = visit.approvedAt && isLead ? await getPropertyListings(visit.propertyId) : [];
   // A landlord-onboarded property has no listing at all, so an approved visit

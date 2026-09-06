@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { StudentProfileInlineStep } from "@/components/student-profile-inline-step";
-import { getServerSession } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
 import { getMyTenantAgreement, getPropertySummary, getTenantAgreementTemplate } from "@/lib/tenant-agreement";
 import { TenantAgreementForm } from "./tenant-agreement-form";
@@ -29,30 +29,7 @@ export default async function TenantAgreementPage({
     notFound();
   }
 
-  const session = await getServerSession();
-  if (!session) {
-    // Scanning the property's QR code is the entry point — the visitor
-    // hasn't necessarily signed in (or even registered) yet. Preserve this
-    // exact page as `next` through both sign-in and sign-up so completing
-    // either lands them right back here instead of a generic home page.
-    redirect(`/sign-in?next=/agreement/${propertyId}`);
-  }
-
-  if (session.user.role !== "student") {
-    return (
-      <div className="flex flex-1 items-center justify-center py-8">
-        <Card className="w-full max-w-lg shadow-md">
-          <CardContent className="p-6 text-center sm:p-8">
-            <h1 className="font-display text-lg font-bold text-foreground">Students only</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This link is for a student completing a tenant agreement for {property.name}. You&apos;re
-              signed in with a {session.user.role} account.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  await requireWorkspace("student", `/agreement/${propertyId}`);
 
   const profile = await getStudentProfile();
   const template = await getTenantAgreementTemplate(propertyId);

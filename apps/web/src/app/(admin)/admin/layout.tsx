@@ -19,8 +19,8 @@ import {
 import { redirect } from "next/navigation";
 
 import { AppShell, type AppNavItem } from "@/components/shell/app-shell";
-import { apiServer } from "@/lib/server-api";
-import { requireRole } from "@/lib/session";
+import { apiServerStrict } from "@/lib/server-api";
+import { requireWorkspace } from "@/lib/session";
 
 interface Access {
   permissions: string[];
@@ -50,9 +50,9 @@ const NAV: (AppNavItem & { any: string[] })[] = [
 ];
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const session = await requireRole(["admin"]);
-  const access = await apiServer<Access>("/admin/access/me");
-  if (!access?.assignments.length) redirect("/sign-in");
+  const session = await requireWorkspace("admin");
+  const access = await apiServerStrict<Access>("/admin/access/me");
+  if (!access.assignments.length) redirect("/access-required");
   const granted = new Set(access.permissions);
   const nav = NAV.filter((item) => item.any.some((permission) => granted.has(permission))).map((item) => ({
     label: item.label,
@@ -67,6 +67,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     <AppShell
       nav={nav}
       user={session.user}
+      access={session.access}
       portalLabel={roleLabel}
       homeHref="/admin"
       profileHref="/admin/profile"

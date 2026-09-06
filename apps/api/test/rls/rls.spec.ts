@@ -5,7 +5,7 @@
  * with identity bound via app.user_id / app.user_role session variables.
  * Prerequisite: docker compose -f docker-compose.test.yml up -d && pnpm db:migrate
  */
-import { asIdentity, pool, seed } from './helpers';
+import { asIdentity, grantPlatformRole, pool, seed } from './helpers';
 
 // Seeded fixture ids
 let landlord1: string;
@@ -56,6 +56,10 @@ beforeAll(async () => {
   student2 = await seedUser('student', '+256700000004');
   opsLead = await seedUser('ops_lead', '+256700000005');
   const inspector = await seedUser('ops_inspector', '+256700000006');
+  // app_staff_scope() (0035) grants access from real user_role_assignments
+  // rows, not users.role — these tests need an actual platform-wide grant.
+  await grantPlatformRole(opsLead, 'ops_lead');
+  await grantPlatformRole(inspector, 'ops_inspector');
 
   await seed(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'Landlord One')`, [landlord1]);
   await seed(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'Landlord Two')`, [landlord2]);

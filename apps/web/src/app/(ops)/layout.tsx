@@ -1,19 +1,20 @@
 import { Building2, ClipboardCheck, ClipboardList, Image as ImageIcon, LifeBuoy, ShieldAlert, UserCheck, UserPlus, Users } from "lucide-react";
 
-import { requireRole } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
 import { SyncStatusIndicator } from "@/components/ops/sync-status-indicator";
 
 export default async function OpsLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await requireRole(["ops_inspector", "ops_lead", "admin"]);
-  const isInspector = session.user.role === "ops_inspector";
+  const session = await requireWorkspace("ops");
+  const isInspector = session.access.roles.includes("ops_inspector") && !session.access.roles.includes("ops_lead") && !session.access.workspaces.includes("admin");
 
   return (
     <AppShell
       portalLabel={isInspector ? "Ops · Inspector" : "Ops · Lead"}
       user={session.user}
+      access={session.access}
       homeHref={isInspector ? "/ops/inspect" : "/ops"}
       nav={
         isInspector

@@ -37,13 +37,6 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
           </Button>
         </a>
 
-        <a
-          href={signInUrl("staff", next ?? undefined)}
-          className="mt-4 block text-center text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300"
-        >
-          Staff sign-in
-        </a>
-
         <p className="mt-4 text-center text-[10px] leading-relaxed text-muted-foreground">
           By continuing you agree to our Terms & Data Handling under the Uganda Data Protection Act 2019
         </p>

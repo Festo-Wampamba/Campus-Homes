@@ -13,21 +13,19 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { requireRole } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
 
-// Layout only gates on role — kyc_status lives on the landlords table, not
-// the session, so the "verified except onboarding routes" gate (brief §13)
-// happens per-page: onboarding/page.tsx redirects once a property exists,
-// landlord/page.tsx redirects back to onboarding until one does.
+// Session access controls workspace entry and the initial onboarding gate.
 export default async function LandlordLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await requireRole(["landlord"]);
+  const session = await requireWorkspace("landlord");
   return (
     <AppShell
       portalLabel="Landlord"
       user={session.user}
+      access={session.access}
       homeHref="/landlord"
       nav={[
         { label: "Dashboard", href: "/landlord", icon: <LayoutDashboard aria-hidden className="size-4 shrink-0" /> },

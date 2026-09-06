@@ -79,7 +79,7 @@ function QueueRow({ row }: { row: OpsQueueRow }) {
 
 export default async function OpsQueuePage() {
   const session = await getServerSession();
-  if (session?.user.role === "ops_inspector") {
+  if (session?.access.roles.includes("ops_inspector") && !session.access.roles.includes("ops_lead") && !session.access.workspaces.includes("admin")) {
     redirect("/ops/inspect");
   }
 

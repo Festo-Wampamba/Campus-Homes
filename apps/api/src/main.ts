@@ -6,6 +6,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { RlsDb } from './db/db.module';
+import { cookieOriginGuard } from './modules/auth/csrf';
 
 // Routes that must NOT get the /api/v1 prefix — their exact paths are
 // already registered as Logto/Google redirect URIs and connector webhook
@@ -28,6 +29,7 @@ async function bootstrap() {
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   const rlsDb = app.get(RlsDb);
   const http = app.getHttpAdapter().getInstance();
+  http.use(cookieOriginGuard(env.WEB_ORIGIN));
   // This API had no security headers at all, while the Logto instance it
   // redirects into sets the full set — an audit of the live staging response
   // headers found HSTS/nosniff/referrer/frame/CSP all absent here, plus an

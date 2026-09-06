@@ -2,6 +2,7 @@ export * from './enums.js';
 export * from './common.js';
 export * from './phone.js';
 export * from './auth.js';
+export * from './auth-access.js';
 export * from './user.js';
 export * from './property.js';
 export * from './campus.js';

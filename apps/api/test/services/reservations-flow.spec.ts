@@ -64,7 +64,7 @@ let bedId: string; // the sole bed on unitId (capacity 1)
 
 const studentCtx = (userId: string): RlsContext => ({ userId, role: 'student' });
 const landlordCtx = (userId: string): RlsContext => ({ userId, role: 'landlord' });
-const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
+const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead', mfaVerified: true });
 
 const FULL_CHECKLIST = Object.fromEntries(
   ['location_gps', 'rooms_capacity', 'amenities', 'photos', 'landlord_identity', 'safety'].map(
@@ -131,6 +131,15 @@ beforeAll(async () => {
   );
   await pool.query(
     `INSERT INTO ops_staff (user_id, team) VALUES ($1, 'lead'), ($2, 'inspector')`,
+    [opsLead, inspectorId],
+  );
+  // app_staff_scope() (0035) grants access from real user_role_assignments
+  // rows, not users.role — these tests need an actual platform-wide grant.
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT u.id, r.id, 'platform_wide', NULL, u.id, 'test fixture'
+     FROM users u JOIN roles r ON r.key = u.role::text
+     WHERE u.id IN ($1, $2)`,
     [opsLead, inspectorId],
   );
 
@@ -774,7 +783,7 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
 
   it('applies the checklist on first sync', async () => {
     const visit = await ops.syncVisit(
-      { userId: inspector, role: 'ops_inspector' },
+      { userId: inspector, role: 'ops_inspector', mfaVerified: true },
       {
         clientIdempotencyKey: SYNC_KEY,
         visitId,
@@ -792,7 +801,7 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
 
   it('a replayed sync with the same key does not double-apply', async () => {
     const replay = await ops.syncVisit(
-      { userId: inspector, role: 'ops_inspector' },
+      { userId: inspector, role: 'ops_inspector', mfaVerified: true },
       {
         clientIdempotencyKey: SYNC_KEY,
         visitId,

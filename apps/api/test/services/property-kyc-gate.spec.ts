@@ -83,6 +83,15 @@ beforeAll(async () => {
     opsLead,
     inspector,
   ]);
+  // app_staff_scope() (0035) grants access from real user_role_assignments
+  // rows, not users.role — these tests need an actual platform-wide grant.
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT u.id, r.id, 'platform_wide', NULL, u.id, 'test fixture'
+     FROM users u JOIN roles r ON r.key = u.role::text
+     WHERE u.id IN ($1, $2)`,
+    [opsLead, inspector],
+  );
   semesterId = await seed(
     `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
      VALUES ('Sem KYC Gate Test', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
@@ -157,7 +166,7 @@ describe('submitProperty KYC gate', () => {
 });
 
 describe('publishListing KYC/account-status defense in depth', () => {
-  const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead' });
+  const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead', mfaVerified: true });
   const fullChecklist = JSON.stringify(
     Object.fromEntries(
       ['location_gps', 'rooms_capacity', 'amenities', 'photos', 'landlord_identity', 'safety'].map((c) => [
@@ -237,7 +246,7 @@ describe('decideKyc property-status release', () => {
       [landlordId],
     );
 
-    await ops.decideKyc({ userId: opsLead, role: 'ops_lead' }, landlordId, { decision: 'verified' });
+    await ops.decideKyc({ userId: opsLead, role: 'ops_lead', mfaVerified: true }, landlordId, { decision: 'verified' });
 
     const [row] = (
       await pool.query<{ status: string }>(`SELECT status FROM properties WHERE id = $1`, [propertyId])
