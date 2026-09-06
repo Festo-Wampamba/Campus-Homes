@@ -17,6 +17,7 @@ import type { RlsContext } from '../../db/rls-context';
 import { LogtoManagementClient } from '../auth/logto-management.client';
 import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
+import { RoleAssignmentService } from './role-assignment.service';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -47,12 +48,18 @@ export class AdminUsersService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
-    private readonly logtoManagement: LogtoManagementClient,
+    _logtoManagement: LogtoManagementClient,
+    private readonly roleAssignments: RoleAssignmentService = new RoleAssignmentService(rlsDb),
   ) {}
 
   async create(actor: RlsContext, input: CreateAdminUserInput) {
+    if (input.temporaryPassword) {
+      throw new BadRequestException('Credentials are created and verified only through hosted Logto sign-in');
+    }
+    if (['admin', 'ops_lead', 'ops_inspector'].includes(input.accountType)) {
+      throw new BadRequestException('Staff accounts must be created through the audited invitation workflow');
+    }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
       try {
         const user = (await client.query<{
           id: string; name: string; email: string | null; phone: string | null; role: string; status: string;
@@ -71,8 +78,8 @@ export class AdminUsersService {
           nullable(input.phone),
           input.accountType,
           input.status,
-          Boolean(input.email && input.temporaryPassword),
-          Boolean(input.phone),
+          false,
+          false,
           input.dateOfBirth ?? null,
           nullable(input.gender),
           nullable(input.nationality),
@@ -138,20 +145,11 @@ export class AdminUsersService {
           ]);
         }
 
-        await client.query('COMMIT');
         return user;
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
         return conflict(error);
       }
     });
-    if (input.temporaryPassword && result.email) {
-      await this.logtoManagement.createUser({
-        primaryEmail: result.email,
-        name: result.name,
-        password: input.temporaryPassword,
-      });
-    }
     await this.audit.record(actor, 'users.create', 'user', result.id, {
       accountType: input.accountType,
       status: input.status,
@@ -227,8 +225,10 @@ export class AdminUsersService {
     if (actor.userId === userId && (input.status || input.accountType)) {
       throw new ForbiddenException('You cannot change your own account type or status');
     }
+    if (input.accountType !== undefined) {
+      throw new BadRequestException('Use role assignments to change access; account type is compatibility data');
+    }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
       try {
         const current = (await client.query<{ id: string; accountType: string }>(
           `SELECT id, role::text AS "accountType" FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
@@ -342,10 +342,8 @@ export class AdminUsersService {
         if (input.status && input.status !== 'active') {
           await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
         }
-        await client.query('COMMIT');
         return user;
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
         return conflict(error);
       }
     });
@@ -358,7 +356,6 @@ export class AdminUsersService {
   async softDelete(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
       try {
         const target = (await client.query<{ id: string; isSuperAdmin: boolean }>(`
           SELECT u.id, EXISTS (
@@ -405,10 +402,8 @@ export class AdminUsersService {
            WHERE status = 'verified' AND property_id IN (SELECT id FROM properties WHERE landlord_id = $1)`,
           [userId],
         );
-        await client.query('COMMIT');
         return { id: userId, deleted: true };
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
         throw error;
       }
     });
@@ -423,61 +418,7 @@ export class AdminUsersService {
     userId: string,
     input: AdminRoleAssignmentInput,
   ) {
-    if (actor.userId === userId) {
-      throw new ForbiddenException('Cannot assign yourself a role');
-    }
-    if (input.roleKey === 'super_admin' && !actorPermissions.has('roles.manage_super_admin')) {
-      throw new ForbiddenException('Only a Super Admin can grant the Super Admin role');
-    }
-    if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
-      throw new ForbiddenException('Cannot assign a role outside your own scope');
-    }
-    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
-      try {
-        const target = (await client.query('SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL', [userId])).rows[0];
-        if (!target) throw new NotFoundException('User not found');
-        const role = (await client.query<{ id: string }>('SELECT id FROM roles WHERE key = $1', [input.roleKey])).rows[0];
-        if (!role) throw new NotFoundException('Role not found');
-        if (input.scopeType === 'property') {
-          const property = (await client.query('SELECT id FROM properties WHERE id = $1', [input.scopeId])).rows[0];
-          if (!property) throw new NotFoundException('Property scope not found');
-        }
-        const assignment = (await client.query(`
-          INSERT INTO user_role_assignments (
-            user_id, role_id, scope_type, scope_id, valid_until, assigned_by, reason
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-          RETURNING id, user_id AS "userId", scope_type AS "scopeType", scope_id AS "scopeId", valid_until AS "validUntil"
-        `, [userId, role.id, input.scopeType, input.scopeId ?? null, input.validUntil ?? null, actor.userId, input.reason])).rows[0]!;
-
-        if (
-          input.scopeType === 'property' &&
-          ['landlord', 'custodian', 'property_worker', 'student'].includes(input.roleKey)
-        ) {
-          const membershipRole = input.roleKey === 'student' ? 'resident_student' : input.roleKey;
-          await client.query(`
-            INSERT INTO property_memberships (
-              user_id, property_id, role, worker_type, assigned_by, ends_at
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (user_id, property_id, role) WHERE revoked_at IS NULL
-            DO UPDATE SET status = 'active', worker_type = EXCLUDED.worker_type,
-              ends_at = EXCLUDED.ends_at, assigned_by = EXCLUDED.assigned_by
-          `, [userId, input.scopeId, membershipRole, input.workerType ?? null, actor.userId, input.validUntil ?? null]);
-        }
-        await client.query('COMMIT');
-        return { ...assignment, roleKey: input.roleKey };
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
-        return conflict(error);
-      }
-    });
-    await this.audit.record(actor, 'roles.assign', 'user_role_assignment', result.id, {
-      targetUserId: userId,
-      roleKey: input.roleKey,
-      scopeType: input.scopeType,
-      scopeId: input.scopeId ?? null,
-    });
-    return result;
+    return this.roleAssignments.grant(actor, actorPermissions, actorAssignments, userId, input);
   }
 
   async revokeRole(
@@ -487,42 +428,13 @@ export class AdminUsersService {
     userId: string,
     assignmentId: string,
   ) {
-    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
-      try {
-        const assignment = (await client.query<{ roleKey: string; scopeType: string; scopeId: string | null }>(`
-          SELECT r.key AS "roleKey", ura.scope_type AS "scopeType", ura.scope_id AS "scopeId"
-          FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
-          WHERE ura.id = $1 AND ura.user_id = $2 AND ura.revoked_at IS NULL FOR UPDATE
-        `, [assignmentId, userId])).rows[0];
-        if (!assignment) throw new NotFoundException('Active role assignment not found');
-        if (assignment.roleKey === 'super_admin') {
-          if (!actorPermissions.has('roles.manage_super_admin')) {
-            throw new ForbiddenException('Only a Super Admin can revoke this role');
-          }
-          if (actor.userId === userId) throw new ForbiddenException('You cannot revoke your own Super Admin role');
-        }
-        if (!hasCoveringScope(actorAssignments, assignment.scopeType, assignment.scopeId)) {
-          throw new ForbiddenException('Cannot revoke a role assignment outside your own scope');
-        }
-        await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE id = $1', [assignmentId, actor.userId]);
-        if (assignment.scopeType === 'property' && assignment.scopeId) {
-          const membershipRole = assignment.roleKey === 'student' ? 'resident_student' : assignment.roleKey;
-          await client.query(`
-            UPDATE property_memberships SET status = 'revoked', revoked_at = now(), revoked_by = $4,
-              revocation_reason = 'Role assignment revoked'
-            WHERE user_id = $1 AND property_id = $2 AND role = $3 AND revoked_at IS NULL
-          `, [userId, assignment.scopeId, membershipRole, actor.userId]);
-        }
-        await client.query('COMMIT');
-        return { id: assignmentId, revoked: true };
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
-        throw error;
-      }
-    });
-    await this.audit.record(actor, 'roles.revoke', 'user_role_assignment', assignmentId, { targetUserId: userId });
-    return result;
+    return this.roleAssignments.revoke(
+      actor,
+      actorPermissions,
+      actorAssignments,
+      assignmentId,
+      userId,
+    );
   }
 
   async grantPermissions(
@@ -542,7 +454,6 @@ export class AdminUsersService {
       throw new ForbiddenException('Cannot grant a permission outside your own scope');
     }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
       try {
         const user = (await client.query('SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL', [userId])).rows[0];
         if (!user) throw new NotFoundException('User not found');
@@ -567,10 +478,8 @@ export class AdminUsersService {
           `, [userId, permission.id, input.scopeType, input.scopeId ?? null, input.validUntil ?? null, actor.userId, input.reason])).rows[0];
           grants.push({ ...grant, permissionKey: permission.key });
         }
-        await client.query('COMMIT');
         return grants;
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
         return conflict(error);
       }
     });
@@ -590,7 +499,6 @@ export class AdminUsersService {
     grantId: string,
   ) {
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await client.query('BEGIN');
       try {
         const grant = (await client.query<{ permissionKey: string; scopeType: string; scopeId: string | null }>(`
           SELECT p.key AS "permissionKey", upg.scope_type AS "scopeType", upg.scope_id AS "scopeId"
@@ -608,9 +516,7 @@ export class AdminUsersService {
           'UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $2 WHERE id = $1',
           [grantId, actor.userId],
         );
-        await client.query('COMMIT');
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
         throw error;
       }
       return { id: grantId, revoked: true };

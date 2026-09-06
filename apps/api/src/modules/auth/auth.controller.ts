@@ -1,8 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
+import { ConflictException, Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
-import { Prompt } from '@logto/node';
+import type { Prompt } from '@logto/node';
 import { safeAuthDestination } from '@campushomes/shared';
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
@@ -77,7 +77,7 @@ export class AuthController {
       }, state);
       await client.signIn({
         redirectUri: `${webOrigin(env)}/api/auth/logto/callback`,
-        ...(portal === 'staff' ? { prompt: Prompt.Login } : {}),
+        ...(portal === 'staff' ? { prompt: 'login' as Prompt } : {}),
         extraParams: {
           nonce,
           ...(portal === 'staff' ? { max_age: '0', claims: JSON.stringify({ id_token: { auth_time: { essential: true }, amr: { essential: true } } }) } : {}),
@@ -137,7 +137,11 @@ export class AuthController {
       this.logger.log(JSON.stringify({ event: 'auth.callback.success', requestId, portal: transaction.portal }));
       const next = transaction.next ? `?next=${encodeURIComponent(transaction.next)}` : '';
       return res.redirect(`${webOrigin(env)}/auth/callback${next}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        this.logger.warn(JSON.stringify({ event: 'auth.callback.identity_conflict', requestId }));
+        return fail('identity_conflict');
+      }
       this.logger.warn(JSON.stringify({ event: 'auth.callback.failed', requestId }));
       return fail('sign_in_failed');
     }

@@ -10,6 +10,7 @@ export const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 export interface TestIdentity {
   userId?: string;
   role?: string; // undefined = anonymous (no session variables at all)
+  mfaVerified?: boolean;
 }
 
 /**
@@ -33,7 +34,9 @@ export async function asIdentity<T>(
       // app_staff_scope() (0035) requires provider-verified MFA before it grants
       // any staff RLS access — these tests exercise row visibility, not MFA
       // enforcement itself (that's covered separately), so assume it's present.
-      await client.query(`SELECT set_config('app.mfa_verified', 'true', true)`);
+      await client.query(`SELECT set_config('app.mfa_verified', $1, true)`, [
+        identity.mfaVerified === false ? 'false' : 'true',
+      ]);
     }
     return await fn(client);
   } finally {

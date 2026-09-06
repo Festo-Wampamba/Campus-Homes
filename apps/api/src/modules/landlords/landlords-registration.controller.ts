@@ -1,21 +1,16 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { createZodDto } from 'nestjs-zod';
-
-import { landlordSelfRegisterSchema } from '@campushomes/shared';
-
-import { LandlordsService } from './landlords.service';
-
-class LandlordSelfRegisterDto extends createZodDto(landlordSelfRegisterSchema) {}
+import { Controller, GoneException, Post } from '@nestjs/common';
 
 // Public — no session exists yet. Deliberately a separate controller from
 // LandlordsController (which is guarded at the class level) rather than an
 // exempted route on it.
 @Controller('landlords')
 export class LandlordsRegistrationController {
-  constructor(private readonly landlords: LandlordsService) {}
-
   @Post('register')
-  register(@Body() body: LandlordSelfRegisterDto) {
-    return this.landlords.register(body);
+  register() {
+    throw new GoneException({
+      code: 'LANDLORD_REGISTRATION_MOVED',
+      message: 'Sign in with Logto, then enroll the authenticated account as a landlord.',
+      enrollmentPath: '/landlords/enroll',
+    });
   }
 }

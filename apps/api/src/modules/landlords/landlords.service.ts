@@ -1,8 +1,7 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, or } from 'drizzle-orm';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 
 import type {
-  LandlordSelfRegisterInput,
   PendingLandlordAccount,
   RejectLandlordAccountInput,
   UpsertLandlordProfileInput,
@@ -11,8 +10,8 @@ import type {
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { landlords, users } from '../../db/schema';
-import { LogtoManagementClient } from '../auth/logto-management.client';
 import { AuditService } from '../ops/audit.service';
+import { assignRoleInTransaction } from '../staff/role-assignment.service';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -24,52 +23,32 @@ export class LandlordsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
-    private readonly logtoManagement: LogtoManagementClient,
   ) {}
 
-  // Public self-registration (no session yet): creates a `users` row
-  // (role: landlord, status: pending) plus a Logto identity with the
-  // submitted password. This is the one provisioning path that links the
-  // Logto identity synchronously rather than at first sign-in (JIT, see
-  // ProvisioningService) — the plaintext password is only ever available
-  // right here, in this request. No `landlords` row yet: AuthGuard rejects
-  // every /api/v1 call until an ops lead/admin flips status to 'active'
-  // below, so the KYC onboarding wizard (legal name, ID doc, property) only
-  // becomes reachable at that point, same as it always has.
-  async register(input: LandlordSelfRegisterInput) {
-    const row = await this.rlsDb.run(SERVICE_CTX, async (db) => {
-      const [existing] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(or(eq(users.phone, input.phone), eq(users.email, input.email)));
-      if (existing) {
-        throw new ConflictException('An account with this phone number or email already exists');
+  /** Adds landlord access to the already authenticated identity without
+   * replacing student or other access. Property/KYC approval remains a
+   * separate publication control in the onboarding workflow. */
+  enroll(ctx: RlsContext) {
+    return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const user = (await client.query<{ id: string; status: string; deletedAt: Date | null }>(`
+        SELECT id, status::text, deleted_at AS "deletedAt"
+        FROM users WHERE id = $1 FOR UPDATE
+      `, [ctx.userId])).rows[0];
+      if (!user || user.deletedAt || user.status !== 'active') {
+        throw new ForbiddenException('Only an active account can enroll as a landlord');
       }
-      const [created] = await db
-        .insert(users)
-        .values({
-          phone: input.phone,
-          email: input.email,
-          name: input.name,
-          role: 'landlord',
-          status: 'pending',
-          phoneVerified: false,
-          emailVerified: false,
-        })
-        .returning({ id: users.id });
-      if (!created) throw new Error('User insert returned no row');
-      return created;
+      const assignment = await assignRoleInTransaction(
+        client,
+        ctx,
+        ctx.userId,
+        {
+          roleKey: 'landlord',
+          scopeType: 'own',
+          reason: 'Self-service landlord enrollment',
+        },
+      );
+      return { enrolled: true, assignmentId: assignment.id, onboardingPath: '/landlord/onboarding' };
     });
-    const logtoUser = await this.logtoManagement.createUser({
-      primaryEmail: input.email,
-      primaryPhone: input.phone,
-      name: input.name,
-      password: input.password,
-    });
-    await this.rlsDb.run(SERVICE_CTX, (db) =>
-      db.update(users).set({ logtoUserId: logtoUser.id }).where(eq(users.id, row.id)),
-    );
-    return { registered: true, userId: row.id };
   }
 
   // Ops lead / admin review queue (landlords.review_kyc — same permission

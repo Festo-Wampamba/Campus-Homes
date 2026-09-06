@@ -27,10 +27,10 @@ export function assertGrantAllowed(
   permissions: Set<string>, assignments: RoleAssignment[], input: AssignmentInput,
 ) {
   if (input.roleKey === 'super_admin' && !permissions.has('roles.manage_super_admin')) {
-    throw new ForbiddenException('Only a Super Admin can grant the super_admin role');
+    throw new ForbiddenException('Only a Super Admin can grant the Super Admin role');
   }
   if (!hasCoveringScope(assignments, input.scopeType, input.scopeId ?? null)) {
-    throw new ForbiddenException('Cannot grant a role outside your own scope');
+    throw new ForbiddenException('Cannot assign a role outside your own scope');
   }
 }
 
@@ -140,9 +140,13 @@ export class RoleAssignmentService {
         FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
         WHERE a.id = $1 AND a.revoked_at IS NULL FOR UPDATE OF a`, [assignmentId])).rows[0];
       if (!assignment) throw new NotFoundException('Active role assignment not found');
-      if (assignment.roleKey === 'super_admin' &&
-          (!permissions.has('roles.manage_super_admin') || owner.userId === actor.userId)) {
-        throw new ForbiddenException('Cannot revoke this Super Admin role');
+      if (assignment.roleKey === 'super_admin') {
+        if (!permissions.has('roles.manage_super_admin')) {
+          throw new ForbiddenException('Only a Super Admin can revoke this role');
+        }
+        if (owner.userId === actor.userId) {
+          throw new ForbiddenException('You cannot revoke your own Super Admin role');
+        }
       }
       if (!hasCoveringScope(scopes, assignment.scopeType, assignment.scopeId)) {
         throw new ForbiddenException('Cannot revoke a role assignment outside your own scope');

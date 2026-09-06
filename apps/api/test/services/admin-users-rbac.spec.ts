@@ -73,7 +73,7 @@ describe('AdminUsersService.assignRole — separation of duty', () => {
 
   it('blocks a non-manage_super_admin actor from granting super_admin', async () => {
     const target = await seed(
-      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'pending', 'Target') RETURNING id`,
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Target') RETURNING id`,
       ['+256700001303'],
     );
     await expect(
@@ -87,7 +87,7 @@ describe('AdminUsersService.assignRole — separation of duty', () => {
 
   it("blocks assigning a role outside the actor's own scope", async () => {
     const target = await seed(
-      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'pending', 'Target2') RETURNING id`,
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target2') RETURNING id`,
       ['+256700001304'],
     );
     await expect(
@@ -102,7 +102,7 @@ describe('AdminUsersService.assignRole — separation of duty', () => {
 
   it('allows assigning a role inside the actor\'s own scope', async () => {
     const target = await seed(
-      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'pending', 'Target3') RETURNING id`,
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target3') RETURNING id`,
       ['+256700001305'],
     );
     const assignment = await adminUsers.assignRole(mukAdminCtx(), new Set(['roles.assign']), catchmentMuk, target, {
@@ -115,27 +115,72 @@ describe('AdminUsersService.assignRole — separation of duty', () => {
   });
 });
 
-describe('AdminUsersService.update — ops staff directory', () => {
-  it('adds a registered account promoted to inspector to the active inspector directory', async () => {
+describe('AdminUsersService identity boundaries', () => {
+  it('rejects direct staff creation outside the invitation workflow', async () => {
+    await expect(adminUsers.create(superAdminCtx(), {
+      name: 'Direct Staff',
+      email: 'direct.staff@example.com',
+      accountType: 'ops_inspector',
+      status: 'active',
+    })).rejects.toThrow('Staff accounts must be created through the audited invitation workflow');
+  });
+
+  it('never creates a Logto credential or infers contact verification', async () => {
+    const created = await adminUsers.create(superAdminCtx(), {
+      name: 'Administrative Student Record',
+      email: 'admin-created-student@example.com',
+      accountType: 'student',
+      status: 'active',
+      university: 'MUK',
+      yearOfStudy: 2,
+    });
+    expect((await pool.query(`
+      SELECT email_verified, phone_verified, logto_user_id FROM users WHERE id = $1
+    `, [created.id])).rows[0]).toEqual({
+      email_verified: false,
+      phone_verified: false,
+      logto_user_id: null,
+    });
+  });
+
+  it('rejects compatibility account-type edits in favor of scoped assignments', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'student', 'active', 'Profile Type Target') RETURNING id`,
+      ['+256700001315'],
+    );
+    await expect(adminUsers.update(superAdminCtx(), target, { accountType: 'landlord' }))
+      .rejects.toThrow('Use role assignments to change access');
+  });
+});
+
+describe('AdminUsersService role assignment — ops staff directory', () => {
+  it('adds an assigned inspector to the directory without rewriting their consumer profile type', async () => {
     const registeredUser = await seed(
       `INSERT INTO users (phone, role, status, name) VALUES ($1, 'student', 'active', 'Registered inspector') RETURNING id`,
       ['+256700001314'],
     );
 
-    await adminUsers.update(superAdminCtx(), registeredUser, { accountType: 'ops_inspector' });
+    await adminUsers.assignRole(
+      superAdminCtx(),
+      new Set(['roles.assign']),
+      platformWide,
+      registeredUser,
+      { roleKey: 'ops_inspector', scopeType: 'platform_wide', reason: 'approved staff transfer' },
+    );
 
     const { rows } = await pool.query(
       `SELECT team::text AS team, active FROM ops_staff WHERE user_id = $1`,
       [registeredUser],
     );
     expect(rows).toEqual([{ team: 'inspector', active: true }]);
+    expect((await pool.query(`SELECT role::text FROM users WHERE id = $1`, [registeredUser])).rows[0].role).toBe('student');
   });
 });
 
 describe('AdminUsersService.assignRole/revokeRole — round trip', () => {
   it('a granted role is reflected by loadPermissions and disappears on revoke', async () => {
     const target = await seed(
-      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'pending', 'Target4') RETURNING id`,
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target4') RETURNING id`,
       ['+256700001306'],
     );
     const assignment = await adminUsers.assignRole(mukAdminCtx(), new Set(['roles.assign']), catchmentMuk, target, {
@@ -163,7 +208,7 @@ describe('AdminUsersService.assignRole/revokeRole — round trip', () => {
 
   it("blocks revoking a role assignment outside the actor's own scope", async () => {
     const target = await seed(
-      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'pending', 'Target5') RETURNING id`,
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target5') RETURNING id`,
       ['+256700001307'],
     );
     const assignment = await adminUsers.assignRole(superAdminCtx(), new Set(['roles.assign']), platformWide, target, {

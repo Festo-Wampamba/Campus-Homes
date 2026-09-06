@@ -13,6 +13,7 @@ let landlord2: string;
 let student1: string;
 let student2: string;
 let opsLead: string;
+let scopedOpsLead: string;
 let property1: string; // owned by landlord1, verified listing
 let property2: string; // owned by landlord2, draft listing only
 let listing1: string; // verified
@@ -56,10 +57,17 @@ beforeAll(async () => {
   student2 = await seedUser('student', '+256700000004');
   opsLead = await seedUser('ops_lead', '+256700000005');
   const inspector = await seedUser('ops_inspector', '+256700000006');
+  scopedOpsLead = await seedUser('ops_lead', '+256799999997');
   // app_staff_scope() (0035) grants access from real user_role_assignments
   // rows, not users.role — these tests need an actual platform-wide grant.
   await grantPlatformRole(opsLead, 'ops_lead');
   await grantPlatformRole(inspector, 'ops_inspector');
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+     SELECT $1, id, 'catchment', 'MUK', $1, 'scoped RLS fixture'
+     FROM roles WHERE key = 'ops_lead'`,
+    [scopedOpsLead],
+  );
 
   await seed(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'Landlord One')`, [landlord1]);
   await seed(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'Landlord Two')`, [landlord2]);
@@ -80,7 +88,7 @@ beforeAll(async () => {
   );
   property2 = await seed(
     `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
-     VALUES ($1, 'Hostel Two', 'Kikoni', 'active', 'MUK') RETURNING id`,
+     VALUES ($1, 'Hostel Two', 'Kikoni', 'active', 'MUBS') RETURNING id`,
     [landlord2],
   );
 
@@ -164,6 +172,30 @@ describe('properties isolation', () => {
   it("landlord cannot read another landlord's property", async () => {
     const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
       (await c.query('SELECT id FROM properties WHERE id = $1', [property2])).rows,
+    );
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe('staff assignment scope and MFA isolation', () => {
+  it('a catchment-scoped lead reads only properties in the granting scope', async () => {
+    const rows = await asIdentity({ userId: scopedOpsLead, role: 'ops_lead' }, async (client) =>
+      (await client.query('SELECT id FROM properties ORDER BY id')).rows,
+    );
+    expect(rows.map((row) => row.id)).toEqual([property1]);
+  });
+
+  it('a platform-wide lead can read properties across catchments', async () => {
+    const rows = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (client) =>
+      (await client.query('SELECT id FROM properties ORDER BY id')).rows,
+    );
+    expect(rows.map((row) => row.id).sort()).toEqual([property1, property2].sort());
+  });
+
+  it('a staff assignment without verified MFA grants no staff property access', async () => {
+    const rows = await asIdentity(
+      { userId: scopedOpsLead, role: 'ops_lead', mfaVerified: false },
+      async (client) => (await client.query('SELECT id FROM properties')).rows,
     );
     expect(rows).toHaveLength(0);
   });
