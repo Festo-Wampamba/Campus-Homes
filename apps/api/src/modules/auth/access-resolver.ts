@@ -68,6 +68,7 @@ export async function resolveAccountAccess(
           WHERE a.user_id = u.id AND a.revoked_at IS NULL AND a.valid_from <= now()
             AND (a.valid_until IS NULL OR a.valid_until > now())
             AND ((a.scope_type = 'platform_wide' AND a.scope_id IS NULL)
+              OR (a.scope_type = 'own' AND a.scope_id IS NULL)
               OR (a.scope_type = 'property' AND EXISTS (SELECT 1 FROM properties p WHERE p.id::text = a.scope_id))
               OR (a.scope_type = 'catchment' AND a.scope_id IN ('MUK','MUBS','KIU','KYU','all')))
         ) AS "activeRoles",
