@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getServerSession } from "@/lib/session";
+import { WORKSPACE_HOME } from "@/lib/auth-routing";
 import { AccountMenu } from "@/components/shell/account-menu";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
@@ -11,6 +12,7 @@ import { Wordmark } from "@/components/shell/wordmark";
 // server component, same helper the portal layouts already use).
 async function SiteHeader() {
   const session = await getServerSession();
+  const hasLandlordAccess = session?.access.workspaces.includes("landlord") ?? false;
 
   return (
     <header className="sticky top-0 z-(--z-sticky) h-16 border-b border-border bg-background/95 text-foreground shadow-sm backdrop-blur-xl">
@@ -38,10 +40,10 @@ async function SiteHeader() {
             Support
           </Link>
           <Link
-            href="/landlords"
+            href={hasLandlordAccess ? WORKSPACE_HOME.landlord : "/landlords"}
             className="hidden whitespace-nowrap rounded-lg border border-border px-3.5 py-2 text-sm font-semibold text-foreground transition duration-300 hover:border-teal-600 hover:bg-accent sm:block"
           >
-            List a property
+            {hasLandlordAccess ? "Landlord" : "List a property"}
           </Link>
           <ThemeToggle />
           {session ? (
