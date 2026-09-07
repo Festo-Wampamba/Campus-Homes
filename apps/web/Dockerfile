@@ -10,6 +10,12 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 WORKDIR /workspace
 COPY . .
 
+# Dokploy fetches source via its GitHub App installation (a tarball, not a
+# real `git clone`), so `.git` never exists in this build context — passed
+# in explicitly instead, same reasoning as apps/api/Dockerfile.
+ARG GIT_COMMIT_SHA=unknown
+RUN echo "$GIT_COMMIT_SHA" > /workspace/commit_sha.txt
+
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_PAYMENTS_ENABLED=false
 ARG NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
@@ -47,6 +53,10 @@ COPY --from=builder --chown=node:node /workspace/apps/web/.next/static ./apps/we
 # Next's standalone output intentionally excludes public assets. Copy them
 # beside server.js so /images, icons, and other static files exist at runtime.
 COPY --from=builder --chown=node:node /workspace/apps/web/public ./apps/web/public
+# Read by src/app/version/route.ts so the deploy health gate can tell a new
+# rollout apart from the outgoing container it replaced (mirrors commit_sha.txt
+# in apps/api/Dockerfile).
+COPY --from=builder --chown=node:node /workspace/commit_sha.txt ./apps/web/commit_sha.txt
 
 USER node
 WORKDIR /app/apps/web

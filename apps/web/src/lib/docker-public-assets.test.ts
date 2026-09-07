@@ -18,4 +18,14 @@ describe("web production image", () => {
     expect(runnerStage).toMatch(/ARG NEXT_PUBLIC_API_BASE_URL/);
     expect(runnerStage).toMatch(/ENV NEXT_PUBLIC_API_BASE_URL=\$NEXT_PUBLIC_API_BASE_URL/);
   });
+
+  it("bakes the build commit into the runtime image for the deploy health gate", () => {
+    const dockerfile = readFileSync(join(process.cwd(), "Dockerfile"), "utf8");
+
+    expect(dockerfile).toMatch(/ARG GIT_COMMIT_SHA=unknown/);
+    expect(dockerfile).toMatch(/echo "\$GIT_COMMIT_SHA" > \/workspace\/commit_sha\.txt/);
+    expect(dockerfile).toMatch(
+      /COPY --from=builder --chown=node:node \/workspace\/commit_sha\.txt \.\/apps\/web\/commit_sha\.txt/,
+    );
+  });
 });

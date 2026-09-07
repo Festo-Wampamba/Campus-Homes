@@ -181,6 +181,68 @@ jobs:
           echo "::error::staging did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
           exit 1
 
+      # apps/web was never wired into this pipeline — Dokploy's GitHub App
+      # auto-deploy was the only thing building it, and once that silently
+      # stopped keeping up (2026-09-05 → 2026-09-07, ~2 days) nothing here
+      # noticed: the API side of every deploy still reported healthy, so a
+      # stale web image serving a since-fixed SSR crash (lib/api.ts's
+      # relative-URL bug, PR #51) went undetected in production. Same
+      # save-env/deploy/health-gate shape as the API steps above.
+      - name: Set build-arg so the web image can report its own commit
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_WEB_APP_ID }}
+        run: |
+          for name in API_KEY API_URL APP_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::DOKPLOY_WEB_APP_ID (or DOKPLOY_$name) is not set — add it under Settings > Secrets and variables > Actions"
+              exit 1
+            fi
+          done
+          current=$(curl --fail --silent --show-error \
+            "$API_URL/api/application.one?applicationId=$APP_ID" \
+            -H "x-api-key: $API_KEY")
+          jq -n \
+            --arg appId "$APP_ID" \
+            --arg env "$(jq -r '.env // ""' <<<"$current")" \
+            --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
+            --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
+            --arg sha "$GITHUB_SHA" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            > /tmp/save-env-web-payload.json
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.saveEnvironment" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/save-env-web-payload.json
+
+      - name: Trigger Dokploy web deploy
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_WEB_APP_ID }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.deploy" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"$APP_ID\"}"
+
+      - name: Wait for staging web to report healthy on this commit
+        run: |
+          sleep 120
+          for attempt in $(seq 1 30); do
+            body=$(curl -s -m 10 https://staging.campushomes.co.ug/version || true)
+            echo "attempt $attempt: ${body:-no response}"
+            case "$body" in
+              *"\"commit\":\"${GITHUB_SHA}\""*) echo "staging web healthy on ${GITHUB_SHA}"; exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::staging web did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          exit 1
+
   # Manual-only (see workflow_dispatch above) — production has stayed a
   # deliberate action since the 3-hour launch cutover, when every deploy was
   # clicked through the Dokploy UI by hand with no health-gate or commit-SHA
@@ -246,4 +308,59 @@ jobs:
             sleep 10
           done
           echo "::error::production did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          exit 1
+
+      - name: Set build-arg so the web image can report its own commit
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_WEB_PROD_APP_ID }}
+        run: |
+          for name in API_KEY API_URL APP_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::DOKPLOY_WEB_PROD_APP_ID (or DOKPLOY_$name) is not set — add it under Settings > Secrets and variables > Actions"
+              exit 1
+            fi
+          done
+          current=$(curl --fail --silent --show-error \
+            "$API_URL/api/application.one?applicationId=$APP_ID" \
+            -H "x-api-key: $API_KEY")
+          jq -n \
+            --arg appId "$APP_ID" \
+            --arg env "$(jq -r '.env // ""' <<<"$current")" \
+            --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
+            --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
+            --arg sha "$GITHUB_SHA" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            > /tmp/save-env-web-payload.json
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.saveEnvironment" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/save-env-web-payload.json
+
+      - name: Trigger Dokploy web deploy
+        env:
+          API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          API_URL: ${{ secrets.DOKPLOY_API_URL }}
+          APP_ID: ${{ secrets.DOKPLOY_WEB_PROD_APP_ID }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.deploy" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"$APP_ID\"}"
+
+      - name: Wait for production web to report healthy on this commit
+        run: |
+          sleep 120
+          for attempt in $(seq 1 30); do
+            body=$(curl -s -m 10 https://campushomes.co.ug/version || true)
+            echo "attempt $attempt: ${body:-no response}"
+            case "$body" in
+              *"\"commit\":\"${GITHUB_SHA}\""*) echo "production web healthy on ${GITHUB_SHA}"; exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::production web did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
           exit 1
