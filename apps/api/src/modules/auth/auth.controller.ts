@@ -180,6 +180,10 @@ export class SessionController {
   async session(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     correlationId(res);
     const token = readSessionCookie(req);
-    return token ? await this.sessionStore.find(token) : null;
+    const session = token ? await this.sessionStore.find(token) : null;
+    // Nest/Express send an empty body (not JSON `null`) for a bare `null`
+    // return — the web app's session.ts calls res.json() on every response
+    // and crashes on an empty one, so this must always be real JSON.
+    res.json(session);
   }
 }
