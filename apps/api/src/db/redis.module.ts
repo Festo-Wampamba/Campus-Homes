@@ -18,6 +18,29 @@ function safeRedisHost(url: string): string {
   }
 }
 
+/** A fresh container can race its overlay network/DNS for the first second
+ * or two of life — retry with backoff before giving up, rather than crash
+ * the whole app on a connection blip that clears itself moments later. */
+export async function withRetry<T>(
+  attempt: () => Promise<T>,
+  options: { maxAttempts?: number; baseDelayMs?: number; delay?: (ms: number) => Promise<void> } = {},
+): Promise<T> {
+  const { maxAttempts = 5, baseDelayMs = 500, delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } =
+    options;
+  let lastError: unknown;
+  for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+      if (attemptNumber < maxAttempts) {
+        await delay(baseDelayMs * 2 ** (attemptNumber - 1));
+      }
+    }
+  }
+  throw lastError;
+}
+
 /** Shared ioredis connection (Upstash, TLS via rediss://). Null when
  * REDIS_URL is unset — dev convenience only; jobs and locks then no-op. */
 @Global()
@@ -35,17 +58,31 @@ function safeRedisHost(url: string): string {
           return null;
         }
 
-        // Connect once during boot so a missing/unsafe queue backend fails
+        // Connect during boot so a missing/unsafe queue backend fails
         // clearly before the HTTP server claims readiness. BullMQ requires
         // maxRetriesPerRequest=null for its blocking connections.
-        const redis = new Redis(redisUrl, {
-          lazyConnect: true,
-          maxRetriesPerRequest: null,
-          connectTimeout: 5_000,
-        });
+        let redis: Redis;
         try {
-          await redis.connect();
-          await redis.ping();
+          redis = await withRetry(async () => {
+            const client = new Redis(redisUrl, {
+              lazyConnect: true,
+              maxRetriesPerRequest: null,
+              connectTimeout: 5_000,
+            });
+            try {
+              await client.connect();
+              await client.ping();
+              return client;
+            } catch (error) {
+              client.disconnect();
+              throw error;
+            }
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'unknown Redis error';
+          throw new Error(`Redis startup check failed: ${message}`);
+        }
+        try {
           const info = await redis.info('memory');
           const policy = info.match(/^maxmemory_policy:(.+)$/m)?.[1]?.trim();
           if (policy && policy !== 'noeviction') {
