@@ -1,21 +1,18 @@
+import Image from "next/image";
+
 import { cn } from "@/lib/utils";
 
 function RoofMark({ className }: { className?: string }) {
   return (
-    <svg
+    <Image
+      src="/images/branding/campushomes-mark.png"
+      alt=""
       aria-hidden
-      viewBox="0 0 42 15"
-      className={cn("h-[0.4em] w-auto text-coral-500", className)}
-    >
-      <polyline
-        points="3,13 21,3 39,13"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+      width={512}
+      height={509}
+      className={cn("h-[1.4em] w-auto", className)}
+      priority
+    />
   );
 }
 
