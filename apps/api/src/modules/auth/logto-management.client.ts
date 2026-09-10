@@ -91,4 +91,18 @@ export class LogtoManagementClient {
       body: JSON.stringify({ email, context: { interactionEvent }, expiresIn: expiresInSeconds }),
     });
   }
+
+  /** The Sign-in Experience is tenant-wide in self-hosted Logto (see
+   * logto.config.ts's header comment) — one call brands the hosted UI for
+   * both the consumer and staff applications. */
+  async getSignInExperience(): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>('/api/sign-in-exp');
+  }
+
+  async updateSignInExperience(patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>('/api/sign-in-exp', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  }
 }

@@ -17,6 +17,10 @@ The legacy `admin:reset` command creates a Better Auth credential and must not b
 1. Choose a named, individual company email. Do not use a shared mailbox.
 2. Sign in once through the normal CampusHomes consumer flow with that email and complete email verification. This creates and links the local CampusHomes user to its Logto subject.
 3. In the API container, set `SUPER_ADMIN_EMAIL` to that exact email and temporarily set `ALLOW_SUPER_ADMIN_BOOTSTRAP=true`.
+   If this first administrator must also operate the Operations workspace, set
+   `SUPER_ADMIN_OPS_ROLE=ops_lead` (or `ops_inspector`) and explicitly set
+   `SUPER_ADMIN_OPS_SCOPE_TYPE=platform_wide`, or use `catchment` together with
+   `SUPER_ADMIN_OPS_SCOPE_ID=MUK|MUBS|KIU|KYU|all`.
 4. Run `pnpm --filter @campushomes/api admin:bootstrap`.
 5. Remove `ALLOW_SUPER_ADMIN_BOOTSTRAP` immediately.
 6. Sign out of both CampusHomes and Logto, then use the Staff sign-in entry point and enroll TOTP.
@@ -24,9 +28,29 @@ The legacy `admin:reset` command creates a Better Auth credential and must not b
 
 The bootstrap is idempotent, requires an active email-verified Logto-linked user, records an audit event, and refuses to create a third active Super Admin.
 
+`super_admin` grants only the Administration workspace. It does not implicitly include Operations — this is deliberate (least privilege, matches the acceptance matrix below). Ordinary API and console role assignment blocks self-grants. For the first Super Admin, use the guarded optional Operations settings above. After a second authorized administrator exists, that administrator may grant or change the first administrator's Operations access through `/admin/users`. "Choose workspace" showing only Administration is not a bug; it reports that account's actual grants.
+
 ## Invite and assign staff
 
-Use `/admin/access/staff`; do not create staff directly in Logto and do not edit `users.role` manually.
+Use `/admin/access/staff` to invite staff and inspect invitation delivery. Use its **Manage access** action (which opens `/admin/users`) to grant, revoke, or scope roles for an existing person. Do not create staff directly in Logto and do not edit `users.role` manually.
+
+## Apply hosted sign-in branding
+
+The branding command reads the current Logto Sign-in Experience first and is a dry run unless `--apply` is present. Keep staging and production credentials in their separate deployment environments; never copy M2M secrets into the command line or Git.
+
+```text
+BRANDING_TARGET=staging pnpm --filter @campushomes/api auth:brand-signin
+BRANDING_TARGET=staging pnpm --filter @campushomes/api auth:brand-signin -- --apply
+```
+
+Review the dry-run output and browser preview before the staging apply. For production, repeat the dry run, obtain the release confirmation, then use both the apply flag and the production latch:
+
+```text
+BRANDING_TARGET=production ALLOW_PRODUCTION_SIGNIN_BRANDING=true \
+  pnpm --filter @campushomes/api auth:brand-signin -- --apply
+```
+
+The script validates that the target label matches the Logto and web hostnames. It applies the CampusHomes logo, teal primary colors, coral focus treatment, and Poppins typography. Remove `ALLOW_PRODUCTION_SIGNIN_BRANDING` immediately after the apply.
 
 | Persona | Role | Normal scope | First landing | Must not inherit |
 | --- | --- | --- | --- | --- |
@@ -56,6 +80,8 @@ Use distinct controlled inboxes for a new consumer and a new staff member. Prese
 3. Forgot-password email arrives, the reset completes, and the old password no longer works.
 4. Staff invitation email arrives, its one-time token works once, TOTP is required, and the correct dashboard opens.
 5. Resend/Logto request logs show a successful provider acceptance for each delivery.
+
+Mailbox creation alone is not delivery evidence. Before running these checks, confirm SPF and DKIM pass and publish a DMARC policy chosen by the domain owner. Start with monitored enforcement only when the aggregate-report destination is an existing, controlled mailbox; do not invent a reporting address.
 
 ## WhatsApp OTP activation
 

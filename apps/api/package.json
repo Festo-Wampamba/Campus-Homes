@@ -22,6 +22,7 @@
     "db:seed:demo": "node --env-file=.env ./scripts/seed-demo.cjs",
     "admin:bootstrap": "node --env-file=.env ./scripts/bootstrap-logto-super-admin.cjs",
     "admin:reset": "node --env-file=.env ./scripts/reset-super-admin.cjs",
+    "auth:brand-signin": "node --env-file=.env ./scripts/set-signin-branding.cjs",
     "lint": "eslint src test"
   },
   "dependencies": {

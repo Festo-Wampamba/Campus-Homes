@@ -9,34 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
+import { StatusChip } from "@/components/status-chip";
 import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { listingPhotoUrl } from "@/lib/cloudinary";
 import { cn } from "@/lib/utils";
 import { PropertyDetailDialog } from "./property-detail-dialog";
 import { PropertyFormDialog } from "./property-form-dialog";
-
-const PROPERTY_STATUS_LABEL: Record<string, string> = {
-  pending_kyc: "Awaiting verification",
-  active: "Active",
-  suspended: "Suspended",
-};
+import { propertyStatusPresentation } from "./property-status";
 
 const PAGE_SIZE = 12;
 
-function StatusBadge({ status }: { status: string }) {
+function PropertyStatusChip({ status }: { status: string }) {
+  const presentation = propertyStatusPresentation(status);
   return (
-    <span
-      className={cn(
-        "inline-block shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold",
-        status === "active"
-          ? "bg-accent text-teal-700"
-          : status === "suspended"
-            ? "bg-destructive/10 text-destructive"
-            : "bg-warning-subtle text-warning",
-      )}
-    >
-      {PROPERTY_STATUS_LABEL[status] ?? status}
-    </span>
+    <StatusChip tone={presentation.tone}>
+      {presentation.label}
+    </StatusChip>
   );
 }
 
@@ -167,7 +155,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       <td className="px-4 py-3 text-muted-foreground">{property.streetAddress}</td>
                       <td className="px-4 py-3 text-muted-foreground">{property.catchment}</td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={property.status} />
+                        <PropertyStatusChip status={property.status} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Button
@@ -200,7 +188,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       {property.streetAddress} · {property.catchment}
                     </p>
                   </div>
-                  <StatusBadge status={property.status} />
+                  <PropertyStatusChip status={property.status} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -229,7 +217,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       </h2>
                       <p className="text-sm text-muted-foreground">{property.streetAddress}</p>
                       <div className="mt-2">
-                        <StatusBadge status={property.status} />
+                        <PropertyStatusChip status={property.status} />
                       </div>
                     </div>
                     <Button
