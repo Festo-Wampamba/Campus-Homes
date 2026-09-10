@@ -47,6 +47,12 @@ export class RolesGuard implements CanActivate {
     }
     const available = effectiveRoles(req.session.access.roles);
     const matched = required.find((role) => available.includes(role) &&
+      // `admin` is a legacy database/RLS role shared by every admin-console
+      // persona. Broad @Roles('admin') routes are full-platform routes, so
+      // only the two platform-administrator assignments may satisfy them.
+      // Finance, support, and audit use PermissionsGuard endpoints instead.
+      (role !== 'admin' || req.session.access.roles.some((key) =>
+        key === 'super_admin' || key === 'platform_admin')) &&
       (!['ops_inspector', 'ops_lead', 'admin'].includes(role) || req.session.access.assurance.mfaVerified));
     if (!matched) return false;
     req.effectiveRole = matched;

@@ -27,6 +27,18 @@ describe('effective route role', () => {
   it('requires verified MFA even when staff used consumer sign-in', () => {
     expect(check(request(['super_admin']), ['admin'])).toBe(false);
   });
+  it.each(['finance_admin', 'support_admin', 'auditor'])(
+    'does not let %s inherit broad legacy admin routes',
+    (role) => {
+      expect(check(request([role], true), ['admin'])).toBe(false);
+    },
+  );
+  it.each(['super_admin', 'platform_admin'])(
+    'allows %s to use broad legacy admin routes after MFA',
+    (role) => {
+      expect(check(request([role], true), ['admin'])).toBe(true);
+    },
+  );
   it('selects the consumer role required by a route for a multi-role user', () => {
     const req = request(['student', 'landlord', 'super_admin']);
     expect(check(req, ['landlord'])).toBe(true);

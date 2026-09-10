@@ -17,6 +17,23 @@ describe("workspace routing", () => {
       roles: [role], assurance: { authenticatedAt: new Date().toISOString(), mfaVerified: true },
     })))).toBe(destination);
   });
+  it.each(["ops_lead", "ops_inspector"])("routes %s to operations", (role) => {
+    expect(authDestination(session(access(["ops"], {
+      roles: [role], assurance: { authenticatedAt: new Date().toISOString(), mfaVerified: true },
+    })))).toBe("/ops");
+  });
+  it.each([
+    ["student", ["student"], "/"],
+    ["landlord", ["landlord"], "/landlord"],
+    ["dual consumer", ["student", "landlord"], "/choose-workspace"],
+    ["consumer plus staff", ["student", "admin"], "/choose-workspace"],
+  ] as const)("routes the %s account matrix case", (_label, workspaces, destination) => {
+    const accountWorkspaces: AccountAccess["workspaces"] = [...workspaces];
+    expect(authDestination(session(access(accountWorkspaces, {
+      roles: accountWorkspaces.includes("admin") ? ["support_admin"] : [],
+      assurance: { authenticatedAt: new Date().toISOString(), mfaVerified: true },
+    })))).toBe(destination);
+  });
   it("chooses among multiple grants instead of selecting a primary role", () => {
     expect(authDestination(session(access(["student", "landlord"])))).toBe("/choose-workspace");
     expect(authDestination(session(access([])))).toBe("/access-required");
