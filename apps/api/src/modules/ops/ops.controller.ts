@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
@@ -94,6 +94,20 @@ export class OpsController {
   @Roles('ops_lead', 'admin')
   publishableSemesters(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.publishableSemesters(rlsCtx(req), id);
+  }
+
+  // Rooms are permanent/property-level (2026-09) — this is what lets the
+  // publish form default to "these already exist" instead of re-typing the
+  // whole room list every semester. semesterId is required so the response
+  // can carry back whether each room already has a price for it.
+  @Get('properties/:id/rooms')
+  @Roles('ops_lead', 'admin')
+  propertyRooms(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('semesterId', ParseUUIDPipe) semesterId: string,
+  ) {
+    return this.ops.propertyRooms(rlsCtx(req), id, semesterId);
   }
 
   // Creates the draft listing a landlord-onboarded property never gets, so the

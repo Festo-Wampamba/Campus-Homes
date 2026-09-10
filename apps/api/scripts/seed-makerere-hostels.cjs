@@ -310,12 +310,18 @@ async function main() {
       );
 
       for (const unit of units) {
+        // Rooms are permanent/property-level (2026-09) — price lives in
+        // unit_semester_pricing, not on the unit itself.
         const unitRes = await client.query(
-          `INSERT INTO units (listing_id, label, capacity, room_category, price_per_term_ugx, deposit_ugx, available_for_semester_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-          [listingId, unit.label, unit.capacity, unit.roomCategory, unit.priceUgx, unit.depositUgx, semesterId],
+          `INSERT INTO units (property_id, label, capacity, room_category)
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [propertyId, unit.label, unit.capacity, unit.roomCategory],
         );
         const unitId = unitRes.rows[0].id;
+        await client.query(
+          `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx, deposit_ugx) VALUES ($1, $2, $3, $4)`,
+          [unitId, semesterId, unit.priceUgx, unit.depositUgx],
+        );
         // Bed-level inventory (2026-09 redesign) — every unit needs its
         // capacity's worth of beds or it's seeded entirely unreservable.
         for (let i = 1; i <= unit.capacity; i++) {

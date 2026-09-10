@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Property, RoomCategory } from "@campushomes/shared";
 
+type PropertyRoom = {
+  id: string;
+  label: string;
+  capacity: number;
+  roomCategory: RoomCategory;
+  pricePerTermUgx: number | null;
+  depositUgx: number | null;
+};
+
 import {
   emptyRoomCategoryRow,
   RoomCategoryRows,
@@ -35,15 +44,49 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [visitPhotoCount, setVisitPhotoCount] = useState<number | null>(null);
 
-  // Pre-fill from the landlord's proposed room categories (submitted at
-  // onboarding) so Ops confirms/adjusts real inspection numbers instead of
-  // typing every listing from a blank form.
+  // Rooms are permanent/property-level (2026-09) — once a property has real
+  // rooms, they're what gets pre-filled here (grouped by category+price,
+  // carrying their unitIds so submit() reuses them instead of creating
+  // duplicates); only a property with no rooms yet falls back to the
+  // landlord's proposed categories from onboarding, same as before.
   useEffect(() => {
     let cancelled = false;
-    api<{ property: Property; visitPhotoCount: number }>(`/ops/listings/${listingId}`)
-      .then(({ property, visitPhotoCount: count }) => {
+    api<{ listing: { propertyId: string; semesterId: string }; property: Property; visitPhotoCount: number }>(
+      `/ops/listings/${listingId}`,
+    )
+      .then(async ({ listing, property, visitPhotoCount: count }) => {
         if (cancelled) return;
         setVisitPhotoCount(count);
+
+        const rooms = await api<PropertyRoom[]>(
+          `/ops/properties/${listing.propertyId}/rooms?semesterId=${listing.semesterId}`,
+        ).catch(() => [] as PropertyRoom[]);
+        if (cancelled) return;
+
+        if (rooms.length > 0) {
+          const groups = new Map<string, RoomCategoryRow>();
+          for (const room of rooms) {
+            const key = `${room.roomCategory}-${room.pricePerTermUgx ?? "unpriced"}`;
+            const existing = groups.get(key);
+            if (existing) {
+              existing.roomCount = String(Number(existing.roomCount) + 1);
+              existing.unitIds!.push(room.id);
+            } else {
+              groups.set(key, {
+                key,
+                category: room.roomCategory,
+                roomCount: "1",
+                pricePerTermUgx: room.pricePerTermUgx != null ? String(room.pricePerTermUgx) : "",
+                depositUgx: room.depositUgx != null ? String(room.depositUgx) : "",
+                selfContained: false,
+                unitIds: [room.id],
+              });
+            }
+          }
+          setRoomCategoryRows([...groups.values()]);
+          return;
+        }
+
         if (!property.proposedRoomCategories?.length) return;
         setRoomCategoryRows(
           property.proposedRoomCategories.map((p) => ({
@@ -84,6 +127,11 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         const price = Number(row.pricePerTermUgx);
         const deposit = row.depositUgx ? Number(row.depositUgx) : undefined;
         return Array.from({ length: count }, (_, i) => ({
+          // Present = reuse this existing room, just price it for this
+          // semester; absent = a brand-new physical room. label/capacity are
+          // ignored server-side when unitId is present (a room's own
+          // physical details don't change on repricing).
+          ...(row.unitIds?.[i] ? { unitId: row.unitIds[i] } : {}),
           label: `${roomCategoryLabel(category)} ${i + 1}`,
           capacity: ROOM_CATEGORY_DEFAULT_CAPACITY[category] ?? 1,
           roomCategory: category,

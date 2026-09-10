@@ -83,6 +83,7 @@ function groupByCategory(
 type LightboxState = { photos: LightboxPhoto[]; index: number; caption: string };
 
 export function RoomCategoryList({
+  listingId,
   units,
   availability,
   photos,
@@ -91,6 +92,7 @@ export function RoomCategoryList({
   canReserve,
   needsProfile,
 }: {
+  listingId: string;
   units: Unit[];
   availability: { id: string; unit_id: string; available: boolean }[];
   photos: LightboxPhoto[];
@@ -178,7 +180,11 @@ export function RoomCategoryList({
               </Button>
             )}
             {canReserve && group.firstAvailableBedId && (
-              <ReserveButton bedId={group.firstAvailableBedId} needsProfile={needsProfile} />
+              <ReserveButton
+                bedId={group.firstAvailableBedId}
+                listingId={listingId}
+                needsProfile={needsProfile}
+              />
             )}
           </li>
         ))}
