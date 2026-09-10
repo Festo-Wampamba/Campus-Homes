@@ -3,6 +3,9 @@ import { accountAccess, normalizeAssurance } from './access-resolver';
 const identity = { role: 'admin', hasStudent: false, hasLandlord: false, activeRoles: [], historicalRoles: [] };
 
 describe('account access resolution', () => {
+  it.each(['super_admin', 'platform_admin', 'finance_admin', 'support_admin', 'auditor'])('does not invent an Ops workspace for %s', role => {
+    expect(accountAccess({ ...identity, activeRoles: [role] }).workspaces).toEqual(['admin']);
+  });
   it('does not infer any staff access from the legacy enum', () => {
     expect(accountAccess(identity).workspaces).toEqual([]);
     expect(accountAccess({ ...identity, role: 'ops_lead' }).roles).toEqual([]);

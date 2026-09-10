@@ -21,17 +21,13 @@ export type GrantRoleInput = z.infer<typeof grantRoleSchema>;
 export const inviteStaffSchema = grantRoleFieldsSchema
   .extend({
     name: z.string().min(1).max(200),
-    email: z.email().optional(),
+    email: z.email(),
     phone: africanPhone.optional(),
     reason: z.string().min(1).max(500),
   })
   .refine((v) => v.scopeType === 'platform_wide' || v.scopeId !== undefined, {
     message: 'scopeId is required when scopeType is catchment',
     path: ['scopeId'],
-  })
-  .refine((v) => v.email !== undefined || v.phone !== undefined, {
-    message: 'email or phone is required',
-    path: ['email'],
   });
 export type InviteStaffInput = z.infer<typeof inviteStaffSchema>;
 

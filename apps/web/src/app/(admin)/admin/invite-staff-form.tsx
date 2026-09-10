@@ -48,7 +48,7 @@ export function InviteStaffForm() {
         method: "POST",
         body: JSON.stringify({
           name,
-          email: email || undefined,
+          email: email.trim(),
           phone: phone || undefined,
           roleKey,
           scopeType,
@@ -83,7 +83,7 @@ export function InviteStaffForm() {
       <Dialog open={open} onOpenChange={setOpen} dismissible={false}>
         <DialogHeader
           title="Invite staff"
-          description="Creates an audited, expiring invitation. Access is granted only after the invited person signs in with the verified contact."
+          description="Sends a one-time email invitation. Staff complete authenticator verification to access their workspace."
           onClose={() => setOpen(false)}
         />
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
@@ -99,10 +99,11 @@ export function InviteStaffForm() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="invite-email">Email (optional)</Label>
+                <Label htmlFor="invite-email" required>Email</Label>
                 <Input
                   id="invite-email"
                   type="email"
+                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />

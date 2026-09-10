@@ -1,11 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 
-import { AfricasTalkingMessaging } from '../../adapters/messaging.adapter';
+import { z } from 'zod';
 import { loadEnv } from '../../config/env';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import type { RoleAssignment } from '../auth/permissions';
+import { LogtoManagementClient } from '../auth/logto-management.client';
 import {
   assertGrantAllowed, assignRoleInTransaction, recordAccessAudit, SERVICE_CTX, STAFF_ROLE_KEYS,
   type AssignmentInput,
@@ -34,7 +35,7 @@ function normalizePhone(phone: string) {
 
 export interface StaffInvitationInput extends AssignmentInput {
   name: string;
-  email?: string;
+  email: string;
   phone?: string;
 }
 
@@ -59,8 +60,8 @@ const INVITATION_COLUMNS = `id, name, email, phone, role_key AS "roleKey", scope
   delivery_attempts AS "deliveryAttempts", last_delivery_error AS "lastDeliveryError",
   delivered_at AS "deliveredAt", created_at AS "createdAt"`;
 
-/** Identity verification is the invitation proof. The emailed URL only opens
- * hosted sign-in; it is not a bearer grant or a password-reset credential.
+/** Verified email is the invitation proof; the one-time token verifies that
+ * contact at Logto but never supplies MFA or bypasses account binding.
  * Call before creating a new staff identity and again, locked, when accepting. */
 export async function pendingInvitationsForIdentity(client: PoolClient, claims: VerifiedIdentityContacts) {
   const { email, phone } = verifiedContacts(claims);
@@ -69,12 +70,8 @@ export async function pendingInvitationsForIdentity(client: PoolClient, claims: 
     WHERE status = 'pending' AND expires_at > now()
       AND (valid_until IS NULL OR valid_until > now())
       AND (
-        (target_user_id IS NOT NULL AND (
-          (email IS NOT NULL AND email = $1) OR (phone IS NOT NULL AND phone = $2)
-        )) OR
-        (target_user_id IS NULL
-          AND (email IS NULL OR email = $1)
-          AND (phone IS NULL OR phone = $2))
+        (email IS NOT NULL AND email = $1) OR
+        (email IS NULL AND phone IS NOT NULL AND phone = $2)
       )
     ORDER BY id FOR UPDATE`, [email, phone])).rows;
 }
@@ -105,24 +102,28 @@ export async function acceptInvitationsInTransaction(
 
 @Injectable()
 export class InvitationDeliveryService {
-  async send(invitation: Pick<Invitation, 'email' | 'phone'>): Promise<void> {
+  constructor(private readonly logto: LogtoManagementClient) {}
+
+  async send(invitation: Pick<Invitation, 'email' | 'expiresAt' | 'validUntil'>): Promise<void> {
     const env = loadEnv();
-    const url = `${env.WEB_ORIGIN.replace(/\/$/, '')}/api/auth/logto/sign-in?portal=staff`;
-    const message = `You have been invited to CampusHomes staff. Sign in with this invited contact to accept: ${url}. This invitation expires in seven days.`;
-    if (invitation.email) {
-      if (!env.RESEND_API_KEY) throw new Error('Invitation email delivery is not configured');
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [invitation.email],
-          subject: 'Your CampusHomes staff invitation', text: message }),
-      });
-      if (!response.ok) throw new Error('Invitation email delivery failed');
-    } else if (invitation.phone) {
-      if (!env.AFRICASTALKING_API_KEY) throw new Error('Invitation SMS delivery is not configured');
-      await new AfricasTalkingMessaging(env.AFRICASTALKING_API_KEY, env.AFRICASTALKING_USERNAME)
-        .sendSms(invitation.phone, message);
-    }
+    if (!invitation.email) throw new Error('Staff invitations require email; create a new email invitation');
+    const expiresAt = Math.min(new Date(invitation.expiresAt).getTime(),
+      invitation.validUntil ? new Date(invitation.validUntil).getTime() : Infinity);
+    const expiresIn = Math.floor((expiresAt - Date.now()) / 1000);
+    if (!Number.isFinite(expiresIn) || expiresIn < 1) throw new Error('Invitation has expired');
+    if (!env.RESEND_API_KEY) throw new Error('Invitation email delivery is not configured');
+    const { token } = await this.logto.createOneTimeToken(invitation.email, 'SignIn', expiresIn);
+    const url = new URL('/api/auth/logto/sign-in', env.WEB_ORIGIN);
+    url.search = new URLSearchParams({ portal: 'staff', intent: 'staff', token, email: invitation.email }).toString();
+    const message = `You have been invited to CampusHomes staff. Open this one-time link to verify your email and complete staff sign-in: ${url.toString()}. This link expires at ${new Date(expiresAt).toISOString()}. Staff access also requires authenticator verification.`;
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      signal: AbortSignal.timeout(10_000),
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [invitation.email],
+        subject: 'Your CampusHomes staff invitation', text: message }),
+    });
+    if (!response.ok) throw new Error('Invitation email delivery failed');
   }
 }
 
@@ -143,7 +144,7 @@ export class InvitationsService {
     }
     const email = input.email?.trim().toLowerCase() ?? null;
     const phone = input.phone ? normalizePhone(input.phone) : null;
-    if (!email && !phone) throw new BadRequestException('An invitation contact is required');
+    if (!z.email().safeParse(email).success) throw new BadRequestException('A valid invitation email is required');
     const invitation = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       // Serialize duplicate invitations without holding a network call open.
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`invite:${email ?? phone}`]);
@@ -215,6 +216,7 @@ export class InvitationsService {
     const row = await this.rlsDb.run(SERVICE_CTX, async (_db, client) =>
       (await client.query<Invitation>(`UPDATE auth_invitations SET delivery_attempts = delivery_attempts + 1,
         last_delivery_attempt_at = now() WHERE id = $1 AND status = 'pending' AND expires_at > now()
+          AND (valid_until IS NULL OR valid_until > now())
           AND (last_delivery_attempt_at IS NULL OR last_delivery_attempt_at < now() - interval '1 minute')
         RETURNING ${INVITATION_COLUMNS}`, [id])).rows[0]);
     if (!row) return { id, delivery: 'not_sent' };

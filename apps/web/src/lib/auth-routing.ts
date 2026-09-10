@@ -39,7 +39,16 @@ export function authorizedNext(access: AccountAccess, rawNext: unknown): string 
   return publicPath ? next : null;
 }
 
-export function workspaceDestination(access: AccountAccess, workspace: Workspace, next = WORKSPACE_HOME[workspace]): string {
+export function workspaceHome(access: AccountAccess, workspace: Workspace): string {
+  if (workspace !== "admin") return WORKSPACE_HOME[workspace];
+  if (access.roles.some(role => ["super_admin", "platform_admin"].includes(role))) return "/admin";
+  if (access.roles.includes("finance_admin")) return "/admin/finance";
+  if (access.roles.includes("support_admin")) return "/admin/inquiries";
+  if (access.roles.includes("auditor")) return "/admin/audit-log";
+  return "/admin";
+}
+
+export function workspaceDestination(access: AccountAccess, workspace: Workspace, next = workspaceHome(access, workspace)): string {
   if (!access.workspaces.includes(workspace)) return "/access-required";
   if ((workspace === "ops" || workspace === "admin") && !access.assurance.mfaVerified) {
     return `/mfa-required?next=${encodeURIComponent(next)}`;

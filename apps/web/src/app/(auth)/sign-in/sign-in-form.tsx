@@ -19,6 +19,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function SignInForm({ next, error }: { next: string | null; error?: string | null }) {
+  const staffNext = next && (next === "/admin" || next.startsWith("/admin/") ||
+    next === "/ops" || next.startsWith("/ops/")) ? next : undefined;
+
   return (
     <Card className="w-full max-w-sm shadow-xl">
       <CardContent className="p-4 sm:p-6">
@@ -27,7 +30,7 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
         </div>
 
         <p className="mb-5 text-center text-sm text-muted-foreground">
-          Sign in with your phone number, email, or Google.
+          Choose where you want to go. Your account determines which workspaces you can access.
         </p>
 
         {error && ERROR_MESSAGES[error] && (
@@ -36,11 +39,17 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
           </p>
         )}
 
-        <a href={signInUrl("consumer", next ?? undefined)} className="block">
+        <a href={signInUrl("consumer", next ?? undefined, "student")} className="block">
           <Button type="button" className="w-full gap-2">
             <ArrowRight aria-hidden className="size-4" />
-            Continue
+            Find student housing
           </Button>
+        </a>
+        <a href={signInUrl("consumer", "/landlords/enroll", "landlord")} className="mt-3 block">
+          <Button type="button" variant="secondary" className="w-full">Manage my properties</Button>
+        </a>
+        <a href={signInUrl("staff", staffNext, "staff")} className="mt-3 block">
+          <Button type="button" variant="secondary" className="w-full">Staff sign in</Button>
         </a>
 
         <p className="mt-4 text-center text-[10px] leading-relaxed text-muted-foreground">

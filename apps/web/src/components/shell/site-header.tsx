@@ -47,7 +47,7 @@ async function SiteHeader() {
           </Link>
           <ThemeToggle />
           {session ? (
-            <AccountMenu user={session.user} />
+            <AccountMenu user={session.user} access={session.access} />
           ) : (
             <Link
               href="/sign-in"

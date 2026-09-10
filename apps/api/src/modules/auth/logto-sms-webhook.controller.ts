@@ -1,14 +1,7 @@
-import { Body, Controller, Headers, HttpCode, Inject, Post, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
 
 import { loadEnv } from '../../config/env';
-import type { MessagingAdapter } from '../../adapters/messaging.adapter';
-import { MESSAGING } from './auth.tokens';
-
-interface LogtoSmsWebhookBody {
-  to: string;
-  type: 'SignIn' | 'Register' | 'ForgotPassword' | 'Generic';
-  payload: { code: string };
-}
+import { authenticateConnector, parseConnectorPayload, PhoneOtpDelivery } from './otp-delivery';
 
 /** Logto's own interaction logs show its internal phone identifier as bare
  * digits with no leading `+` (confirmed live via the Management API's
@@ -17,31 +10,31 @@ interface LogtoSmsWebhookBody {
  * this tenant actually sends). Normalize to E.164-with-plus regardless of
  * which shape arrives, rather than trust either source blindly. */
 function toE164(raw: string): string | null {
-  const digits = raw.replace(/[^\d]/g, '');
-  if (!digits.startsWith('256') || digits.length !== 12) return null;
-  return `+${digits}`;
+  if (!/^\+?256\d{9}$/.test(raw)) return null;
+  return raw.startsWith('+') ? raw : `+${raw}`;
 }
 
 // Logto's built-in HTTP SMS connector target (configured in the Admin
-// Console during Phase 1 provisioning) — reuses the same Africa's Talking
-// adapter Better Auth's phoneNumber plugin used to call directly.
+// Console) — authentication codes now use WhatsApp exclusively.
 @Controller('api/auth/logto/sms-webhook')
 export class LogtoSmsWebhookController {
-  constructor(@Inject(MESSAGING) private readonly messaging: MessagingAdapter) {}
+  constructor(private readonly delivery: PhoneOtpDelivery) {}
 
   @Post()
   @HttpCode(204)
-  async handle(@Headers('authorization') authorization: string | undefined, @Body() body: LogtoSmsWebhookBody) {
+  async handle(@Headers('authorization') authorization: string | undefined, @Body() body: unknown) {
     const env = loadEnv();
-    if (!env.LOGTO_SMS_WEBHOOK_SECRET || authorization !== `Bearer ${env.LOGTO_SMS_WEBHOOK_SECRET}`) {
-      throw new UnauthorizedException();
-    }
+    authenticateConnector(authorization, env.LOGTO_SMS_WEBHOOK_SECRET);
+    const input = parseConnectorPayload(body);
     // Defense in depth, independent of whatever country restriction Logto's
     // own phone input may or may not enforce — students are Uganda-only.
-    const to = toE164(body.to ?? '');
+    const to = toE164(input.to);
     if (!to) {
-      throw new UnauthorizedException('Phone number outside supported range');
+      throw new BadRequestException('Phone number outside supported range');
     }
-    await this.messaging.sendSms(to, `Your CampusHomes verification code is ${body.payload.code}`);
+    // Only the authenticated connector payload supplies the end-user IP.
+    // Older Logto versions omit it, so retain the recipient quota without
+    // accidentally treating the reverse proxy as one global end-user IP.
+    await this.delivery.send(to, input.payload.code, input.ip);
   }
 }

@@ -17,10 +17,12 @@ import { LogtoSmsWebhookController } from './logto-sms-webhook.controller';
 import { MESSAGING } from './auth.tokens';
 import { ProvisioningService } from './provisioning.service';
 import { SessionStore } from './session.store';
+import { PhoneOtpDelivery } from './otp-delivery';
 
 @Module({
   controllers: [AuthController, SessionController, LogtoSmsWebhookController, LogtoEmailWebhookController],
   providers: [
+    PhoneOtpDelivery,
     {
       provide: MESSAGING,
       useFactory: (): MessagingAdapter => {

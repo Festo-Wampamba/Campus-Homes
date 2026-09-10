@@ -38,6 +38,7 @@ export class SessionServiceUnavailableError extends Error {
 
 function validAccess(value: AccountAccess | undefined): value is AccountAccess {
   return !!value && Array.isArray(value.workspaces) && value.workspaces.every((workspace) => WORKSPACES.includes(workspace))
+    && (value.permissions === undefined || (Array.isArray(value.permissions) && value.permissions.every(permission => typeof permission === "string")))
     && Array.isArray(value.roles) && value.roles.every((role) => typeof role === "string")
     && typeof value.onboarding?.student === "boolean" && typeof value.onboarding?.landlord === "boolean"
     && typeof value.assurance?.mfaVerified === "boolean"

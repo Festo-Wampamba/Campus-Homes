@@ -28,7 +28,7 @@ export class StaffService {
     _logtoManagement: LogtoManagementClient,
     private readonly roleAssignments: RoleAssignmentService = new RoleAssignmentService(rlsDb),
     private readonly invitations: InvitationsService =
-      new InvitationsService(rlsDb, new InvitationDeliveryService()),
+      new InvitationsService(rlsDb, new InvitationDeliveryService(_logtoManagement)),
   ) {}
 
   invite(
