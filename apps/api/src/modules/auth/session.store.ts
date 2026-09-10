@@ -9,6 +9,7 @@ import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { sessions, users } from '../../db/schema';
 import { normalizeAssurance, resolveAccountAccess } from './access-resolver';
+import { loadPermissions } from './permissions';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -93,6 +94,8 @@ export class SessionStore {
       mfaVerified: row.mfaVerified,
     });
     if (!access) return null;
+    access.permissions = access.assurance.mfaVerified
+      ? [...(await loadPermissions(this.rlsDb, row.userId)).permissions].sort() : [];
     return {
       access,
       user: { id: row.userId, role: row.role, status: row.status, name: row.name, email: row.email, phone: row.phone },

@@ -1,4 +1,6 @@
-import { Body, Controller, Headers, HttpCode, Post, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Headers, HttpCode, Post, ServiceUnavailableException } from '@nestjs/common';
+import { z } from 'zod';
+import { authenticateConnector, parseConnectorPayload } from './otp-delivery';
 
 import { loadEnv } from '../../config/env';
 import { sendVerificationCodeEmail, type VerificationEmailKind } from './auth.email';
@@ -30,11 +32,15 @@ function verificationKindFor(type: LogtoEmailWebhookBody['type']): VerificationE
 export class LogtoEmailWebhookController {
   @Post()
   @HttpCode(204)
-  async handle(@Headers('authorization') authorization: string | undefined, @Body() body: LogtoEmailWebhookBody) {
+  async handle(@Headers('authorization') authorization: string | undefined, @Body() body: unknown) {
     const env = loadEnv();
-    if (!env.LOGTO_EMAIL_WEBHOOK_SECRET || authorization !== `Bearer ${env.LOGTO_EMAIL_WEBHOOK_SECRET}`) {
-      throw new UnauthorizedException();
+    authenticateConnector(authorization, env.LOGTO_EMAIL_WEBHOOK_SECRET);
+    const input = parseConnectorPayload(body);
+    if (!z.string().email().safeParse(input.to).success) throw new BadRequestException('Invalid verification request');
+    try {
+      await sendVerificationCodeEmail(env, { to: input.to, code: input.payload.code, kind: verificationKindFor(input.type) });
+    } catch {
+      throw new ServiceUnavailableException('Verification delivery temporarily unavailable');
     }
-    await sendVerificationCodeEmail(env, { to: body.to, code: body.payload.code, kind: verificationKindFor(body.type) });
   }
 }

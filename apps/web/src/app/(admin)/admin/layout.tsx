@@ -21,6 +21,7 @@ import { redirect } from "next/navigation";
 import { AppShell, type AppNavItem } from "@/components/shell/app-shell";
 import { apiServerStrict } from "@/lib/server-api";
 import { requireWorkspace } from "@/lib/session";
+import { workspaceHome } from "@/lib/auth-routing";
 
 interface Access {
   permissions: string[];
@@ -69,11 +70,11 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       user={session.user}
       access={session.access}
       portalLabel={roleLabel}
-      homeHref="/admin"
+      homeHref={workspaceHome(session.access, "admin")}
       profileHref="/admin/profile"
       settingsHref={canViewSettings ? "/admin/settings" : undefined}
       auditLogHref={canViewAudit ? "/admin/audit-log" : undefined}
-      notificationsEndpoint="/admin/audit"
+      notificationsEndpoint={canViewAudit ? "/admin/audit" : undefined}
     >
       {children}
     </AppShell>

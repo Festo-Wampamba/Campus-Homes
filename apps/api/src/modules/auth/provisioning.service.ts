@@ -14,6 +14,7 @@ import {
   STAFF_ROLE_KEYS,
 } from '../staff/role-assignment.service';
 import type { Portal } from './logto.config';
+import type { AuthIntent } from '@campushomes/shared';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -57,11 +58,15 @@ interface IdentityRow extends ProvisionedUser {
 export class ProvisioningService {
   constructor(private readonly rlsDb: RlsDb) {}
 
-  async provision(claims: LogtoIdentityClaims, portal: Portal): Promise<ProvisionedUser | null> {
+  async provision(claims: LogtoIdentityClaims, portal: Portal, intent: AuthIntent = 'student'): Promise<ProvisionedUser | null> {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await this.lockIdentity(client, claims);
 
-      const pending = await pendingInvitationsForIdentity(client, claims);
+      // Staff grants may only be consumed inside the dedicated staff auth
+      // transaction. A verified consumer login must never promote an account.
+      const pending = portal === 'staff' && intent === 'staff'
+        ? await pendingInvitationsForIdentity(client, claims)
+        : [];
       let user = await this.byLogtoId(client, claims.sub);
       if (user?.deletedAt) return null;
 
@@ -77,13 +82,14 @@ export class ProvisioningService {
       if (!user && portal === 'staff') return null;
 
       if (!user) {
-        user = await this.createUser(client, claims, 'student');
+        const initialRole = intent === 'landlord' ? 'landlord' : 'student';
+        user = await this.createUser(client, claims, initialRole);
         await assignRoleInTransaction(
           client,
           { userId: user.id, role: 'service_role' },
           user.id,
           {
-            roleKey: 'student',
+            roleKey: initialRole,
             scopeType: 'own',
             reason: 'Initial role assigned during verified identity provisioning',
           },
@@ -166,7 +172,7 @@ export class ProvisioningService {
   private async createUser(
     client: PoolClient,
     claims: LogtoIdentityClaims,
-    role: 'student' | 'admin' | 'ops_lead' | 'ops_inspector',
+    role: 'student' | 'landlord' | 'admin' | 'ops_lead' | 'ops_inspector',
   ): Promise<IdentityRow> {
     const email = claims.email?.trim().toLowerCase() || null;
     const phone = claims.phoneNumber?.trim() || null;

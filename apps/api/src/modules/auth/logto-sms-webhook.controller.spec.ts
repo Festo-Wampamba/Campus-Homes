@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 
 import { LogtoSmsWebhookController } from './logto-sms-webhook.controller';
+import { PhoneOtpDelivery } from './otp-delivery';
 
 process.env.LOGTO_SMS_WEBHOOK_SECRET ??= 'test-webhook-secret';
 // loadEnv() requires the full schema; the other required-in-some-paths
@@ -10,7 +11,7 @@ process.env.DATABASE_URL ??= 'postgresql://localhost/test';
 
 describe('LogtoSmsWebhookController', () => {
   const sendSms = jest.fn().mockResolvedValue(undefined);
-  const controller = new LogtoSmsWebhookController({ sendSms });
+  const controller = new LogtoSmsWebhookController({ send: sendSms } as unknown as PhoneOtpDelivery);
   const auth = `Bearer ${process.env.LOGTO_SMS_WEBHOOK_SECRET}`;
 
   beforeEach(() => sendSms.mockClear());
@@ -31,7 +32,7 @@ describe('LogtoSmsWebhookController', () => {
     ['without a leading + (what Logto actually sends)', '256700000199'],
   ])('accepts a Uganda number %s', async (_label, to) => {
     await controller.handle(auth, { to, type: 'Register', payload: { code: '123456' } });
-    expect(sendSms).toHaveBeenCalledWith('+256700000199', expect.stringContaining('123456'));
+    expect(sendSms).toHaveBeenCalledWith('+256700000199', '123456', undefined);
   });
 
   it('rejects a non-Uganda number', async () => {

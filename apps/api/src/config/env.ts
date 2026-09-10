@@ -23,6 +23,7 @@ const envSchema = z.object({
   // users/passwords — never used for end-user session issuance).
   LOGTO_M2M_APP_ID: z.string().min(1).optional(),
   LOGTO_M2M_APP_SECRET: z.string().min(1).optional(),
+  LOGTO_MANAGEMENT_API_RESOURCE: z.string().url().default('https://default.logto.app/api'),
   // Encrypts the transient sign-in-session cookie (PKCE verifier/state)
   // between the /logto/sign-in redirect and the /logto/callback request.
   LOGTO_COOKIE_SECRET: z.string().min(32).optional(),
@@ -33,6 +34,12 @@ const envSchema = z.object({
   // calling back into our webhooks — rejects any caller who doesn't have it.
   LOGTO_SMS_WEBHOOK_SECRET: z.string().min(1).optional(),
   LOGTO_EMAIL_WEBHOOK_SECRET: z.string().min(1).optional(),
+  PHONE_OTP_CHANNEL: z.enum(['disabled', 'whatsapp']).default('disabled'),
+  WHATSAPP_GRAPH_API_VERSION: z.string().regex(/^v\d+\.0$/).optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().regex(/^\d+$/).optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
+  WHATSAPP_AUTH_TEMPLATE_NAME: z.string().regex(/^[a-z0-9_]+$/).optional(),
+  WHATSAPP_TEMPLATE_LANGUAGE: z.string().regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/).default('en'),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
@@ -101,6 +108,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     // List missing keys only — never echo values, they may be secrets.
     const issues = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
     throw new Error(`Invalid environment configuration: ${issues}`);
+  }
+  if (parsed.data.PHONE_OTP_CHANNEL === 'whatsapp') {
+    const required = ['WHATSAPP_GRAPH_API_VERSION', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_AUTH_TEMPLATE_NAME', 'LOGTO_SMS_WEBHOOK_SECRET'] as const;
+    const missing = required.filter((key) => !parsed.data[key]);
+    if (missing.length) throw new Error(`Invalid environment configuration: ${missing.join(', ')}`);
   }
   return parsed.data;
 }

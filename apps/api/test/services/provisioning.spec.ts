@@ -30,6 +30,14 @@ afterAll(async () => {
 });
 
 describe('ProvisioningService', () => {
+  it('creates only landlord own access for a new landlord-intent identity', async () => {
+    const result = await provisioning.provision({ sub: 'new-landlord-intent', email: 'landlord.intent@example.com', emailVerified: true }, 'consumer', 'landlord');
+    expect(result?.role).toBe('landlord');
+    const assignments = await pool.query(`SELECT r.key, a.scope_type FROM user_role_assignments a
+      JOIN roles r ON r.id = a.role_id WHERE a.user_id = $1 AND a.revoked_at IS NULL`, [result!.id]);
+    expect(assignments.rows).toEqual([{ key: 'landlord', scope_type: 'own' }]);
+  });
+
   it('creates a new student on the consumer portal for a never-seen identity', async () => {
     const result = await provisioning.provision(
       { sub: 'logto-sub-new-1', phoneNumber: '+256700000401', name: 'New Student' },
@@ -69,7 +77,7 @@ describe('ProvisioningService', () => {
       email: 'INVITED.SUPPORT@example.com',
       emailVerified: true,
       name: 'Invited Support',
-    }, 'consumer');
+    }, 'staff', 'staff');
 
     expect(result).toMatchObject({ role: 'admin', status: 'active' });
     expect((await pool.query(`
@@ -98,7 +106,33 @@ describe('ProvisioningService', () => {
       sub: 'logto-unverified-invite',
       email: 'unverified.invite@example.com',
       emailVerified: false,
-    }, 'consumer');
+    }, 'staff', 'staff');
+    expect(result).toBeNull();
+    expect((await pool.query(
+      `SELECT status FROM auth_invitations WHERE id = $1`,
+      [invitation],
+    )).rows[0].status).toBe('pending');
+  });
+
+  it('never consumes a staff invitation through the consumer auth transaction', async () => {
+    const inviter = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Inviter Consumer Guard') RETURNING id`,
+      ['+256700000411'],
+    );
+    const invitation = await seed(`
+      INSERT INTO auth_invitations
+        (name, email, role_key, scope_type, reason, invited_by, expires_at)
+      VALUES ('Consumer Guard', 'consumer.guard@example.com', 'support_admin',
+        'platform_wide', 'approved hire', $1, now() + interval '7 days')
+      RETURNING id
+    `, [inviter]);
+
+    const result = await provisioning.provision({
+      sub: 'logto-consumer-guard',
+      email: 'consumer.guard@example.com',
+      emailVerified: true,
+    }, 'consumer', 'student');
+
     expect(result?.role).toBe('student');
     expect((await pool.query(
       `SELECT status FROM auth_invitations WHERE id = $1`,
@@ -106,7 +140,7 @@ describe('ProvisioningService', () => {
     )).rows[0].status).toBe('pending');
   });
 
-  it('requires every contact on an untargeted dual-contact invitation to be verified', async () => {
+  it('accepts a verified invitation email without requiring optional profile phone verification', async () => {
     const inviter = await seed(
       `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Inviter Three') RETURNING id`,
       ['+256700000407'],
@@ -123,16 +157,16 @@ describe('ProvisioningService', () => {
       sub: 'logto-dual-contact-partial',
       email: 'dual.invite@example.com',
       emailVerified: true,
-    }, 'consumer');
+    }, 'staff', 'staff');
 
-    expect(result?.role).toBe('student');
+    expect(result?.role).toBe('admin');
     expect((await pool.query(
       `SELECT status FROM auth_invitations WHERE id = $1`,
       [invitation],
-    )).rows[0].status).toBe('pending');
+    )).rows[0].status).toBe('accepted');
   });
 
-  it('allows either verified contact when the invitation is bound to that exact account', async () => {
+  it('accepts the verified email when the invitation is bound to that exact account', async () => {
     const inviter = await seed(
       `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Inviter Four') RETURNING id`,
       ['+256700000409'],
@@ -154,7 +188,7 @@ describe('ProvisioningService', () => {
       sub: 'logto-existing-invitee',
       email: 'existing.invitee@example.com',
       emailVerified: true,
-    }, 'consumer');
+    }, 'staff', 'staff');
 
     expect(result?.id).toBe(target);
     expect((await pool.query(

@@ -145,6 +145,7 @@ describe('StaffService.invite + revokeRole round trip', () => {
       [{ scopeType: 'platform_wide', scopeId: null }],
       {
         name: 'New Support Admin',
+        email: 'new.support@campushomes.ug',
         phone: '+256700000306',
         roleKey: 'support_admin',
         scopeType: 'platform_wide',

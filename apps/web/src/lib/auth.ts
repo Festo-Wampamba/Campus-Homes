@@ -1,4 +1,5 @@
 // Relative, not absolute — see lib/api.ts's BASE for why.
+import { authIntent, type AuthIntent } from "@campushomes/shared";
 const BASE = "";
 
 export type Portal = "consumer" | "staff";
@@ -9,8 +10,9 @@ export type Portal = "consumer" | "staff";
  * picks which OIDC application (and therefore which app's own session)
  * the sign-in targets; `next` survives the round trip via a short-lived
  * cookie the API sets, and comes back out at /auth/callback. */
-export function signInUrl(portal: Portal, next?: string): string {
-  const params = new URLSearchParams({ portal });
+export function signInUrl(portal: Portal, next?: string, requestedIntent?: AuthIntent): string {
+  const intent = authIntent(requestedIntent, portal, next);
+  const params = new URLSearchParams({ portal: intent === "staff" ? "staff" : "consumer", intent });
   if (next) params.set("next", next);
   return `${BASE}/api/auth/logto/sign-in?${params.toString()}`;
 }

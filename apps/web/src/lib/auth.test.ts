@@ -1,4 +1,23 @@
-import { signOut } from "./auth";
+import { signInUrl, signOut } from "./auth";
+
+describe("signInUrl", () => {
+  it("binds student and landlord intent to the consumer application", () => {
+    expect(signInUrl("consumer", "/search", "student"))
+      .toBe("/api/auth/logto/sign-in?portal=consumer&intent=student&next=%2Fsearch");
+    expect(signInUrl("consumer", "/landlords/enroll", "landlord"))
+      .toBe("/api/auth/logto/sign-in?portal=consumer&intent=landlord&next=%2Flandlords%2Fenroll");
+  });
+
+  it("cannot downgrade a staff portal transaction to consumer intent", () => {
+    expect(signInUrl("staff", "/admin", "student"))
+      .toBe("/api/auth/logto/sign-in?portal=staff&intent=staff&next=%2Fadmin");
+  });
+
+  it("keeps legacy landlord enrollment links working", () => {
+    expect(signInUrl("consumer", "/landlords/enroll"))
+      .toContain("portal=consumer&intent=landlord");
+  });
+});
 
 describe("signOut", () => {
   const fetchMock = jest.fn();

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Activity, Building2, CalendarCheck2, CircleDollarSign, Clock3, RefreshCcw, Users } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { requireWorkspace } from "@/lib/session";
+import { workspaceHome } from "@/lib/auth-routing";
 
 import { Freshness, PageHeader, SectionCard, StatCard, StatusBadge } from "@/components/admin/admin-ui";
 import { GrowthChart } from "@/components/admin/growth-chart";
@@ -26,6 +29,9 @@ function ugx(value: number) {
 }
 
 export default async function AdminOverviewPage() {
+  const session = await requireWorkspace("admin");
+  const home = workspaceHome(session.access, "admin");
+  if (home !== "/admin") redirect(home);
   const data = await apiServer<Overview>("/admin/overview");
   if (!data) return <><PageHeader eyebrow="Command centre" title="Overview unavailable" description="The admin API could not be reached or this account does not hold analytics.read." /><div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Start the API and database, then refresh this page. No placeholder metrics are shown.</div></>;
   const s = data.summary;

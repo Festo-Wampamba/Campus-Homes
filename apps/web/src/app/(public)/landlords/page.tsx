@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  CameraIcon,
-  ClockIcon,
+  BadgeIcon,
+  CalendarIcon,
+  ChatBubbleIcon,
+  DashboardIcon,
+  EyeOpenIcon,
   HomeIcon,
   MixIcon,
   PersonIcon,
@@ -19,19 +22,24 @@ export const metadata: Metadata = { title: "List your property" };
 
 const VALUE_PROPS = [
   {
-    icon: PersonIcon,
-    title: "Reach students who already trust us",
-    body: "Every listing on CampusHomes carries a badge students recognize. You reach demand that is already primed to book, not cold traffic.",
+    icon: EyeOpenIcon,
+    title: "Improved visibility",
+    body: "Your rooms show up in front of students actively searching near their campus — a verified badge draws demand that is already primed to book.",
   },
   {
-    icon: ClockIcon,
-    title: "Free while the platform grows",
-    body: "Listing your property costs nothing right now. There is no commission and no subscription during this launch phase.",
+    icon: DashboardIcon,
+    title: "Digitally manage your tenants",
+    body: "Track properties, rooms and occupancy from one dashboard. No more spreadsheets or scattered notes to keep your listings current.",
+  },
+  {
+    icon: ChatBubbleIcon,
+    title: "Communication made easy",
+    body: "Respond to booking requests and message tenants directly in the platform. Every conversation stays in one place.",
   },
   {
     icon: StarFilledIcon,
-    title: "A dedicated team gets you set up",
-    body: "You don't have to figure out the platform alone — our operations team walks you through onboarding from your first call to your first booking.",
+    title: "Trusted, with support on hand",
+    body: "CampusHomes is built on inspected, verified housing students trust — and our team is readily available whenever you need help.",
   },
 ] as const;
 
@@ -39,20 +47,26 @@ const STEPS = [
   {
     number: "01",
     icon: PersonIcon,
-    title: "You create your account",
-    body: "Sign in securely, then add a landlord workspace to your existing CampusHomes account. You keep any student access you already have.",
+    title: "Create an account",
+    body: "Use the link below to create your secure CampusHomes account and add a landlord workspace — you keep any student access you already have.",
   },
   {
     number: "02",
-    icon: CameraIcon,
-    title: "We help you list the property",
-    body: "Together we record room types, photos, pricing and availability — the same details students compare when they search.",
+    icon: BadgeIcon,
+    title: "Verify your account",
+    body: "One of our agents contacts you to verify your details, so students can trust every property that carries the CampusHomes badge.",
   },
   {
     number: "03",
     icon: HomeIcon,
-    title: "We verify and publish",
-    body: "An inspector confirms location, rooms, amenities and safety on site. Once every check passes, your property earns the Verified badge and goes live.",
+    title: "List your property",
+    body: "Once verified, you can advertise your rooms — types, photos, pricing and availability — for the public to view and book.",
+  },
+  {
+    number: "04",
+    icon: CalendarIcon,
+    title: "Manage your bookings",
+    body: "Respond to bookings, register and message your tenants, and keep availability accurate as rooms fill — all from your dashboard.",
   },
 ] as const;
 
@@ -130,12 +144,12 @@ export default async function LandlordsPage() {
       <section aria-labelledby="why-heading" className="bg-background">
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <div className="max-w-2xl">
-            <p className="eyebrow">Why list with us</p>
+            <p className="eyebrow">Why CampusHomes</p>
             <h2 id="why-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
               Built to get your rooms filled, not just listed.
             </h2>
           </div>
-          <ul className="mt-10 grid gap-5 md:grid-cols-3">
+          <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {VALUE_PROPS.map((item) => {
               const Icon = item.icon;
               return (
@@ -164,7 +178,7 @@ export default async function LandlordsPage() {
             verification and publishing.
           </p>
 
-          <ol className="mt-10 grid gap-4 md:grid-cols-3">
+          <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step) => {
               const Icon = step.icon;
               return (

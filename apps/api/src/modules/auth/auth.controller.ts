@@ -3,7 +3,7 @@ import { ConflictException, Controller, Get, Logger, Post, Query, Req, Res } fro
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
 import type { Prompt } from '@logto/node';
-import { safeAuthDestination } from '@campushomes/shared';
+import { authIntent, safeAuthDestination } from '@campushomes/shared';
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
 import { AuthTransactions, AUTH_TRANSACTION_TTL_SECONDS, transactionCookie } from './auth-transactions';
@@ -50,10 +50,15 @@ export class AuthController {
     @Query('next') next: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('intent') intentParam?: string,
   ) {
     const requestId = correlationId(res);
     const env = loadEnv();
-    const portal: Portal = portalParam === 'staff' ? 'staff' : 'consumer';
+    if (intentParam !== undefined && !['student', 'landlord', 'staff'].includes(intentParam)) {
+      return res.status(400).json({ code: 'INVALID_AUTH_INTENT', requestId });
+    }
+    const intent = authIntent(intentParam, portalParam, next);
+    const portal: Portal = intent === 'staff' ? 'staff' : 'consumer';
     const state = randomBytes(32).toString('base64url');
     const browserSecret = randomBytes(32).toString('base64url');
     const nonce = randomBytes(32).toString('base64url');
@@ -64,7 +69,7 @@ export class AuthController {
       const existing = existingToken ? await this.sessionStore.find(existingToken) : null;
       const client = await this.clients.create(env, portal, values, async (url) => {
         await this.transactions.save(state, {
-          portal, next: safeAuthDestination(next), nonce, startedAt,
+          portal, intent, next: safeAuthDestination(next), nonce, startedAt,
           browserHash: digest(browserSecret), storage: values,
           expectedUserId: portal === 'staff' ? existing?.user.id ?? null : null,
         });
@@ -120,7 +125,7 @@ export class AuthController {
       const provisioned = await this.provisioning.provision({
         sub: claims.sub, email: claims.email, phoneNumber: claims.phone_number, name: claims.name,
         emailVerified: claims.email_verified === true, phoneVerified: claims.phone_number_verified === true,
-      }, transaction.portal);
+      }, transaction.portal, transaction.intent ?? authIntent(undefined, transaction.portal, transaction.next));
       if (!provisioned) return fail('not_invited');
       if (transaction.expectedUserId && provisioned.id !== transaction.expectedUserId) return fail('account_mismatch');
       if (provisioned.status !== 'active') return res.redirect(`${webOrigin(env)}/account-pending`);
