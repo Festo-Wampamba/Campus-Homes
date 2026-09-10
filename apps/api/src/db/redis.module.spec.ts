@@ -1,4 +1,17 @@
-import { withRetry } from './redis.module';
+import type { Env } from '../config/env';
+
+import { runtimeRedisUrl, withRetry } from './redis.module';
+
+function env(overrides: Partial<Env> = {}): Env {
+  return {
+    NODE_ENV: 'development',
+    PORT: 4000,
+    DEV_REDIS_URL: 'redis://localhost:6379',
+    ALLOW_STUB_INTEGRATIONS: false,
+    PAYMENTS_ENABLED: false,
+    ...overrides,
+  } as Env;
+}
 
 describe('withRetry', () => {
   it('returns the result once the attempt succeeds', async () => {
@@ -46,5 +59,25 @@ describe('withRetry', () => {
       },
     );
     expect(delays).toEqual([100, 200]);
+  });
+});
+
+describe('runtimeRedisUrl', () => {
+  it('prefers an explicitly configured Redis service in development', () => {
+    expect(
+      runtimeRedisUrl(
+        env({
+          REDIS_URL: 'redis://redis-service:6379',
+        }),
+      ),
+    ).toBe('redis://redis-service:6379');
+  });
+
+  it('uses the local development URL only when REDIS_URL is absent', () => {
+    expect(runtimeRedisUrl(env())).toBe('redis://localhost:6379');
+  });
+
+  it('does not use the development fallback in production', () => {
+    expect(runtimeRedisUrl(env({ NODE_ENV: 'production' }))).toBeUndefined();
   });
 });

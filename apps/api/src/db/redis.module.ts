@@ -7,7 +7,11 @@ export const REDIS = 'REDIS_CONNECTION';
 const logger = new Logger('RedisConnection');
 
 export function runtimeRedisUrl(env: Env): string | undefined {
-  return env.NODE_ENV === 'development' ? env.DEV_REDIS_URL : env.REDIS_URL;
+  // An explicitly configured shared Redis service must win in every
+  // environment. DEV_REDIS_URL is only a local-development fallback; using
+  // it unconditionally when NODE_ENV=development makes containerized preview
+  // environments silently connect to their own 127.0.0.1 instead.
+  return env.REDIS_URL ?? (env.NODE_ENV === 'development' ? env.DEV_REDIS_URL : undefined);
 }
 
 function safeRedisHost(url: string): string {
