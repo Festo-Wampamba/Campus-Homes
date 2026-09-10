@@ -43,7 +43,7 @@ async function SiteHeader() {
             href={hasLandlordAccess ? WORKSPACE_HOME.landlord : "/landlords"}
             className="hidden whitespace-nowrap rounded-lg border border-border px-3.5 py-2 text-sm font-semibold text-foreground transition duration-300 hover:border-teal-600 hover:bg-accent sm:block"
           >
-            {hasLandlordAccess ? "Landlord" : "List a property"}
+            {hasLandlordAccess ? "Landlord" : "For landlords"}
           </Link>
           <ThemeToggle />
           {session ? (
