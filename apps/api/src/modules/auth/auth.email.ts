@@ -66,13 +66,15 @@ function verificationContent(kind: VerificationEmailKind, code: string) {
 
 type EmailMessage = { subject: string; html: string; text: string };
 
-async function deliver(env: Env, to: string, message: EmailMessage, devLogValue: string): Promise<void> {
+async function deliver(env: Env, to: string, message: EmailMessage): Promise<void> {
   if (!env.RESEND_API_KEY) {
-    console.info(`[email:dev] ${message.subject} for ${to}: ${devLogValue}`);
+    if (env.NODE_ENV === 'production') throw new Error('Email delivery unavailable');
+    console.info('[email:dev] Delivery skipped: provider is not configured');
     return;
   }
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [to], subject: message.subject, html: message.html, text: message.text }),
   });
@@ -88,9 +90,9 @@ export async function sendVerificationCodeEmail(
   env: Env,
   input: { to: string; code: string; kind: VerificationEmailKind },
 ): Promise<void> {
-  await deliver(env, input.to, verificationContent(input.kind, input.code), input.code);
+  await deliver(env, input.to, verificationContent(input.kind, input.code));
 }
 
 export async function sendAuthEmail(env: Env, input: AuthEmailInput): Promise<void> {
-  await deliver(env, input.to, content(input), input.url);
+  await deliver(env, input.to, content(input));
 }

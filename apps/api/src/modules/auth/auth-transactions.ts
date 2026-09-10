@@ -5,10 +5,12 @@ import { REDIS } from '../../db/redis.module';
 import { loadEnv } from '../../config/env';
 import { digest, matchesSecret } from './auth-security';
 import type { Portal } from './logto.config';
+import type { AuthIntent } from '@campushomes/shared';
 
 export const AUTH_TRANSACTION_TTL_SECONDS = 600;
 export interface AuthTransaction {
   portal: Portal;
+  intent?: AuthIntent;
   next: string | null;
   nonce: string;
   browserHash: string;

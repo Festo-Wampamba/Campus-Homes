@@ -43,7 +43,7 @@ export function accountAccess(identity: AccessIdentity, assurance?: Authenticati
   const workspaces: Workspace[] = [];
   if (mapped.includes('student')) workspaces.push('student');
   if (mapped.some((r) => ['landlord', 'custodian', 'property_worker'].includes(r))) workspaces.push('landlord');
-  if (mapped.some((r) => ['ops_lead', 'ops_inspector', 'admin'].includes(r))) workspaces.push('ops');
+  if (mapped.some((r) => ['ops_lead', 'ops_inspector'].includes(r))) workspaces.push('ops');
   if (mapped.includes('admin')) workspaces.push('admin');
   return {
     roles: [...roles].sort(), workspaces,

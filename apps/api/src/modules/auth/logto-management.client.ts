@@ -30,7 +30,7 @@ export class LogtoManagementClient {
         grant_type: 'client_credentials',
         client_id: this.env.LOGTO_M2M_APP_ID!,
         client_secret: this.env.LOGTO_M2M_APP_SECRET!,
-        resource: `${this.env.LOGTO_ENDPOINT}/api`,
+        resource: this.env.LOGTO_MANAGEMENT_API_RESOURCE ?? 'https://default.logto.app/api',
         scope: 'all',
       }),
     });
@@ -53,9 +53,9 @@ export class LogtoManagementClient {
       },
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Logto Management API ${init.method ?? 'GET'} ${path} failed: HTTP ${res.status} ${body}`);
+      throw new Error(`Logto Management API ${init.method ?? 'GET'} failed: HTTP ${res.status}`);
     }
+    if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
   }
 

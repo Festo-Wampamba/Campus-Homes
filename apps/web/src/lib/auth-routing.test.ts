@@ -8,6 +8,15 @@ const access = (workspaces: AccountAccess["workspaces"], overrides: Partial<Acco
 const session = (grants: AccountAccess, status = "active") => ({ access: grants, user: { status } });
 
 describe("workspace routing", () => {
+  it.each([
+    ["super_admin", "/admin"], ["platform_admin", "/admin"],
+    ["finance_admin", "/admin/finance"], ["support_admin", "/admin/inquiries"],
+    ["auditor", "/admin/audit-log"],
+  ])("routes %s to its working dashboard", (role, destination) => {
+    expect(authDestination(session(access(["admin"], {
+      roles: [role], assurance: { authenticatedAt: new Date().toISOString(), mfaVerified: true },
+    })))).toBe(destination);
+  });
   it("chooses among multiple grants instead of selecting a primary role", () => {
     expect(authDestination(session(access(["student", "landlord"])))).toBe("/choose-workspace");
     expect(authDestination(session(access([])))).toBe("/access-required");

@@ -5,18 +5,18 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Clock, Heart, LayoutDashboard, User as UserIcon } from "lucide-react";
 
 import type { SessionUser } from "@/lib/session";
+import type { AccountAccess } from "@campushomes/shared";
+import { WORKSPACE_LABEL, workspaceDestination } from "@/lib/auth-routing";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 
 const menuItemClass =
   "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted";
 
-export function AccountMenu({ user }: { user: SessionUser }) {
+export function AccountMenu({ user, access }: { user: SessionUser; access: AccountAccess }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const isStudent = user.role === "student";
-  const isLandlord = user.role === "landlord";
-  const isStaff = user.role === "ops_lead" || user.role === "ops_inspector" || user.role === "admin";
+  const isStudent = access.workspaces.includes("student");
   const displayName = user.name?.trim() || user.phoneNumber || user.email || "Account";
 
   useEffect(() => {
@@ -75,18 +75,12 @@ export function AccountMenu({ user }: { user: SessionUser }) {
               </Link>
             </>
           )}
-          {isLandlord && (
-            <Link role="menuitem" href="/landlord" className={menuItemClass} onClick={() => setOpen(false)}>
+          {access.workspaces.filter(workspace => workspace !== "student").map(workspace => (
+            <Link key={workspace} role="menuitem" href={workspaceDestination(access, workspace)} className={menuItemClass} onClick={() => setOpen(false)}>
               <LayoutDashboard aria-hidden className="size-4 text-muted-foreground" />
-              Dashboard
+              {WORKSPACE_LABEL[workspace]}
             </Link>
-          )}
-          {isStaff && (
-            <Link role="menuitem" href="/ops" className={menuItemClass} onClick={() => setOpen(false)}>
-              <LayoutDashboard aria-hidden className="size-4 text-muted-foreground" />
-              Ops portal
-            </Link>
-          )}
+          ))}
           <div className="my-1 h-px bg-border" />
           <div className="px-1">
             <SignOutButton />
