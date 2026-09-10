@@ -157,7 +157,7 @@ export class AdminConfigService {
       const used = Number((await client.query(`
         SELECT (
           (SELECT count(*) FROM listings WHERE semester_id = $1) +
-          (SELECT count(*) FROM units WHERE available_for_semester_id = $1)
+          (SELECT count(*) FROM unit_semester_pricing WHERE semester_id = $1)
         ) AS count
       `, [semesterId])).rows[0]?.count ?? 0);
       if (used) throw new ConflictException('A semester used by listings or units cannot be deleted');
