@@ -20,6 +20,7 @@
     "db:seed:fieldwork": "node --env-file=.env ./scripts/seed-fieldwork.cjs",
     "db:seed:makerere": "node --env-file=.env ./scripts/seed-makerere-hostels.cjs",
     "db:seed:demo": "node --env-file=.env ./scripts/seed-demo.cjs",
+    "admin:bootstrap": "node --env-file=.env ./scripts/bootstrap-logto-super-admin.cjs",
     "admin:reset": "node --env-file=.env ./scripts/reset-super-admin.cjs",
     "lint": "eslint src test"
   },

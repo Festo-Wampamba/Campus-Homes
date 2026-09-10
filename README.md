@@ -226,7 +226,8 @@ packages/config           Shared tsconfig / eslint / prettier.
 | `BETTER_AUTH_API_KEY` | Better Auth dashboard API key |
 | `BETTER_AUTH_URL` | Base URL Better Auth issues callbacks against (`http://localhost:4000` locally) |
 | `AUTH_COOKIE_DOMAIN` | Optional shared parent domain for sibling web/API hosts; set `.campushomes.co.ug` in deployed environments and omit locally |
-| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | Bootstrap super-admin credentials for `admin:reset` |
+| `SUPER_ADMIN_EMAIL` | Verified, Logto-linked identity promoted by the one-time `admin:bootstrap` command |
+| `ALLOW_SUPER_ADMIN_BOOTSTRAP` | Production safety latch; set to `true` only while running the one-time bootstrap, then remove it |
 | `PAYMENTS_ENABLED` | Phase launch gate. Only the exact value `true` enables payment initiation; missing or `false` keeps Phase 1 money-free |
 | `ALLOW_STUB_INTEGRATIONS` | Explicit staging-only opt-in for missing SMS/realtime providers. Keep `false` for public production |
 | `FLUTTERWAVE_SECRET_KEY` | Phase 2 payment provider secret; omit during Phase 1 |
@@ -273,6 +274,7 @@ Run from the repo root unless noted.
 | `db:studio` | Open Drizzle Studio |
 | `db:check` | Verify schema and migrations are in sync (must read "Everything's fine") |
 | `db:seed` | Seed local dev data (`scripts/seed-dev.cjs` — five user roles with credential accounts) |
+| `admin:bootstrap` | Idempotently grant `super_admin` to an existing active, email-verified Logto identity (maximum two) |
 | `admin:reset` | Reset/bootstrap the local super-admin account |
 | `test:rls` | Run only the RLS proof suite |
 

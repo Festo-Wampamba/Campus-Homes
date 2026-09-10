@@ -3,11 +3,9 @@
  * property → visit → approve → publish pipeline: an unreviewed (or even
  * explicitly rejected) landlord could submit a property and Ops could carry
  * it all the way to a publicly-visible verified listing with no KYC gate
- * anywhere. These tests cover the two points that now block it —
- * ListingsService.submitProperty() (earliest, cheapest gate) and
- * OpsService.publishListing() (defense in depth: re-checked at the moment
- * the listing actually goes public, since a landlord verified at
- * submission time could be rejected or suspended any time before publish).
+ * anywhere. Submission is allowed into the pending_kyc queue so Ops can
+ * review the landlord and property together. Publishing remains the hard
+ * security boundary and re-checks KYC at the moment the listing goes public.
  */
 import { Pool } from 'pg';
 
@@ -147,10 +145,12 @@ describe('submitProperty KYC gate', () => {
     ).rejects.toThrow('Complete your landlord profile');
   });
 
-  it('rejects a landlord whose KYC is still pending review', async () => {
-    await expect(
-      listings.submitProperty(ctxFor(landlordPending), submitInput('Pending Hostel')),
-    ).rejects.toThrow('pending review');
+  it('accepts a pending-KYC landlord property into the review queue', async () => {
+    const property = await listings.submitProperty(
+      ctxFor(landlordPending),
+      submitInput('Pending Hostel'),
+    );
+    expect(property!.status).toBe('pending_kyc');
   });
 
   it('rejects a landlord whose KYC was explicitly rejected', async () => {
