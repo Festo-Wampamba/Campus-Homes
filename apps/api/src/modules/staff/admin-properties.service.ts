@@ -176,15 +176,28 @@ export class AdminPropertiesService {
           FROM listings li JOIN semesters s ON s.id = li.semester_id
           WHERE li.property_id = $1 ORDER BY s.starts_on DESC
         `, [propertyId]);
+      // Rooms are permanent/property-level (2026-09) — a unit isn't scoped to
+      // one listing/semester anymore, so price/deposit come from whichever
+      // semester it was most recently priced for (unit_semester_pricing),
+      // purely for this admin reference view — the publish form is the
+      // authoritative place to see/set a specific semester's price.
       const units = await client.query(`
-          SELECT un.id, un.listing_id AS "listingId", un.label, un.capacity,
-                 un.room_category::text AS "roomCategory", un.price_per_term_ugx AS "pricePerTermUgx",
-                 un.deposit_ugx AS "depositUgx",
+          SELECT un.id, un.label, un.capacity,
+                 un.room_category::text AS "roomCategory", usp.price_per_term_ugx AS "pricePerTermUgx",
+                 usp.deposit_ugx AS "depositUgx",
                  un.operational_status AS "operationalStatus", un.building_name AS "buildingName",
                  un.floor_label AS "floorLabel", un.electricity_meter_type AS "electricityMeterType",
                  un.amenities, un.notes
-          FROM units un JOIN listings li ON li.id = un.listing_id
-          WHERE li.property_id = $1 ORDER BY un.building_name NULLS FIRST, un.floor_label NULLS FIRST, un.label
+          FROM units un
+          LEFT JOIN LATERAL (
+            SELECT usp.price_per_term_ugx, usp.deposit_ugx
+            FROM unit_semester_pricing usp
+            JOIN semesters s ON s.id = usp.semester_id
+            WHERE usp.unit_id = un.id
+            ORDER BY s.starts_on DESC
+            LIMIT 1
+          ) usp ON true
+          WHERE un.property_id = $1 ORDER BY un.building_name NULLS FIRST, un.floor_label NULLS FIRST, un.label
         `, [propertyId]);
       const memberships = await client.query(`
           SELECT pm.id, pm.user_id AS "userId", u.name, u.email, u.phone,
@@ -358,34 +371,45 @@ export class AdminPropertiesService {
     if (!semester) {
       throw new BadRequestException('Select an active semester configured for this property university');
     }
-    const listing = (await client.query(`
+    // Ensure this property/semester has a listing to publish against —
+    // unaffected by rooms going permanent, only units themselves moved off
+    // listing_id.
+    await client.query(`
       INSERT INTO listings (property_id, semester_id, status)
       VALUES ($1, $2, 'draft')
       ON CONFLICT (property_id, semester_id) DO UPDATE SET property_id = EXCLUDED.property_id
-      RETURNING id
-    `, [propertyId, semesterId])).rows[0]!;
+    `, [propertyId, semesterId]);
     for (const unit of units) {
-      await client.query(`
+      const inserted = (await client.query(`
         INSERT INTO units (
-          listing_id, label, capacity, room_category, price_per_term_ugx, deposit_ugx,
-          available_for_semester_id, operational_status, building_name, floor_label,
+          property_id, label, capacity, room_category,
+          operational_status, building_name, floor_label,
           electricity_meter_type, amenities, notes
-        ) VALUES ($1, $2, $3, $4::room_category, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
+        ) VALUES ($1, $2, $3, $4::room_category, $5, $6, $7, $8, $9::jsonb, $10)
+        RETURNING id, capacity
       `, [
-        listing.id,
+        propertyId,
         unit.label,
         unit.capacity,
         unit.roomCategory,
-        unit.pricePerTermUgx,
-        unit.depositUgx ?? null,
-        semesterId,
         unit.operationalStatus,
         unit.buildingName ?? null,
         unit.floorLabel ?? null,
         unit.electricityMeterType ?? null,
         JSON.stringify(unit.amenities),
         unit.notes ?? null,
-      ]);
+      ])).rows[0]! as { id: string; capacity: number };
+      // Bed-level inventory — every unit needs its capacity's worth of beds
+      // or it's created entirely unreservable. (This path previously never
+      // created beds at all, a pre-existing latent bug fixed here.)
+      await client.query(`
+        INSERT INTO beds (unit_id, label)
+        SELECT $1, 'Bed ' || gs.n FROM generate_series(1, $2::int) AS gs(n)
+      `, [inserted.id, inserted.capacity]);
+      await client.query(`
+        INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx, deposit_ugx)
+        VALUES ($1, $2, $3, $4)
+      `, [inserted.id, semesterId, unit.pricePerTermUgx, unit.depositUgx ?? null]);
     }
     return units.length;
   }

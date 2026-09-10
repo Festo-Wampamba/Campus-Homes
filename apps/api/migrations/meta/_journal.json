@@ -253,6 +253,13 @@
       "when": 1788310000000,
       "tag": "0036_auth_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788320000000,
+      "tag": "0037_permanent_units",
+      "breakpoints": true
     }
   ]
 }

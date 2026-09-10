@@ -39,8 +39,7 @@ export class ChatService {
          FROM reservations r
          JOIN beds b ON b.id = r.bed_id
          JOIN units u ON u.id = b.unit_id
-         JOIN listings l ON l.id = u.listing_id
-         JOIN properties p ON p.id = l.property_id
+         JOIN properties p ON p.id = u.property_id
          WHERE r.id = $1`,
         [reservationId],
       );

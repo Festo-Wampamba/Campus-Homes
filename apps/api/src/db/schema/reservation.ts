@@ -44,6 +44,15 @@ export const reservations = pgTable(
     status: reservationStatus('status').notNull().default('reserved'),
     idempotencyKey: text('idempotency_key').notNull(),
 
+    // Snapshot of the bed's unit_semester_pricing row at reserve time
+    // (2026-09 permanent-rooms redesign). Rooms are now reused across
+    // semesters and can be repriced, so a reservation can no longer read
+    // rent live off the unit — that would silently reprice a continuing
+    // tenant's locked-in term the moment a landlord raises next semester's
+    // rate. This is the rent that student actually agreed to for this term.
+    pricePerTermUgx: integer('price_per_term_ugx').notNull(),
+    depositUgx: integer('deposit_ugx'),
+
     reservedAt: timestamp('reserved_at', { withTimezone: true }),
     // 24h from reserve; cleared once Booked (a booked bed never auto-expires).
     reservedExpiresAt: timestamp('reserved_expires_at', { withTimezone: true }),

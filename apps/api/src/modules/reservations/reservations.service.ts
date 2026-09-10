@@ -133,19 +133,27 @@ export class ReservationsService {
           return { reservation: existing, replayed: true as const };
         }
 
-        // Bed must belong to a verified listing and not be manually blocked.
+        // Bed must belong to the given (verified) listing and not be
+        // manually blocked. Rooms are permanent/property-level (2026-09) —
+        // a bed alone no longer pins down a single price/semester, since its
+        // unit can carry pricing for more than one semester at once — so
+        // `listingId` (the listing the student was actually viewing) is what
+        // resolves which unit_semester_pricing row applies.
         const bedRes = await client.query(
-          `SELECT b.id, l.property_id, l.id AS listing_id
+          `SELECT b.id, l.id AS listing_id,
+                  usp.price_per_term_ugx, usp.deposit_ugx
            FROM beds b
            JOIN units u ON u.id = b.unit_id
-           JOIN listings l ON l.id = u.listing_id AND l.status = 'verified'
+           JOIN listings l ON l.id = $2 AND l.property_id = u.property_id AND l.status = 'verified'
+           JOIN unit_semester_pricing usp ON usp.unit_id = u.id AND usp.semester_id = l.semester_id
            WHERE b.id = $1 AND b.blocked = false`,
-          [input.bedId],
+          [input.bedId, input.listingId],
         );
         if (bedRes.rowCount === 0) {
-          throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
+          throw new NotFoundException('Bed not found on that verified listing, or it is blocked');
         }
         const listingId = bedRes.rows[0].listing_id as string;
+        const priceRow = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
 
         await this.assertNotLockedInByCurrentOccupancy(client, ctx.userId);
 
@@ -195,6 +203,12 @@ export class ReservationsService {
               reservedAt: now,
               reservedExpiresAt: new Date(now.getTime() + holdHours * 3600_000),
               idempotencyKey: input.idempotencyKey,
+              // Snapshot now — rooms are reusable/repriceable across
+              // semesters (2026-09), so this can never be read live off the
+              // unit again without risking a later price change silently
+              // rewriting what this student actually agreed to.
+              pricePerTermUgx: Number(priceRow.price_per_term_ugx),
+              depositUgx: priceRow.deposit_ugx != null ? Number(priceRow.deposit_ugx) : null,
             })
             .returning()
             .catch((err: { code?: string; cause?: { code?: string } }) => {
@@ -245,6 +259,7 @@ export class ReservationsService {
       let existingReservationId: string | null = null;
       let studentId: string;
       let listingVersionId: string;
+      let walkInPrice: { price_per_term_ugx: number; deposit_ugx: number | null } | null = null;
 
       if (input.reservationId) {
         const reservation = await db.query.reservations.findFirst({
@@ -255,8 +270,8 @@ export class ReservationsService {
           throw new ConflictException(`Cannot book a reservation that is ${reservation.status}`);
         }
         const bedRes = await client.query(
-          `SELECT l.property_id FROM beds b
-           JOIN units u ON u.id = b.unit_id JOIN listings l ON l.id = u.listing_id
+          `SELECT u.property_id FROM beds b
+           JOIN units u ON u.id = b.unit_id
            WHERE b.id = $1`,
           [reservation.bedId],
         );
@@ -266,13 +281,23 @@ export class ReservationsService {
         studentId = reservation.studentId;
         listingVersionId = reservation.listingVersionId;
       } else {
-        // Walk-in: book an Available bed directly, no prior Reserve.
+        // Walk-in: book an Available bed directly, no prior Reserve. Rooms
+        // are permanent/property-level (2026-09) — a unit can carry pricing
+        // for more than one semester, so this picks whichever verified
+        // listing was most recently published for the bed's property (same
+        // "prefer the current listing" precedent as ListingsService.
+        // propertyDetail, the landlord's own view this walk-in flow is
+        // driven from).
         const bedRes = await client.query(
-          `SELECT b.id, l.property_id, l.id AS listing_id, l.current_version_id
+          `SELECT b.id, u.property_id, l.id AS listing_id, l.current_version_id,
+                  usp.price_per_term_ugx, usp.deposit_ugx
            FROM beds b
            JOIN units u ON u.id = b.unit_id
-           JOIN listings l ON l.id = u.listing_id AND l.status = 'verified'
-           WHERE b.id = $1 AND b.blocked = false`,
+           JOIN listings l ON l.property_id = u.property_id AND l.status = 'verified'
+           JOIN unit_semester_pricing usp ON usp.unit_id = u.id AND usp.semester_id = l.semester_id
+           WHERE b.id = $1 AND b.blocked = false
+           ORDER BY l.created_at DESC
+           LIMIT 1`,
           [input.bedId],
         );
         if (bedRes.rowCount === 0) {
@@ -281,6 +306,7 @@ export class ReservationsService {
         bedId = bedRes.rows[0].id as string;
         propertyId = bedRes.rows[0].property_id as string;
         listingVersionId = bedRes.rows[0].current_version_id as string;
+        walkInPrice = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
 
         const studentRes = await client.query(
           `SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE u.phone = $1`,
@@ -345,6 +371,8 @@ export class ReservationsService {
               paymentMethod: input.paymentMethod ?? null,
               paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
               idempotencyKey: `walkin-${bedId}-${now.getTime()}`,
+              pricePerTermUgx: Number(walkInPrice!.price_per_term_ugx),
+              depositUgx: walkInPrice!.deposit_ugx != null ? Number(walkInPrice!.deposit_ugx) : null,
             })
             .returning()
             .catch((err: { code?: string; cause?: { code?: string } }) => {
@@ -380,8 +408,8 @@ export class ReservationsService {
       }
 
       const bedRes = await client.query(
-        `SELECT l.property_id FROM beds b
-         JOIN units u ON u.id = b.unit_id JOIN listings l ON l.id = u.listing_id
+        `SELECT u.property_id FROM beds b
+         JOIN units u ON u.id = b.unit_id
          WHERE b.id = $1`,
         [reservation.bedId],
       );
@@ -455,8 +483,8 @@ export class ReservationsService {
         confirmerRole = 'student';
       } else {
         const bedRes = await client.query(
-          `SELECT l.property_id FROM beds b
-           JOIN units u ON u.id = b.unit_id JOIN listings l ON l.id = u.listing_id
+          `SELECT u.property_id FROM beds b
+           JOIN units u ON u.id = b.unit_id
            WHERE b.id = $1`,
           [reservation.bedId],
         );
@@ -499,11 +527,12 @@ export class ReservationsService {
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
            l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",
            b.label AS "bedLabel", u.room_category AS "roomCategory", u.capacity AS "roomCapacity",
-           u.price_per_term_ugx AS "rentPerTermUgx", u.deposit_ugx AS "depositUgx"
+           r.price_per_term_ugx AS "rentPerTermUgx", r.deposit_ugx AS "depositUgx"
          FROM reservations r
          JOIN beds b ON b.id = r.bed_id
          JOIN units u ON u.id = b.unit_id
-         JOIN listings l ON l.id = u.listing_id
+         JOIN listing_versions lv ON lv.id = r.listing_version_id
+         JOIN listings l ON l.id = lv.listing_id
          JOIN properties p ON p.id = l.property_id
          WHERE r.student_id = $1
          ORDER BY r.created_at DESC`,
