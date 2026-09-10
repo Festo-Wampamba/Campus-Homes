@@ -77,6 +77,20 @@ DROP POLICY units_read ON units;
 --> statement-breakpoint
 DROP POLICY units_landlord_operational_status_update ON units;
 --> statement-breakpoint
+DROP POLICY units_scoped_staff_read ON units;
+--> statement-breakpoint
+DROP POLICY units_scoped_staff_insert ON units;
+--> statement-breakpoint
+DROP POLICY units_scoped_staff_update ON units;
+--> statement-breakpoint
+DROP POLICY beds_scoped_staff_read ON beds;
+--> statement-breakpoint
+DROP POLICY beds_scoped_staff_insert ON beds;
+--> statement-breakpoint
+DROP POLICY beds_scoped_staff_update ON beds;
+--> statement-breakpoint
+DROP POLICY reservations_scoped_lead_read ON reservations;
+--> statement-breakpoint
 DROP POLICY unit_photos_read ON unit_photos;
 --> statement-breakpoint
 DROP POLICY unit_photos_landlord_insert ON unit_photos;
@@ -153,6 +167,30 @@ CREATE POLICY units_read ON units FOR SELECT
 CREATE POLICY units_landlord_operational_status_update ON units FOR UPDATE
   USING (EXISTS (SELECT 1 FROM properties p WHERE p.id = units.property_id AND p.landlord_id = app_user_id()))
   WITH CHECK (EXISTS (SELECT 1 FROM properties p WHERE p.id = units.property_id AND p.landlord_id = app_user_id()));
+--> statement-breakpoint
+CREATE POLICY units_scoped_staff_read ON units FOR SELECT
+  USING (app_staff_scope(property_id));
+--> statement-breakpoint
+CREATE POLICY units_scoped_staff_insert ON units FOR INSERT
+  WITH CHECK (app_staff_scope(property_id));
+--> statement-breakpoint
+CREATE POLICY units_scoped_staff_update ON units FOR UPDATE
+  USING (app_staff_scope(property_id))
+  WITH CHECK (app_staff_scope(property_id));
+--> statement-breakpoint
+CREATE POLICY beds_scoped_staff_read ON beds FOR SELECT USING (
+  EXISTS (SELECT 1 FROM units u WHERE u.id = unit_id AND app_staff_scope(u.property_id)));
+--> statement-breakpoint
+CREATE POLICY beds_scoped_staff_insert ON beds FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM units u WHERE u.id = unit_id AND app_staff_scope(u.property_id)));
+--> statement-breakpoint
+CREATE POLICY beds_scoped_staff_update ON beds FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM units u WHERE u.id = unit_id AND app_staff_scope(u.property_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM units u WHERE u.id = unit_id AND app_staff_scope(u.property_id)));
+--> statement-breakpoint
+CREATE POLICY reservations_scoped_lead_read ON reservations FOR SELECT USING (
+  EXISTS (SELECT 1 FROM beds b JOIN units u ON u.id = b.unit_id
+    WHERE b.id = bed_id AND app_staff_scope(u.property_id, true)));
 --> statement-breakpoint
 
 CREATE POLICY unit_photos_read ON unit_photos FOR SELECT
