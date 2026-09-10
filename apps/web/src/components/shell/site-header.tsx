@@ -41,7 +41,7 @@ async function SiteHeader() {
             href="/landlords"
             className="hidden whitespace-nowrap rounded-lg border border-border px-3.5 py-2 text-sm font-semibold text-foreground transition duration-300 hover:border-teal-600 hover:bg-accent sm:block"
           >
-            List a property
+            For landlords
           </Link>
           <ThemeToggle />
           {session ? (
