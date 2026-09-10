@@ -61,11 +61,10 @@ export class ListingsService {
 
   // ── landlord paths ─────────────────────────────────────────────────────────
 
-  // A landlord could otherwise submit properties before ops ever reviews
-  // them — nothing else in the pipeline (visit scheduling, approval,
-  // publish) checks kyc_status either, so an unreviewed or explicitly
-  // rejected landlord's listing could reach the public verified state with
-  // no KYC gate anywhere. Blocking here is the earliest, cheapest point.
+  // Pending KYC is an expected onboarding state: accept the property into
+  // the review queue as `pending_kyc`, then decideKyc() releases it to
+  // `active`. An explicitly rejected identity is still blocked, and
+  // publishListing() independently re-checks KYC before anything goes live.
   submitProperty(ctx: RlsContext, input: SubmitPropertyInput) {
     return this.rlsDb.run(ctx, async (db) => {
       const [landlord] = await db
@@ -75,19 +74,11 @@ export class ListingsService {
       if (!landlord) {
         throw new ForbiddenException('Complete your landlord profile before listing a property');
       }
-      if (landlord.kycStatus !== 'verified') {
+      if (landlord.kycStatus === 'rejected') {
         throw new ForbiddenException(
-          landlord.kycStatus === 'rejected'
-            ? 'Your identity verification was not approved — contact support before listing a property'
-            : 'Your identity verification is still pending review — you can list a property once it is approved',
+          'Your identity verification was not approved — contact support before listing a property',
         );
       }
-      // 'pending_kyc' (the column default) only makes sense for a property
-      // created before its landlord was reviewed — the gate above already
-      // guarantees that isn't the case here, so inserting with the default
-      // would leave this property permanently stuck at 'pending_kyc' with
-      // nothing left to ever release it (decideKyc's flip only fires for
-      // properties that already existed at the moment of approval).
       const [property] = await db
         .insert(properties)
         .values({
@@ -100,7 +91,7 @@ export class ListingsService {
           genderArrangement: input.genderArrangement,
           catchment: input.catchment,
           otherCatchments: input.otherCatchments,
-          status: 'active',
+          status: landlord.kycStatus === 'verified' ? 'active' : 'pending_kyc',
           proposedRoomCategories: input.proposedRoomCategories,
           proposedAmenities: input.proposedAmenities,
           furnishingItems: input.furnishingItems,

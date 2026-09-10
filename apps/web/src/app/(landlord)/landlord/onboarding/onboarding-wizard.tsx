@@ -214,7 +214,7 @@ export function OnboardingWizard({
           ...(coverPhotoKey ? { coverPhotoKey } : {}),
         }),
       });
-      router.push("/landlord");
+      router.push("/landlord?submitted=property");
       router.refresh();
     } catch (err) {
       setError(errorMessage(err, "Couldn't submit your property — try again."));
