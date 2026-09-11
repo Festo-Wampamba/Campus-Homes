@@ -7,7 +7,7 @@ import { authIntent, safeAuthDestination } from '@campushomes/shared';
 import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
 import { AuthTransactions, AUTH_TRANSACTION_TTL_SECONDS, transactionCookie } from './auth-transactions';
-import { digest, matchesSecret, providerAssurance, redactSecrets } from './auth-security';
+import { digest, matchesSecret, providerAssurance, providerAssuranceFailure, redactSecrets } from './auth-security';
 import { LogtoClientFactory } from './logto-client.factory';
 import { webOrigin, type Portal } from './logto.config';
 import { ProvisioningService } from './provisioning.service';
@@ -86,6 +86,9 @@ export class AuthController {
         extraParams: {
           nonce,
           ...(portal === 'staff' ? { max_age: '0', claims: JSON.stringify({ id_token: { auth_time: { essential: true }, amr: { essential: true } } }) } : {}),
+          // Logto enforces this supported ACR value as a strict step-up
+          // requirement: no password-only staff authorization code is issued.
+          ...(portal === 'staff' ? { acr_values: 'urn:logto:acr:mfa' } : {}),
           ...(token ? { one_time_token: token } : {}),
         },
         ...(token && email ? { loginHint: email } : {}),
@@ -130,7 +133,14 @@ export class AuthController {
       if (transaction.expectedUserId && provisioned.id !== transaction.expectedUserId) return fail('account_mismatch');
       if (provisioned.status !== 'active') return res.redirect(`${webOrigin(env)}/account-pending`);
       const assurance = providerAssurance(claims, transaction.startedAt, transaction.portal === 'staff', env.LOGTO_MFA_POLICY_VERIFIED);
-      if (transaction.portal === 'staff' && !assurance.mfaVerified) return fail('mfa_required');
+      if (transaction.portal === 'staff' && !assurance.mfaVerified) {
+        this.logger.warn(JSON.stringify({
+          event: 'auth.callback.mfa_denied',
+          requestId,
+          reason: providerAssuranceFailure(claims, transaction.startedAt, true, env.LOGTO_MFA_POLICY_VERIFIED),
+        }));
+        return fail('mfa_required');
+      }
       const { token } = await this.sessionStore.create(provisioned.id, req.ip, req.headers['user-agent'], assurance);
       const oldToken = readSessionCookie(req);
       if (oldToken) await this.sessionStore.destroy(oldToken);
