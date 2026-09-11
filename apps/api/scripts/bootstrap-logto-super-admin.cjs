@@ -41,6 +41,15 @@ async function bootstrapSuperAdmin(pool, config) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // This command runs outside Nest's RlsDb wrapper, so it must establish
+    // the same transaction-local service context before reading or writing
+    // protected tables. Without it, PostgreSQL RLS makes an existing user
+    // appear absent and the bootstrap fails closed with a misleading error.
+    await client.query('SET LOCAL ROLE app_user');
+    await client.query(
+      "SELECT set_config('app.user_id', $1, true), set_config('app.user_role', 'service_role', true), set_config('app.mfa_verified', 'true', true)",
+      ['00000000-0000-0000-0000-000000000000'],
+    );
     await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('campushomes:super-admin-bootstrap', 0))`);
 
     const users = (
