@@ -147,14 +147,18 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-payload.json
 
-      - name: Trigger Dokploy deploy
+      # `application.deploy` can finish after rebuilding the mutable :latest
+      # image without replacing an already-running Swarm task. `redeploy`
+      # makes Dokploy rebuild and roll the service, which the health gate below
+      # then verifies by commit SHA.
+      - name: Rebuild and roll staging API with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.deploy" \
+            -X POST "$API_URL/api/application.redeploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
@@ -217,14 +221,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-web-payload.json
 
-      - name: Trigger Dokploy web deploy
+      - name: Rebuild and roll staging web with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_WEB_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.deploy" \
+            -X POST "$API_URL/api/application.redeploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
@@ -284,14 +288,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-payload.json
 
-      - name: Trigger Dokploy deploy
+      - name: Rebuild and roll production API with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_PROD_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.deploy" \
+            -X POST "$API_URL/api/application.redeploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
@@ -339,14 +343,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-web-payload.json
 
-      - name: Trigger Dokploy web deploy
+      - name: Rebuild and roll production web with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_WEB_PROD_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.deploy" \
+            -X POST "$API_URL/api/application.redeploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
