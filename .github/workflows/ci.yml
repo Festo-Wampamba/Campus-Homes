@@ -133,12 +133,15 @@ jobs:
           current=$(curl --fail --silent --show-error \
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
+          existing_env=$(jq -r '.env // ""' <<<"$current")
+          runtime_env=$(printf '%s\n' "$existing_env" | sed '/^NODE_ENV=/d; /^PORT=/d')
+          runtime_env="${runtime_env:+${runtime_env}$'\n'}NODE_ENV=production$'\n'PORT=4000"
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
           jq -n \
             --arg appId "$APP_ID" \
-            --arg env "$(jq -r '.env // ""' <<<"$current")" \
+            --arg env "$runtime_env" \
             --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
             --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
             --arg buildArgs "$build_args" \
@@ -282,12 +285,15 @@ jobs:
           current=$(curl --fail --silent --show-error \
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
+          existing_env=$(jq -r '.env // ""' <<<"$current")
+          runtime_env=$(printf '%s\n' "$existing_env" | sed '/^NODE_ENV=/d; /^PORT=/d')
+          runtime_env="${runtime_env:+${runtime_env}$'\n'}NODE_ENV=production$'\n'PORT=4000"
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
           jq -n \
             --arg appId "$APP_ID" \
-            --arg env "$(jq -r '.env // ""' <<<"$current")" \
+            --arg env "$runtime_env" \
             --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
             --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
             --arg buildArgs "$build_args" \
