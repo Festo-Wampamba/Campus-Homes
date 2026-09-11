@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  GENDER_ARRANGEMENTS,
   listingSearchResultSchema,
   ROOM_CATEGORIES,
   type ListingSearchResult,
@@ -23,7 +24,13 @@ import {
 import { api } from "@/lib/api";
 import { CAMPUS_LOCATIONS } from "@/lib/campuses";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatPriceRange, formatUgx, humanizeKey, roomSizeLabel } from "@/lib/format";
+import {
+  formatPriceRange,
+  formatUgx,
+  GENDER_ARRANGEMENT_LABELS,
+  humanizeKey,
+  roomSizeLabel,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -37,11 +44,12 @@ import { VerifiedBadge } from "@/components/verified-badge";
 
 const searchResponse = listingSearchResultSchema.array();
 
-const CAPACITY_OPTIONS = [
-  { value: "", label: "Any room size" },
-  { value: "1", label: "1+ person" },
-  { value: "2", label: "2+ people" },
-  { value: "4", label: "4+ people" },
+const GENDER_OPTIONS = [
+  { value: "", label: "Any gender" },
+  ...GENDER_ARRANGEMENTS.map((value) => ({
+    value,
+    label: GENDER_ARRANGEMENT_LABELS[value],
+  })),
 ];
 
 const ROOM_TYPE_OPTIONS = [
@@ -52,21 +60,18 @@ const ROOM_TYPE_OPTIONS = [
   })),
 ];
 
-// Only the 4 real catchments a property can belong to — mirrors the
-// listingSearchSchema.university restriction (packages/shared/src/listing.ts).
-const UNIVERSITY_OPTIONS: { value: University | ""; label: string }[] = [
-  { value: "", label: "Any university" },
-  { value: "MUK", label: "Makerere (MUK)" },
-  { value: "MUBS", label: "Makerere Business School (MUBS)" },
-  { value: "KIU", label: "Kampala International (KIU)" },
-  { value: "KYU", label: "Kyambogo (KYU)" },
-];
-
 // Round so panning a few metres doesn't bust the query cache key
 function roundBounds(b: MapBounds): MapBounds {
   const r = (n: number) => Math.round(n * 1e4) / 1e4;
   return { minLat: r(b.minLat), minLon: r(b.minLon), maxLat: r(b.maxLat), maxLon: r(b.maxLon) };
 }
+
+// Only MUK is live for now (2026-09) — the rest of the launch catchments
+// are hidden platform-wide while MUK is the sole pilot university, per
+// CAMPUS_LOCATIONS (lib/campuses.ts). Hardcoding it here (rather than a
+// dropdown with one option) keeps results MUK-only even if the map is
+// panned elsewhere; re-enable the picker when more catchments go live.
+const UNIVERSITY: University = "MUK";
 
 export function SearchClient() {
   const searchParams = useSearchParams();
@@ -82,14 +87,8 @@ export function SearchClient() {
   const [debouncedQ, setDebouncedQ] = useState(initialQ);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [minCapacity, setMinCapacity] = useState("");
+  const [genderArrangement, setGenderArrangement] = useState("");
   const [roomCategory, setRoomCategory] = useState("");
-  // Seeded from the same ?campus= param the map centers on ("Popular near"
-  // pills / home search) — filters results to that university's catchment
-  // rather than only pointing the map there. The dropdown lets a student
-  // change it afterward without re-panning the map by hand.
-  const initialUniversity = campus ? campus.code : "";
-  const [university, setUniversity] = useState<University | "">(initialUniversity);
 
   // Debounced so typing a name doesn't fire a request per keystroke.
   useEffect(() => {
@@ -98,7 +97,7 @@ export function SearchClient() {
   }, [q]);
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, minCapacity, roomCategory, university],
+    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, genderArrangement, roomCategory],
     enabled: bounds !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -109,13 +108,13 @@ export function SearchClient() {
         maxLat: String(b.maxLat),
         maxLon: String(b.maxLon),
         limit: "50",
+        university: UNIVERSITY,
       });
       if (debouncedQ) qs.set("q", debouncedQ);
       if (minPrice) qs.set("minPriceUgx", minPrice);
       if (maxPrice) qs.set("maxPriceUgx", maxPrice);
-      if (minCapacity) qs.set("minCapacity", minCapacity);
+      if (genderArrangement) qs.set("genderArrangement", genderArrangement);
       if (roomCategory) qs.set("roomCategory", roomCategory);
-      if (university) qs.set("university", university);
       return searchResponse.parse(await api<unknown>(`/listings/search?${qs}`));
     },
   });
@@ -140,7 +139,7 @@ export function SearchClient() {
     <div
       className={cn(
         "flex flex-col bg-background lg:grid",
-        mapOpen ? "lg:grid-cols-[minmax(0,32rem)_1fr]" : "lg:grid-cols-[0_1fr]",
+        mapOpen ? "lg:grid-cols-[minmax(0,32rem)_1fr]" : "lg:grid-cols-[1fr_0]",
       )}
     >
       <div
@@ -224,21 +223,6 @@ export function SearchClient() {
               className="pl-9"
             />
           </div>
-          <select
-            value={university}
-            onChange={(e) => setUniversity(e.target.value as University | "")}
-            aria-label="University"
-            className={cn(
-              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
-              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-            )}
-          >
-            {UNIVERSITY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
           <div className="flex gap-2">
             <Input
               type="number"
@@ -262,15 +246,15 @@ export function SearchClient() {
             />
           </div>
           <select
-            value={minCapacity}
-            onChange={(e) => setMinCapacity(e.target.value)}
-            aria-label="Minimum room size"
+            value={genderArrangement}
+            onChange={(e) => setGenderArrangement(e.target.value)}
+            aria-label="Gender"
             className={cn(
               "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
               "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
             )}
           >
-            {CAPACITY_OPTIONS.map((opt) => (
+            {GENDER_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -294,7 +278,10 @@ export function SearchClient() {
         </div>
 
         {isPending && bounds !== null && (
-          <div className="flex flex-col gap-3" aria-hidden>
+          <div
+            className={cn("flex flex-col gap-3", !mapOpen && "lg:grid lg:grid-cols-2 xl:grid-cols-3")}
+            aria-hidden
+          >
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-32 w-full" />
             ))}
@@ -322,18 +309,26 @@ export function SearchClient() {
           />
         )}
 
-        {data?.map((row) => (
-          <ResultCard
-            key={row.id}
-            row={row}
-            selected={row.id === selectedId}
-            onHover={() => setSelectedId(row.id)}
-            ref={(el) => {
-              if (el) cardRefs.current.set(row.id, el);
-              else cardRefs.current.delete(row.id);
-            }}
-          />
-        ))}
+        {/* On a wide screen with the map hidden, the results column has the
+            whole page to fill — a single stretched-out list column looks
+            broken there, so it becomes a real grid instead. With the map
+            open the column is narrow (~32rem) and stays a list. */}
+        {data && data.length > 0 && (
+          <div className={cn("flex flex-col gap-4", !mapOpen && "lg:grid lg:grid-cols-2 xl:grid-cols-3")}>
+            {data.map((row) => (
+              <ResultCard
+                key={row.id}
+                row={row}
+                selected={row.id === selectedId}
+                onHover={() => setSelectedId(row.id)}
+                ref={(el) => {
+                  if (el) cardRefs.current.set(row.id, el);
+                  else cardRefs.current.delete(row.id);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -391,7 +386,14 @@ function ResultCard({
             <MapPin aria-hidden className="size-3.5 shrink-0" />
             {row.street_address}
           </p>
-          {rooms && <p className="mt-1.5 text-sm text-muted-foreground">{rooms}</p>}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {rooms && <span className="text-sm text-muted-foreground">{rooms}</span>}
+            {row.gender_arrangement && (
+              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                {GENDER_ARRANGEMENT_LABELS[row.gender_arrangement]}
+              </span>
+            )}
+          </div>
           {amenities.length > 0 && (
             <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
               {amenities.join(" · ")}

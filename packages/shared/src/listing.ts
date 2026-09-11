@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+  GENDER_ARRANGEMENTS,
   LISTING_STATUSES,
   ROOM_CATEGORIES,
   UNIT_OPERATIONAL_STATUSES,
@@ -66,6 +67,10 @@ export const listingSearchSchema = z.object({
   // includes 'other' (a student's own profile can say that), which has no
   // corresponding properties.catchment value to filter against.
   university: z.enum(['MUK', 'MUBS', 'KIU', 'KYU']).optional(),
+  // Exact match against properties.gender_arrangement — a student picking
+  // "Male only" should not also see a mixed hostel, so this is not a
+  // permissive filter the way roomCategory is.
+  genderArrangement: z.enum(GENDER_ARRANGEMENTS).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export type ListingSearchInput = z.infer<typeof listingSearchSchema>;
@@ -99,6 +104,10 @@ export const listingSearchResultSchema = z.object({
   // Authoritative catchment (properties.catchment) — the same field
   // /listings/campuses counts hostel_count from. Not inferred from GPS.
   university: z.enum(UNIVERSITIES),
+  // Landlord-declared at submission (properties.gender_arrangement) — null
+  // means the landlord never specified one, shown as "Not specified" rather
+  // than assumed mixed.
+  gender_arrangement: z.enum(GENDER_ARRANGEMENTS).nullable(),
   // Primary inspection photo (nullable — a card falls back to a placeholder
   // tile when a listing has none) and the room-size spread across its units,
   // so a search result never implies "one room, one price".
@@ -121,15 +130,17 @@ export const listingPhotoSchema = z.object({
 });
 export type ListingPhoto = z.infer<typeof listingPhotoSchema>;
 
+// Rooms are permanent/property-level (2026-09) — a unit is no longer scoped
+// to one listing/semester, so price/deposit here are specifically THIS
+// listing's semester's price (joined via unit_semester_pricing server-side),
+// not a column on the room itself.
 export const unitSchema = z.object({
   id: uuid,
-  listingId: uuid,
   label: z.string(),
   capacity: z.number().int(),
   roomCategory: z.enum(ROOM_CATEGORIES),
   pricePerTermUgx: z.number().int(),
   depositUgx: z.number().int().nullable(),
-  availableForSemesterId: uuid,
 });
 export type Unit = z.infer<typeof unitSchema>;
 
@@ -167,6 +178,7 @@ export const listingDetailResponseSchema = z.object({
     // booking_fee_percent = the landlord didn't state one.
     booking_fee_percent: z.coerce.number().nullable(),
     advance_rent_required: z.boolean(),
+    gender_arrangement: z.enum(GENDER_ARRANGEMENTS).nullable(),
   }),
   photos: z.array(listingPhotoSchema),
   units: z.array(unitSchema),

@@ -37,7 +37,7 @@ export function HomeSearch() {
   }
 
   return (
-    <div className="mx-auto mt-7 w-full max-w-2xl">
+    <div className="mx-auto mt-3 w-full max-w-2xl">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -73,7 +73,7 @@ export function HomeSearch() {
         </button>
       </form>
 
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2" aria-label="Popular universities">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-2" aria-label="Popular universities">
         <span className="mr-1 text-xs font-semibold text-white/65">Popular near</span>
         {POPULAR_CAMPUSES.map((campus) => (
           <button
