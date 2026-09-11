@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ActivityLogIcon, ArrowRightIcon, DashboardIcon } from "@radix-ui/react-icons";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +23,7 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
     next === "/ops" || next.startsWith("/ops/")) ? next : undefined;
 
   return (
-    <Card className="w-full max-w-sm shadow-xl">
+    <Card className="w-full max-w-md shadow-xl">
       <CardContent className="p-4 sm:p-6">
         <div className="mb-3 flex flex-col items-center gap-1 sm:mb-4">
           <Wordmark stacked />
@@ -41,16 +41,33 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
 
         <a href={signInUrl("consumer", next ?? undefined, "student")} className="block">
           <Button type="button" className="w-full gap-2">
-            <ArrowRight aria-hidden className="size-4" />
+            <ArrowRightIcon aria-hidden />
             Find student housing
           </Button>
         </a>
         <a href={signInUrl("consumer", "/landlords/enroll", "landlord")} className="mt-3 block">
           <Button type="button" variant="secondary" className="w-full">Manage my properties</Button>
         </a>
-        <a href={signInUrl("staff", staffNext, "staff")} className="mt-3 block">
-          <Button type="button" variant="secondary" className="w-full">Staff sign in</Button>
-        </a>
+        <div className="mt-4 border-t border-border pt-4" role="group" aria-labelledby="staff-workspaces">
+          <p id="staff-workspaces" className="text-sm font-semibold text-foreground">Staff workspaces</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Use your invited company account and complete two-step verification.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <a href={signInUrl("staff", staffNext?.startsWith("/admin") ? staffNext : "/admin", "staff")} className="block">
+              <Button type="button" variant="secondary" className="w-full gap-2 active:-translate-y-px">
+                <DashboardIcon aria-hidden />
+                Administration
+              </Button>
+            </a>
+            <a href={signInUrl("staff", staffNext?.startsWith("/ops") ? staffNext : "/ops", "staff")} className="block">
+              <Button type="button" variant="secondary" className="w-full gap-2 active:-translate-y-px">
+                <ActivityLogIcon aria-hidden />
+                Operations
+              </Button>
+            </a>
+          </div>
+        </div>
 
         <p className="mt-4 text-center text-[10px] leading-relaxed text-muted-foreground">
           By continuing you agree to our Terms & Data Handling under the Uganda Data Protection Act 2019
