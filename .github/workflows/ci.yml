@@ -133,13 +133,16 @@ jobs:
           current=$(curl --fail --silent --show-error \
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
+          existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
+          build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
+          build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
           jq -n \
             --arg appId "$APP_ID" \
             --arg env "$(jq -r '.env // ""' <<<"$current")" \
             --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
             --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
-            --arg sha "$GITHUB_SHA" \
-            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            --arg buildArgs "$build_args" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: $buildArgs}' \
             > /tmp/save-env-payload.json
           curl --fail --silent --show-error \
             -X POST "$API_URL/api/application.saveEnvironment" \
@@ -207,13 +210,19 @@ jobs:
           current=$(curl --fail --silent --show-error \
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
+          # application.saveEnvironment replaces buildArgs. Retain every
+          # configured public argument, then refresh these two deployment
+          # values so authenticated SSR can reach the staging API.
+          existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
+          build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d; /^NEXT_PUBLIC_API_BASE_URL=/d')
+          build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"$'\n'"NEXT_PUBLIC_API_BASE_URL=https://api-staging.campushomes.co.ug"
           jq -n \
             --arg appId "$APP_ID" \
             --arg env "$(jq -r '.env // ""' <<<"$current")" \
             --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
             --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
-            --arg sha "$GITHUB_SHA" \
-            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            --arg buildArgs "$build_args" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: $buildArgs}' \
             > /tmp/save-env-web-payload.json
           curl --fail --silent --show-error \
             -X POST "$API_URL/api/application.saveEnvironment" \
