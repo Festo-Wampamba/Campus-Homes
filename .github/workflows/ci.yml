@@ -150,18 +150,17 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-payload.json
 
-      # `application.deploy` can finish after rebuilding the mutable :latest
-      # image without replacing an already-running Swarm task. `redeploy`
-      # makes Dokploy rebuild and roll the service, which the health gate below
-      # then verifies by commit SHA.
-      - name: Rebuild and roll staging API with Dokploy
+      # `deploy` synchronizes the configured Git branch before building. A
+      # `redeploy` only rebuilds Dokploy's existing checkout and can therefore
+      # keep serving an old commit indefinitely.
+      - name: Deploy staging API with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.redeploy" \
+            -X POST "$API_URL/api/application.deploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
@@ -230,14 +229,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-web-payload.json
 
-      - name: Rebuild and roll staging web with Dokploy
+      - name: Deploy staging web with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_WEB_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.redeploy" \
+            -X POST "$API_URL/api/application.deploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
@@ -283,13 +282,16 @@ jobs:
           current=$(curl --fail --silent --show-error \
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
+          existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
+          build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
+          build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
           jq -n \
             --arg appId "$APP_ID" \
             --arg env "$(jq -r '.env // ""' <<<"$current")" \
             --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
             --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
-            --arg sha "$GITHUB_SHA" \
-            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            --arg buildArgs "$build_args" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: $buildArgs}' \
             > /tmp/save-env-payload.json
           curl --fail --silent --show-error \
             -X POST "$API_URL/api/application.saveEnvironment" \
@@ -297,14 +299,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-payload.json
 
-      - name: Rebuild and roll production API with Dokploy
+      - name: Deploy production API with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_PROD_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.redeploy" \
+            -X POST "$API_URL/api/application.deploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
@@ -338,13 +340,16 @@ jobs:
           current=$(curl --fail --silent --show-error \
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
+          existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
+          build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d; /^NEXT_PUBLIC_API_BASE_URL=/d')
+          build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"$'\n'"NEXT_PUBLIC_API_BASE_URL=https://api.campushomes.co.ug"
           jq -n \
             --arg appId "$APP_ID" \
             --arg env "$(jq -r '.env // ""' <<<"$current")" \
             --argjson createEnvFile "$(jq -r '.createEnvFile // false' <<<"$current")" \
             --arg buildSecrets "$(jq -r '.buildSecrets // ""' <<<"$current")" \
-            --arg sha "$GITHUB_SHA" \
-            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: ("GIT_COMMIT_SHA=" + $sha)}' \
+            --arg buildArgs "$build_args" \
+            '{applicationId: $appId, env: $env, createEnvFile: $createEnvFile, buildSecrets: $buildSecrets, buildArgs: $buildArgs}' \
             > /tmp/save-env-web-payload.json
           curl --fail --silent --show-error \
             -X POST "$API_URL/api/application.saveEnvironment" \
@@ -352,14 +357,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d @/tmp/save-env-web-payload.json
 
-      - name: Rebuild and roll production web with Dokploy
+      - name: Deploy production web with Dokploy
         env:
           API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           API_URL: ${{ secrets.DOKPLOY_API_URL }}
           APP_ID: ${{ secrets.DOKPLOY_WEB_PROD_APP_ID }}
         run: |
           curl --fail --silent --show-error \
-            -X POST "$API_URL/api/application.redeploy" \
+            -X POST "$API_URL/api/application.deploy" \
             -H "x-api-key: $API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"applicationId\":\"$APP_ID\"}"
