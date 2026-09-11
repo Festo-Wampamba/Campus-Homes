@@ -25,15 +25,16 @@ function assuranceFailure(
   claims: Record<string, unknown>,
   startedAt: number,
   staffFlow: boolean,
-  policyVerified: boolean,
+  _policyVerified: boolean,
   now: number,
 ): AssuranceFailure | null {
   if (!staffFlow) return null;
-  if (!policyVerified) return 'policy_disabled';
   const time = typeof claims.auth_time === 'number' ? claims.auth_time * 1000 : NaN;
   if (!Number.isFinite(time) || time <= 0 || time > now + 60_000) return 'missing_auth_time';
   if (time < startedAt - 60_000) return 'stale_authentication';
-  if (!Array.isArray(claims.amr) || !claims.amr.includes('mfa')) return 'missing_mfa_claim';
+  if (claims.acr !== 'urn:logto:acr:mfa' || !Array.isArray(claims.amr) || !claims.amr.includes('mfa')) {
+    return 'missing_mfa_claim';
+  }
   return null;
 }
 

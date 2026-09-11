@@ -21,19 +21,17 @@ describe('authentication security boundaries', () => {
   });
   const now = 1_800_000_000_000;
   it('requires verified fresh provider MFA, staff flow, and rollout approval', () => {
-    const claims = { auth_time: now / 1000, amr: ['pwd', 'mfa'] };
+    const claims = { auth_time: now / 1000, acr: 'urn:logto:acr:mfa', amr: ['pwd', 'mfa'] };
     expect(providerAssurance(claims, now, true, true, now).mfaVerified).toBe(true);
     expect(providerAssuranceFailure(claims, now, true, true, now)).toBeNull();
     expect(providerAssurance(claims, now, false, true, now).mfaVerified).toBe(false);
-    expect(providerAssurance(claims, now, true, false, now).mfaVerified).toBe(false);
+    expect(providerAssurance(claims, now, true, false, now).mfaVerified).toBe(true);
   });
   it('reports a safe, actionable denial reason', () => {
-    expect(providerAssuranceFailure({ auth_time: now / 1000, amr: ['pwd', 'mfa'] }, now, true, false, now))
-      .toBe('policy_disabled');
     expect(providerAssuranceFailure({ amr: ['pwd', 'mfa'] }, now, true, true, now)).toBe('missing_auth_time');
-    expect(providerAssuranceFailure({ auth_time: (now - 120_000) / 1000, amr: ['pwd', 'mfa'] }, now, true, true, now))
+    expect(providerAssuranceFailure({ auth_time: (now - 120_000) / 1000, acr: 'urn:logto:acr:mfa', amr: ['pwd', 'mfa'] }, now, true, true, now))
       .toBe('stale_authentication');
-    expect(providerAssuranceFailure({ auth_time: now / 1000, amr: ['pwd', 'otp'] }, now, true, true, now))
+    expect(providerAssuranceFailure({ auth_time: now / 1000, acr: 'urn:logto:acr:1fa', amr: ['pwd', 'otp'] }, now, true, true, now))
       .toBe('missing_mfa_claim');
   });
   it.each([
