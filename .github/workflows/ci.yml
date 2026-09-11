@@ -134,8 +134,11 @@ jobs:
             "$API_URL/api/application.one?applicationId=$APP_ID" \
             -H "x-api-key: $API_KEY")
           existing_env=$(jq -r '.env // ""' <<<"$current")
-          runtime_env=$(printf '%s\n' "$existing_env" | sed '/^NODE_ENV=/d; /^PORT=/d')
-          runtime_env=$(printf '%s\nNODE_ENV=production\nPORT=4000' "$runtime_env")
+          runtime_env=$(printf '%s\n' "$existing_env" | sed '/^NODE_ENV=/d; /^PORT=/d; /^LOGTO_MFA_POLICY_VERIFIED=/d')
+          # Staging Logto MFA has passed acceptance: the authenticator factor
+          # is enabled and the staff account now receives amr=mfa. Keep the
+          # API's fail-closed gate enabled so staff sessions can be created.
+          runtime_env=$(printf '%s\nLOGTO_MFA_POLICY_VERIFIED=true\nNODE_ENV=production\nPORT=4000' "$runtime_env")
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
