@@ -135,7 +135,7 @@ jobs:
             -H "x-api-key: $API_KEY")
           existing_env=$(jq -r '.env // ""' <<<"$current")
           runtime_env=$(printf '%s\n' "$existing_env" | sed '/^NODE_ENV=/d; /^PORT=/d')
-          runtime_env="${runtime_env:+${runtime_env}$'\n'}NODE_ENV=production$'\n'PORT=4000"
+          runtime_env=$(printf '%s\nNODE_ENV=production\nPORT=4000' "$runtime_env")
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
@@ -287,7 +287,7 @@ jobs:
             -H "x-api-key: $API_KEY")
           existing_env=$(jq -r '.env // ""' <<<"$current")
           runtime_env=$(printf '%s\n' "$existing_env" | sed '/^NODE_ENV=/d; /^PORT=/d')
-          runtime_env="${runtime_env:+${runtime_env}$'\n'}NODE_ENV=production$'\n'PORT=4000"
+          runtime_env=$(printf '%s\nNODE_ENV=production\nPORT=4000' "$runtime_env")
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
