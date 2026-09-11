@@ -452,6 +452,7 @@ export class ListingsService {
         `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
                 lv.id AS version_id, lv.price_per_term_ugx, lv.amenities, lv.description,
                 p.name, p.street_address, p.gps_lat, p.gps_lon, p.catchment AS university,
+                p.gender_arrangement,
                 ph.storage_key AS photo_storage_key,
                 u.min_capacity, u.max_capacity, COALESCE(u.unit_count, 0) AS unit_count,
                 COALESCE(u.max_price, lv.price_per_term_ugx) AS max_price_per_term_ugx,
@@ -533,6 +534,7 @@ export class ListingsService {
               )
             )
             AND ($13::text IS NULL OR p.catchment = $13::university)
+            AND ($14::text IS NULL OR p.gender_arrangement = $14)
             AND COALESCE(u.unit_count, 0) > 0
           ORDER BY lv.price_per_term_ugx ASC
           LIMIT $9`,
@@ -550,6 +552,7 @@ export class ListingsService {
           UNAVAILABLE_OPERATIONAL_STATUSES,
           input.roomCategory ?? null,
           input.university ?? null,
+          input.genderArrangement ?? null,
         ],
       );
       // Pilot-funnel backstop (0032) — best-effort: a logging failure must
@@ -651,7 +654,7 @@ export class ListingsService {
           // needs a name/phone to actually reach, not just an address.
           const propRes = await client.query(
             `SELECT p.id, p.name, p.street_address, p.gps_lat, p.gps_lon,
-                    p.booking_fee_percent, p.advance_rent_required,
+                    p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
                     u.name AS custodian_name, u.phone AS custodian_phone
              FROM properties p
              JOIN landlords l ON l.user_id = p.landlord_id
@@ -692,6 +695,7 @@ export class ListingsService {
               gps_lon: string | null;
               booking_fee_percent: string | number | null;
               advance_rent_required: boolean;
+              gender_arrangement: string | null;
               custodian_name: string;
               custodian_phone: string | null;
             },

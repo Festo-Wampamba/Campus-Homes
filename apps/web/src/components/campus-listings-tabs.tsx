@@ -34,24 +34,29 @@ export function CampusListingsTabs({
 
   return (
     <div>
-      <div className="scrollbar-hide flex gap-2 overflow-x-auto border-b border-border pb-4" aria-label="Filter by university">
-        <FilterButton active={active === "all"} onClick={() => setActive("all")}>
-          All universities
-        </FilterButton>
-        {CAMPUSES.map((campus) => {
-          const count = campusByCode.get(campus.code)?.hostel_count ?? grouped.get(campus.code)?.length ?? 0;
-          return (
-            <FilterButton
-              key={campus.code}
-              active={active === campus.code}
-              onClick={() => setActive(campus.code)}
-            >
-              {campus.code}
-              {count > 0 && <span className="ml-1 opacity-65">{count}</span>}
-            </FilterButton>
-          );
-        })}
-      </div>
+      {/* One campus per catchment tab is dead weight once there's only one
+          university live (CAMPUS_LOCATIONS, MUK-only for now) — the picker
+          only earns its place once there's a real choice to filter. */}
+      {CAMPUSES.length > 1 && (
+        <div className="scrollbar-hide flex gap-2 overflow-x-auto border-b border-border pb-4" aria-label="Filter by university">
+          <FilterButton active={active === "all"} onClick={() => setActive("all")}>
+            All universities
+          </FilterButton>
+          {CAMPUSES.map((campus) => {
+            const count = campusByCode.get(campus.code)?.hostel_count ?? grouped.get(campus.code)?.length ?? 0;
+            return (
+              <FilterButton
+                key={campus.code}
+                active={active === campus.code}
+                onClick={() => setActive(campus.code)}
+              >
+                {campus.code}
+                {count > 0 && <span className="ml-1 opacity-65">{count}</span>}
+              </FilterButton>
+            );
+          })}
+        </div>
+      )}
 
       {visible.length > 0 ? (
         <ul className="mt-8 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">

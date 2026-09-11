@@ -5,11 +5,8 @@ import {
   ArrowRightIcon,
   CameraIcon,
   ChevronDownIcon,
-  ClockIcon,
   DimensionsIcon,
-  HomeIcon,
   LockClosedIcon,
-  MagnifyingGlassIcon,
   MixIcon,
   PersonIcon,
   SewingPinIcon,
@@ -75,30 +72,15 @@ const HERO_SLIDES = [
   "/images/campushomes/student-room-hd-v2.webp",
 ] as const;
 
+// MUK-only for now (2026-09) — mirrors CAMPUS_LOCATIONS (lib/campuses.ts),
+// the platform-wide gate on which universities are visible during first
+// testing. Add an entry back here once another catchment goes live.
 const CAMPUS_CARDS = [
   {
     code: "MUK",
     name: "Makerere University",
     area: "Wandegeya · Kikoni · Makerere",
     image: "/images/campushomes/makerere-campus-hd-v2.webp",
-  },
-  {
-    code: "MUBS",
-    name: "Makerere Business School",
-    area: "Nakawa · Bugolobi · Banda",
-    image: "/images/campushomes/student-lounge-hd-v2.webp",
-  },
-  {
-    code: "KIU",
-    name: "Kampala International University",
-    area: "Kansanga · Kabalagala · Muyenga",
-    image: "/images/campushomes/student-room-hd-v2.webp",
-  },
-  {
-    code: "KYU",
-    name: "Kyambogo University",
-    area: "Kyambogo · Banda · Ntinda",
-    image: "/images/campushomes/hero-hostel-hd-v2.webp",
   },
 ] as const;
 
@@ -133,7 +115,10 @@ const FEATURED_BOUNDS = {
 
 async function getFeaturedListings() {
   try {
-    const query = new URLSearchParams({ ...FEATURED_BOUNDS, limit: "50" });
+    // university: "MUK" — MUK-only for now (2026-09), mirrors CAMPUS_LOCATIONS;
+    // without this the bounding box would still surface any other-university
+    // listing that happens to fall inside it.
+    const query = new URLSearchParams({ ...FEATURED_BOUNDS, limit: "50", university: "MUK" });
     const rows = listingSearchResultSchema
       .array()
       .parse(await api<unknown>(`/listings/search?${query}`, { cache: "no-store" }));
@@ -172,7 +157,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <section className="relative isolate flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-teal-900 text-white">
+      <section className="relative isolate flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-teal-900 text-white">
         <div className="absolute inset-0 z-0">
           {HERO_SLIDES.map((src, index) => (
             <div
@@ -195,19 +180,19 @@ export default async function HomePage() {
           <div className="absolute inset-0 opacity-[0.055] [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:24px_24px]" />
         </div>
 
-        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center px-4 py-8 text-center sm:px-6 sm:py-10 lg:px-8">
-          <div className="marketing-reveal my-auto mx-auto flex max-w-3xl flex-col items-center [text-shadow:0_2px_16px_rgba(0,0,0,0.35)]">
-            <div className="mb-5 inline-flex items-center gap-3">
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col items-center justify-center px-4 pt-6 pb-2 text-center sm:px-6 sm:pt-8 lg:px-8">
+          <div className="marketing-reveal mx-auto flex max-w-3xl flex-col items-center [text-shadow:0_2px_16px_rgba(0,0,0,0.35)]">
+            <div className="mb-2 inline-flex items-center gap-3">
               <VerifiedBadge className="shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]" />
               <span className="text-xs font-bold tracking-[0.16em] text-white/66 uppercase">
                 Kampala&apos;s inspected student housing
               </span>
             </div>
 
-            <h1 className="max-w-[15ch] font-brand text-5xl leading-[1.05] text-white sm:text-5xl lg:text-5xl">
+            <h1 className="max-w-[28ch] font-brand text-3xl leading-[1.05] text-white sm:text-4xl">
               Your room. Your campus. <span className="text-coral-500">Verified.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
+            <p className="mt-2 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
               Find a hostel we have physically inspected, compare honest room
               details, and reserve your choice for free before someone else does.
             </p>
@@ -219,23 +204,23 @@ export default async function HomePage() {
         <div className="relative z-10 shrink-0 border-t border-white/15 bg-teal-900/70 backdrop-blur-md">
           <a
             href="#featured-heading"
-            className="mx-auto -mt-5 hidden size-10 items-center justify-center rounded-full border border-white/25 bg-teal-900 text-white/90 shadow-lg transition duration-300 hover:text-white sm:flex"
+            className="mx-auto -mt-4 hidden size-9 items-center justify-center rounded-full border border-white/25 bg-teal-900 text-white/90 shadow-lg transition duration-300 hover:text-white sm:flex"
             aria-label="Scroll to featured listings"
           >
-            <ChevronDownIcon className="size-5 animate-bounce" />
+            <ChevronDownIcon className="size-4 animate-bounce" />
           </a>
           <div className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-x divide-white/15 sm:grid-cols-4">
             {[
-              ["4", "launch universities"],
+              ["MUK", "launch university"],
               ["6", "inspection checks"],
               ["Free", "to reserve a room"],
               ["Instant", "reservation confirmed"],
             ].map(([value, label]) => (
-              <div key={label} className="px-5 py-5 text-center sm:px-6 sm:py-6">
-                <p className="tabular font-display text-2xl font-bold text-coral-500 sm:text-3xl">
+              <div key={label} className="px-5 py-2 text-center sm:px-6 sm:py-3">
+                <p className="tabular font-display text-lg font-bold text-coral-500 sm:text-xl">
                   {value}
                 </p>
-                <p className="mt-1 text-xs font-semibold tracking-wide text-white/80 uppercase">
+                <p className="mt-0.5 text-xs font-semibold tracking-wide text-white/80 uppercase">
                   {label}
                 </p>
               </div>
@@ -298,26 +283,22 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-[1.35fr_0.9fr_0.9fr] lg:grid-rows-2">
-            {CAMPUS_CARDS.map((campus, index) => (
+          <div className="mt-10 grid gap-4">
+            {CAMPUS_CARDS.map((campus) => (
               <Link
                 key={campus.code}
                 href={`/search?campus=${campus.code}`}
-                className={cn(
-                  "image-card group relative isolate min-h-64 overflow-hidden rounded-[1.25rem] bg-teal-900",
-                  index === 0 && "lg:row-span-2 lg:min-h-[32rem]",
-                  index === 3 && "md:col-span-2 lg:col-span-1",
-                )}
+                className="image-card group relative isolate min-h-72 overflow-hidden rounded-[1.25rem] bg-teal-900 sm:min-h-96"
               >
                 <Image
                   src={campus.image}
                   alt={`Student housing near ${campus.name}`}
                   fill
-                  sizes={index === 0 ? "(min-width: 1024px) 45vw, 100vw" : "(min-width: 1024px) 28vw, 50vw"}
+                  sizes="100vw"
                   className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.045]"
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-teal-900/85 via-teal-900/10 to-transparent transition-opacity duration-300 group-hover:from-teal-900/70" />
-                <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-6">
+                <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
                   <span className="inline-flex rounded-full border border-white/20 bg-white/12 px-2.5 py-1 text-[0.68rem] font-bold tracking-[0.14em] uppercase backdrop-blur-md">
                     {campus.code}
                   </span>
@@ -423,49 +404,46 @@ export default async function HomePage() {
             From search to move-in, without the guessing.
           </h2>
 
-          <ol className="mt-10 grid gap-4 lg:grid-cols-[1.2fr_0.8fr] lg:grid-rows-2">
-            <li className="group relative isolate overflow-hidden rounded-[1.5rem] bg-coral-500 p-7 text-teal-900 sm:p-10 lg:row-span-2">
-              <Image
-                src="/images/campushomes/student-room-card.webp"
-                alt="A bright student room with a study desk and garden view"
-                fill
-                sizes="(min-width: 1024px) 58vw, 100vw"
-                className="object-cover object-center transition-transform duration-700 group-hover:scale-[1.03]"
-              />
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-[linear-gradient(90deg,rgba(240,128,128,0.98)_0%,rgba(240,128,128,0.92)_34%,rgba(240,128,128,0.58)_62%,rgba(240,128,128,0.12)_100%)]"
-              />
-              <span className="relative z-10 tabular text-sm font-bold tracking-widest">01</span>
-              <MagnifyingGlassIcon className="absolute top-8 right-8 z-10 size-14 opacity-25 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
-              <div className="relative z-10 mt-28 max-w-lg sm:mt-40">
-                <h3 className="text-2xl font-semibold sm:text-3xl">Search around your university</h3>
-                <p className="mt-4 text-base leading-7 text-teal-900/74">
-                  Compare inspected hostels near MUK, MUBS, KIU and KYU by price,
-                  room capacity and the amenities that matter day to day.
-                </p>
-              </div>
-            </li>
-            <li className="group rounded-[1.5rem] border border-border bg-teal-50 p-7 sm:p-8">
-              <div className="flex items-start justify-between gap-6">
-                <span className="tabular text-sm font-bold tracking-widest text-teal-700">02</span>
-                <ClockIcon className="size-8 text-teal-700 transition-transform duration-500 group-hover:rotate-12" />
-              </div>
-              <h3 className="mt-10 text-xl font-semibold">Reserve it for free</h3>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                A free reservation holds the selected room while you arrange the rest.
-              </p>
-            </li>
-            <li className="group rounded-[1.5rem] bg-teal-900 p-7 text-white sm:p-8">
-              <div className="flex items-start justify-between gap-6">
-                <span className="tabular text-sm font-bold tracking-widest text-white/48">03</span>
-                <HomeIcon className="size-8 text-coral-500 transition-transform duration-500 group-hover:-translate-y-1" />
-              </div>
-              <h3 className="mt-10 text-xl font-semibold text-white">Move in and deal directly</h3>
-              <p className="mt-3 text-sm leading-6 text-white/60">
-                Confirm move-in, settle rent with the landlord and leave a structured review afterward.
-              </p>
-            </li>
+          <ol className="mt-10 grid gap-6 sm:grid-cols-3">
+            {[
+              {
+                image: "/images/campushomes/student-room-card.webp",
+                alt: "A bright student room with a study desk and garden view",
+                title: "Search around your university",
+                body: "Compare inspected hostels near MUK by price, room capacity and the amenities that matter day to day.",
+              },
+              {
+                image: "/images/campushomes/student-lounge-hd-v2.webp",
+                alt: "Students relaxing in a hostel common area",
+                title: "Reserve it for free",
+                body: "A free reservation holds the selected room while you arrange the rest.",
+              },
+              {
+                image: "/images/campushomes/student-room-hd-v2.webp",
+                alt: "A furnished student hostel room ready to move into",
+                title: "Move in and deal directly",
+                body: "Confirm move-in, settle rent with the landlord and leave a structured review afterward.",
+              },
+            ].map((step, index) => (
+              <li key={step.title} className="overflow-hidden rounded-[1.25rem] border border-border bg-card">
+                <div className="relative aspect-[4/3] w-full">
+                  <Image
+                    src={step.image}
+                    alt={step.alt}
+                    fill
+                    sizes="(min-width: 640px) 33vw, 100vw"
+                    className="object-cover"
+                  />
+                </div>
+                <div className="p-6">
+                  <span className="tabular text-sm font-bold tracking-widest text-teal-700">
+                    0{index + 1}
+                  </span>
+                  <h3 className="mt-2 text-xl font-semibold">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.body}</p>
+                </div>
+              </li>
+            ))}
           </ol>
         </div>
       </section>

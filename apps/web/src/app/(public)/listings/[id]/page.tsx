@@ -11,7 +11,7 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatPriceRange, humanizeKey } from "@/lib/format";
+import { formatPriceRange, GENDER_ARRANGEMENT_LABELS, humanizeKey } from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
@@ -106,6 +106,11 @@ export default async function ListingDetailPage({
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl tracking-[-0.035em] sm:text-4xl">{property.name}</h1>
         <VerifiedBadge />
+        {property.gender_arrangement && (
+          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
+            {GENDER_ARRANGEMENT_LABELS[property.gender_arrangement]}
+          </span>
+        )}
         <Link href="/#verified" className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
           What does Verified mean?
         </Link>

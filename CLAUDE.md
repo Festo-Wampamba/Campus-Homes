@@ -757,3 +757,91 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     apex + `deploy` are proxied. Inconsistent — worth aligning.
   - Clearing the flag requires **Search Console → Security Issues → Request
     Review** on the apex; nothing in the codebase can do it.
+
+- **Gender filter, MUK-only pilot mode, homepage "three clear steps" redesign
+  (2026-09-11):** first pass at student-facing gender awareness plus scoping
+  the whole public product to Makerere only for first testing. No migration —
+  `properties.gender_arrangement` already existed end-to-end (landlord
+  onboarding + admin form, 0025) but was never surfaced in search/results.
+  - `listingSearchSchema` gained `genderArrangement` (exact-match filter, not
+    permissive like `roomCategory` — picking "Male only" must not also show a
+    mixed hostel); `listingSearchResultSchema` and the detail response's
+    `property` object both gained `gender_arrangement`/`gender_arrangement`.
+    Wired into `ListingsService.search()`'s raw SQL (new `$14` param) and the
+    `detail()` property query. Search page: the "Any room size" (`minCapacity`)
+    dropdown — redundant next to room type — is now the gender dropdown;
+    `minCapacity` itself stays in the schema/backend (nothing else used it,
+    harmless to leave), just no longer sent from the web UI. Gender shows as a
+    small badge on search result cards and next to VerifiedBadge on the detail
+    page.
+  - **MUK-only is a front-end-only gate, deliberately reversible**: shrinking
+    `CAMPUS_LOCATIONS` (`apps/web/src/lib/campuses.ts`) to just MUK is the
+    single source that cascades everywhere — home search pills
+    (`home-search.tsx`), campus tabs (`campus-listings-tabs.tsx`, which now
+    hides its tab bar entirely when `CAMPUSES.length <= 1`), and the search
+    page (which dropped its university `<select>` and hardcoded
+    `university: "MUK"` in every search call instead of a one-option dropdown).
+    Also scoped `getFeaturedListings()` on the homepage to `university=MUK` —
+    without it the bounding-box query would still surface any other-university
+    listing that happens to fall inside Kampala's box. The `UNIVERSITIES`/
+    `CATCHMENTS` enums and backend are untouched; re-adding a university is
+    just adding its entry back to `CAMPUS_LOCATIONS` + `CAMPUS_CARDS`.
+  - Homepage "three clear steps" section rebuilt per product feedback (heavy
+    coral gradient was hiding the step-1 photo, decorative icons felt
+    AI-generated, cards were unevenly sized): now three equal
+    `sm:grid-cols-3` cards, each a plain photo (no overlay) with text below it,
+    no icons. The single-campus "browse by university" section lost its
+    3-card asymmetric grid (`lg:row-span-2` etc., meaningless with one card)
+    in favor of one full-width banner.
+  - **Found: `seed-makerere-hostels.cjs` (and likely `seed-demo.cjs`/
+    `seed-dev.cjs`/`seed-fieldwork.cjs`) are broken** — they `require(
+    'better-auth/crypto')`, which no longer resolves post-Logto-migration
+    (2026-08-31 decision above dropped Better Auth entirely). Not fixed here
+    (out of scope); worked around for this session with a one-off scratch
+    script (direct SQL inserts, bypassing auth) to seed 4 MUK test listings
+    with varying `gender_arrangement` values on a freshly reset local dev DB.
+    Whoever next needs seed data on a fresh DB will hit this — the fix is
+    either updating those scripts to provision via Logto/skip password
+    hashing, or writing dedicated auth-free seed scripts.
+  - **Local dev DB gotcha:** the docker-local Postgres container
+    (`campushomes-local-db-1`) was found with orphaned partial-migration state
+    (types created by an earlier `drizzle-kit migrate` run that failed
+    mid-way, but `__drizzle_migrations` empty since it never recorded
+    success) — every fresh `db:migrate` attempt failed on `type "catchment"
+    already exists` with no useful error text (drizzle-kit's spinner appears
+    to swallow the real stderr). Fixed by dropping and recreating the empty
+    database. If `db:migrate` fails silently like this again, check for
+    orphaned objects from a previous failed run before assuming the migration
+    SQL itself is broken. **Second reset needed after merging origin/main**:
+    the merge renumbered `0035_permanent_units.sql` → `0037_permanent_units.sql`
+    and inserted two new migrations ahead of it (`0035_auth_access.sql`,
+    `0036_auth_invitations.sql`); the local DB's `__drizzle_migrations` table
+    still had the *old* content hash recorded at id=35 (from the pre-merge
+    permanent_units content), which no longer matches the new journal's idx=35
+    entry — same fix, drop/recreate + re-migrate from scratch.
+  - **Local self-hosted Logto app registrations were stale — "staff login"
+    threw `oidc.invalid_redirect_uri`.** The `AuthModule` OIDC flow was
+    refactored to redirect through the web app (`${WEB_ORIGIN}/api/auth/logto/callback`,
+    proxied via `apps/web/src/proxy.ts` so the session cookie can be
+    host-only — see `logto.config.ts`'s `webOrigin()` comment) sometime in the
+    42-commit auth migration this session pulled in from `origin/main`, but
+    the local Logto tenant's `staff`/`consumer` applications (`LOGTO_STAFF_APP_ID`/
+    `LOGTO_CONSUMER_APP_ID` in `apps/api/.env`) were still registered with the
+    *old* redirect URI (`http://localhost:4010/api/auth/logto/callback`,
+    pointing straight at the API) from before that refactor — a
+    config-drift bug, not a fresh-env gap. Fixed via the Management API
+    (`LogtoManagementClient`'s pattern: client_credentials grant against
+    `LOGTO_M2M_APP_ID`/`SECRET`, then `PATCH /api/applications/:id`) —
+    additively added `${WEB_ORIGIN}/api/auth/logto/callback` and `WEB_ORIGIN`
+    to both apps' `redirectUris`/`postLogoutRedirectUris`, keeping the old
+    entries rather than replacing them. Same config-drift bug hit
+    `postLogoutRedirectUris` too: `authController.signOut()` always signs out
+    through the **consumer** app's client regardless of which portal the user
+    is on (`this.clients.create(env, 'consumer', ...)`, deliberate — one
+    Logto session either way), and calls `client.signOut(\`${webOrigin}/sign-in\`)`
+    — an exact `http://localhost:3000/sign-in`, not the bare origin. The bare
+    `WEB_ORIGIN` I'd registered wasn't enough (Logto requires an exact string
+    match); added `${WEB_ORIGIN}/sign-in` to both apps' `postLogoutRedirectUris`
+    too. Anyone re-provisioning a local Logto tenant from scratch needs to
+    register the web-origin callback URL (not the API port) AND the exact
+    `/sign-in` post-logout URL, on both the staff and consumer applications.

@@ -39,6 +39,40 @@ services:
       timeout: 3s
       retries: 20
 
+  # Local-only self-hosted Logto (identity provider), so landlord/staff/student
+  # sign-in works without needing the staging tenant's credentials. NOT the
+  # pattern used in staging/production (see CLAUDE.md) — this is throwaway
+  # dev-only infra with its own isolated tenant and data.
+  logto-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: logto
+      POSTGRES_PASSWORD: logto_dev
+      POSTGRES_DB: logto
+    ports:
+      - '54330:5432'
+    volumes:
+      - logto_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U logto -d logto']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  logto:
+    image: svhd/logto:latest
+    depends_on:
+      logto-db:
+        condition: service_healthy
+    environment:
+      DB_URL: postgres://logto:logto_dev@logto-db:5432/logto
+      ENDPOINT: http://localhost:3001
+      ADMIN_ENDPOINT: http://localhost:3002
+    ports:
+      - '3001:3001'
+      - '3002:3002'
+
 volumes:
   postgres_data:
   redis_data:
+  logto_postgres_data:
