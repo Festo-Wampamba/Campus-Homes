@@ -125,6 +125,15 @@ export class InquiriesService {
         .catch((err: unknown) => {
           console.error('[inquiries] landlord notify failed:', err);
         });
+      this.notifications
+        .notify(landlordId, 'inquiry.received', 'in_app', {
+          inquiryId: created.id,
+          message: `New enquiry about your listing: “${created.subject}”.`,
+          href: '/landlord/enquiries',
+        })
+        .catch((err: unknown) => {
+          console.error('[inquiries] landlord in-app notify failed:', err);
+        });
     }
     return created;
   }
@@ -163,6 +172,13 @@ export class InquiriesService {
       return this.selectById(db, row.id);
     });
     if (!updated) throw new ForbiddenException('Inquiry not found or not addressed to you');
+    // The student sees the reply in their enquiry history, but an in-app
+    // alert makes the response discoverable without polling that screen.
+    await this.notifications.notify(updated.studentId, 'inquiry.response_received', 'in_app', {
+      message: `Your landlord replied to “${updated.subject}”.`,
+      href: '/support',
+      inquiryId: updated.id,
+    });
     return updated;
   }
 

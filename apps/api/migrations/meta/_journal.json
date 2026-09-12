@@ -267,6 +267,13 @@
       "when": 1788400000000,
       "tag": "0038_user_purge",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788486400000,
+      "tag": "0039_direct_messages",
+      "breakpoints": true
     }
   ]
 }

@@ -13,11 +13,13 @@ import { cn } from "@/lib/utils";
 
 const TYPE_LABEL: Record<CalendarEventType, string> = {
   task: "Task",
+  event: "Event",
   reminder: "Reminder",
   activity: "Activity",
 };
 const TYPE_DOT: Record<CalendarEventType, string> = {
   task: "bg-teal-600",
+  event: "bg-sky-600",
   reminder: "bg-amber-500",
   activity: "bg-violet-600",
 };

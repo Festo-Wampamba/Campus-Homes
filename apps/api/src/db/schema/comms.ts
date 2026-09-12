@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 import { notificationChannel, notificationStatus } from './enums';
 import { landlords, students, users } from './identity';
@@ -18,7 +19,6 @@ export const chatThreads = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     reservationId: uuid('reservation_id')
-      .notNull()
       .references(() => reservations.id, { onDelete: 'restrict' }),
     studentId: uuid('student_id')
       .notNull()
@@ -29,7 +29,12 @@ export const chatThreads = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
   },
-  (t) => [uniqueIndex('chat_threads_reservation_uk').on(t.reservationId)],
+  (t) => [
+    uniqueIndex('chat_threads_reservation_uk').on(t.reservationId),
+    uniqueIndex('chat_threads_direct_parties_uk')
+      .on(t.studentId, t.landlordId)
+      .where(sql`reservation_id IS NULL`),
+  ],
 );
 
 export const chatMessages = pgTable(
@@ -44,6 +49,7 @@ export const chatMessages = pgTable(
       .references(() => users.id),
     body: text('body').notNull(), // max 2000 — CHECK in SQL migration
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+    editedAt: timestamp('edited_at', { withTimezone: true }),
     readAt: timestamp('read_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }), // soft delete (DPPA)
   },

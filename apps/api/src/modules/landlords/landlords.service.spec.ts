@@ -20,7 +20,8 @@ function fixture(status = 'active', existingAssignment = false) {
       if (sql.startsWith('SELECT id, status, deleted_at')) {
         return { rows: [{ id: actor.userId, status, deletedAt: null }] };
       }
-      if (sql.startsWith('UPDATE users SET status')) return { rows: [{ id: actor.userId }] };
+      if (sql.startsWith("UPDATE landlords SET kyc_status = 'verified'")) return { rows: [{ id: actor.userId }] };
+      if (sql.startsWith("UPDATE properties SET status = 'active'")) return { rows: [] };
       if (sql.startsWith('SELECT id FROM roles')) return { rows: [{ id: 'landlord-role' }] };
       if (sql.startsWith('UPDATE user_role_assignments')) return { rows: [] };
       if (sql.includes('FROM user_role_assignments WHERE user_id')) {
@@ -75,19 +76,10 @@ describe('LandlordsService.enroll', () => {
 });
 
 describe('LandlordsService.approveAccount', () => {
-  it('activates the account and grants a self-scoped landlord assignment', async () => {
+  it('verifies the submitted landlord profile and releases its submitted properties', async () => {
     const { service, queries } = fixture('active');
     await expect(service.approveAccount(actor, actor.userId)).resolves.toEqual({ approved: true });
-    expect(queries.some(({ sql }) => sql.startsWith('UPDATE users SET status'))).toBe(true);
-    const insert = queries.find(({ sql }) => sql.startsWith('INSERT INTO user_role_assignments'));
-    expect(insert?.params).toEqual([
-      actor.userId,
-      'landlord-role',
-      'own',
-      null,
-      null,
-      actor.userId,
-      'Landlord account approved',
-    ]);
+    expect(queries.some(({ sql }) => sql.startsWith("UPDATE landlords SET kyc_status = 'verified'"))).toBe(true);
+    expect(queries.some(({ sql }) => sql.startsWith("UPDATE properties SET status = 'active'"))).toBe(true);
   });
 });

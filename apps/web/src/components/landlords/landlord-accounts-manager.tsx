@@ -16,8 +16,15 @@ function formatDate(iso: string) {
 // Reachable from both /ops/landlord-accounts and /admin/landlord-accounts —
 // PermissionsGuard (landlords.review_kyc / landlords.suspend) is the real
 // gate, same dual-mount pattern as InquiriesManager.
-export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: PendingLandlordAccount[] }) {
+export function LandlordAccountsManager({
+  initialAccounts,
+  initialApprovedAccounts,
+}: {
+  initialAccounts: PendingLandlordAccount[];
+  initialApprovedAccounts: PendingLandlordAccount[];
+}) {
   const [rows, setRows] = useState(initialAccounts);
+  const [approvedRows, setApprovedRows] = useState(initialApprovedAccounts);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -31,7 +38,9 @@ export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: 
     setNotice(null);
     try {
       await api(`/admin/landlord-accounts/${userId}/approve`, { method: "POST" });
+      const approved = rows.find((r) => r.userId === userId);
       setRows((current) => current.filter((r) => r.userId !== userId));
+      if (approved) setApprovedRows((current) => [approved, ...current]);
       setNotice(`${name} approved — they can now sign in and access the landlord portal.`);
     } catch (err) {
       setError(apiErrorMessage(err, "Couldn't approve this account — try again."));
@@ -71,19 +80,16 @@ export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: 
     </>
   );
 
-  if (rows.length === 0) {
-    return (
-      <div className="mt-6 space-y-3">
-        {banners}
-        <p className="text-sm text-muted-foreground">No landlord accounts awaiting approval.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="mt-6 space-y-3">
+    <div className="mt-6 space-y-6">
       {banners}
-      {rows.map((row) => (
+      <section aria-labelledby="pending-landlord-accounts" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="pending-landlord-accounts" className="text-base font-bold">Pending review</h2>
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{rows.length}</span>
+        </div>
+        {rows.length === 0 && <p className="text-sm text-muted-foreground">No submitted landlord applications are awaiting review.</p>}
+        {rows.map((row) => (
         <Card key={row.userId}>
           <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
             <div>
@@ -147,7 +153,19 @@ export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: 
             )}
           </CardContent>
         </Card>
-      ))}
+        ))}
+      </section>
+      <section aria-labelledby="approved-landlord-accounts" className="space-y-3 border-t border-border pt-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="approved-landlord-accounts" className="text-base font-bold">Approved landlords</h2>
+          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">{approvedRows.length}</span>
+        </div>
+        {approvedRows.length === 0 ? <p className="text-sm text-muted-foreground">No landlords have been approved yet.</p> : (
+          <div className="divide-y divide-border rounded-lg border border-border">
+            {approvedRows.map((row) => <div key={row.userId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="font-semibold">{row.name || "Unnamed"}</span><span className="text-muted-foreground">Approved landlord · registered {formatDate(row.createdAt)}</span></div>)}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

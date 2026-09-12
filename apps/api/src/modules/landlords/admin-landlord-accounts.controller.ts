@@ -27,6 +27,12 @@ export class AdminLandlordAccountsController {
     return this.landlords.pendingAccounts();
   }
 
+  @Get('approved')
+  @RequirePermission('landlords.review_kyc')
+  approved() {
+    return this.landlords.approvedAccounts();
+  }
+
   @Post(':id/approve')
   @RequirePermission('landlords.review_kyc')
   approve(@Param('id', ParseUUIDPipe) id: string, @Req() req: PermissionedRequest) {

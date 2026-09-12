@@ -1,5 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import type {
   ListingSearchInput,
@@ -23,7 +23,10 @@ import {
   unitPhotos,
   units,
   unitSemesterPricing,
+  roles,
+  userRoleAssignments,
 } from '../../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** A bed still counts as "live" (not available) under these statuses —
  * cancelled/expired/released reservations free the bed back up. An occupied
@@ -58,7 +61,10 @@ const SERVICE_CTX: RlsContext = {
 
 @Injectable()
 export class ListingsService {
-  constructor(private readonly rlsDb: RlsDb) {}
+  constructor(
+    private readonly rlsDb: RlsDb,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   // ── landlord paths ─────────────────────────────────────────────────────────
 
@@ -116,6 +122,33 @@ export class ListingsService {
           declaredConsentToProcessing: input.declaredConsentToProcessing,
         })
         .returning();
+      if (!property) {
+        throw new NotFoundException('Property submission could not be created');
+      }
+      // A self-service submission must surface in the reviewer workspace.
+      // Do not rely on a client refresh or on a landlord's role assignment:
+      // review is owned by active platform administrators.
+      if (property.status === 'pending_kyc') {
+        const reviewers = await this.rlsDb.run(SERVICE_CTX, (serviceDb) =>
+          serviceDb
+            .selectDistinct({ userId: userRoleAssignments.userId })
+            .from(userRoleAssignments)
+            .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
+            .where(and(
+              inArray(roles.key, ['super_admin', 'platform_admin']),
+              eq(userRoleAssignments.scopeType, 'platform_wide'),
+              // Keep this predicate explicit rather than assuming an assignment
+              // remains usable after it has been revoked.
+              isNull(userRoleAssignments.revokedAt),
+            )),
+        );
+        await Promise.all(reviewers.map((reviewer) =>
+          this.notifications?.notify(reviewer.userId, 'landlord.application_submitted', 'in_app', {
+            message: `A landlord submitted ${property.name} for approval. Review the application before access is granted.`,
+            href: '/admin/landlord-accounts',
+          }),
+        ));
+      }
       return property;
     });
   }

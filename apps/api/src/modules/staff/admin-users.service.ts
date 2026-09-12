@@ -450,7 +450,11 @@ export class AdminUsersService {
         CREATE TEMP TABLE _pg_unts ON COMMIT DROP AS SELECT id FROM units WHERE property_id IN (SELECT id FROM _pg_props);
         CREATE TEMP TABLE _pg_bds ON COMMIT DROP AS SELECT id FROM beds WHERE unit_id IN (SELECT id FROM _pg_unts);
         CREATE TEMP TABLE _pg_res ON COMMIT DROP AS SELECT id FROM reservations WHERE student_id IN (SELECT id FROM _pg_g) OR bed_id IN (SELECT id FROM _pg_bds);
-        CREATE TEMP TABLE _pg_thr ON COMMIT DROP AS SELECT id FROM chat_threads WHERE reservation_id IN (SELECT id FROM _pg_res);
+        CREATE TEMP TABLE _pg_thr ON COMMIT DROP AS
+          SELECT id FROM chat_threads
+          WHERE reservation_id IN (SELECT id FROM _pg_res)
+             OR student_id IN (SELECT id FROM _pg_g)
+             OR landlord_id IN (SELECT id FROM _pg_g);
 
         DELETE FROM chat_messages WHERE thread_id IN (SELECT id FROM _pg_thr) OR from_user_id IN (SELECT id FROM _pg_g);
         DELETE FROM chat_threads WHERE id IN (SELECT id FROM _pg_thr);

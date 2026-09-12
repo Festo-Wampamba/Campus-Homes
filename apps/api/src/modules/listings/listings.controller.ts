@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
-import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
+import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   AddPropertyDocumentDto,
   AddPropertyMediaDto,
@@ -68,6 +68,7 @@ export class ListingsController {
 
   @Post('properties')
   @UseGuards(AuthGuard, RolesGuard)
+  @AllowPendingLandlord()
   @Roles('landlord')
   submitProperty(@Req() req: AuthenticatedRequest, @Body() body: SubmitPropertyDto) {
     return this.listings.submitProperty(rlsCtx(req), body);
@@ -75,6 +76,7 @@ export class ListingsController {
 
   @Get('properties/mine')
   @UseGuards(AuthGuard, RolesGuard)
+  @AllowPendingLandlord()
   @Roles('landlord')
   myProperties(@Req() req: AuthenticatedRequest) {
     return this.listings.myProperties(rlsCtx(req));

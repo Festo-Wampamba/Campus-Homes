@@ -16,7 +16,7 @@ export class NotificationsController {
 
   @Get()
   feed(@Req() req: AuthenticatedRequest) {
-    return this.notificationsService.feed(rlsCtx(req));
+    return this.notificationsService.feedWithActions(rlsCtx(req), req.session.access.roles);
   }
 
   @Post('push-subscriptions')

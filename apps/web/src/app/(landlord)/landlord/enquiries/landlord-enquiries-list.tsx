@@ -42,7 +42,7 @@ function EnquiryRow({
   inquiry: Inquiry;
   onResponded: (updated: Inquiry) => void;
 }) {
-  const [response, setResponse] = useState("");
+  const [response, setResponse] = useState(inquiry.landlordResponse ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,8 +56,10 @@ function EnquiryRow({
         method: "PATCH",
         body: JSON.stringify({ response: response.trim() }),
       });
-      if (updated) onResponded(updated);
-      setResponse("");
+      if (updated) {
+        onResponded(updated);
+        setResponse(updated.landlordResponse ?? response.trim());
+      }
     } catch (err) {
       setError(apiErrorMessage(err, "Couldn't send your reply — try again."));
     } finally {
@@ -101,13 +103,8 @@ function EnquiryRow({
         {inquiry.studentPhone ? ` · ${inquiry.studentPhone}` : ""}
       </p>
 
-      {inquiry.landlordResponse ? (
-        <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
-          <p className="font-semibold">Your reply</p>
-          <p className="mt-1 whitespace-pre-line text-muted-foreground">{inquiry.landlordResponse}</p>
-        </div>
-      ) : (
-        <form onSubmit={submit} className="mt-3 space-y-2">
+      <form onSubmit={submit} className="mt-3 space-y-2">
+        {inquiry.landlordResponse && <p className="text-sm font-semibold">Your reply <span className="font-normal text-muted-foreground">— edit and save to update it</span></p>}
           <textarea
             rows={3}
             maxLength={2000}
@@ -123,10 +120,9 @@ function EnquiryRow({
           </p>
           {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
           <Button type="submit" size="sm" disabled={pending || !response.trim()}>
-            {pending ? "Sending…" : "Send reply"}
+            {pending ? "Saving…" : inquiry.landlordResponse ? "Save reply" : "Send reply"}
           </Button>
         </form>
-      )}
     </li>
   );
 }

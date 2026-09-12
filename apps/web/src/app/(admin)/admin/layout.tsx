@@ -74,7 +74,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       profileHref="/admin/profile"
       settingsHref={canViewSettings ? "/admin/settings" : undefined}
       auditLogHref={canViewAudit ? "/admin/audit-log" : undefined}
-      notificationsEndpoint={canViewAudit ? "/admin/audit" : undefined}
+      notificationsEndpoint="/notifications"
     >
       {children}
     </AppShell>
