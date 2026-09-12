@@ -102,7 +102,7 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
   async function revokeRole(id: string) {
     if (!selected) return; setPending(true); setNotice(null);
     try { await api(`/admin/users/${selected.id}/roles/${id}`, { method: "DELETE" }); setDetail(await api<UserDetail>(`/admin/users/${selected.id}`)); setNotice("Role assignment revoked; history was preserved."); router.refresh(); }
-    catch { setNotice("The role could not be revoked."); } finally { setPending(false); }
+    catch (error) { setNotice(error instanceof ApiError && error.status === 401 ? "Sign out and sign back in, then revoke within 30 minutes — this is a sensitive change." : apiErrorMessage(error, "The role could not be revoked.")); } finally { setPending(false); }
   }
 
   async function grantPermission(event: React.FormEvent) {
@@ -123,7 +123,7 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
     event.preventDefault(); if (!selected) return; setPending(true); setNotice(null);
     const data = new FormData(event.currentTarget);
     try { await api(`/admin/users/${selected.id}`, { method: "DELETE", body: JSON.stringify({ reason: String(data.get("reason")) }) }); setNotice("User access revoked and account soft-deleted."); router.refresh(); setTimeout(() => close(), 700); }
-    catch { setNotice("The user could not be deleted. The last Super Admin is protected."); } finally { setPending(false); }
+    catch (error) { setNotice(error instanceof ApiError && error.status === 401 ? "Deleting a user is a sensitive action — sign out, sign back in, and delete within 30 minutes." : apiErrorMessage(error, "The user could not be deleted.")); } finally { setPending(false); }
   }
 
   async function revokeSessions() {
