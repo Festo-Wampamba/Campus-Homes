@@ -20,6 +20,7 @@ function fixture(status = 'active', existingAssignment = false) {
       if (sql.startsWith('SELECT id, status, deleted_at')) {
         return { rows: [{ id: actor.userId, status, deletedAt: null }] };
       }
+      if (sql.startsWith('UPDATE users SET status')) return { rows: [{ id: actor.userId }] };
       if (sql.startsWith('SELECT id FROM roles')) return { rows: [{ id: 'landlord-role' }] };
       if (sql.startsWith('UPDATE user_role_assignments')) return { rows: [] };
       if (sql.includes('FROM user_role_assignments WHERE user_id')) {
@@ -35,7 +36,8 @@ function fixture(status = 'active', existingAssignment = false) {
   const rlsDb = {
     run: async (_ctx: unknown, fn: (_db: unknown, client: PoolClient) => unknown) => fn({}, client),
   } as RlsDb;
-  const service = new LandlordsService(rlsDb, {} as AuditService);
+  const audit = { record: jest.fn(async () => undefined) } as unknown as AuditService;
+  const service = new LandlordsService(rlsDb, audit);
   return { service, queries };
 }
 
@@ -69,5 +71,23 @@ describe('LandlordsService.enroll', () => {
   it('rejects an inactive account', async () => {
     const { service } = fixture('suspended');
     await expect(service.enroll(actor)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('LandlordsService.approveAccount', () => {
+  it('activates the account and grants a self-scoped landlord assignment', async () => {
+    const { service, queries } = fixture('active');
+    await expect(service.approveAccount(actor, actor.userId)).resolves.toEqual({ approved: true });
+    expect(queries.some(({ sql }) => sql.startsWith('UPDATE users SET status'))).toBe(true);
+    const insert = queries.find(({ sql }) => sql.startsWith('INSERT INTO user_role_assignments'));
+    expect(insert?.params).toEqual([
+      actor.userId,
+      'landlord-role',
+      'own',
+      null,
+      null,
+      actor.userId,
+      'Landlord account approved',
+    ]);
   });
 });

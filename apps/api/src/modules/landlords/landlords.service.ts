@@ -66,14 +66,25 @@ export class LandlordsService {
   }
 
   async approveAccount(actor: RlsContext, userId: string) {
-    const [row] = await this.rlsDb.run(SERVICE_CTX, (db) =>
-      db
-        .update(users)
-        .set({ status: 'active' })
-        .where(and(eq(users.id, userId), eq(users.role, 'landlord'), eq(users.status, 'pending')))
-        .returning({ id: users.id }),
-    );
-    if (!row) throw new NotFoundException('No pending landlord account found for that user');
+    const approved = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `UPDATE users SET status = 'active'
+         WHERE id = $1 AND role = 'landlord' AND status = 'pending' RETURNING id`,
+        [userId],
+      );
+      if (!rows[0]) return false;
+      // Flipping status alone left access riding on the legacy consumer
+      // fallback in access-resolver (disabled the moment the account gains any
+      // other assignment). Grant the landlord role authoritatively — same
+      // scope enroll() uses — so approval actually confers portal access.
+      await assignRoleInTransaction(client, actor, userId, {
+        roleKey: 'landlord',
+        scopeType: 'own',
+        reason: 'Landlord account approved',
+      });
+      return true;
+    });
+    if (!approved) throw new NotFoundException('No pending landlord account found for that user');
     await this.audit.record(actor, 'landlord_account.approve', 'user', userId, {});
     return { approved: true };
   }
