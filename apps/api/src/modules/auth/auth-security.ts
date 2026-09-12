@@ -25,16 +25,22 @@ function assuranceFailure(
   claims: Record<string, unknown>,
   startedAt: number,
   staffFlow: boolean,
-  _policyVerified: boolean,
+  policyVerified: boolean,
   now: number,
 ): AssuranceFailure | null {
   if (!staffFlow) return null;
   const time = typeof claims.auth_time === 'number' ? claims.auth_time * 1000 : NaN;
   if (!Number.isFinite(time) || time <= 0 || time > now + 60_000) return 'missing_auth_time';
   if (time < startedAt - 60_000) return 'stale_authentication';
-  if (claims.acr !== 'urn:logto:acr:mfa' || !Array.isArray(claims.amr) || !claims.amr.includes('mfa')) {
-    return 'missing_mfa_claim';
-  }
+  // Preferred proof: Logto's signed step-up claims (urn:logto:acr:mfa + an `mfa`
+  // amr entry). Released Logto (<= v1.43) does not emit acr/amr — the feature is
+  // unreleased (master only) — so it forces MFA via its mandatory-MFA policy
+  // without stamping the token. When the signed proof is absent we fall back to
+  // LOGTO_MFA_POLICY_VERIFIED: the operator asserting Logto enforces staff MFA
+  // server-side. This auto-tightens to the signed proof the moment Logto ships it.
+  const signedMfa =
+    claims.acr === 'urn:logto:acr:mfa' && Array.isArray(claims.amr) && claims.amr.includes('mfa');
+  if (!signedMfa && !policyVerified) return 'missing_mfa_claim';
   return null;
 }
 
