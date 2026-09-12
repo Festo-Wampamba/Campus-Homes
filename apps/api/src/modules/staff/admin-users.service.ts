@@ -222,19 +222,23 @@ export class AdminUsersService {
   }
 
   async update(actor: RlsContext, userId: string, input: UpdateAdminUserInput) {
-    if (actor.userId === userId && (input.status || input.accountType)) {
-      throw new ForbiddenException('You cannot change your own account type or status');
-    }
     if (input.accountType !== undefined) {
       throw new BadRequestException('Use role assignments to change access; account type is compatibility data');
     }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       try {
-        const current = (await client.query<{ id: string; accountType: string }>(
-          `SELECT id, role::text AS "accountType" FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        const current = (await client.query<{ id: string; accountType: string; status: string }>(
+          `SELECT id, role::text AS "accountType", status::text AS status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
           [userId],
         )).rows[0];
         if (!current) throw new NotFoundException('User not found');
+        // Editing your own identity/particulars is fine; only a real change to
+        // your own status is blocked (self-lockout guard). The edit form
+        // re-submits the unchanged status field, so compare rather than reject
+        // its mere presence.
+        if (actor.userId === userId && input.status !== undefined && input.status !== current.status) {
+          throw new ForbiddenException('You cannot change your own status');
+        }
 
         const columnMap: Record<string, string> = {
           name: 'name', email: 'email', phone: 'phone', accountType: 'role', status: 'status', image: 'image',
