@@ -63,6 +63,13 @@ export class AdminDashboardService {
 
   overview() {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      // Split off the payment revenue sums: payments (and refunds) carry
+      // deeply nested RLS policies (reservations→beds→units→properties→
+      // listings, each recursively policied), so the planner expands 200+
+      // subplans per scan. Three revenue sums plus refunds in one statement
+      // combined into a plan that took >15s to build and timed the endpoint
+      // out. Keeping at most one RLS-heavy table per statement holds each
+      // query near ~1s.
       const summary = await client.query<{
         totalUsers: string;
         activeUsers: string;
@@ -73,9 +80,6 @@ export class AdminDashboardService {
         reservations: string;
         reservations30d: string;
         priorReservations30d: string;
-        revenueUgx: string;
-        revenue30dUgx: string;
-        priorRevenue30dUgx: string;
         pendingKyc: string;
         pendingVisits: string;
         pendingRefunds: string;
@@ -91,14 +95,25 @@ export class AdminDashboardService {
           (SELECT count(*) FROM reservations)::text AS reservations,
           (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '30 days')::text AS "reservations30d",
           (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorReservations30d",
-          (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded')::text AS "revenueUgx",
-          (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded' AND created_at >= now() - interval '30 days')::text AS "revenue30dUgx",
-          (SELECT coalesce(sum(amount_ugx), 0) FROM payments WHERE status = 'succeeded' AND created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorRevenue30dUgx",
           (SELECT count(*) FROM landlords WHERE kyc_status = 'pending')::text AS "pendingKyc",
           (SELECT count(*) FROM verification_visits
             WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
           (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
           (SELECT count(*) FROM notifications WHERE status = 'failed')::text AS "failedNotifications"
+      `);
+
+      // Payment revenue on its own statement, all three windows in one scan.
+      const revenue = await client.query<{
+        revenueUgx: string;
+        revenue30dUgx: string;
+        priorRevenue30dUgx: string;
+      }>(`
+        SELECT
+          coalesce(sum(amount_ugx), 0)::text AS "revenueUgx",
+          coalesce(sum(amount_ugx) FILTER (WHERE created_at >= now() - interval '30 days'), 0)::text AS "revenue30dUgx",
+          coalesce(sum(amount_ugx) FILTER (WHERE created_at >= now() - interval '60 days'
+            AND created_at < now() - interval '30 days'), 0)::text AS "priorRevenue30dUgx"
+        FROM payments WHERE status = 'succeeded'
       `);
 
       const growth = await client.query<{ month: string; users: string; reservations: string }>(`
@@ -133,7 +148,7 @@ export class AdminDashboardService {
         ORDER BY a.ts DESC LIMIT 8
       `);
 
-      const s = summary.rows[0]!;
+      const s = { ...summary.rows[0]!, ...revenue.rows[0]! };
       return {
         summary: Object.fromEntries(Object.entries(s).map(([key, value]) => [key, number(value)])),
         growth: growth.rows.map((row) => ({ ...row, users: number(row.users), reservations: number(row.reservations) })),
