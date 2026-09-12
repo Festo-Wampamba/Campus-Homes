@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 
 import { updateRolePermissionsSchema } from '@campushomes/shared';
@@ -26,7 +26,9 @@ export class AdminDashboardController {
 
   @Get('users')
   @RequireAnyPermission('students.read', 'landlords.read', 'staff.read')
-  users(@Req() req: PermissionedRequest) { return this.dashboard.users(req.permissions); }
+  users(@Req() req: PermissionedRequest, @Query('deleted') deleted?: string) {
+    return this.dashboard.users(req.permissions, deleted === 'true');
+  }
 
   @Get('properties')
   @RequirePermission('properties.read')

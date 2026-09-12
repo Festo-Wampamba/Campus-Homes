@@ -12,7 +12,7 @@ import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { usePagination } from "@/lib/use-pagination";
 
-type UserRow = Record<string, unknown> & { id: string; name: string; email?: string | null; phone?: string | null; role: string; status: string; university?: string | null; emailVerified?: boolean; phoneVerified?: boolean; authProviders?: string[]; assignments?: Assignment[] };
+type UserRow = Record<string, unknown> & { id: string; name: string; email?: string | null; phone?: string | null; role: string; status: string; university?: string | null; emailVerified?: boolean; phoneVerified?: boolean; authProviders?: string[]; assignments?: Assignment[]; deletedAt?: string | null; deletionReason?: string | null };
 type Role = { key: string; name: string; description: string };
 type Permission = { key: string; description: string; requiresStepUp: boolean };
 type Property = { id: string; name: string; catchment: string };
@@ -31,6 +31,8 @@ function buttonClass(tone: "primary" | "secondary" | "danger" = "secondary") {
 
 export function UsersManager({ rows, roles, permissions, properties, canMutate }: { rows: UserRow[]; roles: Role[]; permissions: Permission[]; properties: Property[]; canMutate: boolean }) {
   const router = useRouter();
+  const [list, setList] = useState(rows);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
   const [mode, setMode] = useState<"create" | "edit" | "access" | "delete" | null>(null);
@@ -42,7 +44,20 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
   const [formError, setFormError] = useState<string | null>(null);
   const [roleForm, setRoleForm] = useState({ roleKey: "student", scopeType: "own", scopeId: "", workerType: "general_worker", reason: "Operational access approved by Super Admin" });
   const [permissionForm, setPermissionForm] = useState({ permissionKey: permissions[0]?.key ?? "", scopeType: "platform_wide", scopeId: "", reason: "Direct exception approved by Super Admin" });
-  const filtered = useMemo(() => rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query.trim().toLowerCase())), [rows, query]);
+  const filtered = useMemo(() => list.filter((row) => JSON.stringify(row).toLowerCase().includes(query.trim().toLowerCase())), [list, query]);
+
+  async function toggleDeleted(next: boolean) {
+    setShowDeleted(next); setPage(1); setNotice(null);
+    try { const res = await api<{ rows: UserRow[] }>(`/admin/users${next ? "?deleted=true" : ""}`); setList(res.rows); }
+    catch { setList([]); setNotice("Could not load that view."); }
+  }
+
+  async function purge(row: UserRow) {
+    if (!window.confirm(`PERMANENTLY delete ${row.name || "this account"} and everything they own (properties, reservations, roles)? This is irreversible and cannot be undone.`)) return;
+    setPending(true); setNotice(null);
+    try { await api(`/admin/users/${row.id}/purge`, { method: "POST" }); setList((current) => current.filter((r) => r.id !== row.id)); setNotice(`${row.name || "Account"} permanently purged.`); router.refresh(); }
+    catch (error) { setNotice(error instanceof ApiError && error.status === 401 ? "Purging needs a recent sign-in — sign out, sign back in, then retry." : apiErrorMessage(error, "The account could not be purged.")); } finally { setPending(false); }
+  }
   const { page, setPage, totalPages, pageItems, total, pageSize } = usePagination(filtered, 10);
 
   function setField(key: string, value: string) { setForm((current) => ({ ...current, [key]: value })); }
@@ -145,6 +160,9 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
   }
 
   function rowActions(row: UserRow) {
+    if (showDeleted) {
+      return <div className="flex gap-1">{canMutate && <button aria-label="Purge user" title="Permanently purge" disabled={pending} onClick={() => purge(row)} className={buttonClass("danger")}><Trash2 className="size-4" />Purge permanently</button>}</div>;
+    }
     return <div className="flex gap-1">
       <button aria-label="Edit user" title="Edit particulars" onClick={() => startDetail(row, "edit")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><Pencil className="size-4" /></button>
       <button aria-label="Manage access" title="Roles and permissions" onClick={() => startDetail(row, "access")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 dark:border-border dark:text-slate-300 dark:hover:border-violet-800 dark:hover:bg-violet-950 dark:hover:text-violet-200"><KeyRound className="size-4" /></button>
@@ -156,10 +174,13 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
     <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-center dark:border-border">
       <label className="relative min-w-0 flex-1"><span className="sr-only">Search users</span><Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className={`${adminFieldClass} pl-9`} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search name, email, phone, role, campus…" /></label>
       <div className="flex gap-2">
+        <button type="button" onClick={() => toggleDeleted(!showDeleted)} className={buttonClass(showDeleted ? "primary" : "secondary")} title="Show soft-deleted accounts to permanently purge them">{showDeleted ? "Active accounts" : "Deleted accounts"}</button>
         <ViewToggle view={view} onChange={setView} />
-        {canMutate && <button type="button" onClick={startCreate} className={buttonClass("primary")}><Plus aria-hidden className="size-4" />Add user</button>}
+        {canMutate && !showDeleted && <button type="button" onClick={startCreate} className={buttonClass("primary")}><Plus aria-hidden className="size-4" />Add user</button>}
       </div>
     </div>
+    {showDeleted && <p className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">Soft-deleted accounts. Purging is permanent — it removes the person and everything they own; historical audit entries are kept but anonymized.</p>}
+    {notice && <p className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 dark:border-border dark:bg-muted dark:text-foreground">{notice}</p>}
 
     {view === "list" && (
       <div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left text-xs"><thead className="bg-slate-50 text-slate-500 dark:bg-muted"><tr>{["User", "Contact", "Account type", "Staff / access roles", "Campus", "Verification", "KYC", "Status", "Joined", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-bold uppercase tracking-[.06em]">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{pageItems.map((row) =><tr key={row.id} className="hover:bg-slate-50/80 dark:hover:bg-muted/30"><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.name || "Unnamed user"}</td><td className="px-4 py-3.5 text-slate-500 dark:text-muted-foreground"><span className="block">{row.email || "—"}</span><span className="block text-[10px]">{row.phone || "—"}</span></td><td className="px-4 py-3.5 capitalize dark:text-muted-foreground">{row.role.replaceAll("_", " ")}</td><td className="max-w-64 px-4 py-3.5">{rowAssignments(row)}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.university ?? "—"}</td><td className="px-4 py-3.5"><div className="flex flex-wrap gap-1"><span className={`rounded px-1.5 py-1 text-[10px] font-semibold ${row.emailVerified ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 text-slate-500 dark:bg-muted dark:text-muted-foreground"}`}>Email {row.emailVerified ? "verified" : "pending"}</span><span className={`rounded px-1.5 py-1 text-[10px] font-semibold ${row.phoneVerified ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 text-slate-500 dark:bg-muted dark:text-muted-foreground"}`}>Phone {row.phoneVerified ? "verified" : "pending"}</span>{row.authProviders?.includes("google") && <span className="rounded bg-blue-50 px-1.5 py-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">Google</span>}</div></td><td className="px-4 py-3.5"><StatusBadge value={row.kycStatus ?? "not applicable"} /></td><td className="px-4 py-3.5"><StatusBadge value={row.status} /></td><td className="px-4 py-3.5 text-slate-500 dark:text-muted-foreground">{row.createdAt ? new Date(String(row.createdAt)).toLocaleDateString() : "—"}</td><td className="px-4 py-3.5">{rowActions(row)}</td></tr>)}</tbody></table>{!filtered.length && <p className="py-14 text-center text-sm text-slate-500">No users match the current search.</p>}</div>

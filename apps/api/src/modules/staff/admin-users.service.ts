@@ -415,6 +415,108 @@ export class AdminUsersService {
     return result;
   }
 
+  /** Hard-deletes a soft-deleted user and everything they own (properties and
+   * their whole subtree, reservations, the student/landlord profile, RBAC
+   * rows, chat). Historical records that merely reference the person as an
+   * actor (audit_log, who-reviewed/uploaded/assigned) are anonymized to NULL
+   * so the event survives without the identity. Requires the account to be
+   * soft-deleted first (two-step safety); super-admin targets need the
+   * super-admin tier permission, same as softDelete. */
+  async purgeUser(actor: RlsContext, actorPermissions: Set<string>, userId: string) {
+    if (actor.userId === userId) throw new ForbiddenException('You cannot purge your own account');
+    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const target = (await client.query<{ id: string; deletedAt: Date | null; isSuperAdmin: boolean }>(`
+        SELECT u.id, u.deleted_at AS "deletedAt", EXISTS (
+          SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
+          WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
+        ) AS "isSuperAdmin"
+        FROM users u WHERE u.id = $1 FOR UPDATE
+      `, [userId])).rows[0];
+      if (!target) throw new NotFoundException('User not found');
+      if (!target.deletedAt) throw new BadRequestException('Soft-delete the account first, then purge it');
+      if (target.isSuperAdmin && !actorPermissions.has('roles.manage_super_admin')) {
+        throw new ForbiddenException('Only a Super Admin can purge a Super Admin');
+      }
+      // Seed the target set, then derive and remove its whole footprint. The
+      // derived block references only _pg_g (no external input), so it runs as
+      // one statement. Order is strict child-before-parent: the schema's
+      // RESTRICT/NO-ACTION FKs would otherwise block the delete.
+      await client.query(`CREATE TEMP TABLE _pg_g(id uuid PRIMARY KEY) ON COMMIT DROP`);
+      await client.query(`INSERT INTO _pg_g VALUES ($1)`, [userId]);
+      await client.query(`
+        CREATE TEMP TABLE _pg_props ON COMMIT DROP AS SELECT id FROM properties WHERE landlord_id IN (SELECT id FROM _pg_g);
+        CREATE TEMP TABLE _pg_lists ON COMMIT DROP AS SELECT id FROM listings WHERE property_id IN (SELECT id FROM _pg_props);
+        CREATE TEMP TABLE _pg_vers ON COMMIT DROP AS SELECT id FROM listing_versions WHERE listing_id IN (SELECT id FROM _pg_lists);
+        CREATE TEMP TABLE _pg_unts ON COMMIT DROP AS SELECT id FROM units WHERE property_id IN (SELECT id FROM _pg_props);
+        CREATE TEMP TABLE _pg_bds ON COMMIT DROP AS SELECT id FROM beds WHERE unit_id IN (SELECT id FROM _pg_unts);
+        CREATE TEMP TABLE _pg_res ON COMMIT DROP AS SELECT id FROM reservations WHERE student_id IN (SELECT id FROM _pg_g) OR bed_id IN (SELECT id FROM _pg_bds);
+        CREATE TEMP TABLE _pg_thr ON COMMIT DROP AS SELECT id FROM chat_threads WHERE reservation_id IN (SELECT id FROM _pg_res);
+
+        DELETE FROM chat_messages WHERE thread_id IN (SELECT id FROM _pg_thr) OR from_user_id IN (SELECT id FROM _pg_g);
+        DELETE FROM chat_threads WHERE id IN (SELECT id FROM _pg_thr);
+        DELETE FROM reviews WHERE reservation_id IN (SELECT id FROM _pg_res) OR listing_version_id IN (SELECT id FROM _pg_vers);
+        DELETE FROM refunds WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM landlord_strikes WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM student_flags WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM reservation_releases WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM payments WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM move_ins WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM journal_entries WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM reservations WHERE id IN (SELECT id FROM _pg_res);
+
+        DELETE FROM unit_photos WHERE unit_id IN (SELECT id FROM _pg_unts);
+        DELETE FROM unit_semester_pricing WHERE unit_id IN (SELECT id FROM _pg_unts);
+        DELETE FROM beds WHERE id IN (SELECT id FROM _pg_bds);
+        DELETE FROM units WHERE id IN (SELECT id FROM _pg_unts);
+        DELETE FROM listing_photos WHERE listing_version_id IN (SELECT id FROM _pg_vers);
+        DELETE FROM saved_listings WHERE listing_id IN (SELECT id FROM _pg_lists);
+        UPDATE inquiries SET listing_id = NULL WHERE listing_id IN (SELECT id FROM _pg_lists);
+        UPDATE listings SET current_version_id = NULL WHERE id IN (SELECT id FROM _pg_lists);
+        DELETE FROM listing_versions WHERE id IN (SELECT id FROM _pg_vers);
+        DELETE FROM listings WHERE id IN (SELECT id FROM _pg_lists);
+        DELETE FROM tenant_agreements WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM verification_visits WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM properties WHERE id IN (SELECT id FROM _pg_props);
+
+        DELETE FROM inquiries WHERE student_id IN (SELECT id FROM _pg_g);
+        UPDATE inquiries SET landlord_id = NULL WHERE landlord_id IN (SELECT id FROM _pg_g);
+        DELETE FROM property_memberships WHERE user_id IN (SELECT id FROM _pg_g);
+
+        UPDATE audit_log SET actor_id = NULL WHERE actor_id IN (SELECT id FROM _pg_g);
+        UPDATE landlords SET kyc_reviewed_by = NULL WHERE kyc_reviewed_by IN (SELECT id FROM _pg_g);
+        UPDATE reservations SET booked_by = NULL WHERE booked_by IN (SELECT id FROM _pg_g);
+        UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
+        UPDATE approval_requests SET requested_by = NULL WHERE requested_by IN (SELECT id FROM _pg_g);
+        UPDATE approval_requests SET decided_by = NULL WHERE decided_by IN (SELECT id FROM _pg_g);
+        UPDATE auth_invitations SET invited_by = NULL WHERE invited_by IN (SELECT id FROM _pg_g);
+        UPDATE auth_invitations SET cancelled_by = NULL WHERE cancelled_by IN (SELECT id FROM _pg_g);
+        UPDATE auth_invitations SET accepted_by = NULL WHERE accepted_by IN (SELECT id FROM _pg_g);
+        UPDATE auth_invitations SET target_user_id = NULL WHERE target_user_id IN (SELECT id FROM _pg_g);
+        UPDATE campus_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
+        UPDATE onboarding_leads SET contacted_by = NULL WHERE contacted_by IN (SELECT id FROM _pg_g);
+        UPDATE platform_integrations SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
+        UPDATE platform_integrations SET updated_by = NULL WHERE updated_by IN (SELECT id FROM _pg_g);
+        UPDATE platform_settings SET updated_by = NULL WHERE updated_by IN (SELECT id FROM _pg_g);
+        UPDATE property_documents SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
+        UPDATE property_media SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
+        UPDATE property_memberships SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
+        UPDATE property_memberships SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
+        UPDATE report_exports SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
+        UPDATE reservation_releases SET released_by = NULL WHERE released_by IN (SELECT id FROM _pg_g);
+        UPDATE tenant_agreement_templates SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
+        UPDATE unit_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
+        UPDATE user_permission_grants SET granted_by = NULL WHERE granted_by IN (SELECT id FROM _pg_g);
+        UPDATE user_permission_grants SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
+        UPDATE user_role_assignments SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
+        UPDATE user_role_assignments SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
+
+        DELETE FROM users WHERE id IN (SELECT id FROM _pg_g);
+      `);
+    });
+    await this.audit.record(actor, 'users.purge', 'user', userId, {});
+    return { id: userId, purged: true };
+  }
+
   async assignRole(
     actor: RlsContext,
     actorPermissions: Set<string>,
