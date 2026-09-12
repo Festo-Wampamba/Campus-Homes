@@ -21,6 +21,13 @@ import { effectiveRoles } from './access-resolver';
 
 export const PERMISSION_KEY = 'permission';
 
+// Step-up-gated permissions (delete, role/permission changes, deactivation)
+// require the session's original sign-in to be within this window — a hijacked
+// or long-idle session cannot perform them without a fresh, MFA-verified login.
+// Sized to cover a normal admin work session (was 30m, too short to be usable);
+// step-up is kept ON for every sensitive action rather than removed.
+export const STEP_UP_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+
 /** Restricts a route to callers holding the given permission. Must be paired
  * with AuthGuard (AuthGuard attaches the session PermissionsGuard reads). */
 export const RequirePermission = (permission: string) => SetMetadata(PERMISSION_KEY, permission);
@@ -189,7 +196,7 @@ export class PermissionsGuard implements CanActivate {
     }
     if (grants.some((grant) => grant.permissionKey === matched && grant.requiresStepUp)) {
       const signedInAt = Date.parse(req.session.access.assurance.authenticatedAt ?? '');
-      if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > 30 * 60_000) {
+      if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > STEP_UP_MAX_AGE_MS) {
         throw new UnauthorizedException(`${matched} requires a fresh sign-in`);
       }
     }
