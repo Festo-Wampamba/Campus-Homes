@@ -31,14 +31,27 @@ describe('authentication security boundaries', () => {
     expect(providerAssuranceFailure({ amr: ['pwd', 'mfa'] }, now, true, true, now)).toBe('missing_auth_time');
     expect(providerAssuranceFailure({ auth_time: (now - 120_000) / 1000, acr: 'urn:logto:acr:mfa', amr: ['pwd', 'mfa'] }, now, true, true, now))
       .toBe('stale_authentication');
-    expect(providerAssuranceFailure({ auth_time: now / 1000, acr: 'urn:logto:acr:1fa', amr: ['pwd', 'otp'] }, now, true, true, now))
+    // Fresh auth, no signed MFA proof, and no operator assertion → denied.
+    expect(providerAssuranceFailure({ auth_time: now / 1000, acr: 'urn:logto:acr:1fa', amr: ['pwd', 'otp'] }, now, true, false, now))
       .toBe('missing_mfa_claim');
+  });
+  it('accepts fresh staff auth under operator-asserted mandatory MFA when Logto omits acr/amr', () => {
+    // Released Logto (<= v1.43) emits neither acr nor amr; MFA is guaranteed by
+    // Logto's mandatory-MFA policy, asserted via LOGTO_MFA_POLICY_VERIFIED.
+    const claims = { auth_time: now / 1000 };
+    expect(providerAssurance(claims, now, true, true, now).mfaVerified).toBe(true);
+    expect(providerAssuranceFailure(claims, now, true, true, now)).toBeNull();
+    // Without the operator assertion, absent proof is still denied.
+    expect(providerAssuranceFailure(claims, now, true, false, now)).toBe('missing_mfa_claim');
+    // A stale authentication is denied even under the operator assertion.
+    expect(providerAssuranceFailure({ auth_time: (now - 120_000) / 1000 }, now, true, true, now))
+      .toBe('stale_authentication');
   });
   it.each([
     {}, { amr: ['mfa'] }, { auth_time: now / 1000, mfaEnrolled: true },
     { auth_time: (now - 120_000) / 1000, amr: ['mfa'] },
     { auth_time: (now + 120_000) / 1000, amr: ['mfa'] },
-  ])('does not invent assurance from absent, stale or invalid evidence', (claims) => {
-    expect(providerAssurance(claims, now, true, true, now).mfaVerified).toBe(false);
+  ])('does not invent assurance from absent, stale or invalid evidence without the operator assertion', (claims) => {
+    expect(providerAssurance(claims, now, true, false, now).mfaVerified).toBe(false);
   });
 });
