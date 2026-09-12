@@ -163,10 +163,11 @@ export class AdminDashboardService {
     });
   }
 
-  users(granted: Set<string>) {
+  users(granted: Set<string>, includeDeleted = false) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const result = await client.query(`
         SELECT u.id, u.name, u.email, u.phone, u.role::text, u.status::text,
+               u.deleted_at AS "deletedAt", u.deletion_reason AS "deletionReason",
                u.email_verified AS "emailVerified", u.phone_verified AS "phoneVerified",
                -- Which providers a user signed in with lived in Better Auth's
                -- accounts table; Logto owns that now and it isn't locally
@@ -186,12 +187,12 @@ export class AdminDashboardService {
         LEFT JOIN user_role_assignments ura ON ura.user_id = u.id AND ura.revoked_at IS NULL
           AND ura.valid_from <= now() AND (ura.valid_until IS NULL OR ura.valid_until > now())
         LEFT JOIN roles r ON r.id = ura.role_id
-        WHERE u.deleted_at IS NULL AND ((u.role = 'student' AND $1::boolean)
+        WHERE (u.deleted_at IS NULL) <> $4::boolean AND ((u.role = 'student' AND $1::boolean)
            OR (u.role = 'landlord' AND $2::boolean)
            OR (u.role IN ('admin', 'ops_lead', 'ops_inspector', 'custodian', 'property_worker') AND $3::boolean))
         GROUP BY u.id, s.university, l.kyc_status
         ORDER BY u.created_at DESC LIMIT 250
-      `, [granted.has('students.read'), granted.has('landlords.read'), granted.has('staff.read')]);
+      `, [granted.has('students.read'), granted.has('landlords.read'), granted.has('staff.read'), includeDeleted]);
       return { rows: result.rows, asOf: new Date().toISOString(), limit: 250 };
     });
   }

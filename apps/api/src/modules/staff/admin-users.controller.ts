@@ -62,6 +62,12 @@ export class AdminUsersController {
     return this.users.softDelete(rlsCtx(req), req.permissions, id, body.reason);
   }
 
+  @Post(':id/purge')
+  @RequirePermission('users.purge')
+  purge(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.users.purgeUser(rlsCtx(req), req.permissions, id);
+  }
+
   @Post(':id/sessions/revoke')
   @RequirePermission('users.update')
   revokeSessions(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {

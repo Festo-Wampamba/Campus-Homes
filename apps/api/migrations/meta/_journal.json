@@ -260,6 +260,13 @@
       "when": 1788320000000,
       "tag": "0037_permanent_units",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0038_user_purge",
+      "breakpoints": true
     }
   ]
 }
