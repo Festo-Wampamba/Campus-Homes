@@ -120,8 +120,10 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
   }
 
   async function removeUser(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!selected) return; setPending(true); setNotice(null);
+    event.preventDefault(); if (!selected) return;
     const data = new FormData(event.currentTarget);
+    if (!window.confirm(`Are you sure you want to revoke all access and delete ${selected.name || "this user"}? This cannot be undone.`)) return;
+    setPending(true); setNotice(null);
     try { await api(`/admin/users/${selected.id}`, { method: "DELETE", body: JSON.stringify({ reason: String(data.get("reason")) }) }); setNotice("User access revoked and account soft-deleted."); router.refresh(); setTimeout(() => close(), 700); }
     catch (error) { setNotice(error instanceof ApiError && error.status === 401 ? "Deleting a user needs a recent sign-in — sign out, sign back in, then retry." : apiErrorMessage(error, "The user could not be deleted.")); } finally { setPending(false); }
   }
