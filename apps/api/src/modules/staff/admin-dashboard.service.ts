@@ -191,10 +191,13 @@ export class AdminDashboardService {
                coalesce(nullif(u.name, ''), l.legal_name) AS "landlordName",
                l.kyc_status::text AS "landlordKycStatus",
                li.id AS "listingId", li.status::text AS "listingStatus", li.verified_at AS "verifiedAt",
-               (SELECT count(*)::int FROM units un WHERE un.listing_id = li.id) AS "unitCount",
+               (SELECT count(*)::int FROM units un
+                 WHERE un.property_id = p.id
+                   AND EXISTS (SELECT 1 FROM unit_semester_pricing usp
+                     WHERE usp.unit_id = un.id AND usp.semester_id = li.semester_id)) AS "unitCount",
                (SELECT count(*)::int FROM property_media pm WHERE pm.property_id = p.id) AS "imageCount",
-               (SELECT count(*)::int FROM units un JOIN listings ux ON ux.id = un.listing_id
-                 WHERE ux.property_id = p.id AND un.operational_status IN ('available', 'vacant')) AS "availableUnits",
+               (SELECT count(*)::int FROM units un
+                 WHERE un.property_id = p.id AND un.operational_status IN ('available', 'vacant')) AS "availableUnits",
                vv.result::text AS "latestVisitResult", vv.scheduled_at AS "visitScheduledAt"
         FROM properties p
         JOIN landlords l ON l.user_id = p.landlord_id
@@ -243,8 +246,7 @@ export class AdminDashboardService {
         JOIN users su ON su.id = r.student_id
         JOIN beds b ON b.id = r.bed_id
         JOIN units un ON un.id = b.unit_id
-        JOIN listings li ON li.id = un.listing_id
-        JOIN properties p ON p.id = li.property_id
+        JOIN properties p ON p.id = un.property_id
         ORDER BY r.created_at DESC LIMIT 250
       `);
       return { rows: result.rows, asOf: new Date().toISOString(), limit: 250 };
@@ -310,12 +312,15 @@ export class AdminDashboardService {
       const catchments = await client.query(`
         SELECT p.catchment::text,
                count(DISTINCT p.id)::int AS properties,
-               count(DISTINCT li.id) FILTER (WHERE li.status = 'verified')::int AS "verifiedListings",
+               -- Rooms are property-level now, so listings can't share the
+               -- revenue join without cartesian-inflating the payment sum;
+               -- count verified listings per catchment on their own path.
+               (SELECT count(*)::int FROM listings li JOIN properties lp ON lp.id = li.property_id
+                 WHERE lp.catchment = p.catchment AND li.status = 'verified') AS "verifiedListings",
                count(DISTINCT r.id)::int AS reservations,
                coalesce(sum(pay.amount_ugx) FILTER (WHERE pay.status = 'succeeded'), 0)::bigint AS "revenueUgx"
         FROM properties p
-        LEFT JOIN listings li ON li.property_id = p.id
-        LEFT JOIN units un ON un.listing_id = li.id
+        LEFT JOIN units un ON un.property_id = p.id
         LEFT JOIN beds bd ON bd.unit_id = un.id
         LEFT JOIN reservations r ON r.bed_id = bd.id
         LEFT JOIN payments pay ON pay.reservation_id = r.id

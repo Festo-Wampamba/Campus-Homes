@@ -22,13 +22,17 @@ export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function approve(userId: string) {
+    const name = rows.find((r) => r.userId === userId)?.name || "This landlord";
     setPendingId(userId);
     setError(null);
+    setNotice(null);
     try {
       await api(`/admin/landlord-accounts/${userId}/approve`, { method: "POST" });
       setRows((current) => current.filter((r) => r.userId !== userId));
+      setNotice(`${name} approved — they can now sign in and access the landlord portal.`);
     } catch (err) {
       setError(apiErrorMessage(err, "Couldn't approve this account — try again."));
     } finally {
@@ -40,6 +44,7 @@ export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: 
     if (!reason.trim()) return;
     setPendingId(userId);
     setError(null);
+    setNotice(null);
     try {
       await api(`/admin/landlord-accounts/${userId}/reject`, {
         method: "POST",
@@ -55,13 +60,29 @@ export function LandlordAccountsManager({ initialAccounts }: { initialAccounts: 
     }
   }
 
+  const banners = (
+    <>
+      {notice && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+          {notice}
+        </p>
+      )}
+      {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
+    </>
+  );
+
   if (rows.length === 0) {
-    return <p className="mt-6 text-sm text-muted-foreground">No landlord accounts awaiting approval.</p>;
+    return (
+      <div className="mt-6 space-y-3">
+        {banners}
+        <p className="text-sm text-muted-foreground">No landlord accounts awaiting approval.</p>
+      </div>
+    );
   }
 
   return (
     <div className="mt-6 space-y-3">
-      {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
+      {banners}
       {rows.map((row) => (
         <Card key={row.userId}>
           <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">

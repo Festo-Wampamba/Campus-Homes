@@ -135,7 +135,7 @@ export class AdminExportsService {
                  count(DISTINCT un.id) FILTER (WHERE un.operational_status IN ('available','vacant'))::int AS "availableUnits",
                  p.created_at AS "createdAt"
           FROM properties p JOIN landlords l ON l.user_id = p.landlord_id JOIN users u ON u.id = p.landlord_id
-          LEFT JOIN listings li ON li.property_id = p.id LEFT JOIN units un ON un.listing_id = li.id
+          LEFT JOIN units un ON un.property_id = p.id
           WHERE p.created_at::date BETWEEN $1::date AND $2::date
             AND ($3 = 'all' OR p.catchment::text = $3)
             AND (cardinality($4::text[]) = 0 OR p.status::text = ANY($4::text[]) OR p.operational_status = ANY($4::text[]))
@@ -151,7 +151,7 @@ export class AdminExportsService {
                  r.payment_method::text AS "paymentMethod", r.created_at AS "createdAt"
           FROM reservations r JOIN users u ON u.id = r.student_id JOIN beds bd ON bd.id = r.bed_id
           JOIN units un ON un.id = bd.unit_id
-          JOIN listings li ON li.id = un.listing_id JOIN properties p ON p.id = li.property_id
+          JOIN properties p ON p.id = un.property_id
           WHERE r.created_at::date BETWEEN $1::date AND $2::date
             AND ($3 = 'all' OR p.catchment::text = $3)
             AND (cardinality($4::text[]) = 0 OR r.status::text = ANY($4::text[]))
@@ -166,8 +166,8 @@ export class AdminExportsService {
                  p.name AS property, p.catchment::text, r.id AS "reservationId",
                  pay.webhook_verified AS "webhookVerified", pay.created_at AS "createdAt"
           FROM payments pay JOIN reservations r ON r.id = pay.reservation_id
-          JOIN beds bd ON bd.id = r.bed_id JOIN units un ON un.id = bd.unit_id JOIN listings li ON li.id = un.listing_id
-          JOIN properties p ON p.id = li.property_id
+          JOIN beds bd ON bd.id = r.bed_id JOIN units un ON un.id = bd.unit_id
+          JOIN properties p ON p.id = un.property_id
           WHERE pay.created_at::date BETWEEN $1::date AND $2::date
             AND ($3 = 'all' OR p.catchment::text = $3)
             AND (cardinality($4::text[]) = 0 OR pay.status::text = ANY($4::text[]))
@@ -206,11 +206,14 @@ export class AdminExportsService {
       if (input.reportType === 'catchments') {
         return (await client.query(`
           SELECT p.catchment::text AS catchment, count(DISTINCT p.id)::int AS properties,
-                 count(DISTINCT li.id) FILTER (WHERE li.status = 'verified')::int AS "verifiedListings",
+                 -- Rooms are property-level now; count verified listings on their
+                 -- own path so they can't cartesian-inflate the payment sum.
+                 (SELECT count(*)::int FROM listings li JOIN properties lp ON lp.id = li.property_id
+                   WHERE lp.catchment = p.catchment AND li.status = 'verified') AS "verifiedListings",
                  count(DISTINCT un.id)::int AS units,
                  count(DISTINCT r.id)::int AS reservations,
                  coalesce(sum(pay.amount_ugx) FILTER (WHERE pay.status = 'succeeded'),0)::bigint AS "revenueUgx"
-          FROM properties p LEFT JOIN listings li ON li.property_id = p.id LEFT JOIN units un ON un.listing_id = li.id
+          FROM properties p LEFT JOIN units un ON un.property_id = p.id
           LEFT JOIN beds bd ON bd.unit_id = un.id
           LEFT JOIN reservations r ON r.bed_id = bd.id AND r.created_at::date BETWEEN $1::date AND $2::date
           LEFT JOIN payments pay ON pay.reservation_id = r.id
