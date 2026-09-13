@@ -2,7 +2,7 @@ import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/comm
 
 import { RlsDb } from '../../db/db.module';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
-import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
+import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { updateSelfParticulars } from '../profile/particulars';
 import { UpdateSelfParticularsDto, UpsertLandlordProfileDto } from './landlords.dto';
 import { LandlordsService } from './landlords.service';
@@ -21,12 +21,14 @@ export class LandlordsController {
   }
 
   @Get('me')
+  @AllowPendingLandlord()
   @Roles('landlord')
   me(@Req() req: AuthenticatedRequest) {
     return this.landlords.me(rlsCtx(req));
   }
 
   @Post('profile')
+  @AllowPendingLandlord()
   @Roles('landlord')
   upsertProfile(@Req() req: AuthenticatedRequest, @Body() body: UpsertLandlordProfileDto) {
     return this.landlords.upsertProfile(rlsCtx(req), body);

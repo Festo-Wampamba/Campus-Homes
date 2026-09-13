@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { and, eq, exists } from 'drizzle-orm';
 
 import type {
   PendingLandlordAccount,
@@ -9,8 +9,9 @@ import type {
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
-import { landlords, users } from '../../db/schema';
+import { landlords, properties, users } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { assignRoleInTransaction } from '../staff/role-assignment.service';
 
 const SERVICE_CTX: RlsContext = {
@@ -23,11 +24,13 @@ export class LandlordsService {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  /** Adds landlord access to the already authenticated identity without
-   * replacing student or other access. Property/KYC approval remains a
-   * separate publication control in the onboarding workflow. */
+  /** Adds the application-only landlord role to an existing identity. The
+   * assignment intentionally permits only onboarding until the reviewer
+   * verifies the landlord profile; normal landlord operations are guarded by
+   * RolesGuard's approval check. */
   enroll(ctx: RlsContext) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const user = (await client.query<{ id: string; status: string; deletedAt: Date | null }>(`
@@ -51,16 +54,36 @@ export class LandlordsService {
     });
   }
 
-  // Ops lead / admin review queue (landlords.review_kyc — same permission
-  // that already gates the KYC queue; this is the earlier gate in the same
-  // reviewer's workflow, not a separate role).
+  // The account-review queue is the landlord's submitted identity plus at
+  // least one submitted property. Looking at users.status was the original
+  // bug: self-enrolment keeps the shared (often student) identity active, so
+  // those landlords never appeared here despite having a pending KYC record.
   pendingAccounts(): Promise<PendingLandlordAccount[]> {
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
       const rows = await db
         .select({ userId: users.id, name: users.name, phone: users.phone, createdAt: users.createdAt })
         .from(users)
-        .where(and(eq(users.role, 'landlord'), eq(users.status, 'pending')))
-        .orderBy(users.createdAt);
+        .innerJoin(landlords, eq(landlords.userId, users.id))
+        .where(and(
+          eq(users.status, 'active'),
+          eq(landlords.kycStatus, 'pending'),
+          exists(
+            db.select({ id: properties.id }).from(properties).where(eq(properties.landlordId, users.id)),
+          ),
+        ))
+        .orderBy(landlords.createdAt);
+      return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+    });
+  }
+
+  approvedAccounts(): Promise<PendingLandlordAccount[]> {
+    return this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const rows = await db
+        .select({ userId: users.id, name: users.name, phone: users.phone, createdAt: users.createdAt })
+        .from(users)
+        .innerJoin(landlords, eq(landlords.userId, users.id))
+        .where(and(eq(users.status, 'active'), eq(landlords.kycStatus, 'verified')))
+        .orderBy(landlords.kycReviewedAt);
       return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
     });
   }
@@ -68,37 +91,44 @@ export class LandlordsService {
   async approveAccount(actor: RlsContext, userId: string) {
     const approved = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const { rows } = await client.query<{ id: string }>(
-        `UPDATE users SET status = 'active'
-         WHERE id = $1 AND role = 'landlord' AND status = 'pending' RETURNING id`,
-        [userId],
+        `UPDATE landlords SET kyc_status = 'verified', kyc_reviewed_by = $2, kyc_reviewed_at = now()
+         WHERE user_id = $1 AND kyc_status = 'pending' RETURNING user_id AS id`,
+        [userId, actor.userId],
       );
       if (!rows[0]) return false;
-      // Flipping status alone left access riding on the legacy consumer
-      // fallback in access-resolver (disabled the moment the account gains any
-      // other assignment). Grant the landlord role authoritatively — same
-      // scope enroll() uses — so approval actually confers portal access.
-      await assignRoleInTransaction(client, actor, userId, {
-        roleKey: 'landlord',
-        scopeType: 'own',
-        reason: 'Landlord account approved',
-      });
+      await client.query(
+        `UPDATE properties SET status = 'active'
+         WHERE landlord_id = $1 AND status = 'pending_kyc'`,
+        [userId],
+      );
       return true;
     });
-    if (!approved) throw new NotFoundException('No pending landlord account found for that user');
+    if (!approved) throw new NotFoundException('No submitted landlord application awaiting approval was found');
     await this.audit.record(actor, 'landlord_account.approve', 'user', userId, {});
+    await this.notifications?.notify(userId, 'landlord.application_approved', 'in_app', {
+      message: 'Your landlord application has been approved. Your dashboard and property tools are now available.',
+      href: '/landlord',
+    });
     return { approved: true };
   }
 
   async rejectAccount(actor: RlsContext, userId: string, input: RejectLandlordAccountInput) {
     const [row] = await this.rlsDb.run(SERVICE_CTX, (db) =>
       db
-        .update(users)
-        .set({ status: 'suspended', notes: input.reason })
-        .where(and(eq(users.id, userId), eq(users.role, 'landlord'), eq(users.status, 'pending')))
-        .returning({ id: users.id }),
+        .update(landlords)
+        .set({ kycStatus: 'rejected', kycReviewedBy: actor.userId, kycReviewedAt: new Date() })
+        .where(and(eq(landlords.userId, userId), eq(landlords.kycStatus, 'pending')))
+        .returning({ id: landlords.userId }),
     );
     if (!row) throw new NotFoundException('No pending landlord account found for that user');
+    await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db.update(users).set({ notes: input.reason, updatedAt: new Date() }).where(eq(users.id, userId)),
+    );
     await this.audit.record(actor, 'landlord_account.reject', 'user', userId, { reason: input.reason });
+    await this.notifications?.notify(userId, 'landlord.application_rejected', 'in_app', {
+      message: `Your landlord application was not approved. ${input.reason}`,
+      href: '/landlord/approval-pending',
+    });
     return { rejected: true };
   }
 

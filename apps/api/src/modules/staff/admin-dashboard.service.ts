@@ -95,7 +95,9 @@ export class AdminDashboardService {
           (SELECT count(*) FROM reservations)::text AS reservations,
           (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '30 days')::text AS "reservations30d",
           (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorReservations30d",
-          (SELECT count(*) FROM landlords WHERE kyc_status = 'pending')::text AS "pendingKyc",
+          (SELECT count(*) FROM landlords l JOIN users u ON u.id=l.user_id
+            WHERE l.kyc_status='pending' AND u.status='active' AND u.deleted_at IS NULL
+              AND EXISTS (SELECT 1 FROM properties p WHERE p.landlord_id=l.user_id))::text AS "pendingKyc",
           (SELECT count(*) FROM verification_visits
             WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
           (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
@@ -244,6 +246,7 @@ export class AdminDashboardService {
                l.kyc_status::text AS status, l.created_at AS "submittedAt",
                l.kyc_reviewed_at AS "reviewedAt"
         FROM landlords l JOIN users u ON u.id = l.user_id
+        WHERE u.deleted_at IS NULL AND u.status = 'active'
         ORDER BY CASE l.kyc_status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 200
       `) : { rows: [] };
       return { visits: visits.rows, landlordKyc: kyc.rows, asOf: new Date().toISOString() };

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-export const CALENDAR_EVENT_TYPES = ['task', 'reminder', 'activity'] as const;
+// `activity` is retained for existing rows created before the dedicated
+// event choice was introduced. New personal calendar entries use `event`.
+export const CALENDAR_EVENT_TYPES = ['task', 'event', 'reminder', 'activity'] as const;
 export type CalendarEventType = (typeof CALENDAR_EVENT_TYPES)[number];
 
 export const createCalendarEventSchema = z.object({

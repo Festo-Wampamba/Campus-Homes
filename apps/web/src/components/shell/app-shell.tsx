@@ -32,10 +32,10 @@ import { Wordmark } from "@/components/shell/wordmark";
 
 type NotificationRow = {
   id: string;
-  actorName: string;
-  action: string;
-  targetType: string;
-  ts: string;
+  templateKey: string;
+  payload: { message?: string; href?: string; threadId?: string };
+  createdAt: string;
+  readAt: string | null;
 };
 
 export interface AppNavItem {
@@ -68,6 +68,8 @@ function Sidebar({
   collapsed,
   portalLabel,
   homeHref,
+  attentionHrefs = new Set<string>(),
+  attentionCounts = new Map<string, number>(),
 }: {
   nav: AppNavItem[];
   pathname: string;
@@ -75,6 +77,8 @@ function Sidebar({
   collapsed?: boolean;
   portalLabel: string;
   homeHref: string;
+  attentionHrefs?: Set<string>;
+  attentionCounts?: Map<string, number>;
 }) {
   const active = activeHref(pathname, nav);
   const groups = useMemo(() => {
@@ -113,6 +117,8 @@ function Sidebar({
               <div className="space-y-1">
                 {items.map((item) => {
                   const selected = active === item.href;
+                  const needsAttention = attentionHrefs.has(item.href);
+                  const attentionCount = attentionCounts.get(item.href) ?? 0;
                   return (
                     <Link
                       key={item.href}
@@ -126,10 +132,11 @@ function Sidebar({
                         selected ? "bg-accent text-teal-700 dark:bg-teal-500/16 dark:text-teal-300" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
                     >
-                      <span className={cn("shrink-0", selected ? "text-teal-700 dark:text-teal-300" : "text-muted-foreground group-hover:text-foreground")}>
+                      <span className={cn("relative shrink-0", selected ? "text-teal-700 dark:text-teal-300" : "text-muted-foreground group-hover:text-foreground")}>
                         {item.icon}
+                        {needsAttention && <span aria-label="Action required" className="absolute -right-1.5 -top-1 size-2 rounded-full border border-card bg-red-500" />}
                       </span>
-                      {!collapsed && item.label}
+                      {!collapsed && <><span className="min-w-0 flex-1 truncate">{item.label}</span>{attentionCount > 0 && <span aria-label={`${attentionCount} unread`} className="grid min-w-5 place-items-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{attentionCount > 99 ? "99+" : attentionCount}</span>}</>}
                     </Link>
                   );
                 })}
@@ -167,9 +174,9 @@ export function AppShell({
   profileHref?: string;
   /** Shows a "Settings" link in the account menu when provided. */
   settingsHref?: string;
-  /** Shows the notification bell + "Audit log" account-menu link together,
-   * fetching from `notificationsEndpoint` (defaults to /admin/audit). */
+  /** Optional audit-log shortcut for privileged workspaces. */
   auditLogHref?: string;
+  /** In-app notification feed. Every workspace uses `/notifications`. */
   notificationsEndpoint?: string;
   /** Portal-specific header widget (e.g. ops' offline-sync indicator). */
   headerExtra?: React.ReactNode;
@@ -185,8 +192,25 @@ export function AppShell({
   const notifMenuRef = useRef<HTMLDivElement | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[] | null>(null);
   const [notifError, setNotifError] = useState(false);
+  const [messageToast, setMessageToast] = useState<NotificationRow | null>(null);
+  const knownNotificationIds = useRef<Set<string> | null>(null);
+  const baseDocumentTitle = useRef<string | null>(null);
   const [query, setQuery] = useState("");
   const matches = useMemo(() => nav.filter((item) => `${item.label} ${item.group ?? ""}`.toLowerCase().includes(query.toLowerCase())), [nav, query]);
+  const unreadNotifications = useMemo(() => notifications?.filter((item) => !item.readAt) ?? [], [notifications]);
+  const attentionHrefs = useMemo(() => new Set(
+    unreadNotifications
+      .map((item) => item.payload?.href)
+      .filter((href): href is string => Boolean(href && nav.some((item) => item.href === href))),
+  ), [nav, unreadNotifications]);
+  const attentionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of unreadNotifications) {
+      const href = item.payload?.href;
+      if (href && nav.some((navItem) => navItem.href === href)) counts.set(href, (counts.get(href) ?? 0) + 1);
+    }
+    return counts;
+  }, [nav, unreadNotifications]);
 
   useEffect(() => {
     if (!userMenuOpen && !notifOpen) return;
@@ -209,11 +233,20 @@ export function AppShell({
   }, [userMenuOpen, notifOpen]);
 
   useEffect(() => {
-    if (!notifOpen || !auditLogHref || notifications !== null) return;
+    if (!notificationsEndpoint) return;
     let cancelled = false;
-    api<{ rows: NotificationRow[] }>(notificationsEndpoint ?? "/admin/audit")
+    const load = () => api<NotificationRow[]>(notificationsEndpoint)
       .then((data) => {
-        if (!cancelled) setNotifications(data.rows.slice(0, 6));
+        if (!cancelled) {
+          const next = data.slice(0, 50);
+          if (knownNotificationIds.current) {
+            const newestMessage = next.find((item) => !item.readAt && item.templateKey === "chat.message_received" && !knownNotificationIds.current?.has(item.id));
+            if (newestMessage && pathname !== newestMessage.payload.href) setMessageToast(newestMessage);
+          }
+          knownNotificationIds.current = new Set(next.map((item) => item.id));
+          setNotifications(next);
+          setNotifError(false);
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -221,21 +254,43 @@ export function AppShell({
           setNotifError(true);
         }
       });
+    void load();
+    const refresh = () => { void load(); };
+    window.addEventListener("campushomes:notifications-refresh", refresh);
+    const interval = window.setInterval(load, 5_000);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("campushomes:notifications-refresh", refresh);
     };
-  }, [notifOpen, notifications, auditLogHref, notificationsEndpoint]);
+  }, [notificationsEndpoint, pathname]);
+
+  useEffect(() => {
+    const count = unreadNotifications.filter((item) => item.templateKey === "chat.message_received").length;
+    baseDocumentTitle.current ??= document.title;
+    document.title = count > 0 ? `(${count}) ${baseDocumentTitle.current}` : baseDocumentTitle.current;
+    return () => { if (baseDocumentTitle.current) document.title = baseDocumentTitle.current; };
+  }, [unreadNotifications]);
+
+  function markNotificationRead(id: string) {
+    setNotifications((current) => current?.map((item) => (
+      item.id === id ? { ...item, readAt: new Date().toISOString() } : item
+    )) ?? current);
+    void api(`/notifications/${id}/read`, { method: "POST" }).catch(() => {
+      // A later poll restores the server state if this optimistic update fails.
+    });
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className={cn("fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 lg:block", collapsed ? "w-16" : "w-62")}>
-        <Sidebar nav={nav} pathname={pathname} collapsed={collapsed} portalLabel={portalLabel} homeHref={homeHref} />
+        <Sidebar nav={nav} pathname={pathname} collapsed={collapsed} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
       </aside>
       {menuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button aria-label="Close navigation" className="absolute inset-0 bg-slate-950/60" onClick={() => setMenuOpen(false)} />
           <aside className="relative h-full w-72 max-w-[86vw] shadow-2xl">
-            <Sidebar nav={nav} pathname={pathname} close={() => setMenuOpen(false)} portalLabel={portalLabel} homeHref={homeHref} />
+            <Sidebar nav={nav} pathname={pathname} close={() => setMenuOpen(false)} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
           </aside>
         </div>
       )}
@@ -257,7 +312,7 @@ export function AppShell({
           <div className="ml-auto flex items-center gap-2">
             {headerExtra}
             <ThemeToggle />
-            {auditLogHref && (
+            {notificationsEndpoint && (
               <div ref={notifMenuRef} className="relative">
                 <button
                   type="button"
@@ -268,27 +323,24 @@ export function AppShell({
                   className="relative grid size-10 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 dark:text-muted-foreground dark:hover:bg-muted"
                 >
                   <Bell aria-hidden className="size-4.5" />
-                  {!!notifications?.length && <span className="absolute right-2 top-2 size-1.5 rounded-full bg-coral-500" />}
+                  {!!unreadNotifications.length && <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />}
                 </button>
                 {notifOpen && (
                   <div role="menu" aria-label="Notifications" className="absolute right-0 top-full z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
                     <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
-                      <p className="text-sm font-bold text-slate-900 dark:text-foreground">Recent activity</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-foreground">Notifications</p>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
                       {notifications === null && <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-muted-foreground">Loading…</p>}
                       {notifications !== null && notifError && <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-muted-foreground">Couldn&apos;t load recent activity.</p>}
                       {notifications !== null && !notifError && !notifications.length && <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-muted-foreground">Nothing new.</p>}
-                      {notifications !== null && !notifError && notifications.map((item) => (
-                        <div key={item.id} className="border-b border-slate-100 px-4 py-3 last:border-0 dark:border-border">
-                          <p className="truncate text-sm font-semibold text-slate-800 dark:text-foreground">{item.actorName} · {item.action}</p>
-                          <p className="truncate text-xs text-slate-500 dark:text-muted-foreground">{item.targetType} · {new Date(item.ts).toLocaleString()}</p>
-                        </div>
-                      ))}
+                      {notifications !== null && !notifError && notifications.map((item) => {
+                        const content = <><p className="text-sm font-semibold text-slate-800 dark:text-foreground">{item.payload?.message ?? item.templateKey}</p><p className="mt-1 text-xs text-slate-500 dark:text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p></>;
+                        const className = cn("block border-b border-slate-100 px-4 py-3 last:border-0 dark:border-border", !item.readAt && "bg-teal-50/60 dark:bg-teal-500/10");
+                        return item.payload?.href ? <Link key={item.id} href={item.payload.href} onClick={() => { markNotificationRead(item.id); setNotifOpen(false); }} className={className}>{content}</Link> : <button key={item.id} type="button" onClick={() => markNotificationRead(item.id)} className={cn(className, "w-full text-left")}>{content}</button>;
+                      })}
                     </div>
-                    <Link href={auditLogHref} onClick={() => setNotifOpen(false)} className="block px-4 py-3 text-center text-sm font-bold text-teal-700 transition-colors hover:bg-slate-50 dark:hover:bg-muted">
-                      View details
-                    </Link>
+                    {auditLogHref && <Link href={auditLogHref} onClick={() => setNotifOpen(false)} className="block px-4 py-3 text-center text-sm font-bold text-teal-700 transition-colors hover:bg-slate-50 dark:hover:bg-muted">View audit log</Link>}
                   </div>
                 )}
               </div>
@@ -346,6 +398,16 @@ export function AppShell({
         </header>
         <main className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
       </div>
+
+      {messageToast && (
+        <div role="status" className="fixed bottom-5 right-5 z-50 w-[min(24rem,calc(100vw-2.5rem))] rounded-xl border border-teal-200 bg-white p-4 shadow-2xl dark:border-teal-800 dark:bg-card">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-100"><Bell aria-hidden className="size-4 text-teal-700" /></span>
+            <div className="min-w-0 flex-1"><p className="font-bold">New message</p><p className="mt-0.5 text-sm text-muted-foreground">{messageToast.payload.message ?? "You received a new message."}</p><div className="mt-3 flex gap-2">{messageToast.payload.href && <Link href={`${messageToast.payload.href}${messageToast.payload.threadId ? `?thread=${messageToast.payload.threadId}` : ""}`} onClick={() => { markNotificationRead(messageToast.id); setMessageToast(null); }} className="rounded-md bg-teal-700 px-3 py-1.5 text-xs font-bold text-white">View message</Link>}<button type="button" onClick={() => setMessageToast(null)} className="rounded-md border border-border px-3 py-1.5 text-xs font-bold">Dismiss</button></div></div>
+            <button type="button" aria-label="Dismiss notification" onClick={() => setMessageToast(null)}><X aria-hidden className="size-4" /></button>
+          </div>
+        </div>
+      )}
 
       {searchOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/55 px-4 pt-[12vh]" onMouseDown={() => setSearchOpen(false)}>

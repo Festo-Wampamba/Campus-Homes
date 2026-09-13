@@ -13,6 +13,7 @@ export default async function StudentLayout({
       user={session.user}
       access={session.access}
       homeHref="/"
+      notificationsEndpoint="/notifications"
       nav={[
         { label: "Find housing", href: "/search", icon: <Search aria-hidden className="size-4 shrink-0" /> },
         { label: "My reservations", href: "/reservations", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
