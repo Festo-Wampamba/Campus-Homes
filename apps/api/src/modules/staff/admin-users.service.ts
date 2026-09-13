@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import type {
   AdminPermissionGrantInput,
   AdminRoleAssignmentInput,
@@ -357,71 +358,43 @@ export class AdminUsersService {
     return result;
   }
 
-  async softDelete(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string) {
+  /** Hard-deletes an active user and everything they own in one step — no
+   * recoverable soft-delete stage, so the account (and its inflated dashboard
+   * counts) disappears immediately. Runs the same footprint cascade as
+   * purgeUser. Keeps the self-delete, super-admin tier, and last-active-
+   * super-admin guards so an admin can't lock everyone out. */
+  async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
-    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      try {
-        const target = (await client.query<{ id: string; isSuperAdmin: boolean }>(`
-          SELECT u.id, EXISTS (
-            SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
-            WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
-          ) AS "isSuperAdmin"
-          FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
-        `, [userId])).rows[0];
-        if (!target) throw new NotFoundException('User not found');
-        if (target.isSuperAdmin) {
-          if (!actorPermissions.has('roles.manage_super_admin')) {
-            throw new ForbiddenException('Only a Super Admin can delete a Super Admin');
-          }
-          const count = Number((await client.query(`
-            SELECT count(DISTINCT ura.user_id) AS count
-            FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id JOIN users u ON u.id = ura.user_id
-            WHERE r.key = 'super_admin' AND ura.revoked_at IS NULL AND u.deleted_at IS NULL AND u.status = 'active'
-          `)).rows[0]?.count ?? 0);
-          if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
+    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const target = (await client.query<{ id: string; isSuperAdmin: boolean }>(`
+        SELECT u.id, EXISTS (
+          SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
+          WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
+        ) AS "isSuperAdmin"
+        FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
+      `, [userId])).rows[0];
+      if (!target) throw new NotFoundException('User not found');
+      if (target.isSuperAdmin) {
+        if (!actorPermissions.has('roles.manage_super_admin')) {
+          throw new ForbiddenException('Only a Super Admin can delete a Super Admin');
         }
-
-        // email/phone keep their plain UNIQUE constraints (not partial on
-        // deleted_at), and Better Auth's own sign-up lookup has no idea about
-        // our deleted_at convention anyway — leaving them intact permanently
-        // blocks the same person from ever signing up again. Mangle both to a
-        // deterministic, guaranteed-unique value derived from the row's own
-        // id so they're freed for reuse immediately; the row (and its id)
-        // stays intact for audit_log/FK history.
-        await client.query(
-          `UPDATE users SET status = 'suspended', deleted_at = now(), deletion_reason = $2, updated_at = now(),
-                  email = 'deleted-' || id || '@deleted.campushomes.internal', phone = NULL
-           WHERE id = $1`,
-          [userId, reason],
-        );
-        await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
-        await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
-        await client.query('UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
-        await client.query(`UPDATE property_memberships SET status = 'revoked', revoked_at = now(), revoked_by = $2, revocation_reason = $3 WHERE user_id = $1 AND revoked_at IS NULL`, [userId, actor.userId, reason]);
-        // Mirrors enforce_strike_suspension() (0001_rls_hardening.sql): a
-        // deleted landlord's previously-verified listings must stop being
-        // publicly searchable immediately, not just vanish from admin lists.
-        await client.query(
-          `UPDATE listings SET status = 'suspended'
-           WHERE status = 'verified' AND property_id IN (SELECT id FROM properties WHERE landlord_id = $1)`,
-          [userId],
-        );
-        return { id: userId, deleted: true };
-      } catch (error) {
-        throw error;
+        const count = Number((await client.query(`
+          SELECT count(DISTINCT ura.user_id) AS count
+          FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id JOIN users u ON u.id = ura.user_id
+          WHERE r.key = 'super_admin' AND ura.revoked_at IS NULL AND u.deleted_at IS NULL AND u.status = 'active'
+        `)).rows[0]?.count ?? 0);
+        if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
       }
+      await this.runPurgeCascade(client, userId);
     });
     await this.audit.record(actor, 'users.delete', 'user', userId, { reason });
-    return result;
+    return { id: userId, deleted: true };
   }
 
-  /** Hard-deletes a soft-deleted user and everything they own (properties and
-   * their whole subtree, reservations, the student/landlord profile, RBAC
-   * rows, chat). Historical records that merely reference the person as an
-   * actor (audit_log, who-reviewed/uploaded/assigned) are anonymized to NULL
-   * so the event survives without the identity. Requires the account to be
-   * soft-deleted first (two-step safety); super-admin targets need the
-   * super-admin tier permission, same as softDelete. */
+  /** Cleanup path for accounts already soft-deleted by the legacy two-step
+   * flow: permanently removes the row and its whole footprint (same cascade as
+   * deleteUser). Requires the account to be soft-deleted first; super-admin
+   * targets need the super-admin tier permission. */
   async purgeUser(actor: RlsContext, actorPermissions: Set<string>, userId: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot purge your own account');
     await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
@@ -437,10 +410,21 @@ export class AdminUsersService {
       if (target.isSuperAdmin && !actorPermissions.has('roles.manage_super_admin')) {
         throw new ForbiddenException('Only a Super Admin can purge a Super Admin');
       }
-      // Seed the target set, then derive and remove its whole footprint. The
-      // derived block references only _pg_g (no external input), so it runs as
-      // one statement. Order is strict child-before-parent: the schema's
-      // RESTRICT/NO-ACTION FKs would otherwise block the delete.
+      await this.runPurgeCascade(client, userId);
+    });
+    await this.audit.record(actor, 'users.purge', 'user', userId, {});
+    return { id: userId, purged: true };
+  }
+
+  /** Deletes a user and their whole owned footprint (properties→listings→
+   * units→beds→reservations→payments, profiles, RBAC rows, chat). Historical
+   * records that merely reference the person as an actor are anonymized to
+   * NULL so the event survives without the identity. Seeds the target set,
+   * then derives and removes its footprint. The derived block references only
+   * _pg_g (no external input), so it runs as one statement. Order is strict
+   * child-before-parent: the schema's RESTRICT/NO-ACTION FKs would otherwise
+   * block the delete. */
+  private async runPurgeCascade(client: PoolClient, userId: string) {
       await client.query(`CREATE TEMP TABLE _pg_g(id uuid PRIMARY KEY) ON COMMIT DROP`);
       await client.query(`INSERT INTO _pg_g VALUES ($1)`, [userId]);
       await client.query(`
@@ -516,9 +500,6 @@ export class AdminUsersService {
 
         DELETE FROM users WHERE id IN (SELECT id FROM _pg_g);
       `);
-    });
-    await this.audit.record(actor, 'users.purge', 'user', userId, {});
-    return { id: userId, purged: true };
   }
 
   async assignRole(
