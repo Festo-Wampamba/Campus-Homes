@@ -16,6 +16,7 @@ export default async function OpsLayout({
       user={session.user}
       access={session.access}
       homeHref={isInspector ? "/ops/inspect" : "/ops"}
+      notificationsEndpoint="/notifications"
       nav={
         isInspector
           ? [{ label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> }]

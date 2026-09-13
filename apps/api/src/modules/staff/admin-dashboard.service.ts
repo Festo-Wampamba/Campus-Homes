@@ -95,7 +95,9 @@ export class AdminDashboardService {
           (SELECT count(*) FROM reservations)::text AS reservations,
           (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '30 days')::text AS "reservations30d",
           (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorReservations30d",
-          (SELECT count(*) FROM landlords WHERE kyc_status = 'pending')::text AS "pendingKyc",
+          (SELECT count(*) FROM landlords l JOIN users u ON u.id=l.user_id
+            WHERE l.kyc_status='pending' AND u.status='active' AND u.deleted_at IS NULL
+              AND EXISTS (SELECT 1 FROM properties p WHERE p.landlord_id=l.user_id))::text AS "pendingKyc",
           (SELECT count(*) FROM verification_visits
             WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
           (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
@@ -163,10 +165,11 @@ export class AdminDashboardService {
     });
   }
 
-  users(granted: Set<string>) {
+  users(granted: Set<string>, includeDeleted = false) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const result = await client.query(`
         SELECT u.id, u.name, u.email, u.phone, u.role::text, u.status::text,
+               u.deleted_at AS "deletedAt", u.deletion_reason AS "deletionReason",
                u.email_verified AS "emailVerified", u.phone_verified AS "phoneVerified",
                -- Which providers a user signed in with lived in Better Auth's
                -- accounts table; Logto owns that now and it isn't locally
@@ -186,12 +189,12 @@ export class AdminDashboardService {
         LEFT JOIN user_role_assignments ura ON ura.user_id = u.id AND ura.revoked_at IS NULL
           AND ura.valid_from <= now() AND (ura.valid_until IS NULL OR ura.valid_until > now())
         LEFT JOIN roles r ON r.id = ura.role_id
-        WHERE u.deleted_at IS NULL AND ((u.role = 'student' AND $1::boolean)
+        WHERE (u.deleted_at IS NULL) <> $4::boolean AND ((u.role = 'student' AND $1::boolean)
            OR (u.role = 'landlord' AND $2::boolean)
            OR (u.role IN ('admin', 'ops_lead', 'ops_inspector', 'custodian', 'property_worker') AND $3::boolean))
         GROUP BY u.id, s.university, l.kyc_status
         ORDER BY u.created_at DESC LIMIT 250
-      `, [granted.has('students.read'), granted.has('landlords.read'), granted.has('staff.read')]);
+      `, [granted.has('students.read'), granted.has('landlords.read'), granted.has('staff.read'), includeDeleted]);
       return { rows: result.rows, asOf: new Date().toISOString(), limit: 250 };
     });
   }
@@ -243,6 +246,7 @@ export class AdminDashboardService {
                l.kyc_status::text AS status, l.created_at AS "submittedAt",
                l.kyc_reviewed_at AS "reviewedAt"
         FROM landlords l JOIN users u ON u.id = l.user_id
+        WHERE u.deleted_at IS NULL AND u.status = 'active'
         ORDER BY CASE l.kyc_status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 200
       `) : { rows: [] };
       return { visits: visits.rows, landlordKyc: kyc.rows, asOf: new Date().toISOString() };

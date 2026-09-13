@@ -3,12 +3,13 @@ import { Module } from '@nestjs/common';
 import { NoopRealtime, SoketiRealtime, type RealtimeAdapter } from '../../adapters/realtime.adapter';
 import { loadEnv } from '../../config/env';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { REALTIME } from './chat.tokens';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, NotificationsModule],
   controllers: [ChatController],
   providers: [
     ChatService,

@@ -7,6 +7,9 @@ export const sendMessageSchema = z.object({
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
+export const startConversationSchema = z.object({ recipientUserId: uuid });
+export type StartConversationInput = z.infer<typeof startConversationSchema>;
+
 export const pusherAuthSchema = z.object({
   socket_id: z.string().min(1),
   channel_name: z.string().min(1),
@@ -19,15 +22,28 @@ export const chatMessageSchema = z.object({
   fromUserId: uuid,
   body: z.string(),
   sentAt: z.iso.datetime(),
+  editedAt: z.iso.datetime().nullable().optional(),
   readAt: z.iso.datetime().nullable(),
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
 export const chatThreadSchema = z.object({
   id: uuid,
-  reservationId: uuid,
+  reservationId: uuid.nullable(),
   studentId: uuid,
   landlordId: uuid,
   lastMessageAt: z.iso.datetime().nullable(),
+  counterpartName: z.string().nullable().optional(),
+  counterpartKind: z.enum(['student', 'landlord']).optional(),
+  lastMessageSnippet: z.string().nullable().optional(),
+  unreadCount: z.number().int().nonnegative().optional(),
 });
 export type ChatThread = z.infer<typeof chatThreadSchema>;
+
+export const chatContactSchema = z.object({
+  userId: uuid,
+  name: z.string().nullable(),
+  kind: z.enum(['student', 'landlord']),
+  context: z.string(),
+});
+export type ChatContact = z.infer<typeof chatContactSchema>;

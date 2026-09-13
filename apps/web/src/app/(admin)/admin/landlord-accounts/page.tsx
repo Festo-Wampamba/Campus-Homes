@@ -7,15 +7,18 @@ import { LandlordAccountsManager } from "@/components/landlords/landlord-account
 export const metadata: Metadata = { title: "Landlord accounts" };
 
 export default async function AdminLandlordAccountsPage() {
-  const accounts = (await apiServer<PendingLandlordAccount[]>("/admin/landlord-accounts")) ?? [];
+  const [accounts, approvedAccounts] = await Promise.all([
+    apiServer<PendingLandlordAccount[]>("/admin/landlord-accounts"),
+    apiServer<PendingLandlordAccount[]>("/admin/landlord-accounts/approved"),
+  ]);
 
   return (
     <>
       <h1 className="text-2xl">Landlord accounts</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Self-registered landlord accounts awaiting approval before they can sign in.
+        Review submitted landlord applications before granting dashboard access.
       </p>
-      <LandlordAccountsManager initialAccounts={accounts} />
+      <LandlordAccountsManager initialAccounts={accounts ?? []} initialApprovedAccounts={approvedAccounts ?? []} />
     </>
   );
 }

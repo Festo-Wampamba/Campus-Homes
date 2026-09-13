@@ -33,6 +33,8 @@ export function useThreadMessages(threadId: string | null) {
       const ordered = chronological(rows);
       ordered.forEach((m) => seenIds.current.add(m.id));
       setMessages(ordered);
+      await api(`/chat/threads/${threadId}/read`, { method: "POST" });
+      window.dispatchEvent(new Event("campushomes:notifications-refresh"));
     }
     loadInitial();
 
@@ -70,6 +72,14 @@ export function useThreadMessages(threadId: string | null) {
           if (seenIds.current.has(message.id)) return;
           seenIds.current.add(message.id);
           setMessages((prev) => [...prev, message]);
+          if (message.fromUserId) {
+            void api(`/chat/threads/${threadId}/read`, { method: "POST" }).then(() => {
+              window.dispatchEvent(new Event("campushomes:notifications-refresh"));
+            });
+          }
+        });
+        channel.bind("message-edited", (message: ChatMessage) => {
+          setMessages((current) => current.map((item) => item.id === message.id ? message : item));
         });
       });
 
@@ -85,6 +95,7 @@ export function useThreadMessages(threadId: string | null) {
         const rows = await api<ChatMessage[]>(`/chat/threads/${threadId}/messages`);
         if (cancelled) return;
         setMessages(chronological(rows));
+        await api(`/chat/threads/${threadId}/read`, { method: "POST" });
       } catch {
         // Transient — next tick retries (same pattern as usePaymentPoll).
       }
@@ -95,11 +106,15 @@ export function useThreadMessages(threadId: string | null) {
     };
   }, [threadId]);
 
-  function appendOptimistic(message: ChatMessage) {
+  function appendMessage(message: ChatMessage) {
     if (seenIds.current.has(message.id)) return;
     seenIds.current.add(message.id);
     setMessages((prev) => [...prev, message]);
   }
 
-  return { messages: threadId ? messages : [], appendOptimistic };
+  function replaceMessage(message: ChatMessage) {
+    setMessages((current) => current.map((item) => item.id === message.id ? message : item));
+  }
+
+  return { messages: threadId ? messages : [], appendMessage, replaceMessage };
 }
