@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,11 +45,7 @@ export function ChangeSetSubmitDialog({
           method: "POST",
           body: JSON.stringify({ notes: notes.trim() || null }),
         },
-      ).catch(() => ({
-        ...changeSet,
-        status: hasPhysicalChanges ? ("visit_required" as const) : ("pending_review" as const),
-        submittedAt: new Date().toISOString(),
-      }));
+      );
 
       onSubmitted(result);
       onOpenChange(false);
@@ -66,6 +62,7 @@ export function ChangeSetSubmitDialog({
         <DialogHeader
           title="Submit Inventory Changes for Operations Review"
           description="Review your staged modifications before submitting to the CampusHomes Operations team."
+          onClose={() => onOpenChange(false)}
         />
 
         <DialogBody className="space-y-4">
@@ -129,7 +126,7 @@ export function ChangeSetSubmitDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >

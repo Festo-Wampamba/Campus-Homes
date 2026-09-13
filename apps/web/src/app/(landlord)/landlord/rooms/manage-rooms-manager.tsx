@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
   Bed,
   Building2,
   Calendar,
@@ -16,10 +15,8 @@ import {
   Send,
   Sparkles,
   Wrench,
-  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatusChip } from "@/components/status-chip";
 import { api, apiErrorMessage } from "@/lib/api";
 import type {
   RoomInventoryChangeSet,
@@ -44,10 +41,10 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
     (searchParams.get("tab") as "types" | "rooms") || "rooms",
   );
 
-  const [property, setProperty] = useState(initialData.property);
-  const [properties] = useState(initialData.properties);
-  const [currentSemester, setCurrentSemester] = useState(initialData.currentSemester);
-  const [semesters] = useState(initialData.semesters);
+  const property = initialData.property;
+  const properties = initialData.properties;
+  const currentSemester = initialData.currentSemester;
+  const semesters = initialData.semesters;
 
   const [changeSet, setChangeSet] = useState<RoomInventoryChangeSet | null>(
     initialData.changeSet,
@@ -60,7 +57,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
 
   // Derive dynamic summary metrics from current rooms state
   const metrics = useMemo(() => {
-    let totalRooms = rooms.length;
+    const totalRooms = rooms.length;
     let totalBeds = 0;
     let availableBeds = 0;
     let partiallyOccupiedRooms = 0;
@@ -128,7 +125,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
     try {
       await api(`/room-management/change-sets/${changeSet.id}/cancel`, {
         method: "POST",
-      }).catch(() => undefined);
+      });
 
       setChangeSet(null);
       setRooms((prev) => prev.filter((r) => !r.pendingChanges));
@@ -138,6 +135,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
           pendingVersion: undefined,
         })),
       );
+      router.refresh();
     } catch (err) {
       alert(apiErrorMessage(err, "Failed to discard draft changes."));
     } finally {
@@ -156,54 +154,24 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
       return [...prev, savedType];
     });
 
-    if (!changeSet) {
-      setChangeSet({
-        id: `cs-draft-${Date.now()}`,
-        propertyId: property.id,
-        semesterId: currentSemester.id,
-        status: "draft",
-        physicalRoomChangesCount: 0,
-        roomTypeChangesCount: 1,
-      });
-    } else {
-      setChangeSet((cs) =>
-        cs ? { ...cs, roomTypeChangesCount: cs.roomTypeChangesCount + 1 } : null,
-      );
-    }
+    router.refresh();
   }
 
   function onRoomUpdated(updatedRoom: RoomUnit) {
     setRooms((prev) =>
       prev.map((r) => (r.id === updatedRoom.id ? updatedRoom : r)),
     );
+    router.refresh();
   }
 
   function onRoomsAdded(newRooms: RoomUnit[]) {
     setRooms((prev) => [...prev, ...newRooms]);
-    if (!changeSet) {
-      setChangeSet({
-        id: `cs-draft-${Date.now()}`,
-        propertyId: property.id,
-        semesterId: currentSemester.id,
-        status: "draft",
-        physicalRoomChangesCount: newRooms.length,
-        roomTypeChangesCount: 0,
-      });
-    } else {
-      setChangeSet((cs) =>
-        cs
-          ? {
-              ...cs,
-              physicalRoomChangesCount:
-                cs.physicalRoomChangesCount + newRooms.length,
-            }
-          : null,
-      );
-    }
+    router.refresh();
   }
 
   function onRoomArchived(roomId: string) {
     setRooms((prev) => prev.filter((r) => r.id !== roomId));
+    router.refresh();
   }
 
   return (
@@ -278,7 +246,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               </div>
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={handleDiscardChangeSet}
                   disabled={cancellingChangeSet}
@@ -490,7 +458,6 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
           {activeTab === "rooms" && (
             <RoomsInventoryTab
               propertyId={property.id}
-              semesterId={currentSemester.id}
               roomTypes={roomTypes}
               rooms={rooms}
               onRoomUpdated={onRoomUpdated}
@@ -524,7 +491,10 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
           open={submitDialogOpen}
           onOpenChange={setSubmitDialogOpen}
           changeSet={changeSet}
-          onSubmitted={(updated) => setChangeSet(updated)}
+          onSubmitted={(updated) => {
+            setChangeSet(updated);
+            router.refresh();
+          }}
         />
       )}
     </div>

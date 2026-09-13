@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import NextImage from "next/image";
 import {
   AlertCircle,
   Bath,
   Bed,
-  CheckCircle2,
   Clock,
   Edit,
-  Eye,
   Image as ImageIcon,
   Layers,
   Plus,
@@ -20,7 +19,6 @@ import { formatUgx } from "@/lib/format";
 import {
   BATHROOM_TYPE_LABELS,
   type RoomType,
-  type RoomTypeVersion,
 } from "@/lib/room-management";
 import { RoomTypeDialog } from "./room-type-dialog";
 
@@ -100,10 +98,12 @@ export function RoomTypesTab({
                 {/* Image Header */}
                 <div className="relative aspect-16/9 w-full overflow-hidden bg-muted/40">
                   {photoUrl ? (
-                    <img
+                    <NextImage
                       src={photoUrl}
                       alt={activeVer?.title || "Room type"}
-                      className="size-full object-cover"
+                      fill
+                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                      className="object-cover"
                     />
                   ) : (
                     <div className="flex size-full flex-col items-center justify-center text-muted-foreground/60">
@@ -210,7 +210,7 @@ export function RoomTypesTab({
                   {/* Card Actions */}
                   <div className="pt-3 border-t border-border flex items-center justify-between">
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleEdit(rt)}
                       className="w-full gap-1.5"

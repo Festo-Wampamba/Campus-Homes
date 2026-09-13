@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertCircle, Check, CopyCheck, Layers, Loader2, Sparkles, X } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,11 +50,6 @@ export function BulkRoomGeneratorDialog({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const selectedRoomType = useMemo(
-    () => roomTypes.find((rt) => rt.id === selectedRoomTypeId),
-    [roomTypes, selectedRoomTypeId],
-  );
 
   const existingCodesSet = useMemo(() => {
     return new Set(
@@ -127,10 +122,6 @@ export function BulkRoomGeneratorDialog({
     setSubmitting(true);
     setError(null);
 
-    const capacity = selectedRoomType?.currentVersion?.capacity ?? selectedRoomType?.pendingVersion?.capacity ?? 1;
-    const roomTypeTitle = selectedRoomType?.currentVersion?.title ?? selectedRoomType?.pendingVersion?.title ?? "Room";
-    const roomCategory = selectedRoomType?.currentVersion?.category ?? selectedRoomType?.pendingVersion?.category ?? "single";
-
     try {
       const payload = {
         roomTypeId: selectedRoomTypeId,
@@ -146,31 +137,7 @@ export function BulkRoomGeneratorDialog({
           method: "POST",
           body: JSON.stringify(payload),
         },
-      ).catch(() => {
-        // Safe fallback mock generator if backend endpoint is pending
-        return previewCodes.map((code, idx) => ({
-          id: `room-gen-${Date.now()}-${idx}`,
-          propertyId,
-          roomTypeId: selectedRoomTypeId,
-          roomTypeTitle,
-          roomCategory,
-          roomCode: code,
-          buildingName: buildingName.trim() || null,
-          floorLabel: floorLabel.trim() || null,
-          capacity,
-          totalBeds: capacity,
-          occupiedBeds: 0,
-          derivedStatus: "available" as const,
-          pendingChanges: true,
-          beds: Array.from({ length: capacity }).map((_, bIdx) => ({
-            id: `bed-gen-${Date.now()}-${idx}-${bIdx}`,
-            unitId: `room-gen-${Date.now()}-${idx}`,
-            label: `Bed ${bIdx + 1}`,
-            blocked: false,
-            status: "available" as const,
-          })),
-        }));
-      });
+      );
 
       onGenerated(result);
       onOpenChange(false);
@@ -187,6 +154,7 @@ export function BulkRoomGeneratorDialog({
         <DialogHeader
           title="Bulk Generate Physical Rooms"
           description="Quickly generate sequential or custom room codes and assign them to a room type. Added rooms are staged into your draft change set."
+          onClose={() => onOpenChange(false)}
         />
 
         <DialogBody className="space-y-5">
@@ -375,7 +343,7 @@ export function BulkRoomGeneratorDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >

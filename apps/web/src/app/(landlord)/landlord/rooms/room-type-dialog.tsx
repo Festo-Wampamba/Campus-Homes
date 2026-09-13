@@ -1,7 +1,8 @@
 "use client";
 
+import NextImage from "next/image";
 import { useState } from "react";
-import { Camera, Check, ImagePlus, Loader2, Star, Trash2, X } from "lucide-react";
+import { Camera, Check, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -186,23 +187,6 @@ export function RoomTypeDialog({
         result = await api<RoomType>(`/room-management/room-types/${roomType.id}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
-        }).catch(() => {
-          return {
-            id: roomType.id,
-            propertyId,
-            currentVersionId: roomType.currentVersionId,
-            currentVersion: roomType.currentVersion,
-            pendingVersion: {
-              id: `ver-pending-${Date.now()}`,
-              roomTypeId: roomType.id,
-              versionNumber: (roomType.currentVersion?.versionNumber ?? 0) + 1,
-              ...payload,
-              status: "pending_review" as const,
-              submittedAt: new Date().toISOString(),
-            },
-            attachedRoomsCount: roomType.attachedRoomsCount,
-            createdAt: roomType.createdAt,
-          };
         });
       } else {
         result = await api<RoomType>(
@@ -211,25 +195,7 @@ export function RoomTypeDialog({
             method: "POST",
             body: JSON.stringify(payload),
           },
-        ).catch(() => {
-          const newId = `rt-${Date.now()}`;
-          return {
-            id: newId,
-            propertyId,
-            currentVersionId: null,
-            currentVersion: null,
-            pendingVersion: {
-              id: `ver-${Date.now()}`,
-              roomTypeId: newId,
-              versionNumber: 1,
-              ...payload,
-              status: "pending_review" as const,
-              submittedAt: new Date().toISOString(),
-            },
-            attachedRoomsCount: 0,
-            createdAt: new Date().toISOString(),
-          };
-        });
+        );
       }
 
       onSaved(result);
@@ -247,6 +213,7 @@ export function RoomTypeDialog({
         <DialogHeader
           title={roomType ? "Edit Room Type Specification" : "Create Room Type"}
           description="Define the room category, bathroom type, sleeping capacity, amenities, and price per bedspace per semester."
+          onClose={() => onOpenChange(false)}
         />
 
         <DialogBody className="space-y-6">
@@ -458,10 +425,12 @@ export function RoomTypeDialog({
                       className="group relative aspect-4/3 overflow-hidden rounded-lg border border-border bg-card shadow-xs"
                     >
                       {url ? (
-                        <img
+                        <NextImage
                           src={url}
                           alt="Room preview"
-                          className="size-full object-cover"
+                          fill
+                          sizes="(min-width: 768px) 20vw, 50vw"
+                          className="object-cover"
                         />
                       ) : (
                         <div className="flex size-full items-center justify-center bg-muted text-xs text-muted-foreground">
@@ -508,7 +477,7 @@ export function RoomTypeDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >

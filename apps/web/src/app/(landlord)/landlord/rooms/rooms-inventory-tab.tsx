@@ -1,24 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Archive,
-  Bed,
-  Building,
-  Check,
-  ChevronDown,
-  Clock,
-  Edit,
-  Filter,
-  Layers,
-  Lock,
-  Plus,
-  Search,
-  Unlock,
-  Wrench,
-  X,
-} from "lucide-react";
+import { Archive, Bed, Edit, Layers, Lock, Plus, Search, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/status-chip";
 import {
@@ -43,7 +26,6 @@ import { UnitBlockDialog } from "./unit-block-dialog";
 
 interface RoomsInventoryTabProps {
   propertyId: string;
-  semesterId: string;
   roomTypes: RoomType[];
   rooms: RoomUnit[];
   onRoomUpdated: (updatedRoom: RoomUnit) => void;
@@ -53,7 +35,6 @@ interface RoomsInventoryTabProps {
 
 export function RoomsInventoryTab({
   propertyId,
-  semesterId,
   roomTypes,
   rooms,
   onRoomUpdated,
@@ -173,11 +154,6 @@ export function RoomsInventoryTab({
     setSrSubmitting(true);
     setSrError(null);
 
-    const typeObj = roomTypes.find((t) => t.id === srTypeId);
-    const capacity = typeObj?.currentVersion?.capacity ?? typeObj?.pendingVersion?.capacity ?? 1;
-    const typeTitle = typeObj?.currentVersion?.title ?? typeObj?.pendingVersion?.title ?? "Room";
-    const category = typeObj?.currentVersion?.category ?? typeObj?.pendingVersion?.category ?? "single";
-
     try {
       if (editingRoom) {
         const payload = {
@@ -193,13 +169,7 @@ export function RoomsInventoryTab({
             method: "PATCH",
             body: JSON.stringify(payload),
           },
-        ).catch(() => ({
-          ...editingRoom,
-          ...payload,
-          roomTypeTitle: typeTitle,
-          roomCategory: category,
-          pendingChanges: true,
-        }));
+        );
 
         onRoomUpdated(updated);
       } else {
@@ -216,28 +186,7 @@ export function RoomsInventoryTab({
             method: "POST",
             body: JSON.stringify(payload),
           },
-        ).catch(() => ({
-          id: `room-${Date.now()}`,
-          propertyId,
-          roomTypeId: srTypeId,
-          roomTypeTitle: typeTitle,
-          roomCategory: category,
-          roomCode: srCode.trim(),
-          buildingName: srBuilding.trim() || null,
-          floorLabel: srFloor.trim() || null,
-          capacity,
-          totalBeds: capacity,
-          occupiedBeds: 0,
-          derivedStatus: "available" as const,
-          pendingChanges: true,
-          beds: Array.from({ length: capacity }).map((_, idx) => ({
-            id: `bed-${Date.now()}-${idx}`,
-            unitId: `room-${Date.now()}`,
-            label: `Bed ${idx + 1}`,
-            blocked: false,
-            status: "available" as const,
-          })),
-        }));
+        );
 
         onRoomsAdded([created]);
       }
@@ -262,7 +211,7 @@ export function RoomsInventoryTab({
     try {
       await api(`/room-management/rooms/${room.id}/archive`, {
         method: "POST",
-      }).catch(() => undefined);
+      });
 
       if (onRoomArchived) {
         onRoomArchived(room.id);
@@ -279,7 +228,7 @@ export function RoomsInventoryTab({
       await api(`/room-management/rooms/${activeBedspaceRoom.id}/beds/${bedId}/block`, {
         method: "PATCH",
         body: JSON.stringify({ blocked }),
-      }).catch(() => undefined);
+      });
 
       const updatedBeds = activeBedspaceRoom.beds.map((b) =>
         b.id === bedId
@@ -334,7 +283,7 @@ export function RoomsInventoryTab({
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Button variant="outline" onClick={openAddSingleRoom} className="gap-1.5">
+          <Button variant="secondary" onClick={openAddSingleRoom} className="gap-1.5">
             <Plus className="size-4" />
             Add Room
           </Button>
@@ -466,7 +415,7 @@ export function RoomsInventoryTab({
           </p>
           {rooms.length === 0 && (
             <div className="mt-5 flex justify-center gap-3">
-              <Button variant="outline" onClick={openAddSingleRoom}>
+              <Button variant="secondary" onClick={openAddSingleRoom}>
                 Add Single Room
               </Button>
               <Button onClick={() => setBulkDialogOpen(true)}>
@@ -578,7 +527,7 @@ export function RoomsInventoryTab({
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             onClick={() => openViewBeds(room)}
                             className="h-8 px-2.5 text-xs"
@@ -588,9 +537,10 @@ export function RoomsInventoryTab({
                           </Button>
 
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             onClick={() => openBlockModal(room)}
+                            disabled={room.pendingChanges}
                             className={`h-8 px-2.5 text-xs ${
                               room.activeBlock
                                 ? "text-destructive border-destructive/30 hover:bg-destructive-subtle"
@@ -619,6 +569,7 @@ export function RoomsInventoryTab({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleArchiveRoom(room)}
+                            disabled={room.pendingChanges}
                             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                             title="Archive Room"
                           >
@@ -682,7 +633,7 @@ export function RoomsInventoryTab({
                   {/* Actions bar (44px min touch target) */}
                   <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => openViewBeds(room)}
                       className="flex-1 h-11"
@@ -691,9 +642,10 @@ export function RoomsInventoryTab({
                       View Beds
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => openBlockModal(room)}
+                      disabled={room.pendingChanges}
                       className={`h-11 px-3.5 ${
                         room.activeBlock ? "text-destructive border-destructive/30" : ""
                       }`}
@@ -705,7 +657,7 @@ export function RoomsInventoryTab({
                       )}
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => openEditSingleRoom(room)}
                       className="h-11 px-3.5"
@@ -735,7 +687,7 @@ export function RoomsInventoryTab({
         open={bedspaceDrawerOpen}
         onClose={() => setBedspaceDrawerOpen(false)}
         room={activeBedspaceRoom}
-        onToggleBedBlock={handleToggleBedBlock}
+        onToggleBedBlock={activeBedspaceRoom?.pendingChanges ? undefined : handleToggleBedBlock}
       />
 
       {/* Unit Block Dialog */}
@@ -757,6 +709,7 @@ export function RoomsInventoryTab({
           <DialogHeader
             title={editingRoom ? `Edit Room ${editingRoom.roomCode}` : "Add Single Room"}
             description="Create or modify a physical room code and associate it with a room type specification."
+            onClose={() => setSingleRoomDialogOpen(false)}
           />
           <DialogBody className="space-y-4">
             {srError && (
@@ -822,7 +775,7 @@ export function RoomsInventoryTab({
           <DialogFooter>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={() => setSingleRoomDialogOpen(false)}
               disabled={srSubmitting}
             >

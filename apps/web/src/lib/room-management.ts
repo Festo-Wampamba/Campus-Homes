@@ -1,5 +1,4 @@
 import type { Property } from "@campushomes/shared";
-import { apiServer } from "@/lib/server-api";
 
 export type BathroomType = "ensuite" | "shared" | "private_external" | "unspecified";
 
@@ -188,12 +187,4 @@ export function deriveRoomStatus(
   if (occupiedCount === 0) return "available";
   if (occupiedCount >= activeBeds.length) return "fully_occupied";
   return "partially_occupied";
-}
-
-export async function fetchRoomManagementData(
-  propertyId: string,
-  semesterId?: string,
-): Promise<RoomManagementOverview | null> {
-  const query = semesterId ? `?propertyId=${propertyId}&semesterId=${semesterId}` : `?propertyId=${propertyId}`;
-  return apiServer<RoomManagementOverview>(`/room-management${query}`);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle, Loader2, Lock, Unlock } from "lucide-react";
+import { AlertTriangle, Loader2, Lock, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,20 +66,12 @@ export function UnitBlockDialog({
           method: "POST",
           body: JSON.stringify(payload),
         },
-      ).catch(() => ({
-        id: `block-${Date.now()}`,
-        unitId: room.id,
-        reason,
-        startsAt: payload.startsAt,
-        endsAt: payload.endsAt,
-        notes: payload.notes,
-        createdAt: new Date().toISOString(),
-      }));
+      );
 
       const updated: RoomUnit = {
         ...room,
         activeBlock: block,
-        derivedStatus: "blocked",
+        derivedStatus: new Date(block.startsAt) <= new Date() ? "blocked" : room.derivedStatus,
       };
 
       onBlockUpdated(updated);
@@ -103,7 +95,7 @@ export function UnitBlockDialog({
         {
           method: "POST",
         },
-      ).catch(() => undefined);
+      );
 
       const activeBeds = room.beds.filter((b) => !b.blocked);
       const occupiedCount = activeBeds.filter(
@@ -143,6 +135,7 @@ export function UnitBlockDialog({
               ? `Manage Maintenance Block — ${room.roomCode}`
               : `Block Room for Maintenance — ${room.roomCode}`
           }
+          onClose={() => onOpenChange(false)}
           description={
             isBlocked
               ? "This room is currently blocked from student bookings. You can review block details or restore availability immediately."
@@ -253,7 +246,7 @@ export function UnitBlockDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >

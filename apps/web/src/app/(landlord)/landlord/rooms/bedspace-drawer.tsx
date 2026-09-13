@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { Bed, Calendar, Clock, Lock, Phone, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/status-chip";
-import type { Bedspace, RoomUnit } from "@/lib/room-management";
+import type { RoomUnit } from "@/lib/room-management";
 
 interface BedspaceDrawerProps {
   open: boolean;
@@ -177,7 +177,7 @@ export function BedspaceDrawer({
 
         {/* Footer */}
         <div className="border-t border-border p-4 bg-card">
-          <Button variant="outline" className="w-full" onClick={onClose}>
+          <Button variant="secondary" className="w-full" onClick={onClose}>
             Close
           </Button>
         </div>

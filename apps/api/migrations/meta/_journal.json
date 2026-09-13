@@ -274,6 +274,13 @@
       "when": 1788486400000,
       "tag": "0039_direct_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789272000000,
+      "tag": "0040_room_management",
+      "breakpoints": true
     }
   ]
 }
