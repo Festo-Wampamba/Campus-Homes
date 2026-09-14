@@ -57,6 +57,10 @@ const nextConfig: NextConfig = {
       // requiring a Cloudinary account (scripts/seed-dev.cjs) — real listing
       // photos always come from res.cloudinary.com above.
       { protocol: "https", hostname: "images.unsplash.com" },
+      // Backblaze B2 (S3-compatible) upload storage — covers both the S3
+      // endpoint (s3.<region>.backblazeb2.com) and B2 friendly URLs
+      // (f<nnn>.backblazeb2.com), whatever region the bucket lands in.
+      { protocol: "https", hostname: "**.backblazeb2.com" },
     ],
   },
 };
