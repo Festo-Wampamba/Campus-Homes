@@ -88,6 +88,7 @@ export const units = pgTable('units', {
   propertyId: uuid('property_id')
     .notNull()
     .references(() => properties.id, { onDelete: 'restrict' }),
+  roomTypeId: uuid('room_type_id'),
   label: text('label').notNull(), // "Room 2A"
   // Total occupancy positions in the room — the source of truth for how
   // many `beds` rows get created under it (bed-level redesign, 2026-09).
@@ -107,6 +108,7 @@ export const units = pgTable('units', {
   electricityMeterType: text('electricity_meter_type'),
   amenities: jsonb('amenities').notNull().default({}),
   notes: text('notes'),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -153,6 +155,7 @@ export const beds = pgTable('beds', {
   // of a separate occupancy flag, so there's no 'occupied'/'held' value here.
   blocked: boolean('blocked').notNull().default(false),
   blockedReason: text('blocked_reason'),
+  retiredAt: timestamp('retired_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

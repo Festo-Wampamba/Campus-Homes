@@ -22,3 +22,4 @@ export * from './inquiries.js';
 export * from './content-safety.js';
 export * from './ledger.js';
 export * from './tenant-agreement.js';
+export * from './room-management.js';

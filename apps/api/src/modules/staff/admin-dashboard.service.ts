@@ -82,6 +82,7 @@ export class AdminDashboardService {
         priorReservations30d: string;
         pendingKyc: string;
         pendingVisits: string;
+        pendingRoomChanges: string;
         pendingRefunds: string;
         failedNotifications: string;
       }>(`
@@ -100,6 +101,8 @@ export class AdminDashboardService {
               AND EXISTS (SELECT 1 FROM properties p WHERE p.landlord_id=l.user_id))::text AS "pendingKyc",
           (SELECT count(*) FROM verification_visits
             WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
+          (SELECT count(*) FROM room_inventory_change_sets
+            WHERE status IN ('pending_review', 'visit_required'))::text AS "pendingRoomChanges",
           (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
           (SELECT count(*) FROM notifications WHERE status = 'failed')::text AS "failedNotifications"
       `);
