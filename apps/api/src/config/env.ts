@@ -79,6 +79,15 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v === 'true'),
   CLOUDINARY_URL: z.string().min(1).optional(),
+  // Backblaze B2 (S3-compatible) for photo uploads. When set, /uploads/sign
+  // issues a presigned PUT instead of Cloudinary params. Bucket must be
+  // public-read so stored object URLs render directly. Legacy Cloudinary
+  // storage keys keep rendering via the http passthrough in the web helper.
+  B2_S3_ENDPOINT: z.string().url().optional(),
+  B2_S3_REGION: z.string().min(1).optional(),
+  B2_BUCKET: z.string().min(1).optional(),
+  B2_ACCESS_KEY_ID: z.string().min(1).optional(),
+  B2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   SENTRY_DSN: z.string().optional(),
   POWER_BI_PUSH_URL: z.string().url().optional(),
   POWER_BI_API_TOKEN: z.string().min(1).optional(),

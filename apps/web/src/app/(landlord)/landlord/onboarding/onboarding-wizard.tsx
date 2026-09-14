@@ -177,7 +177,7 @@ export function OnboardingWizard({
     try {
       let coverPhotoKey: string | undefined;
       if (coverPhotoFile) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: coverPhotoFile.type }) });
         const { publicId } = await uploadToCloudinary(coverPhotoFile, sig);
         coverPhotoKey = publicId;
       }
