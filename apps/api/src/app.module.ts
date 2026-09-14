@@ -18,6 +18,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OpsModule } from './modules/ops/ops.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
+import { RoomManagementModule } from './modules/room-management/room-management.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { TenantAgreementsModule } from './modules/tenant-agreements/tenant-agreements.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
@@ -34,6 +35,7 @@ import { RootController } from './root.controller';
     ProfileModule,
     FinanceModule,
     ReservationsModule,
+    RoomManagementModule,
     NotificationsModule,
     ChatModule,
     JobsModule,

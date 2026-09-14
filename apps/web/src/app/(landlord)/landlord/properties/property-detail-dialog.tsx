@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import { BedDouble, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
 import {
@@ -1132,11 +1133,24 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
             </div>
           )}
 
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase">
+              Rooms & Inventory ({detail.rooms.length})
+            </p>
+            <Link
+              href={`/landlord/rooms?propertyId=${detail.property.id}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800 hover:underline dark:text-teal-400"
+            >
+              <BedDouble className="size-3.5" />
+              Manage Rooms & Bedspaces &rarr;
+            </Link>
+          </div>
+
           {detail.rooms.length === 0 ? (
             <EmptyState
               icon={BedDouble}
               title="No rooms yet"
-              body="Ops adds rooms once this listing is published."
+              body="Configure room types and physical rooms in Manage Rooms, or wait for Ops to add rooms."
             />
           ) : (
             <div className="overflow-x-auto rounded-md border border-border">
