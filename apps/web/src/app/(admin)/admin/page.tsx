@@ -35,7 +35,7 @@ export default async function AdminOverviewPage() {
   const data = await apiServer<Overview>("/admin/overview");
   if (!data) return <><PageHeader eyebrow="Command centre" title="Overview unavailable" description="The admin API could not be reached or this account does not hold analytics.read." /><div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Start the API and database, then refresh this page. No placeholder metrics are shown.</div></>;
   const s = data.summary;
-  const queueTotal = s.pendingKyc + s.pendingVisits + s.pendingRefunds + s.failedNotifications;
+  const queueTotal = s.pendingKyc + s.pendingVisits + s.pendingRoomChanges + s.pendingRefunds + s.failedNotifications;
   const reservationTotal = Math.max(1, data.reservationStatus.reduce((sum, row) => sum + row.count, 0));
 
   return <>
@@ -54,6 +54,7 @@ export default async function AdminOverviewPage() {
           {[
             ["Landlord identity review", s.pendingKyc, "/admin/verifications"],
             ["Properties waiting verification", s.pendingVisits, "/admin/verifications"],
+            ["Room changes awaiting review", s.pendingRoomChanges, "/admin/room-changes"],
             ["Pending refunds", s.pendingRefunds, "/admin/payments"],
             ["Failed notifications", s.failedNotifications, "/admin/audit-log"],
           ].map(([label, count, href]) => <Link key={String(label)} href={String(href)} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50 dark:hover:bg-muted/40"><span className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground"><Clock3 aria-hidden className="size-4" /></span><span className="text-sm font-semibold text-slate-700 dark:text-foreground">{label}</span><span className="tabular ml-auto text-sm font-bold text-slate-950 dark:text-foreground">{Number(count).toLocaleString()}</span></Link>)}

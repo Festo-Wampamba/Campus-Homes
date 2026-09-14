@@ -511,6 +511,11 @@ export class ListingsService {
            JOIN beds bd ON bd.unit_id = un.id
            WHERE un.property_id = l.property_id
              AND un.operational_status <> ALL($11::text[])
+             AND NOT EXISTS (
+               SELECT 1 FROM unit_blocks ub
+               WHERE ub.unit_id = un.id AND ub.cleared_at IS NULL
+                 AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
+             )
              AND NOT bd.blocked
              AND NOT EXISTS (
                SELECT 1 FROM reservations r
@@ -533,6 +538,11 @@ export class ListingsService {
              JOIN beds bd ON bd.unit_id = un.id
              WHERE un.property_id = l.property_id
                AND un.operational_status <> ALL($11::text[])
+               AND NOT EXISTS (
+                 SELECT 1 FROM unit_blocks ub
+                 WHERE ub.unit_id = un.id AND ub.cleared_at IS NULL
+                   AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
+               )
                AND NOT bd.blocked
                AND NOT EXISTS (
                  SELECT 1 FROM reservations r
@@ -559,6 +569,11 @@ export class ListingsService {
                 WHERE uf.property_id = l.property_id
                   AND uf.room_category = $12::room_category
                   AND uf.operational_status <> ALL($11::text[])
+                  AND NOT EXISTS (
+                    SELECT 1 FROM unit_blocks ub
+                    WHERE ub.unit_id = uf.id AND ub.cleared_at IS NULL
+                      AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
+                  )
                   AND NOT bf.blocked
                   AND NOT EXISTS (
                     SELECT 1 FROM reservations rf
@@ -668,6 +683,11 @@ export class ListingsService {
             `SELECT b.id, b.unit_id, (
                NOT b.blocked
                AND u.operational_status <> ALL($3::text[])
+               AND NOT EXISTS (
+                 SELECT 1 FROM unit_blocks ub
+                 WHERE ub.unit_id = u.id AND ub.cleared_at IS NULL
+                   AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
+               )
                AND NOT EXISTS (
                  SELECT 1 FROM reservations r
                   WHERE r.bed_id = b.id AND r.status = ANY($2::reservation_status[])
