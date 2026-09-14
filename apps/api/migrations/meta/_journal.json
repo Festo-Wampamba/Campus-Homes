@@ -281,6 +281,13 @@
       "when": 1789272000000,
       "tag": "0040_room_management",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789300000000,
+      "tag": "0041_delete_no_step_up",
+      "breakpoints": true
     }
   ]
 }

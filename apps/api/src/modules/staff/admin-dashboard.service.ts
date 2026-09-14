@@ -87,10 +87,10 @@ export class AdminDashboardService {
         failedNotifications: string;
       }>(`
         SELECT
-          (SELECT count(*) FROM users)::text AS "totalUsers",
-          (SELECT count(*) FROM users WHERE status = 'active')::text AS "activeUsers",
-          (SELECT count(*) FROM users WHERE created_at >= now() - interval '30 days')::text AS "newUsers30d",
-          (SELECT count(*) FROM users WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorUsers30d",
+          (SELECT count(*) FROM users WHERE deleted_at IS NULL)::text AS "totalUsers",
+          (SELECT count(*) FROM users WHERE status = 'active' AND deleted_at IS NULL)::text AS "activeUsers",
+          (SELECT count(*) FROM users WHERE deleted_at IS NULL AND created_at >= now() - interval '30 days')::text AS "newUsers30d",
+          (SELECT count(*) FROM users WHERE deleted_at IS NULL AND created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorUsers30d",
           (SELECT count(*) FROM properties)::text AS properties,
           (SELECT count(*) FROM listings WHERE status = 'verified')::text AS "verifiedListings",
           (SELECT count(*) FROM reservations)::text AS reservations,
@@ -129,7 +129,7 @@ export class AdminDashboardService {
           ) AS month
         )
         SELECT to_char(m.month, 'Mon') AS month,
-          (SELECT count(*) FROM users u WHERE u.created_at >= m.month AND u.created_at < m.month + interval '1 month')::text AS users,
+          (SELECT count(*) FROM users u WHERE u.deleted_at IS NULL AND u.created_at >= m.month AND u.created_at < m.month + interval '1 month')::text AS users,
           (SELECT count(*) FROM reservations r WHERE r.created_at >= m.month AND r.created_at < m.month + interval '1 month')::text AS reservations
         FROM months m ORDER BY m.month
       `);
