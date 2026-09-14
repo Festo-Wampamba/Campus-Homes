@@ -111,7 +111,7 @@ export function RoomTypeDialog({
 
         const sig = await api<CloudinarySignature>("/uploads/sign", {
           method: "POST",
-          body: JSON.stringify({ folder: `properties/${propertyId}/room-types` }),
+          body: JSON.stringify({ folder: `properties/${propertyId}/room-types`, contentType: file.type }),
         });
 
         const { publicId } = await uploadToCloudinary(file, sig);

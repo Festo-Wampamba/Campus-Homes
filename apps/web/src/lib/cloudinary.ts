@@ -25,15 +25,24 @@ export type CloudinarySignature =
 // object type (it is intentionally not part of the signature). `publicId` is
 // what gets stored as storage_key: a Cloudinary public_id, or the B2 object's
 // public URL (rendered as-is by listingPhotoUrl's http passthrough).
+// Best-effort client-side ceiling; the presigned URL is short-lived and
+// auth-gated. Server-enforced size caps need a POST-policy upload (a later
+// pass) — B2's S3 PUT presign has no size clause.
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
 export async function uploadToCloudinary(
   file: File,
   sig: CloudinarySignature,
 ): Promise<{ publicId: string }> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("File is too large — the limit is 15 MB.");
+  }
   if (sig.provider === "b2") {
+    // Content-Type must match exactly what was signed (see uploads.module.ts).
     const res = await fetch(sig.uploadUrl, {
       method: "PUT",
       body: file,
-      headers: { "Content-Type": file.type || "application/octet-stream" },
+      headers: { "Content-Type": file.type },
     });
     if (!res.ok) {
       throw new Error("Upload failed — check the file and try again.");

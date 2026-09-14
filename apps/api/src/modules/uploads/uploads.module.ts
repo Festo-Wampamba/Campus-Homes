@@ -2,11 +2,18 @@ import crypto from 'node:crypto';
 
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Controller, Injectable, Module, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Injectable, Module, Post, Req, UseGuards } from '@nestjs/common';
 
 import { loadEnv } from '../../config/env';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthModule } from '../auth/auth.module';
+
+// Only these can be uploaded/stored. Binding the type at signing (below) stops
+// a caller from parking active content (text/html, image/svg+xml) on the
+// public bucket and serving it as a stored-XSS / phishing payload.
+const ALLOWED_UPLOAD_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'application/pdf',
+]);
 
 export interface CloudinarySignParams {
   provider: 'cloudinary';
@@ -34,9 +41,12 @@ export type UploadSignParams = CloudinarySignParams | B2SignParams;
  * CLOUDINARY_URL = cloudinary://<api_key>:<api_secret>@<cloud_name>. */
 @Injectable()
 export class UploadsService {
-  async sign(userId: string): Promise<UploadSignParams> {
+  async sign(userId: string, contentType?: string): Promise<UploadSignParams> {
     const env = loadEnv();
     if (env.B2_S3_ENDPOINT && env.B2_S3_REGION && env.B2_BUCKET && env.B2_ACCESS_KEY_ID && env.B2_SECRET_ACCESS_KEY) {
+      if (!contentType || !ALLOWED_UPLOAD_TYPES.has(contentType)) {
+        throw new BadRequestException('Unsupported file type');
+      }
       const key = `uploads/${userId}/${crypto.randomUUID()}`;
       const client = new S3Client({
         endpoint: env.B2_S3_ENDPOINT,
@@ -44,12 +54,13 @@ export class UploadsService {
         forcePathStyle: true,
         credentials: { accessKeyId: env.B2_ACCESS_KEY_ID, secretAccessKey: env.B2_SECRET_ACCESS_KEY },
       });
-      // ContentType is deliberately left unsigned: the browser sends its own
-      // Content-Type header on the PUT and B2 stores it, without every caller
-      // having to pass the file type into this signing request.
+      // ContentType is part of the signature: the browser PUT must send exactly
+      // this type, and it is what B2 stores and later serves — so a caller
+      // cannot park text/html or image/svg+xml (both scriptable) on the public
+      // bucket. The type is validated against the allowlist above first.
       const uploadUrl = await getSignedUrl(
         client,
-        new PutObjectCommand({ Bucket: env.B2_BUCKET, Key: key }),
+        new PutObjectCommand({ Bucket: env.B2_BUCKET, Key: key, ContentType: contentType }),
         { expiresIn: 600 },
       );
       const base = env.B2_S3_ENDPOINT.replace(/\/+$/, '');
@@ -77,8 +88,8 @@ export class UploadsController {
   constructor(private readonly uploads: UploadsService) {}
 
   @Post('sign')
-  sign(@Req() req: AuthenticatedRequest) {
-    return this.uploads.sign(req.session.user.id);
+  sign(@Req() req: AuthenticatedRequest, @Body() body: { contentType?: string }) {
+    return this.uploads.sign(req.session.user.id, body?.contentType);
   }
 }
 

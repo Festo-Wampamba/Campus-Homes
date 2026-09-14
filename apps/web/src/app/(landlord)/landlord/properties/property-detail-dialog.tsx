@@ -778,7 +778,7 @@ function PropertyMediaManager({
     setError(null);
     setUploading(true);
     try {
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
       const { publicId } = await uploadToCloudinary(file, sig);
       const created = await api<{ id: string; storageKey: string }>(
         `/listings/properties/${propertyId}/media`,
@@ -877,7 +877,7 @@ function RoomPhotoManager({
     setError(null);
     setUploading(true);
     try {
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
       const { publicId } = await uploadToCloudinary(file, sig);
       const created = await api<{ id: string; storageKey: string }>(
         `/listings/units/${room.id}/photos`,
