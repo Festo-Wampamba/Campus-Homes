@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BedDouble,
   Building2,
   Calendar,
   CalendarCheck,
@@ -48,6 +49,7 @@ export default async function LandlordLayout({
       nav={[
         { label: "Dashboard", href: "/landlord", icon: <LayoutDashboard aria-hidden className="size-4 shrink-0" /> },
         { label: "My Properties", href: "/landlord/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
+        { label: "Manage Rooms", href: "/landlord/rooms", icon: <BedDouble aria-hidden className="size-4 shrink-0" /> },
         { label: "Tenants", href: "/landlord/tenants", icon: <Users aria-hidden className="size-4 shrink-0" /> },
         { label: "Bookings", href: "/landlord/bookings", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
         { label: "Enquiries", href: "/landlord/enquiries", icon: <MessageCircleQuestion aria-hidden className="size-4 shrink-0" /> },

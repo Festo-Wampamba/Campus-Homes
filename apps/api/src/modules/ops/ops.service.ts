@@ -40,6 +40,8 @@ import {
   onboardingLeads,
   opsStaff,
   properties,
+  roomTypes,
+  roomTypeVersions,
   semesters,
   units,
   unitSemesterPricing,
@@ -682,10 +684,45 @@ export class OpsService {
       const existingUnitInputs = input.units.filter((u) => u.unitId);
       const newUnitInputs = input.units.filter((u) => !u.unitId);
 
+      // Keep the older publish workflow compatible with the reusable room-
+      // type model. A single publish may add several physical rooms sharing
+      // the same specification, so create one approved type/version per
+      // category/capacity/price/deposit group and attach every new unit to it.
+      const roomTypeIds = new Map<string, string>();
+      for (const unit of newUnitInputs) {
+        const key = JSON.stringify([unit.roomCategory, unit.capacity, unit.pricePerTermUgx, unit.depositUgx ?? null]);
+        if (roomTypeIds.has(key)) continue;
+        const roomType = firstRow(await db.insert(roomTypes).values({
+          propertyId: listing.propertyId,
+          createdBy: property.landlordId,
+        }).returning());
+        const title = `${unit.roomCategory.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())} Room`;
+        const version = firstRow(await db.insert(roomTypeVersions).values({
+          roomTypeId: roomType.id,
+          versionNumber: 1,
+          title,
+          category: unit.roomCategory,
+          bathroomType: 'unspecified',
+          capacity: unit.capacity,
+          amenities: [],
+          semesterId: listing.semesterId,
+          pricePerTermUgx: unit.pricePerTermUgx,
+          depositUgx: unit.depositUgx ?? null,
+          status: 'approved',
+          submittedAt: new Date(),
+          reviewedBy: ctx.userId,
+          reviewedAt: new Date(),
+          createdBy: property.landlordId,
+        }).returning());
+        await db.update(roomTypes).set({ currentVersionId: version.id, updatedAt: new Date() }).where(eq(roomTypes.id, roomType.id));
+        roomTypeIds.set(key, roomType.id);
+      }
+
       const insertedUnits = newUnitInputs.length
         ? await db.insert(units).values(
             newUnitInputs.map((u) => ({
               propertyId: listing.propertyId,
+              roomTypeId: roomTypeIds.get(JSON.stringify([u.roomCategory, u.capacity, u.pricePerTermUgx, u.depositUgx ?? null])),
               label: u.label,
               capacity: u.capacity,
               roomCategory: u.roomCategory,
