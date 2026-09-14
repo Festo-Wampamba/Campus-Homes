@@ -59,7 +59,7 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: DeleteAdminUserDto,
   ) {
-    return this.users.softDelete(rlsCtx(req), req.permissions, id, body.reason);
+    return this.users.deleteUser(rlsCtx(req), req.permissions, id, body.reason);
   }
 
   @Post(':id/purge')
