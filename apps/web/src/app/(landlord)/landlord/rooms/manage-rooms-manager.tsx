@@ -52,6 +52,20 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   const [roomTypes, setRoomTypes] = useState<RoomType[]>(initialData.roomTypes);
   const [rooms, setRooms] = useState<RoomUnit[]>(initialData.rooms);
 
+  // Optimistic updates give instant feedback, but router.refresh() re-fetches
+  // the server data without re-seeding these useState values. Reconcile from
+  // fresh props whenever a refresh hands us a new initialData object — using
+  // React's render-time "reset state on prop change" pattern (not an effect)
+  // so the draft change-set banner (and its Submit button) surfaces after
+  // adding rooms, and server-bridged rooms appear.
+  const [syncedData, setSyncedData] = useState(initialData);
+  if (syncedData !== initialData) {
+    setSyncedData(initialData);
+    setChangeSet(initialData.changeSet);
+    setRoomTypes(initialData.roomTypes);
+    setRooms(initialData.rooms);
+  }
+
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [cancellingChangeSet, setCancellingChangeSet] = useState(false);
 
@@ -327,77 +341,37 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
 
       {/* Summary Metric Cards (6 Cards) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {/* Physical Rooms */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold">Total Rooms</span>
-            <DoorClosed className="size-4" />
-          </div>
-          <p className="text-2xl font-bold font-mono text-foreground mt-2 tabular-nums">
-            {metrics.totalRooms}
-          </p>
-          <span className="text-[11px] text-muted-foreground mt-0.5 block">Physical units</span>
-        </div>
-
-        {/* Total Bedspaces */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold">Total Beds</span>
-            <Bed className="size-4" />
-          </div>
-          <p className="text-2xl font-bold font-mono text-foreground mt-2 tabular-nums">
-            {metrics.totalBeds}
-          </p>
-          <span className="text-[11px] text-muted-foreground mt-0.5 block">Total capacity</span>
-        </div>
-
-        {/* Available Beds */}
-        <div className="rounded-xl border border-teal-200/80 bg-teal-50/40 p-4 shadow-xs dark:border-teal-900/60 dark:bg-teal-950/20">
-          <div className="flex items-center justify-between text-teal-800 dark:text-teal-300">
-            <span className="text-xs font-semibold">Available Beds</span>
-            <CheckCircle2 className="size-4" />
-          </div>
-          <p className="text-2xl font-bold font-mono text-teal-700 dark:text-teal-400 mt-2 tabular-nums">
-            {metrics.availableBeds}
-          </p>
-          <span className="text-[11px] text-teal-900/70 dark:text-teal-300/70 mt-0.5 block">Ready to reserve</span>
-        </div>
-
-        {/* Partially Occupied Rooms */}
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 shadow-xs dark:border-amber-900/60 dark:bg-amber-950/20">
-          <div className="flex items-center justify-between text-amber-800 dark:text-amber-300">
-            <span className="text-xs font-semibold">Partially Full</span>
-            <Clock className="size-4" />
-          </div>
-          <p className="text-2xl font-bold font-mono text-amber-700 dark:text-amber-400 mt-2 tabular-nums">
-            {metrics.partiallyOccupiedRooms}
-          </p>
-          <span className="text-[11px] text-amber-900/70 dark:text-amber-300/70 mt-0.5 block">Has free beds</span>
-        </div>
-
-        {/* Fully Occupied */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold">Fully Booked</span>
-            <Layers className="size-4" />
-          </div>
-          <p className="text-2xl font-bold font-mono text-foreground mt-2 tabular-nums">
-            {metrics.fullyOccupiedRooms}
-          </p>
-          <span className="text-[11px] text-muted-foreground mt-0.5 block">100% occupied</span>
-        </div>
-
-        {/* Blocked / Maintenance */}
-        <div className="rounded-xl border border-destructive/20 bg-destructive-subtle/30 p-4 shadow-xs">
-          <div className="flex items-center justify-between text-destructive">
-            <span className="text-xs font-semibold">Maintenance</span>
-            <Wrench className="size-4" />
-          </div>
-          <p className="text-2xl font-bold font-mono text-destructive mt-2 tabular-nums">
-            {metrics.blockedRooms}
-          </p>
-          <span className="text-[11px] text-destructive/80 mt-0.5 block">Offline blocks</span>
-        </div>
+        {([
+          { label: "Total Rooms", value: metrics.totalRooms, caption: "Physical units", Icon: DoorClosed, tone: "muted", title: "Every physical room on this property for the selected semester. Click to see the full list." },
+          { label: "Total Beds", value: metrics.totalBeds, caption: "Total capacity", Icon: Bed, tone: "muted", title: "Total bedspaces across all rooms — the maximum students you can house. Click to see the list." },
+          { label: "Available Beds", value: metrics.availableBeds, caption: "Ready to reserve", Icon: CheckCircle2, tone: "teal", title: "Bedspaces that are free and not blocked — students can reserve these now. Click to see the list." },
+          { label: "Partially Full", value: metrics.partiallyOccupiedRooms, caption: "Has free beds", Icon: Clock, tone: "amber", title: "Rooms with some beds taken and some still free. Click to see the list." },
+          { label: "Fully Booked", value: metrics.fullyOccupiedRooms, caption: "100% occupied", Icon: Layers, tone: "muted", title: "Rooms where every bed is occupied. Click to see the list." },
+          { label: "Maintenance", value: metrics.blockedRooms, caption: "Offline blocks", Icon: Wrench, tone: "destructive", title: "Rooms taken offline by a maintenance block — not reservable until cleared. Click to see the list." },
+        ] as const).map((card) => {
+          const tone = {
+            muted: { box: "border-border bg-card", head: "text-muted-foreground", value: "text-foreground", caption: "text-muted-foreground" },
+            teal: { box: "border-teal-200/80 bg-teal-50/40 dark:border-teal-900/60 dark:bg-teal-950/20", head: "text-teal-800 dark:text-teal-300", value: "text-teal-700 dark:text-teal-400", caption: "text-teal-900/70 dark:text-teal-300/70" },
+            amber: { box: "border-amber-200/80 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/20", head: "text-amber-800 dark:text-amber-300", value: "text-amber-700 dark:text-amber-400", caption: "text-amber-900/70 dark:text-amber-300/70" },
+            destructive: { box: "border-destructive/20 bg-destructive-subtle/30", head: "text-destructive", value: "text-destructive", caption: "text-destructive/80" },
+          }[card.tone];
+          return (
+            <button
+              key={card.label}
+              type="button"
+              title={card.title}
+              onClick={() => handleTabChange("rooms")}
+              className={`rounded-xl border ${tone.box} p-4 text-left shadow-xs transition-colors hover:border-teal-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600`}
+            >
+              <div className={`flex items-center justify-between ${tone.head}`}>
+                <span className="text-xs font-semibold">{card.label}</span>
+                <card.Icon className="size-4" />
+              </div>
+              <p className={`text-2xl font-bold font-mono ${tone.value} mt-2 tabular-nums`}>{card.value}</p>
+              <span className={`text-[11px] ${tone.caption} mt-0.5 block`}>{card.caption}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Accessible WAI-ARIA Tabs */}

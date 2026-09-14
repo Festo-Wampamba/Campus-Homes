@@ -416,7 +416,7 @@ export function RoomsInventoryTab({
           {rooms.length === 0 && (
             <div className="mt-5 flex justify-center gap-3">
               <Button variant="secondary" onClick={openAddSingleRoom}>
-                Add Single Room
+                Add Room
               </Button>
               <Button onClick={() => setBulkDialogOpen(true)}>
                 Bulk Generate Rooms
@@ -707,7 +707,7 @@ export function RoomsInventoryTab({
       <Dialog open={singleRoomDialogOpen} onOpenChange={setSingleRoomDialogOpen} size="sm">
         <form onSubmit={handleSingleRoomSubmit} className="flex flex-col h-full">
           <DialogHeader
-            title={editingRoom ? `Edit Room ${editingRoom.roomCode}` : "Add Single Room"}
+            title={editingRoom ? `Edit Room ${editingRoom.roomCode}` : "Add Room"}
             description="Create or modify a physical room code and associate it with a room type specification."
             onClose={() => setSingleRoomDialogOpen(false)}
           />
