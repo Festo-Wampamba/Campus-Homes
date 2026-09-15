@@ -295,6 +295,13 @@
       "when": 1789400000000,
       "tag": "0042_purge_delete_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789480000000,
+      "tag": "0043_purge_update_grants",
+      "breakpoints": true
     }
   ]
 }

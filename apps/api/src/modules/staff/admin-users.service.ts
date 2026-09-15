@@ -477,7 +477,6 @@ export class AdminUsersService {
         UPDATE inquiries SET landlord_id = NULL WHERE landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM property_memberships WHERE user_id IN (SELECT id FROM _pg_g);
 
-        UPDATE audit_log SET actor_id = NULL WHERE actor_id IN (SELECT id FROM _pg_g);
         UPDATE landlords SET kyc_reviewed_by = NULL WHERE kyc_reviewed_by IN (SELECT id FROM _pg_g);
         UPDATE reservations SET booked_by = NULL WHERE booked_by IN (SELECT id FROM _pg_g);
         UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
@@ -504,10 +503,6 @@ export class AdminUsersService {
         UPDATE user_permission_grants SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
-        UPDATE room_type_versions SET reviewed_by = NULL WHERE reviewed_by IN (SELECT id FROM _pg_g);
-        UPDATE room_inventory_change_sets SET reviewed_by = NULL WHERE reviewed_by IN (SELECT id FROM _pg_g);
-        UPDATE unit_blocks SET cleared_by = NULL WHERE cleared_by IN (SELECT id FROM _pg_g);
-
         DELETE FROM users WHERE id IN (SELECT id FROM _pg_g);
       `);
   }
