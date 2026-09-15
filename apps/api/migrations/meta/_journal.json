@@ -288,6 +288,27 @@
       "when": 1789300000000,
       "tag": "0041_delete_no_step_up",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0042_purge_delete_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789480000000,
+      "tag": "0043_purge_update_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789500000000,
+      "tag": "0044_purge_append_only_references",
+      "breakpoints": true
     }
   ]
 }

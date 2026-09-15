@@ -446,12 +446,12 @@ export class AdminUsersService {
         DELETE FROM refunds WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM landlord_strikes WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM student_flags WHERE reservation_id IN (SELECT id FROM _pg_res);
-        DELETE FROM reservation_releases WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM payments WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM move_ins WHERE reservation_id IN (SELECT id FROM _pg_res);
-        DELETE FROM journal_entries WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM reservations WHERE id IN (SELECT id FROM _pg_res);
 
+        DELETE FROM room_unit_changes WHERE change_set_id IN (SELECT id FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props)) OR unit_id IN (SELECT id FROM _pg_unts) OR room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
+        DELETE FROM unit_blocks WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM unit_photos WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM unit_semester_pricing WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM beds WHERE id IN (SELECT id FROM _pg_bds);
@@ -464,13 +464,17 @@ export class AdminUsersService {
         DELETE FROM listings WHERE id IN (SELECT id FROM _pg_lists);
         DELETE FROM tenant_agreements WHERE property_id IN (SELECT id FROM _pg_props);
         DELETE FROM verification_visits WHERE property_id IN (SELECT id FROM _pg_props);
+        UPDATE room_types SET current_version_id = NULL WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM room_type_photos WHERE room_type_version_id IN (SELECT id FROM room_type_versions WHERE room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props)));
+        DELETE FROM room_type_versions WHERE room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
+        DELETE FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM room_types WHERE property_id IN (SELECT id FROM _pg_props);
         DELETE FROM properties WHERE id IN (SELECT id FROM _pg_props);
 
         DELETE FROM inquiries WHERE student_id IN (SELECT id FROM _pg_g);
         UPDATE inquiries SET landlord_id = NULL WHERE landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM property_memberships WHERE user_id IN (SELECT id FROM _pg_g);
 
-        UPDATE audit_log SET actor_id = NULL WHERE actor_id IN (SELECT id FROM _pg_g);
         UPDATE landlords SET kyc_reviewed_by = NULL WHERE kyc_reviewed_by IN (SELECT id FROM _pg_g);
         UPDATE reservations SET booked_by = NULL WHERE booked_by IN (SELECT id FROM _pg_g);
         UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
@@ -490,14 +494,12 @@ export class AdminUsersService {
         UPDATE property_memberships SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE property_memberships SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE report_exports SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
-        UPDATE reservation_releases SET released_by = NULL WHERE released_by IN (SELECT id FROM _pg_g);
         UPDATE tenant_agreement_templates SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
         UPDATE unit_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
         UPDATE user_permission_grants SET granted_by = NULL WHERE granted_by IN (SELECT id FROM _pg_g);
         UPDATE user_permission_grants SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
-
         DELETE FROM users WHERE id IN (SELECT id FROM _pg_g);
       `);
   }
