@@ -46,9 +46,12 @@ export const journalEntries = pgTable('journal_entries', {
   entryDate: date('entry_date').notNull().defaultNow(),
   memo: text('memo').notNull(),
   sourceType: text('source_type').notNull().default('manual'), // auto | manual
-  reservationId: uuid('reservation_id').references(() => reservations.id, { onDelete: 'restrict' }),
-  paymentId: uuid('payment_id').references(() => payments.id, { onDelete: 'restrict' }),
-  refundId: uuid('refund_id').references(() => refunds.id, { onDelete: 'restrict' }),
+  // Accounting entries outlive the operational reservation/payment/refund
+  // records that prompted them. A permanent account purge anonymizes those
+  // links through the database FK, never by mutating the append-only journal.
+  reservationId: uuid('reservation_id').references(() => reservations.id, { onDelete: 'set null' }),
+  paymentId: uuid('payment_id').references(() => payments.id, { onDelete: 'set null' }),
+  refundId: uuid('refund_id').references(() => refunds.id, { onDelete: 'set null' }),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

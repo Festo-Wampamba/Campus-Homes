@@ -446,10 +446,8 @@ export class AdminUsersService {
         DELETE FROM refunds WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM landlord_strikes WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM student_flags WHERE reservation_id IN (SELECT id FROM _pg_res);
-        DELETE FROM reservation_releases WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM payments WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM move_ins WHERE reservation_id IN (SELECT id FROM _pg_res);
-        DELETE FROM journal_entries WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM reservations WHERE id IN (SELECT id FROM _pg_res);
 
         DELETE FROM room_unit_changes WHERE change_set_id IN (SELECT id FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props)) OR unit_id IN (SELECT id FROM _pg_unts) OR room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
@@ -496,7 +494,6 @@ export class AdminUsersService {
         UPDATE property_memberships SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE property_memberships SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE report_exports SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
-        UPDATE reservation_releases SET released_by = NULL WHERE released_by IN (SELECT id FROM _pg_g);
         UPDATE tenant_agreement_templates SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
         UPDATE unit_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
         UPDATE user_permission_grants SET granted_by = NULL WHERE granted_by IN (SELECT id FROM _pg_g);

@@ -92,11 +92,9 @@ export const reservations = pgTable(
 export const reservationReleases = pgTable('reservation_releases', {
   id: uuid('id').primaryKey().defaultRandom(),
   reservationId: uuid('reservation_id')
-    .notNull()
-    .references(() => reservations.id, { onDelete: 'restrict' }),
+    .references(() => reservations.id, { onDelete: 'set null' }),
   releasedBy: uuid('released_by')
-    .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'set null' }),
   reason: text('reason').notNull(),
   // Automated refund execution is a later phase (§16 of the redesign doc) —
   // this just preserves the information a future refund workflow will need.

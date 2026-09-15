@@ -68,5 +68,8 @@ describe('AdminUsersService.purgeUser', () => {
     expect(cascade).toContain('DELETE FROM room_inventory_change_sets');
     expect(cascade).toContain('DELETE FROM room_types');
     expect(cascade).not.toContain('UPDATE audit_log');
+    expect(cascade).not.toContain('DELETE FROM journal_entries');
+    expect(cascade).not.toContain('DELETE FROM reservation_releases');
+    expect(cascade).not.toContain('UPDATE reservation_releases');
   });
 });
