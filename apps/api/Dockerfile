@@ -26,6 +26,7 @@ ENV PORT=4000
 
 WORKDIR /app
 COPY --from=builder --chown=node:node /prod/api ./
+COPY --from=builder --chown=node:node /workspace/apps/api/migrations ./migrations
 COPY --from=builder /commit_sha.txt ./commit_sha.txt
 
 USER node
@@ -35,4 +36,7 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT || 4000}/api/v1/health`).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 
-CMD ["node", "dist/src/main.js"]
+# DATABASE_URL remains the least-privilege runtime connection. When the
+# separately-scoped migration URL is configured, apply SQL before booting so
+# code and schema cannot silently drift apart during a deploy.
+CMD ["sh", "-c", "if [ -n \"$DATABASE_MIGRATIONS_URL\" ]; then node dist/src/db/migrate.js; fi; exec node dist/src/main.js"]
