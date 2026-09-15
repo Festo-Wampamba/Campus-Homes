@@ -452,6 +452,8 @@ export class AdminUsersService {
         DELETE FROM journal_entries WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM reservations WHERE id IN (SELECT id FROM _pg_res);
 
+        DELETE FROM room_unit_changes WHERE change_set_id IN (SELECT id FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props)) OR unit_id IN (SELECT id FROM _pg_unts) OR room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
+        DELETE FROM unit_blocks WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM unit_photos WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM unit_semester_pricing WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM beds WHERE id IN (SELECT id FROM _pg_bds);
@@ -464,6 +466,11 @@ export class AdminUsersService {
         DELETE FROM listings WHERE id IN (SELECT id FROM _pg_lists);
         DELETE FROM tenant_agreements WHERE property_id IN (SELECT id FROM _pg_props);
         DELETE FROM verification_visits WHERE property_id IN (SELECT id FROM _pg_props);
+        UPDATE room_types SET current_version_id = NULL WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM room_type_photos WHERE room_type_version_id IN (SELECT id FROM room_type_versions WHERE room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props)));
+        DELETE FROM room_type_versions WHERE room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
+        DELETE FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM room_types WHERE property_id IN (SELECT id FROM _pg_props);
         DELETE FROM properties WHERE id IN (SELECT id FROM _pg_props);
 
         DELETE FROM inquiries WHERE student_id IN (SELECT id FROM _pg_g);
@@ -497,6 +504,9 @@ export class AdminUsersService {
         UPDATE user_permission_grants SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
+        UPDATE room_type_versions SET reviewed_by = NULL WHERE reviewed_by IN (SELECT id FROM _pg_g);
+        UPDATE room_inventory_change_sets SET reviewed_by = NULL WHERE reviewed_by IN (SELECT id FROM _pg_g);
+        UPDATE unit_blocks SET cleared_by = NULL WHERE cleared_by IN (SELECT id FROM _pg_g);
 
         DELETE FROM users WHERE id IN (SELECT id FROM _pg_g);
       `);
