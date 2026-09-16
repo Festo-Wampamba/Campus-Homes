@@ -1,4 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { PoolClient } from 'pg';
 
 import { RlsDb } from '../../db/db.module';
@@ -28,6 +30,16 @@ function make(targetRow: { deletedAt: Date | null; isSuperAdmin: boolean } | nul
 }
 
 describe('AdminUsersService.purgeUser', () => {
+  it('has the narrowly-scoped users DELETE grant required by the final cascade step', () => {
+    const migration = readFileSync(
+      join(process.cwd(), 'migrations/0045_purge_users_delete_grant.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('GRANT DELETE ON users TO app_user;');
+    expect(migration).toContain("app.user_role = 'service_role'");
+  });
+
   it('hard-deletes a soft-deleted non-super-admin and records the audit', async () => {
     const { service, queries, audit } = make({ deletedAt: new Date(), isSuperAdmin: false });
     await expect(service.purgeUser(actor, new Set(), target)).resolves.toEqual({ id: target, purged: true });
