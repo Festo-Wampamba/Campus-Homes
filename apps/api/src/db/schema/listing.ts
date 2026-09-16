@@ -50,9 +50,7 @@ export const listingVersions = pgTable(
     amenities: jsonb('amenities').notNull(),
     description: text('description'),
     verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull(),
-    verifiedBy: uuid('verified_by')
-      .notNull()
-      .references(() => opsStaff.userId),
+    verifiedBy: uuid('verified_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
     supersededAt: timestamp('superseded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -65,9 +63,7 @@ export const listingPhotos = pgTable('listing_photos', {
     .notNull()
     .references(() => listingVersions.id, { onDelete: 'restrict' }),
   storageKey: text('storage_key').notNull(),
-  capturedBy: uuid('captured_by')
-    .notNull()
-    .references(() => opsStaff.userId),
+  capturedBy: uuid('captured_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
   // EXIF-verified server-side on upload — client-reported values are never trusted.
   gpsLat: numeric('gps_lat', { precision: 10, scale: 7 }).notNull(),
   gpsLon: numeric('gps_lon', { precision: 10, scale: 7 }).notNull(),

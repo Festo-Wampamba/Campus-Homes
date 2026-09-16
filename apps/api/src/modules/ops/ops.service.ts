@@ -218,11 +218,13 @@ export class OpsService {
     await this.audit.record(ctx, 'visit.correction_raise', 'verification_visit', visitId, {
       component: input.component,
     });
-    await this.notifications.notify(visit.inspectorId, 'visit.correction_requested', 'in_app', {
-      visitId,
-      component: input.component,
-      message: input.message,
-    });
+    if (visit.inspectorId) {
+      await this.notifications.notify(visit.inspectorId, 'visit.correction_requested', 'in_app', {
+        visitId,
+        component: input.component,
+        message: input.message,
+      });
+    }
     return correction;
   }
 
@@ -287,6 +289,7 @@ export class OpsService {
       component: input.component,
     });
     for (const correction of resolved) {
+      if (!correction.raisedBy) continue;
       await this.notifications.notify(correction.raisedBy, 'visit.correction_resolved', 'in_app', {
         visitId,
         component: input.component,

@@ -158,7 +158,7 @@ export const moveIns = pgTable(
     noShow: boolean('no_show').notNull().default(false),
     landlordFailureFlag: boolean('landlord_failure_flag').notNull().default(false),
     landlordFailureReason: text('landlord_failure_reason'),
-    opsVerifiedBy: uuid('ops_verified_by').references(() => opsStaff.userId),
+    opsVerifiedBy: uuid('ops_verified_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('move_ins_reservation_uk').on(t.reservationId)],
