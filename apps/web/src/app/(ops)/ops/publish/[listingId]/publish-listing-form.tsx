@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Property, RoomCategory } from "@campushomes/shared";
+import { MAX_PUBLISH_UNITS, type Property, type RoomCategory } from "@campushomes/shared";
 
 type PropertyRoom = {
   id: string;
@@ -116,6 +116,14 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
     );
     if (validRows.length === 0) {
       setError("Add at least one room type with a room count and price.");
+      return;
+    }
+
+    const totalRooms = validRows.reduce((sum, row) => sum + Number(row.roomCount), 0);
+    if (totalRooms > MAX_PUBLISH_UNITS) {
+      setError(
+        `This publish has ${totalRooms} rooms — the maximum per listing is ${MAX_PUBLISH_UNITS}. Reduce the room counts or publish the remaining rooms separately.`,
+      );
       return;
     }
 

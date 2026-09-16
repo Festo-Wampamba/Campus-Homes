@@ -61,6 +61,13 @@ export type SyncVisitInput = z.infer<typeof syncVisitSchema>;
 // There's no single flat price: each room category (single/double/...) is
 // priced independently, so the version snapshot's headline price is derived
 // server-side as the cheapest category, not entered directly by Ops.
+// One `units` entry is published per physical room, so a large hostel's single
+// publish can run to several hundred rooms (e.g. 200 singles + 100 doubles).
+// The cap only bounds request/transaction size, not real inventory — keep it
+// comfortably above any real property. Exported so the publish form can warn
+// before submitting instead of the server returning a bare "Validation failed".
+export const MAX_PUBLISH_UNITS = 1000;
+
 export const publishListingSchema = z.object({
   listingId: uuid,
   amenities: z.record(z.string(), z.boolean()),
@@ -84,7 +91,7 @@ export const publishListingSchema = z.object({
       }),
     )
     .min(1)
-    .max(200),
+    .max(MAX_PUBLISH_UNITS),
 });
 export type PublishListingInput = z.infer<typeof publishListingSchema>;
 
