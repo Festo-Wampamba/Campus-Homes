@@ -462,25 +462,60 @@ export class OpsService {
   }
 
   async scheduleVisit(ctx: RlsContext, input: ScheduleVisitInput) {
-    const visit = await this.rlsDb.run(ctx, async (db) =>
-      firstRow(
+    const scheduledAt = new Date(input.scheduledAt);
+    const { visit, created } = await this.rlsDb.run(ctx, async (db) => {
+      // The picker only lists active inspectors, but a direct API call could
+      // target any user with an ops_staff row — assigning an inactive one
+      // creates a visit nobody can work (RLS denies their update).
+      const inspector = await db.query.opsStaff.findFirst({
+        where: and(eq(opsStaff.userId, input.inspectorId), eq(opsStaff.active, true)),
+      });
+      if (!inspector) {
+        throw new BadRequestException('Assign an active ops inspector');
+      }
+      // Idempotent against a double-submit: the same (property, inspector,
+      // time) assignment that is still open (unworked, unapproved) returns the
+      // existing visit instead of creating a duplicate the inspector sees twice.
+      const existing = await db.query.verificationVisits.findFirst({
+        where: and(
+          eq(verificationVisits.propertyId, input.propertyId),
+          eq(verificationVisits.inspectorId, input.inspectorId),
+          eq(verificationVisits.scheduledAt, scheduledAt),
+          eq(verificationVisits.result, 'pending'),
+          isNull(verificationVisits.approvedAt),
+        ),
+      });
+      if (existing) {
+        return { visit: existing, created: false };
+      }
+      const inserted = firstRow(
         await db
           .insert(verificationVisits)
           .values({
             propertyId: input.propertyId,
             inspectorId: input.inspectorId,
-            scheduledAt: new Date(input.scheduledAt),
+            scheduledAt,
             // Server-created rows still need the NOT NULL idempotency slot; the
             // inspector's offline sync replaces it with the client's own key.
             clientIdempotencyKey: `visit-scheduled-${crypto.randomUUID()}`,
           })
           .returning(),
-      ),
-    );
-    await this.audit.record(ctx, 'visit.schedule', 'verification_visit', visit.id, {
-      propertyId: input.propertyId,
-      inspectorId: input.inspectorId,
+      );
+      return { visit: inserted, created: true };
     });
+    // Only a genuinely new assignment audits and notifies — a replayed submit
+    // must not double-notify the inspector.
+    if (created) {
+      await this.audit.record(ctx, 'visit.schedule', 'verification_visit', visit.id, {
+        propertyId: input.propertyId,
+        inspectorId: input.inspectorId,
+      });
+      await this.notifications.notify(input.inspectorId, 'visit.assigned', 'in_app', {
+        visitId: visit.id,
+        propertyId: input.propertyId,
+        scheduledAt: input.scheduledAt,
+      });
+    }
     return visit;
   }
 
