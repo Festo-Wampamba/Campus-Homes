@@ -7,7 +7,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
   UGANDA_GPS_BOUNDS,
@@ -627,15 +627,42 @@ export class OpsService {
           "This property's landlord account is not active — publishing is blocked",
         );
       }
-      // The visit whose photos (staged at sync time) get promoted below —
-      // the most recently approved, passed visit for this property.
+      // Publish gate: a listing only goes public behind an ops-lead-approved
+      // inspection. A passed-but-unapproved visit is the inspector's evidence
+      // waiting on the lead's decision — it is NOT sufficient to publish, so
+      // approved_at must be set, not merely result = 'passed'. This visit's
+      // staged photos are also what gets promoted below.
       const approvedVisit = await db.query.verificationVisits.findFirst({
         where: and(
           eq(verificationVisits.propertyId, listing.propertyId),
           eq(verificationVisits.result, 'passed'),
+          isNotNull(verificationVisits.approvedAt),
         ),
         orderBy: (v, ops) => [ops.desc(v.approvedAt)],
       });
+      if (!approvedVisit) {
+        throw new ConflictException(
+          'This property has no ops-lead-approved inspection — approve the passed visit before publishing',
+        );
+      }
+
+      // Don't publish inventory that is mid-review: an open change set for this
+      // property + semester means the room data a student would see could still
+      // change under review. Gate on the same semester the listing is for, so a
+      // pending change for a different term doesn't block this one.
+      const [{ pending }] = (
+        await db.execute(sql`
+          SELECT count(*)::int AS pending FROM room_inventory_change_sets
+          WHERE property_id = ${listing.propertyId}
+            AND semester_id = ${listing.semesterId}
+            AND status IN ('pending_review', 'visit_required')
+        `)
+      ).rows as [{ pending: number }];
+      if (pending > 0) {
+        throw new ConflictException(
+          'A room inventory change for this semester is still under review — resolve it before publishing',
+        );
+      }
       const [{ next }] = (
         await db.execute(
           sql`SELECT COALESCE(MAX(version_number), 0) + 1 AS next

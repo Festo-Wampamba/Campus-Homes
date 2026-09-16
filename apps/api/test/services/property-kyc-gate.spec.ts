@@ -229,6 +229,55 @@ describe('publishListing KYC/account-status defense in depth', () => {
     });
     expect(result.listing.status).toBe('verified');
   });
+
+  it('blocks publish when the passed visit was never ops-lead-approved', async () => {
+    const propertyId = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+       VALUES ($1, 'Unapproved Visit Hostel', 'Kikoni', 'active', 'MUK') RETURNING id`,
+      [landlordVerified],
+    );
+    await seed(
+      `INSERT INTO verification_visits
+         (property_id, inspector_id, checklist, client_idempotency_key, result)
+       VALUES ($1, $2, $3, 'gate-unapproved-visit', 'passed') RETURNING id`,
+      [propertyId, inspector, fullChecklist],
+    );
+    const listingId = await seed(
+      `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'pending_verification') RETURNING id`,
+      [propertyId, semesterId],
+    );
+    await expect(
+      ops.publishListing(leadCtx(), {
+        listingId,
+        units: [{ label: 'A1', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500000 }],
+        amenities: {},
+        description: 'desc',
+      }),
+    ).rejects.toThrow('approved inspection');
+  });
+
+  it('blocks publish while a room inventory change for the semester is pending review', async () => {
+    const listingId = await propertyWithApprovedVisit(landlordVerified, 'Pending Change Set Hostel');
+    const propertyId = (
+      await pool.query<{ propertyId: string }>(
+        `SELECT property_id AS "propertyId" FROM listings WHERE id = $1`,
+        [listingId],
+      )
+    ).rows[0]!.propertyId;
+    await pool.query(
+      `INSERT INTO room_inventory_change_sets (property_id, semester_id, status)
+       VALUES ($1, $2, 'pending_review')`,
+      [propertyId, semesterId],
+    );
+    await expect(
+      ops.publishListing(leadCtx(), {
+        listingId,
+        units: [{ label: 'A1', capacity: 1, roomCategory: 'single', pricePerTermUgx: 500000 }],
+        amenities: {},
+        description: 'desc',
+      }),
+    ).rejects.toThrow('under review');
+  });
 });
 
 describe('decideKyc property-status release', () => {
