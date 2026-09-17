@@ -23,6 +23,7 @@ import {
   type SyncVisitInput,
   type UnitOperationalStatus,
   type University,
+  normalizeVisitPhotos,
 } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
@@ -848,15 +849,18 @@ export class OpsService {
     // requires GPS before a visit can even be submitted), is skipped rather
     // than blocking the publish itself on it.
     const visit = published.approvedVisit;
-    const photoKeys = (visit?.photoStorageKeys ?? []) as string[];
+    // Staged photos are jsonb and may be bare keys (staged before categories)
+    // or {storageKey, category} — normalizeVisitPhotos reads both.
+    const visitPhotos = normalizeVisitPhotos(visit?.photoStorageKeys);
     const gpsLat = visit?.visitGpsLat;
     const gpsLon = visit?.visitGpsLon;
-    if (visit && photoKeys.length > 0 && gpsLat != null && gpsLon != null) {
+    if (visit && visitPhotos.length > 0 && gpsLat != null && gpsLon != null) {
       await this.rlsDb.run(SERVICE_CTX, (db) =>
         db.insert(listingPhotos).values(
-          photoKeys.map((storageKey, i) => ({
+          visitPhotos.map((photo, i) => ({
             listingVersionId: published.version.id,
-            storageKey,
+            storageKey: photo.storageKey,
+            category: photo.category,
             capturedBy: visit.inspectorId,
             gpsLat,
             gpsLon,
@@ -895,7 +899,7 @@ export class OpsService {
         ),
         orderBy: (v, ops) => [ops.desc(v.approvedAt)],
       });
-      const visitPhotoCount = (approvedVisit?.photoStorageKeys as string[] | null)?.length ?? 0;
+      const visitPhotoCount = normalizeVisitPhotos(approvedVisit?.photoStorageKeys).length;
       const photos = listing.currentVersionId
         ? await db
             .select()

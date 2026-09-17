@@ -6,6 +6,9 @@ import {
   VERIFICATION_CHECKLIST_COMPONENTS,
   type OpsVisitDetail,
   type VerificationChecklistComponent,
+  PHOTO_CATEGORIES,
+  PHOTO_CATEGORY_LABELS,
+  type PhotoCategory,
 } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -13,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
-import { getDraft, putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
+import { getDraft, putDraft, type InspectionDraft, type PendingPhoto } from "@/lib/ops/inspection-db";
 import { syncQueuedDrafts } from "@/lib/ops/sync-manager";
 import { CorrectionFixPanel } from "./correction-fix-panel";
 
@@ -36,8 +39,16 @@ function useOnline(): boolean {
 /** Local blob preview for a not-yet-uploaded File — captured offline, so
  * there's no storage URL to point an <img> at yet. Revokes its object URL
  * on unmount so removing/replacing photos doesn't leak them. */
-function PhotoThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const [url] = useState(() => URL.createObjectURL(file));
+function PhotoThumb({
+  photo,
+  onRemove,
+  onCategoryChange,
+}: {
+  photo: PendingPhoto;
+  onRemove: () => void;
+  onCategoryChange: (category: PhotoCategory) => void;
+}) {
+  const [url] = useState(() => URL.createObjectURL(photo.file));
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return (
     <div className="group relative">
@@ -51,6 +62,20 @@ function PhotoThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
       >
         <X aria-hidden className="size-3" />
       </button>
+      {/* Categorised on site, while the inspector can still see the room —
+          not left for whoever reviews the listing later to guess from a thumbnail. */}
+      <select
+        aria-label="Photo category"
+        value={photo.category}
+        onChange={(e) => onCategoryChange(e.target.value as PhotoCategory)}
+        className="mt-1 w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
+      >
+        {PHOTO_CATEGORIES.map((c) => (
+          <option key={c} value={c}>
+            {PHOTO_CATEGORY_LABELS[c]}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -220,7 +245,17 @@ export function InspectionForm({
   }
 
   function addPhotos(files: File[]) {
-    persist({ ...currentDraft, photos: [...currentDraft.photos, ...files] });
+    // Defaults to 'bedroom' — the category an inspector shoots most — and is
+    // changeable per photo below, so capture is never blocked on a dropdown.
+    const added = files.map((file) => ({ file, category: "bedroom" as PhotoCategory }));
+    persist({ ...currentDraft, photos: [...currentDraft.photos, ...added] });
+  }
+
+  function setPhotoCategory(index: number, category: PhotoCategory) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) => (i === index ? { ...p, category } : p)),
+    });
   }
 
   function removePhoto(index: number) {
@@ -388,11 +423,12 @@ export function InspectionForm({
                 <div className="space-y-2">
                   {draft.photos.length > 0 && (
                     <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                      {draft.photos.map((file, i) => (
+                      {draft.photos.map((photo, i) => (
                         <PhotoThumb
-                          key={`${file.name}-${file.lastModified}-${i}`}
-                          file={file}
+                          key={`${photo.file.name}-${photo.file.lastModified}-${i}`}
+                          photo={photo}
                           onRemove={() => removePhoto(i)}
+                          onCategoryChange={(category) => setPhotoCategory(i, category)}
                         />
                       ))}
                     </div>

@@ -11,7 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { listingStatus, roomCategory } from './enums';
+import { listingStatus, photoCategory, roomCategory } from './enums';
 import { opsStaff, users } from './identity';
 import { properties, semesters } from './property';
 
@@ -68,6 +68,8 @@ export const listingPhotos = pgTable('listing_photos', {
   gpsLat: numeric('gps_lat', { precision: 10, scale: 7 }).notNull(),
   gpsLon: numeric('gps_lon', { precision: 10, scale: 7 }).notNull(),
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+  // Nullable: rows captured before categories existed (0047) have none.
+  category: photoCategory('category'),
   isPrimary: boolean('is_primary').notNull().default(false),
   sortOrder: smallint('sort_order').notNull().default(0),
   metadata: jsonb('metadata'),
