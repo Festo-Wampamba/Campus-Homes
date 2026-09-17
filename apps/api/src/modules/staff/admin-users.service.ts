@@ -489,10 +489,16 @@ export class AdminUsersService {
         UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
         UPDATE approval_requests SET requested_by = NULL WHERE requested_by IN (SELECT id FROM _pg_g);
         UPDATE approval_requests SET decided_by = NULL WHERE decided_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET invited_by = NULL WHERE invited_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET cancelled_by = NULL WHERE cancelled_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET accepted_by = NULL WHERE accepted_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET target_user_id = NULL WHERE target_user_id IN (SELECT id FROM _pg_g);
+        -- Invitations can't be anonymized in place: invited_by is NOT NULL, and
+        -- the status CHECKs require accepted_by/cancelled_by to stay non-null on
+        -- an accepted/cancelled invite (nulling them raised 23514). They're
+        -- ephemeral onboarding artifacts — the permanent record is audit_log —
+        -- so delete any row that references the purged user in any of its slots.
+        DELETE FROM auth_invitations
+          WHERE invited_by IN (SELECT id FROM _pg_g)
+             OR cancelled_by IN (SELECT id FROM _pg_g)
+             OR accepted_by IN (SELECT id FROM _pg_g)
+             OR target_user_id IN (SELECT id FROM _pg_g);
         UPDATE campus_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
         UPDATE onboarding_leads SET contacted_by = NULL WHERE contacted_by IN (SELECT id FROM _pg_g);
         UPDATE platform_integrations SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);

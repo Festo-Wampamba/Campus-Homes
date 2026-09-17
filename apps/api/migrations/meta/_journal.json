@@ -337,6 +337,13 @@
       "when": 1789900000000,
       "tag": "0048_health_migrations_read",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0049_auth_invitations_purge_delete",
+      "breakpoints": true
     }
   ]
 }
