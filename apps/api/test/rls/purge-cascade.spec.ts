@@ -307,3 +307,20 @@ describe('purge cascade for a staff user (ops inspector)', () => {
     });
   });
 });
+
+// Deleting a staff user cascade-deletes their ops_staff row, so any FK pointing
+// at ops_staff that is NOT ON DELETE SET NULL/CASCADE blocks the whole purge
+// with a 23503 — the exact defect 0046 fixed, table by table. This asserts the
+// invariant instead of the nine individual columns, so a table added later
+// cannot reintroduce it unnoticed.
+describe('ops_staff referential invariant', () => {
+  it('has no FK referencing ops_staff that would block a staff delete', async () => {
+    const { rows } = await pool.query<{ conname: string }>(`
+      SELECT c.conname FROM pg_constraint c
+      WHERE c.contype = 'f'
+        AND c.confrelid::regclass::text = 'ops_staff'
+        AND c.confdeltype IN ('a', 'r')
+    `);
+    expect(rows.map((r) => r.conname)).toEqual([]);
+  });
+});
