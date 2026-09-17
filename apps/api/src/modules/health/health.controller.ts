@@ -71,6 +71,20 @@ export class HealthController {
     // it must be legible. `applied: null` means the migrations table could not
     // be read (missing, or not granted to the runtime role) — itself a finding.
     let applied: number | null = null;
+    // pg_catalog is readable by every role, so this distinguishes the two very
+    // different meanings of `applied: null`: the ledger being absent means
+    // migrations have never run against this database at all, while present-
+    // but-unreadable means they have run and the runtime role simply lacks the
+    // grant. Without it a null is ambiguous exactly when it matters most.
+    let ledgerPresent: boolean | null = null;
+    try {
+      const { rows } = await this.pool.query<{ present: boolean }>(
+        "SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS present",
+      );
+      ledgerPresent = rows[0]?.present ?? null;
+    } catch {
+      // Same posture as the checks above: state only, details stay server-side.
+    }
     try {
       const { rows } = await this.pool.query<{ applied: number }>(
         'SELECT count(*)::int AS applied FROM drizzle.__drizzle_migrations',
@@ -79,7 +93,7 @@ export class HealthController {
     } catch {
       // Same posture as the checks above: state only, details stay server-side.
     }
-    const schema = { applied, expected: EXPECTED_MIGRATIONS };
+    const schema = { applied, ledgerPresent, expected: EXPECTED_MIGRATIONS };
 
     if (checks.database !== 'up' || checks.redis === 'down') {
       throw new ServiceUnavailableException({ status: 'degraded', checks, commit: COMMIT_SHA, schema });
