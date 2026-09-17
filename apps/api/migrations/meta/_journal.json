@@ -330,6 +330,13 @@
       "when": 1789800000000,
       "tag": "0047_listing_photo_category",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0048_health_migrations_read",
+      "breakpoints": true
     }
   ]
 }
