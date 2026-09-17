@@ -19,6 +19,24 @@ function readCommitSha(): string {
 
 const COMMIT_SHA = readCommitSha();
 
+// How many migrations this image ships. Compared against what the database has
+// actually applied so schema drift — an image deployed against a database that
+// never ran its migrations — is visible from outside instead of surfacing as an
+// unexplained 500 in whichever feature the missing migration backed.
+function readExpectedMigrations(): number {
+  try {
+    const journal: unknown = JSON.parse(
+      readFileSync(join(process.cwd(), 'migrations/meta/_journal.json'), 'utf8'),
+    );
+    const entries = (journal as { entries?: unknown[] }).entries;
+    return Array.isArray(entries) ? entries.length : -1;
+  } catch {
+    return -1;
+  }
+}
+
+const EXPECTED_MIGRATIONS = readExpectedMigrations();
+
 @Controller('health')
 export class HealthController {
   constructor(
@@ -49,9 +67,23 @@ export class HealthController {
       }
     }
 
-    if (checks.database !== 'up' || checks.redis === 'down') {
-      throw new ServiceUnavailableException({ status: 'degraded', checks, commit: COMMIT_SHA });
+    // Reported, never fatal: a drifted schema must not fail the deploy gate,
+    // it must be legible. `applied: null` means the migrations table could not
+    // be read (missing, or not granted to the runtime role) — itself a finding.
+    let applied: number | null = null;
+    try {
+      const { rows } = await this.pool.query<{ applied: number }>(
+        'SELECT count(*)::int AS applied FROM drizzle.__drizzle_migrations',
+      );
+      applied = rows[0]?.applied ?? null;
+    } catch {
+      // Same posture as the checks above: state only, details stay server-side.
     }
-    return { status: 'ok', checks, commit: COMMIT_SHA };
+    const schema = { applied, expected: EXPECTED_MIGRATIONS };
+
+    if (checks.database !== 'up' || checks.redis === 'down') {
+      throw new ServiceUnavailableException({ status: 'degraded', checks, commit: COMMIT_SHA, schema });
+    }
+    return { status: 'ok', checks, commit: COMMIT_SHA, schema };
   }
 }

@@ -19,6 +19,7 @@ describe('HealthController', () => {
       status: 'ok',
       checks: { database: 'up', redis: 'up' },
       commit: expect.any(String),
+      schema: expect.any(Object),
     });
   });
 
@@ -27,6 +28,7 @@ describe('HealthController', () => {
       status: 'ok',
       checks: { database: 'up', redis: 'disabled' },
       commit: expect.any(String),
+      schema: expect.any(Object),
     });
   });
 
@@ -46,6 +48,22 @@ describe('HealthController', () => {
       status: 'degraded',
       checks: expect.objectContaining({ database: expect.any(String), redis: expect.any(String) }),
       commit: expect.any(String),
+      schema: expect.any(Object),
     });
+  });
+
+  it('reports how many migrations the database has applied', async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [{ applied: 46 }] });
+    const result = await controller(query).check();
+    expect((result as { schema: { applied: number | null } }).schema.applied).toBe(46);
+  });
+
+  it('reports applied as null when the migrations table cannot be read', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockRejectedValueOnce(new Error('permission denied for schema drizzle'));
+    const result = await controller(query).check();
+    expect((result as { schema: { applied: number | null } }).schema.applied).toBeNull();
   });
 });
