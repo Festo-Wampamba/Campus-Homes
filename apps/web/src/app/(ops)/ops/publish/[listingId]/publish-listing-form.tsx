@@ -24,6 +24,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { AMENITY_OPTIONS, ROOM_CATEGORY_DEFAULT_CAPACITY, roomCategoryLabel } from "@/lib/format";
 
+type PublishedVersion = {
+  versionNumber: number;
+  pricePerTermUgx: number;
+  amenities: Record<string, boolean>;
+  description: string | null;
+  verifiedAt: string;
+};
+
+type PublishedPhoto = { id: string; storageKey: string; category: string | null };
+
+type PublishedSnapshot = { version: PublishedVersion; photos: PublishedPhoto[] };
+
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     const body = err.body as { message?: string | string[] } | null;
@@ -43,6 +55,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visitPhotoCount, setVisitPhotoCount] = useState<number | null>(null);
+  // Set once the listing is already live. publishListing() rejects a second
+  // publish, so a verified listing is shown read-only rather than as a form
+  // whose only possible outcome is a 409.
+  const [published, setPublished] = useState<PublishedSnapshot | null>(null);
 
   // Rooms are permanent/property-level (2026-09) — once a property has real
   // rooms, they're what gets pre-filled here (grouped by category+price,
@@ -51,12 +67,20 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   // landlord's proposed categories from onboarding, same as before.
   useEffect(() => {
     let cancelled = false;
-    api<{ listing: { propertyId: string; semesterId: string }; property: Property; visitPhotoCount: number }>(
-      `/ops/listings/${listingId}`,
-    )
-      .then(async ({ listing, property, visitPhotoCount: count }) => {
+    api<{
+      listing: { propertyId: string; semesterId: string; status: string };
+      property: Property;
+      visitPhotoCount: number;
+      version: PublishedVersion | null;
+      photos: PublishedPhoto[];
+    }>(`/ops/listings/${listingId}`)
+      .then(async ({ listing, property, visitPhotoCount: count, version, photos }) => {
         if (cancelled) return;
         setVisitPhotoCount(count);
+        if (listing.status === "verified" && version) {
+          setPublished({ version, photos });
+          return;
+        }
 
         const rooms = await api<PropertyRoom[]>(
           `/ops/properties/${listing.propertyId}/rooms?semesterId=${listing.semesterId}`,
@@ -162,6 +186,65 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       setError(errorMessage(err, "Couldn't publish the listing — try again."));
       setPending(false);
     }
+  }
+
+  if (published) {
+    const amenities = Object.entries(published.version.amenities)
+      .filter(([, on]) => on)
+      .map(([key]) => key);
+    return (
+      <div className="space-y-4">
+        <div className="rounded-md border border-input px-3 py-2 text-sm">
+          <p className="font-semibold">Published — version {published.version.versionNumber}</p>
+          <p className="mt-1 text-muted-foreground">
+            Went live on {new Date(published.version.verifiedAt).toLocaleDateString()}. A published
+            listing is what students have already seen, so it can&apos;t be edited here. If something
+            is wrong, raise a new visit for this property.
+          </p>
+        </div>
+        <dl className="space-y-2 text-sm">
+          <div>
+            <dt className="font-semibold">From</dt>
+            <dd className="text-muted-foreground">
+              UGX {published.version.pricePerTermUgx.toLocaleString()} per term
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Description</dt>
+            <dd className="text-muted-foreground">{published.version.description || "—"}</dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Amenities</dt>
+            <dd className="text-muted-foreground">
+              {amenities.length > 0
+                ? amenities
+                    .map((key) => AMENITY_OPTIONS.find((a) => a.key === key)?.label ?? key)
+                    .join(", ")
+                : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Photos ({published.photos.length})</dt>
+            <dd className="text-muted-foreground">
+              {published.photos.length === 0 ? (
+                "No verification photos were published with this listing."
+              ) : (
+                <ul className="mt-1 space-y-1">
+                  {published.photos.map((photo) => (
+                    <li key={photo.id} className="flex items-center gap-2">
+                      <span className="truncate">{photo.storageKey}</span>
+                      <span className="shrink-0 rounded bg-muted px-1 text-xs">
+                        {photo.category ?? "uncategorised"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    );
   }
 
   return (
