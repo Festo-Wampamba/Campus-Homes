@@ -32,6 +32,38 @@ export type ScheduleVisitInput = z.infer<typeof scheduleVisitSchema>;
 // rather than fail silently downstream.
 export const UGANDA_GPS_BOUNDS = { minLat: -2.5, maxLat: 5, minLon: 28.5, maxLon: 35.5 };
 
+// What part of the property a photo shows. Chosen by the inspector at capture
+// time so the lead reviewing for quality, and the student browsing the listing,
+// both see photos grouped rather than one undifferentiated roll.
+// Mirrors the `photo_category` pgEnum (migration 0047) — update both together.
+export const PHOTO_CATEGORIES = [
+  'bedroom', 'bathroom', 'kitchen', 'compound', 'shops', 'exterior', 'common_area', 'other',
+] as const;
+export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number];
+
+export const PHOTO_CATEGORY_LABELS: Record<PhotoCategory, string> = {
+  bedroom: 'Bedroom', bathroom: 'Bathroom', kitchen: 'Kitchen', compound: 'Compound',
+  shops: 'Shops', exterior: 'Exterior', common_area: 'Common area', other: 'Other',
+};
+
+export const visitPhotoSchema = z.object({
+  storageKey: z.string(),
+  category: z.enum(PHOTO_CATEGORIES),
+});
+export type VisitPhoto = z.infer<typeof visitPhotoSchema>;
+
+/** Reads a visit's staged photos in either format. Photos staged before
+ * categories existed are bare storage keys; they surface as 'other' rather than
+ * being dropped, so an older visit still publishes all of its photos. */
+export function normalizeVisitPhotos(raw: unknown): VisitPhoto[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): VisitPhoto[] => {
+    if (typeof item === 'string') return [{ storageKey: item, category: 'other' }];
+    const parsed = visitPhotoSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
 // Offline-sync checklist submission (§9 flow 2). The client generates the
 // idempotency key when the visit starts; a retried sync can never double-submit.
 export const syncVisitSchema = z.object({
@@ -52,7 +84,11 @@ export const syncVisitSchema = z.object({
   // sync-manager.ts once the device is back online (same deferred-network
   // pattern as the sync itself). Staged on the visit; promoted into
   // listing_photos at publish time once a listing_version exists.
-  photoStorageKeys: z.array(z.string()).max(20).default([]),
+  //
+  // A bare string is the pre-category format still present on visits synced
+  // before photo categories existed, and still accepted from an Inspection Mode
+  // draft saved offline before this deploy. Read it through normalizeVisitPhotos.
+  photoStorageKeys: z.array(z.union([z.string(), visitPhotoSchema])).max(20).default([]),
 });
 export type SyncVisitInput = z.infer<typeof syncVisitSchema>;
 
@@ -208,7 +244,7 @@ export const opsVisitDetailSchema = z.object({
   visitGpsLat: z.string().nullable(),
   visitGpsLon: z.string().nullable(),
   checklist: verificationChecklistSchema.partial(),
-  photoStorageKeys: z.array(z.string()).nullable(),
+  photoStorageKeys: z.array(z.union([z.string(), visitPhotoSchema])).nullable(),
   result: z.enum(VISIT_RESULTS),
   failureReason: z.string().nullable(),
   approvedBy: uuid.nullable(),

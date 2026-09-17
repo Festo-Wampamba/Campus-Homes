@@ -12,13 +12,15 @@ import { getQueuedDrafts, putDraft, type InspectionDraft } from "./inspection-db
 async function uploadPendingPhotos(draft: InspectionDraft): Promise<InspectionDraft> {
   let current = draft;
   while (current.photos.length > 0) {
-    const [file, ...rest] = current.photos;
-    const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
-    const { publicId } = await uploadToCloudinary(file, sig);
+    const [pending, ...rest] = current.photos;
+    const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: pending.file.type }) });
+    const { publicId } = await uploadToCloudinary(pending.file, sig);
     current = {
       ...current,
       photos: rest,
-      photoStorageKeys: [...current.photoStorageKeys, publicId],
+      // Carries the category chosen on site, so it survives the upload and is
+      // promoted into listing_photos with the photo it describes.
+      photoStorageKeys: [...current.photoStorageKeys, { storageKey: publicId, category: pending.category }],
     };
     await putDraft(current);
   }

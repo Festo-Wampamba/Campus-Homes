@@ -323,6 +323,13 @@
       "when": 1789700000000,
       "tag": "0046_purge_ops_staff_references",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0047_listing_photo_category",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import type { VerificationChecklistComponent } from "@campushomes/shared";
+import type { PhotoCategory, VerificationChecklistComponent, VisitPhoto } from "@campushomes/shared";
 
 export type SyncStatus = "draft" | "queued" | "syncing" | "synced" | "failed";
 
@@ -17,8 +17,33 @@ export interface InspectionDraft {
   // clone) but not yet uploaded — sync-manager.ts uploads these to Cloudinary
   // once the device is back online, moving each into photoStorageKeys so a
   // retried sync never re-uploads an already-uploaded photo.
-  photos: File[];
-  photoStorageKeys: string[];
+  photos: PendingPhoto[];
+  photoStorageKeys: VisitPhoto[];
+}
+
+/** A captured-but-not-yet-uploaded photo and the part of the property it shows.
+ * The category is chosen at capture time, on site, and rides along through the
+ * upload so it survives into listing_photos. */
+export interface PendingPhoto {
+  file: File;
+  category: PhotoCategory;
+}
+
+/** Drafts written before photo categories existed hold bare Files and bare
+ * storage keys. A half-finished inspection on an inspector's device must not
+ * break (or silently lose its photos) just because the app updated under it, so
+ * both are read forward into the current shape as 'other'. */
+function normalizeDraft(draft: InspectionDraft | undefined): InspectionDraft | undefined {
+  if (!draft) return draft;
+  return {
+    ...draft,
+    photos: (draft.photos ?? []).map((p) =>
+      p instanceof File ? { file: p, category: "other" as const } : p,
+    ),
+    photoStorageKeys: (draft.photoStorageKeys ?? []).map((k) =>
+      typeof k === "string" ? { storageKey: k, category: "other" as const } : k,
+    ),
+  };
 }
 
 const DB_NAME = "campushomes-ops";
@@ -41,7 +66,7 @@ export async function getDraft(visitId: string): Promise<InspectionDraft | undef
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
     const req = tx.objectStore(STORE_NAME).get(visitId);
-    req.onsuccess = () => resolve(req.result as InspectionDraft | undefined);
+    req.onsuccess = () => resolve(normalizeDraft(req.result as InspectionDraft | undefined));
     req.onerror = () => reject(req.error);
   });
 }
