@@ -23,6 +23,7 @@ function fixture(status = 'active', existingAssignment = false) {
       if (sql.startsWith("UPDATE landlords SET kyc_status = 'verified'")) return { rows: [{ id: actor.userId }] };
       if (sql.startsWith("UPDATE properties SET status = 'active'")) return { rows: [] };
       if (sql.startsWith('SELECT id FROM roles')) return { rows: [{ id: 'landlord-role' }] };
+      if (sql.startsWith('SELECT r.key FROM user_role_assignments')) return { rows: [] };
       if (sql.startsWith('UPDATE user_role_assignments')) return { rows: [] };
       if (sql.includes('FROM user_role_assignments WHERE user_id')) {
         return { rows: existingAssignment ? [{ id: 'existing', userId: actor.userId, scopeType: 'own', scopeId: null }] : [] };
