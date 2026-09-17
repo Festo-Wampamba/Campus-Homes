@@ -127,6 +127,14 @@ async function inPurgeTx<T>(fn: (client: PoolClient, target: string) => Promise<
        SELECT $1, id, 'platform_wide', $2, 'purge fixture' FROM roles LIMIT 1`,
       [studentUser, target],
     );
+    // Strike issued directly against the landlord, not via a reservation
+    // (reservation_id NULL). RESTRICT-references landlords → the cascade must
+    // clear it by landlord_id or the users delete fails (23503).
+    await client.query(
+      `INSERT INTO landlord_strikes (landlord_id, reason, description, reservation_id)
+       VALUES ($1, 'other', 'manual strike', NULL)`,
+      [target],
+    );
 
     // Switch to the runtime identity: restricted role + service_role context.
     await client.query('SET LOCAL ROLE app_user');

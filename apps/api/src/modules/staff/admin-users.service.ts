@@ -475,6 +475,15 @@ export class AdminUsersService {
         UPDATE inquiries SET landlord_id = NULL WHERE landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM property_memberships WHERE user_id IN (SELECT id FROM _pg_g);
 
+        -- Strikes/flags/agreements referencing the user directly (RESTRICT on
+        -- landlords/students, which cascade-delete with the user). The
+        -- reservation-keyed deletes above only catch rows tied to a deleted
+        -- reservation; one with a NULL/foreign reservation_id would otherwise
+        -- block the users delete (23503).
+        DELETE FROM landlord_strikes WHERE landlord_id IN (SELECT id FROM _pg_g);
+        DELETE FROM student_flags WHERE student_id IN (SELECT id FROM _pg_g);
+        DELETE FROM tenant_agreements WHERE student_id IN (SELECT id FROM _pg_g);
+
         UPDATE landlords SET kyc_reviewed_by = NULL WHERE kyc_reviewed_by IN (SELECT id FROM _pg_g);
         UPDATE reservations SET booked_by = NULL WHERE booked_by IN (SELECT id FROM _pg_g);
         UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
