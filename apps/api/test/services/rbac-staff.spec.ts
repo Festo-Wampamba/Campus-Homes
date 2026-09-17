@@ -137,6 +137,29 @@ describe('StaffService.grantRole — success path', () => {
   });
 });
 
+describe('StaffService.grantRole — staff/consumer mutual exclusivity', () => {
+  it('blocks granting a staff role to an account that already holds a student role', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'student', 'active', 'Dual Role') RETURNING id`,
+      ['+256700000399'],
+    );
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+       SELECT $1, id, 'own', $2, 'baseline' FROM roles WHERE key = 'student'`,
+      [target, superAdmin],
+    );
+    await expect(
+      staff.grantRole(
+        superAdminCtx(),
+        new Set(['roles.assign']),
+        [{ scopeType: 'platform_wide', scopeId: null }],
+        target,
+        { roleKey: 'ops_inspector', scopeType: 'platform_wide', reason: 'promote to inspector' },
+      ),
+    ).rejects.toThrow(/already holds the "student" role/);
+  });
+});
+
 describe('StaffService.invite + revokeRole round trip', () => {
   it('persists a pending invitation without pre-creating an application user', async () => {
     const invitation = await staff.invite(
