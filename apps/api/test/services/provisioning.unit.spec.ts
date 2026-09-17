@@ -38,6 +38,7 @@ function fixture(options: {
         return { rows: [{ id: params[0], status: 'active', deletedAt: null }] };
       }
       if (sql.startsWith('SELECT id FROM roles')) return { rows: [{ id: 'role-id' }] };
+      if (sql.startsWith('SELECT r.key FROM user_role_assignments')) return { rows: [] };
       if (sql.startsWith('UPDATE user_role_assignments')) return { rows: [] };
       if (sql.includes('FROM user_role_assignments WHERE user_id')) return { rows: [] };
       if (sql.startsWith('INSERT INTO user_role_assignments')) {
