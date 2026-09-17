@@ -330,6 +330,13 @@
       "when": 1789800000000,
       "tag": "0047_listing_photo_category",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0049_auth_invitations_purge_delete",
+      "breakpoints": true
     }
   ]
 }
