@@ -2,7 +2,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import { putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
+import { getDraft, putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
 
 import { InspectionForm } from "./inspection-form";
 
@@ -16,6 +16,23 @@ async function waitFor(condition: () => boolean, attempts = 20): Promise<void> {
     });
   }
   throw new Error("waitFor: condition never became true");
+}
+
+/** putDraft is debounced ~300ms, so reading straight after a click can see the
+ * pre-click row. Polls until the stored draft satisfies the predicate. */
+async function waitForDraft(
+  visitId: string,
+  predicate: (d: InspectionDraft) => boolean,
+  attempts = 40,
+): Promise<InspectionDraft> {
+  for (let i = 0; i < attempts; i++) {
+    const stored = await getDraft(visitId);
+    if (stored && predicate(stored)) return stored;
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 25));
+    });
+  }
+  throw new Error("waitForDraft: draft never satisfied predicate");
 }
 
 function failedDraft(visitId: string): InspectionDraft {
@@ -126,5 +143,56 @@ describe("InspectionForm", () => {
 
     expect(fetchMock).toHaveBeenCalled();
     expect(container.textContent).not.toContain("Couldn't submit this checklist");
+  });
+
+  it("mints a new idempotency key when a submitted checklist is reopened", async () => {
+    const draft: InspectionDraft = {
+      ...failedDraft("visit-reopen"),
+      syncStatus: "synced",
+      photoStorageKeys: [{ storageKey: "already-uploaded", category: "bedroom" }],
+    };
+    await putDraft(draft);
+
+    act(() => {
+      root.render(<InspectionForm visitId="visit-reopen" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Edit submission") === true);
+
+    const editButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Edit submission",
+    );
+    act(() => editButton?.click());
+    await waitFor(() => container.querySelector("textarea") !== null);
+
+    // Reusing the original key would make syncVisit treat the edit as a
+    // replayed retry and return the stored row untouched.
+    const reopened = await waitForDraft("visit-reopen", (d) => d.syncStatus === "draft");
+    expect(reopened.clientIdempotencyKey).not.toBe(draft.clientIdempotencyKey);
+  });
+
+  it("keeps already-uploaded photos when a submitted checklist is reopened", async () => {
+    await putDraft({
+      ...failedDraft("visit-reopen-photos"),
+      syncStatus: "synced",
+      photoStorageKeys: [{ storageKey: "already-uploaded", category: "bedroom" }],
+    });
+
+    act(() => {
+      root.render(<InspectionForm visitId="visit-reopen-photos" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Edit submission") === true);
+
+    const editButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Edit submission",
+    );
+    act(() => editButton?.click());
+    await waitFor(() => container.querySelector("textarea") !== null);
+
+    // A resubmit sends photoStorageKeys as the visit's whole photo set, so
+    // losing them here would silently wipe the first submission's photos.
+    const reopened = await waitForDraft("visit-reopen-photos", (d) => d.syncStatus === "draft");
+    expect(reopened.photoStorageKeys).toEqual([
+      { storageKey: "already-uploaded", category: "bedroom" },
+    ]);
   });
 });

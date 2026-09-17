@@ -9,6 +9,7 @@ import {
   PHOTO_CATEGORIES,
   PHOTO_CATEGORY_LABELS,
   type PhotoCategory,
+  normalizeVisitPhotos,
 } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -137,7 +138,10 @@ function draftFromServer(visitId: string, visit: OpsVisitDetail): InspectionDraf
     failureReason: visit.failureReason ?? "",
     syncStatus: "synced",
     photos: [],
-    photoStorageKeys: [],
+    // Carry the already-uploaded photos. A resubmit sends this array as the
+    // visit's whole photo set, so seeding it empty would silently wipe every
+    // photo the inspector captured the first time.
+    photoStorageKeys: normalizeVisitPhotos(visit.photoStorageKeys),
   };
 }
 
@@ -194,12 +198,26 @@ export function InspectionForm({
     }, 300);
   }, []);
 
+  /** Reopens an already-submitted checklist for correction. The new
+   * clientIdempotencyKey is what makes the edit actually land: syncVisit
+   * treats a repeat of the same key as a replayed retry and returns the
+   * stored row untouched, so reusing it would make the resubmit look like it
+   * worked while changing nothing. */
+  function reopenForEdit() {
+    if (!draft) return;
+    persist({ ...draft, syncStatus: "draft", clientIdempotencyKey: crypto.randomUUID() });
+  }
+
   if (!draft) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
   if (draft.syncStatus === "synced") {
     const failed = draft.result === "failed";
+    // The server accepts a resubmit until the lead approves the visit and
+    // rejects it with a 409 afterwards, so the button mirrors that rule
+    // rather than inventing a second one that could drift from it.
+    const approved = Boolean(serverVisit?.approvedAt);
     return (
       <div className="space-y-4">
         <Card>
@@ -208,10 +226,17 @@ export function InspectionForm({
               {failed ? "Synced — failed" : "Synced"}
             </StatusChip>
             <p className="mt-2 text-sm text-muted-foreground">
-              {failed
-                ? "This checklist was submitted and recorded as failed. It can't be approved — a lead needs to schedule a new visit before this property can be verified."
-                : "This checklist has already been submitted and is waiting on lead approval."}
+              {approved
+                ? "A lead has approved this checklist, so it can no longer be changed. Ask a lead to schedule a new visit if something here is wrong."
+                : failed
+                  ? "This checklist was submitted and recorded as failed. It can't be approved — a lead needs to schedule a new visit before this property can be verified. You can still correct it until a lead acts on it."
+                  : "This checklist has already been submitted and is waiting on lead approval. You can still correct it until a lead approves it."}
             </p>
+            {!approved && (
+              <Button type="button" variant="secondary" className="mt-3" onClick={reopenForEdit}>
+                Edit submission
+              </Button>
+            )}
           </CardContent>
         </Card>
         {serverVisit && (
@@ -249,6 +274,22 @@ export function InspectionForm({
     // changeable per photo below, so capture is never blocked on a dropdown.
     const added = files.map((file) => ({ file, category: "bedroom" as PhotoCategory }));
     persist({ ...currentDraft, photos: [...currentDraft.photos, ...added] });
+  }
+
+  function setUploadedPhotoCategory(index: number, category: PhotoCategory) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index ? { ...p, category } : p,
+      ),
+    });
+  }
+
+  function removeUploadedPhoto(index: number) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.filter((_, i) => i !== index),
+    });
   }
 
   function setPhotoCategory(index: number, category: PhotoCategory) {
@@ -421,6 +462,44 @@ export function InspectionForm({
               />
               {component === "photos" && (
                 <div className="space-y-2">
+                  {/* Photos uploaded on an earlier submission. Shown so a
+                      reopened checklist can be genuinely reviewed rather than
+                      only added to — a resubmit sends this list as the visit's
+                      whole photo set, so a wrong one has to be removable. */}
+                  {draft.photoStorageKeys.length > 0 && (
+                    <ul className="space-y-1">
+                      {draft.photoStorageKeys.map((photo, i) => (
+                        <li
+                          key={photo.storageKey}
+                          className="flex items-center gap-2 rounded-md border border-input px-2 py-1 text-xs"
+                        >
+                          <span className="flex-1 truncate text-muted-foreground">
+                            {photo.storageKey}
+                          </span>
+                          <select
+                            aria-label={`Category for uploaded photo ${i + 1}`}
+                            value={photo.category}
+                            onChange={(e) => setUploadedPhotoCategory(i, e.target.value as PhotoCategory)}
+                            className="rounded border border-input bg-background px-1 py-0.5 text-xs"
+                          >
+                            {PHOTO_CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {PHOTO_CATEGORY_LABELS[c]}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            aria-label={`Remove uploaded photo ${i + 1}`}
+                            onClick={() => removeUploadedPhoto(i)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X aria-hidden className="size-3" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {draft.photos.length > 0 && (
                     <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                       {draft.photos.map((photo, i) => (
