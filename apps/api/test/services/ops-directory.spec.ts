@@ -34,6 +34,7 @@ let propertyD: string;
 let visitA: string;
 let approvedVisitA: string;
 let pendingListingA: string;
+let verifiedListingA: string;
 let semester: string;
 let priorSemester: string;
 
@@ -124,7 +125,7 @@ beforeAll(async () => {
   // A prior-semester listing already verified — re-verification means a
   // property can carry more than one listing row over time; propertyListings
   // must not surface this one as a publish target.
-  await seed(
+  verifiedListingA = await seed(
     `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'verified') RETURNING id`,
     [propertyA, priorSemester],
   );
@@ -342,5 +343,32 @@ describe('syncVisit', () => {
         photoStorageKeys: [],
       }),
     ).rejects.toThrow(/already been approved/i);
+  });
+});
+
+// A lead opening a listing they already published must be able to read back
+// what went live: publishListing() rejects a second publish, so without the
+// snapshot the publish screen is a dead end offering edits that can only 409.
+describe('listingForPublish', () => {
+  it('returns the published snapshot for an already-verified listing', async () => {
+    const versionId = await seed(
+      `INSERT INTO listing_versions
+         (listing_id, version_number, price_per_term_ugx, amenities, description, verified_at)
+       VALUES ($1, 1, 500000, '{"electricity":true}'::jsonb, 'Published copy', now())
+       RETURNING id`,
+      [verifiedListingA],
+    );
+    await pool.query('UPDATE listings SET current_version_id = $2 WHERE id = $1', [
+      verifiedListingA,
+      versionId,
+    ]);
+
+    const target = await ops.listingForPublish(leadCtx(), verifiedListingA);
+    expect(target.version?.description).toBe('Published copy');
+  });
+
+  it('returns no snapshot for a listing that has never been published', async () => {
+    const target = await ops.listingForPublish(leadCtx(), pendingListingA);
+    expect(target.version).toBeNull();
   });
 });

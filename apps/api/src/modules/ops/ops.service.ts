@@ -907,7 +907,16 @@ export class OpsService {
             .where(eq(listingPhotos.listingVersionId, listing.currentVersionId))
             .orderBy(asc(listingPhotos.sortOrder))
         : [];
-      return { listing, property, visitPhotoCount, photos };
+      // The published snapshot, so a lead can open a listing they already
+      // published and read back exactly what went live. publishListing()
+      // rejects a second publish, so without this the form is a dead end:
+      // it offers edits that can only ever come back as a 409.
+      const version = listing.currentVersionId
+        ? ((await db.query.listingVersions.findFirst({
+            where: eq(listingVersions.id, listing.currentVersionId),
+          })) ?? null)
+        : null;
+      return { listing, property, visitPhotoCount, photos, version };
     });
   }
 
