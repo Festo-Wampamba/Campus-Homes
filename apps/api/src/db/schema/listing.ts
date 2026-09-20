@@ -70,6 +70,8 @@ export const listingPhotos = pgTable('listing_photos', {
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
   // Nullable: rows captured before categories existed (0047) have none.
   category: photoCategory('category'),
+  // Free-text label when category is 'custom' (0052).
+  customLabel: text('custom_label'),
   isPrimary: boolean('is_primary').notNull().default(false),
   sortOrder: smallint('sort_order').notNull().default(0),
   metadata: jsonb('metadata'),
@@ -94,6 +96,8 @@ export const units = pgTable('units', {
   // Room type (single/double/triple/...) — priced independently per category,
   // not one flat price for the whole listing. CHECK price > 0 in SQL migration.
   roomCategory: roomCategory('room_category').notNull().default('other'),
+  // Free-text room type when roomCategory is 'other' (0052).
+  roomCategoryLabel: text('room_category_label'),
   // Room-level manual override (maintenance/blocked take the whole room out
   // of service regardless of individual beds) — walk-in occupancy itself
   // moved to bed-level `beds.blocked` + direct Book-on-Available (0033); this

@@ -44,10 +44,12 @@ function PhotoThumb({
   photo,
   onRemove,
   onCategoryChange,
+  onLabelChange,
 }: {
   photo: PendingPhoto;
   onRemove: () => void;
   onCategoryChange: (category: PhotoCategory) => void;
+  onLabelChange: (label: string) => void;
 }) {
   const [url] = useState(() => URL.createObjectURL(photo.file));
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
@@ -77,6 +79,16 @@ function PhotoThumb({
           </option>
         ))}
       </select>
+      {photo.category === "custom" && (
+        <input
+          aria-label="Custom photo label"
+          value={photo.label ?? ""}
+          onChange={(e) => onLabelChange(e.target.value)}
+          maxLength={50}
+          placeholder="Describe the room"
+          className="mt-1 w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
+        />
+      )}
     </div>
   );
 }
@@ -280,7 +292,16 @@ export function InspectionForm({
     persist({
       ...currentDraft,
       photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
-        i === index ? { ...p, category } : p,
+        i === index ? { ...p, category, ...(category === "custom" ? {} : { label: undefined }) } : p,
+      ),
+    });
+  }
+
+  function setUploadedPhotoLabel(index: number, label: string) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index ? { ...p, label } : p,
       ),
     });
   }
@@ -295,7 +316,16 @@ export function InspectionForm({
   function setPhotoCategory(index: number, category: PhotoCategory) {
     persist({
       ...currentDraft,
-      photos: currentDraft.photos.map((p, i) => (i === index ? { ...p, category } : p)),
+      photos: currentDraft.photos.map((p, i) =>
+        i === index ? { ...p, category, ...(category === "custom" ? {} : { label: undefined }) } : p,
+      ),
+    });
+  }
+
+  function setPhotoLabel(index: number, label: string) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) => (i === index ? { ...p, label } : p)),
     });
   }
 
@@ -488,6 +518,16 @@ export function InspectionForm({
                               </option>
                             ))}
                           </select>
+                          {photo.category === "custom" && (
+                            <input
+                              aria-label={`Custom label for uploaded photo ${i + 1}`}
+                              value={photo.label ?? ""}
+                              onChange={(e) => setUploadedPhotoLabel(i, e.target.value)}
+                              maxLength={50}
+                              placeholder="Describe the room"
+                              className="w-28 rounded border border-input bg-background px-1 py-0.5 text-xs"
+                            />
+                          )}
                           <button
                             type="button"
                             aria-label={`Remove uploaded photo ${i + 1}`}
@@ -508,6 +548,7 @@ export function InspectionForm({
                           photo={photo}
                           onRemove={() => removePhoto(i)}
                           onCategoryChange={(category) => setPhotoCategory(i, category)}
+                          onLabelChange={(label) => setPhotoLabel(i, label)}
                         />
                       ))}
                     </div>

@@ -37,20 +37,33 @@ export const UGANDA_GPS_BOUNDS = { minLat: -2.5, maxLat: 5, minLon: 28.5, maxLon
 // both see photos grouped rather than one undifferentiated roll.
 // Mirrors the `photo_category` pgEnum (migration 0047) — update both together.
 export const PHOTO_CATEGORIES = [
-  'bedroom', 'bathroom', 'kitchen', 'compound', 'shops', 'exterior', 'common_area', 'other',
+  'bedroom', 'single_bedroom', 'double_bedroom', 'triple_bedroom',
+  'bathroom', 'kitchen', 'compound', 'shops', 'exterior', 'common_area', 'custom', 'other',
 ] as const;
 export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number];
 
 export const PHOTO_CATEGORY_LABELS: Record<PhotoCategory, string> = {
-  bedroom: 'Bedroom', bathroom: 'Bathroom', kitchen: 'Kitchen', compound: 'Compound',
-  shops: 'Shops', exterior: 'Exterior', common_area: 'Common area', other: 'Other',
+  bedroom: 'Bedroom', single_bedroom: 'Single bedroom', double_bedroom: 'Double bedroom (2 beds)',
+  triple_bedroom: 'Triple bedroom (3 beds)', bathroom: 'Bathroom', kitchen: 'Kitchen',
+  compound: 'Compound', shops: 'Shops', exterior: 'Exterior', common_area: 'Common area',
+  custom: 'Custom…', other: 'Other',
 };
 
 export const visitPhotoSchema = z.object({
   storageKey: z.string(),
   category: z.enum(PHOTO_CATEGORIES),
+  // Free-text label used only when category is 'custom' — the preset list is
+  // the checklist; this is the fallback when nothing fits.
+  label: z.string().trim().max(50).optional(),
 });
 export type VisitPhoto = z.infer<typeof visitPhotoSchema>;
+
+/** What to show for a photo: the typed custom label when present, else the
+ * preset category's label. */
+export function photoCategoryDisplay(photo: Pick<VisitPhoto, 'category' | 'label'>): string {
+  if (photo.category === 'custom' && photo.label) return photo.label;
+  return PHOTO_CATEGORY_LABELS[photo.category];
+}
 
 /** Reads a visit's staged photos in either format. Photos staged before
  * categories existed are bare storage keys; they surface as 'other' rather than
@@ -122,6 +135,8 @@ export const publishListingSchema = z.object({
         label: z.string().min(1).max(100),
         capacity: z.number().int().min(1).max(20).default(1),
         roomCategory: z.enum(ROOM_CATEGORIES),
+        // Free-text room type used only when roomCategory is 'other'.
+        roomCategoryLabel: z.string().trim().max(40).optional(),
         pricePerTermUgx: ugxAmount,
         depositUgx: ugxAmount.optional(),
       }),
