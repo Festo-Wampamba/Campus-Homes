@@ -20,7 +20,7 @@ async function uploadPendingPhotos(draft: InspectionDraft): Promise<InspectionDr
       photos: rest,
       // Carries the category chosen on site, so it survives the upload and is
       // promoted into listing_photos with the photo it describes.
-      photoStorageKeys: [...current.photoStorageKeys, { storageKey: publicId, category: pending.category }],
+      photoStorageKeys: [...current.photoStorageKeys, { storageKey: publicId, category: pending.category, ...(pending.category === "custom" && pending.label ? { label: pending.label } : {}) }],
     };
     await putDraft(current);
   }

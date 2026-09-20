@@ -792,6 +792,7 @@ export class OpsService {
               label: u.label,
               capacity: u.capacity,
               roomCategory: u.roomCategory,
+              roomCategoryLabel: u.roomCategory === 'other' ? (u.roomCategoryLabel ?? null) : null,
             })),
           ).returning()
         : [];
@@ -861,6 +862,7 @@ export class OpsService {
             listingVersionId: published.version.id,
             storageKey: photo.storageKey,
             category: photo.category,
+            customLabel: photo.category === 'custom' ? (photo.label ?? null) : null,
             capturedBy: visit.inspectorId,
             gpsLat,
             gpsLon,

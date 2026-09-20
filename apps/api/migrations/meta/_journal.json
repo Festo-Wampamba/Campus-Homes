@@ -358,6 +358,13 @@
       "when": 1790200000000,
       "tag": "0051_user_username",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0052_room_photo_categories_custom",
+      "breakpoints": true
     }
   ]
 }

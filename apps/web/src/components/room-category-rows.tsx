@@ -13,6 +13,8 @@ export type RoomCategoryRow = {
   // Local-only key for React reconciliation — never sent to the API.
   key: string;
   category: RoomCategory;
+  // Free-text room type, only meaningful when category is 'other'.
+  customLabel: string;
   roomCount: string;
   pricePerTermUgx: string;
   // Optional — not every property charges a deposit.
@@ -36,6 +38,7 @@ export function emptyRoomCategoryRow(): RoomCategoryRow {
   return {
     key: `row-${nextKey}`,
     category: "single",
+    customLabel: "",
     roomCount: "",
     pricePerTermUgx: "",
     depositUgx: "",
@@ -99,6 +102,15 @@ export function RoomCategoryRows({
                 </option>
               ))}
             </select>
+            {row.category === "other" && (
+              <Input
+                aria-label="Custom room type"
+                value={row.customLabel}
+                maxLength={40}
+                placeholder="e.g. Penthouse suite"
+                onChange={(e) => update(row.key, { customLabel: e.target.value })}
+              />
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-count-${i}`}>Rooms</Label>

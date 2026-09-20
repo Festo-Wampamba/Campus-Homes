@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { VerificationChecklistComponent, VisitCorrection, VisitPhoto } from "@campushomes/shared";
+import { photoCategoryDisplay, type VerificationChecklistComponent, type VisitCorrection, type VisitPhoto } from "@campushomes/shared";
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -103,7 +103,7 @@ export function ChecklistItemDialog({
                             No preview
                           </div>
                         )}
-                        <p className="truncate px-1.5 py-1 text-[10px] capitalize text-muted-foreground">{photo.category.replaceAll("_", " ")}</p>
+                        <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground">{photoCategoryDisplay(photo)}</p>
                       </div>
                     );
                   })}

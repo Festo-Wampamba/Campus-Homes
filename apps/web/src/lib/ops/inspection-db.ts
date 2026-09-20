@@ -27,6 +27,8 @@ export interface InspectionDraft {
 export interface PendingPhoto {
   file: File;
   category: PhotoCategory;
+  // Free-text room type when category is 'custom'.
+  label?: string;
 }
 
 /** Drafts written before photo categories existed hold bare Files and bare
