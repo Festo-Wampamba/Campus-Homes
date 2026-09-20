@@ -19,6 +19,11 @@ export const users = pgTable('users', {
   // writes them changed (Logto's provisioned profile data now, via
   // ProvisioningService, instead of Better Auth's Drizzle adapter).
   name: text('name').notNull().default(''),
+  // Public @handle chosen at first-sign-in onboarding. Nullable so existing
+  // rows and just-provisioned identities have none until the gate collects
+  // it; case-insensitive uniqueness enforced by users_username_lower_uk
+  // (0051), not a plain column unique.
+  username: text('username'),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
   phoneVerified: boolean('phone_verified').notNull().default(false),

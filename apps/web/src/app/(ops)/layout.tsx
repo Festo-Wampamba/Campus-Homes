@@ -16,6 +16,7 @@ export default async function OpsLayout({
       user={session.user}
       access={session.access}
       homeHref={isInspector ? "/ops/inspect" : "/ops"}
+      profileHref="/ops/profile"
       notificationsEndpoint="/notifications"
       nav={
         isInspector

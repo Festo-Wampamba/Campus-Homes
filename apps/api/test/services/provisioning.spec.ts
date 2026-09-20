@@ -90,6 +90,29 @@ describe('ProvisioningService', () => {
     )).rows[0]).toMatchObject({ status: 'accepted', accepted_by: result?.id });
   });
 
+  it('names a new invited staff user from the invitation when the identity carries no name', async () => {
+    const inviter = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Inviter Named') RETURNING id`,
+      ['+256700000412'],
+    );
+    await seed(`
+      INSERT INTO auth_invitations
+        (name, email, role_key, scope_type, reason, invited_by, expires_at)
+      VALUES ('Recorded Name', 'named.invite@example.com', 'support_admin',
+        'platform_wide', 'approved hire', $1, now() + interval '7 days')
+      RETURNING id
+    `, [inviter]);
+
+    const result = await provisioning.provision({
+      sub: 'logto-named-invite',
+      email: 'named.invite@example.com',
+      emailVerified: true,
+    }, 'staff', 'staff');
+
+    const [row] = (await pool.query(`SELECT name FROM users WHERE id = $1`, [result?.id])).rows;
+    expect(row.name).toBe('Recorded Name');
+  });
+
   it('does not accept a staff invitation from an unverified contact claim', async () => {
     const inviter = await seed(
       `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Inviter Two') RETURNING id`,
