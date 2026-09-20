@@ -95,12 +95,39 @@ export type OpsStaffProfile = z.infer<typeof opsStaffProfileSchema>;
 // No local password hash exists to re-verify against — both require a
 // freshly established session instead (same 30-minute step-up-freshness
 // boundary as sensitive RBAC actions), enforced in me.controller.ts.
+// Step 1: request a verification code sent to the NEW address.
 export const changeSelfEmailSchema = z.object({
   email: z.email().max(320),
 });
 export type ChangeSelfEmailInput = z.infer<typeof changeSelfEmailSchema>;
 
+// Step 2: prove ownership of the new address before it becomes the sign-in
+// email. The code is what was mailed to `email` in step 1.
+export const confirmSelfEmailSchema = z.object({
+  email: z.email().max(320),
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+export type ConfirmSelfEmailInput = z.infer<typeof confirmSelfEmailSchema>;
+
 export const changeSelfPasswordSchema = z.object({
   newPassword: z.string().min(8).max(200),
 });
 export type ChangeSelfPasswordInput = z.infer<typeof changeSelfPasswordSchema>;
+
+// Public @handle. Stored lowercased; uniqueness is case-insensitive. Kept to
+// URL/mention-safe characters so it can double as a display handle later.
+export const usernameSchema = z
+  .string()
+  .trim()
+  .min(3, "At least 3 characters")
+  .max(20, "At most 20 characters")
+  .regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers and underscores only");
+export type Username = z.infer<typeof usernameSchema>;
+
+// First-sign-in identity gate: every account (email, phone, or Google) sets a
+// full name and a username before reaching a portal.
+export const profileOnboardingSchema = z.object({
+  name: z.string().trim().min(1, "Enter your full name").max(200),
+  username: usernameSchema,
+});
+export type ProfileOnboardingInput = z.infer<typeof profileOnboardingSchema>;

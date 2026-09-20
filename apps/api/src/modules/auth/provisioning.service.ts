@@ -76,7 +76,10 @@ export class ProvisioningService {
         const firstRole = pending[0]?.roleKey;
         const legacyRole = firstRole ? STAFF_LEGACY_ROLE[firstRole] : undefined;
         if (!legacyRole) return null;
-        user = await this.createUser(client, claims, legacyRole);
+        // Invited staff verify only their email at Logto, so the identity
+        // carries no name — fall back to the name the inviter recorded, else
+        // the header/account menu shows their email instead of a name.
+        user = await this.createUser(client, claims, legacyRole, pending[0]?.name);
       }
 
       if (!user && portal === 'staff') return null;
@@ -173,6 +176,7 @@ export class ProvisioningService {
     client: PoolClient,
     claims: LogtoIdentityClaims,
     role: 'student' | 'landlord' | 'admin' | 'ops_lead' | 'ops_inspector',
+    nameFallback?: string,
   ): Promise<IdentityRow> {
     const email = claims.email?.trim().toLowerCase() || null;
     const phone = claims.phoneNumber?.trim() || null;
@@ -191,7 +195,7 @@ export class ProvisioningService {
         phone_verified, email_verified
       ) VALUES ($1, $2, $3, $4, $5, $6::user_role, 'active', $7, $8)
       RETURNING id, role::text, status::text, deleted_at AS "deletedAt"
-    `, [randomUUID(), claims.sub, phone, email, claims.name?.trim() ?? '', role,
+    `, [randomUUID(), claims.sub, phone, email, claims.name?.trim() || nameFallback?.trim() || '', role,
       claims.phoneVerified === true, claims.emailVerified === true])).rows[0];
     if (!created) throw new Error('User insert returned no row');
     return created;

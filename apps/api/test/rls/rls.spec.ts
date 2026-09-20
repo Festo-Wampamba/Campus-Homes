@@ -815,6 +815,44 @@ describe('activities (0017): staff ops board is service-only', () => {
   });
 });
 
+describe('email_change_requests (0050): sign-in email change codes are service-only', () => {
+  let request1: string;
+
+  beforeAll(async () => {
+    request1 = await seed(
+      `INSERT INTO email_change_requests (user_id, new_email, code_hash, expires_at)
+       VALUES ($1, 'new.email@example.com', 'deadbeef', now() + interval '15 minutes') RETURNING id`,
+      [student1],
+    );
+  });
+
+  it('a user cannot read their own email-change code row (no self policy)', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM email_change_requests').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a user cannot insert an email-change request directly (app-layer write only)', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'student' }, async (c) =>
+        c.query(
+          `INSERT INTO email_change_requests (user_id, new_email, code_hash, expires_at)
+           VALUES ($1, 'sneaky@example.com', 'x', now() + interval '15 minutes')`,
+          [student1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads and consumes the request', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT * FROM email_change_requests WHERE id = $1', [request1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
+
 describe('visit_corrections (0029): ops-only read, service-only write', () => {
   let correctionInspector: string;
   let correctionVisit: string;

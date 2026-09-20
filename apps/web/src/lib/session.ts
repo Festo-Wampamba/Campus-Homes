@@ -15,8 +15,15 @@ export interface SessionUser {
   role: UserRole;
   status: "active" | "suspended" | "pending";
   name: string | null;
+  username: string | null;
   email: string | null;
   phoneNumber: string | null;
+}
+
+// First-sign-in identity gate: every account needs a full name + @handle
+// before reaching a portal. Google sign-ins arrive without a username.
+export function needsProfileSetup(user: SessionUser): boolean {
+  return !user.name?.trim() || !user.username;
 }
 
 export interface Session {
@@ -25,7 +32,7 @@ export interface Session {
 }
 
 type RawSessionResponse = {
-  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; email: string | null; phone: string | null };
+  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; username: string | null; email: string | null; phone: string | null };
   access: AccountAccess;
 } | null;
 
@@ -64,7 +71,7 @@ export const getServerSession = cache(async (): Promise<Session | null> => {
     if (!data.user?.id || !["active", "pending", "suspended"].includes(data.user.status) || !validAccess(data.access)) {
       throw new SessionServiceUnavailableError();
     }
-    return { user: { ...data.user, phoneNumber: data.user.phone }, access: data.access };
+    return { user: { ...data.user, phoneNumber: data.user.phone, username: data.user.username ?? null }, access: data.access };
   } catch {
     // Do not turn a deployment outage or malformed contract into a login loop.
     throw new SessionServiceUnavailableError();
@@ -75,6 +82,7 @@ export async function requireSession(next = "/choose-workspace"): Promise<Sessio
   const session = await getServerSession();
   if (!session) redirect(`/sign-in?next=${encodeURIComponent(next)}`);
   if (session.user.status !== "active") redirect("/account-pending");
+  if (needsProfileSetup(session.user)) redirect("/onboarding");
   return session;
 }
 
@@ -83,5 +91,8 @@ export async function requireWorkspace(workspace: Workspace, path?: string): Pro
   const next = path ?? (await headers()).get("x-campushomes-path") ?? WORKSPACE_HOME[workspace];
   const destination = workspaceGuardDestination(session, workspace, next);
   if (destination) redirect(destination);
+  // Identity gate runs after the workspace guard admits the user: a
+  // logged-in account with no name/username is sent to set them first.
+  if (needsProfileSetup(session!.user)) redirect("/onboarding");
   return session!;
 }
