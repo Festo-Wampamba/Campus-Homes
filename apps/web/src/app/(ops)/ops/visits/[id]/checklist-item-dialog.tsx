@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { VerificationChecklistComponent, VisitCorrection } from "@campushomes/shared";
+import type { VerificationChecklistComponent, VisitCorrection, VisitPhoto } from "@campushomes/shared";
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -25,7 +25,7 @@ export function ChecklistItemDialog({
   component,
   label,
   entry,
-  photoStorageKeys,
+  photos,
   corrections,
   trigger,
 }: {
@@ -33,7 +33,7 @@ export function ChecklistItemDialog({
   component: VerificationChecklistComponent;
   label: string;
   entry: { passed: boolean; notes?: string } | undefined;
-  photoStorageKeys: string[];
+  photos: VisitPhoto[];
   corrections: VisitCorrection[];
   trigger: React.ReactNode;
 }) {
@@ -87,22 +87,23 @@ export function ChecklistItemDialog({
           {component === "photos" && (
             <div>
               <p className="mb-2 text-sm font-semibold text-foreground">Photos</p>
-              {photoStorageKeys.length === 0 ? (
+              {photos.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No photos captured.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {photoStorageKeys.map((key) => {
-                    const url = listingPhotoUrl(key, 400);
+                  {photos.map((photo) => {
+                    const url = listingPhotoUrl(photo.storageKey, 400);
                     return (
-                      <div key={key} className="overflow-hidden rounded-md border border-border">
+                      <div key={photo.storageKey} className="overflow-hidden rounded-md border border-border">
                         {url ? (
                           // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                          <img src={url} alt="" className="aspect-square w-full object-cover" />
+                          <img src={url} alt={photo.category} className="aspect-square w-full object-cover" />
                         ) : (
                           <div className="grid aspect-square place-items-center bg-muted text-xs text-muted-foreground">
                             No preview
                           </div>
                         )}
+                        <p className="truncate px-1.5 py-1 text-[10px] capitalize text-muted-foreground">{photo.category.replaceAll("_", " ")}</p>
                       </div>
                     );
                   })}
