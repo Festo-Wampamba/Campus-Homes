@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Camera, LocateFixed, X } from "lucide-react";
 import {
+  CHECKLIST_ITEMS,
   VERIFICATION_CHECKLIST_COMPONENTS,
   type OpsVisitDetail,
   type VerificationChecklistComponent,
@@ -104,8 +105,19 @@ const COMPONENT_LABEL: Record<VerificationChecklistComponent, string> = {
 
 function emptyChecklist(): InspectionDraft["checklist"] {
   return Object.fromEntries(
-    VERIFICATION_CHECKLIST_COMPONENTS.map((c) => [c, { passed: null, notes: "" }]),
+    VERIFICATION_CHECKLIST_COMPONENTS.map((c) => [c, { passed: null, notes: "", items: {} }]),
   ) as InspectionDraft["checklist"];
+}
+
+/** A component passes only when every one of its items is marked pass; it fails
+ * if any item is marked fail; it stays undecided (null) until all are marked. */
+export function deriveComponentPassed(
+  component: VerificationChecklistComponent,
+  items: Record<string, boolean>,
+): boolean | null {
+  const keys = CHECKLIST_ITEMS[component].map((i) => i.key);
+  if (keys.some((k) => items[k] === undefined)) return null;
+  return keys.every((k) => items[k] === true);
 }
 
 function newDraft(visitId: string): InspectionDraft {
@@ -136,7 +148,11 @@ function draftFromServer(visitId: string, visit: OpsVisitDetail): InspectionDraf
   const checklist = emptyChecklist();
   for (const component of VERIFICATION_CHECKLIST_COMPONENTS) {
     const entry = visit.checklist[component];
-    checklist[component] = { passed: entry?.passed ?? null, notes: entry?.notes ?? "" };
+    checklist[component] = {
+      passed: entry?.passed ?? null,
+      notes: entry?.notes ?? "",
+      items: entry?.items ?? {},
+    };
   }
   return {
     visitId,
@@ -277,6 +293,26 @@ export function InspectionForm({
       checklist: {
         ...currentDraft.checklist,
         [component]: { ...currentDraft.checklist[component], ...patch },
+      },
+    });
+  }
+
+  function setChecklistItem(
+    component: VerificationChecklistComponent,
+    itemKey: string,
+    passed: boolean,
+  ) {
+    const items = { ...currentDraft.checklist[component].items, [itemKey]: passed };
+    persist({
+      ...currentDraft,
+      checklist: {
+        ...currentDraft.checklist,
+        [component]: {
+          ...currentDraft.checklist[component],
+          items,
+          // Section pass/fail is derived, never set directly.
+          passed: deriveComponentPassed(component, items),
+        },
       },
     });
   }
@@ -466,27 +502,52 @@ export function InspectionForm({
             <CardContent className="space-y-3 p-5">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-semibold text-foreground">{COMPONENT_LABEL[component]}</p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={entry.passed === true ? "primary" : "secondary"}
-                    onClick={() => setComponent(component, { passed: true })}
-                  >
-                    Pass
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={entry.passed === false ? "destructive" : "secondary"}
-                    onClick={() => setComponent(component, { passed: false })}
-                  >
-                    Fail
-                  </Button>
-                </div>
+                <span
+                  className={
+                    entry.passed === true
+                      ? "rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
+                      : entry.passed === false
+                        ? "rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
+                        : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+                  }
+                >
+                  {entry.passed === true
+                    ? "Passed"
+                    : entry.passed === false
+                      ? "Failed"
+                      : `${CHECKLIST_ITEMS[component].filter((i) => entry.items[i.key] !== undefined).length}/${CHECKLIST_ITEMS[component].length}`}
+                </span>
               </div>
+              <ul className="space-y-1.5">
+                {CHECKLIST_ITEMS[component].map((item) => {
+                  const mark = entry.items[item.key];
+                  return (
+                    <li key={item.key} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-foreground">{item.label}</span>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mark === true ? "primary" : "secondary"}
+                          onClick={() => setChecklistItem(component, item.key, true)}
+                        >
+                          Pass
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mark === false ? "destructive" : "secondary"}
+                          onClick={() => setChecklistItem(component, item.key, false)}
+                        >
+                          Fail
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
               <Textarea
-                placeholder="Notes (optional)"
+                placeholder="Notes — only if the items above don't capture what you saw"
                 value={entry.notes}
                 onChange={(e) => setComponent(component, { notes: e.target.value })}
               />
