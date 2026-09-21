@@ -912,3 +912,14 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     Postgres/Redis/Logto apps. Separate prod DB/Logto tenant remains the
     follow-up. Backup bucket + its scoped key are the one media/backup thing
     made prod-dedicated this session.
+  - **Superseded 2026-09-22 — custom backup script retired for Dokploy-native.**
+    Staging turned out to already back up via **Dokploy's built-in Postgres
+    backup** (the DB service's Backups tab → S3 destination "Campus Homes",
+    prefix `/staging/`, keep-latest 14, cron `0 0 * * *`) — which is why no host
+    cron/timer existed for it. Prod now uses the same native mechanism (same S3
+    destination, prefix `/prod/`, keep 14, `0 0 * * *`) instead of the custom
+    `scripts/backup-prod-db.sh`. The script + its host cron + its write-only B2
+    key were removed — native gives a restore UI, managed pruning, and parity
+    with staging, and the write-only key had no read path for restores anyway.
+    The `prod/` prefix (PR #114) carried over to the Dokploy backup's storage
+    prefix.
