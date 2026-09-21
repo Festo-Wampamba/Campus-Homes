@@ -636,9 +636,12 @@ export class OpsService {
       if (!listing) {
         throw new NotFoundException('Listing not found');
       }
-      if (listing.status === 'verified') {
-        throw new ConflictException('Listing is already verified');
-      }
+      // A verified listing can be re-opened and edited by the lead (rooms,
+      // prices, amenities, description) — it stays verified and gets a fresh
+      // immutable version snapshot rather than being rejected. The prior
+      // version's photos are carried onto the new version below.
+      const isRepublish = listing.status === 'verified';
+      const priorVersionId = listing.currentVersionId;
       // Defense in depth alongside submitProperty()'s own gate: the
       // landlord could have been verified at submission time and rejected
       // or suspended (3-strike auto-suspend) any time before this, the
@@ -836,21 +839,70 @@ export class OpsService {
               depositUgx: row.input.depositUgx ?? null,
             })),
           )
-          .onConflictDoNothing({ target: [unitSemesterPricing.unitId, unitSemesterPricing.semesterId] });
+          // On a re-publish the lead may change a room's price/deposit for this
+          // semester, so update rather than ignore the conflict. (Existing
+          // reservations locked their own price at reservation time, so this
+          // only affects new reservations.)
+          .onConflictDoUpdate({
+            target: [unitSemesterPricing.unitId, unitSemesterPricing.semesterId],
+            set: {
+              pricePerTermUgx: sql`excluded.price_per_term_ugx`,
+              depositUgx: sql`excluded.deposit_ugx`,
+            },
+          });
       }
 
-      return { listing: updated, version, approvedVisit };
+      return { listing: updated, version, approvedVisit, isRepublish, priorVersionId };
     });
-    await this.audit.record(ctx, 'listing.publish', 'listing', input.listingId, {
-      versionId: published.version.id,
-      priceUgx: startingPriceUgx,
-    });
+    await this.audit.record(
+      ctx,
+      published.isRepublish ? 'listing.republish' : 'listing.publish',
+      'listing',
+      input.listingId,
+      { versionId: published.version.id, priceUgx: startingPriceUgx },
+    );
 
-    // Promote the visit's staged photos (uploaded at sync time) now that a
-    // listing_version — the FK they attach to — finally exists. A visit with
-    // no photos staged, or missing GPS (shouldn't happen: the inspection form
-    // requires GPS before a visit can even be submitted), is skipped rather
-    // than blocking the publish itself on it.
+    if (published.isRepublish) {
+      // A re-publish makes a fresh immutable version; photos belong to the
+      // listing, not to whichever version was current, so copy the prior
+      // version's listing_photos onto the new one rather than re-promoting the
+      // visit's staged photos (which would duplicate them every edit).
+      if (published.priorVersionId) {
+        const priorVersionId = published.priorVersionId;
+        const newVersionId = published.version.id;
+        await this.rlsDb.run(SERVICE_CTX, async (db) => {
+          const prior = await db
+            .select()
+            .from(listingPhotos)
+            .where(eq(listingPhotos.listingVersionId, priorVersionId))
+            .orderBy(asc(listingPhotos.sortOrder));
+          if (prior.length > 0) {
+            await db.insert(listingPhotos).values(
+              prior.map((p) => ({
+                listingVersionId: newVersionId,
+                storageKey: p.storageKey,
+                category: p.category,
+                customLabel: p.customLabel,
+                selfContained: p.selfContained,
+                capturedBy: p.capturedBy,
+                gpsLat: p.gpsLat,
+                gpsLon: p.gpsLon,
+                capturedAt: p.capturedAt,
+                isPrimary: p.isPrimary,
+                sortOrder: p.sortOrder,
+              })),
+            );
+          }
+        });
+      }
+      return published;
+    }
+
+    // First publish: promote the visit's staged photos (uploaded at sync time)
+    // now that a listing_version — the FK they attach to — finally exists. A
+    // visit with no photos staged, or missing GPS (shouldn't happen: the
+    // inspection form requires GPS before a visit can even be submitted), is
+    // skipped rather than blocking the publish itself on it.
     const visit = published.approvedVisit;
     // Staged photos are jsonb and may be bare keys (staged before categories)
     // or {storageKey, category} — normalizeVisitPhotos reads both.
