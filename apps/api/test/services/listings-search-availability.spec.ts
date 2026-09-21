@@ -177,6 +177,32 @@ describe('detail() public availability', () => {
   });
 });
 
+describe('search() self-contained filter (0053)', () => {
+  // The only still-available bed is on unitCancelled — mark that room
+  // self-contained so has_self_contained (computed over available units only)
+  // reflects a real, reservable self-contained room.
+  beforeAll(async () => {
+    await pool.query(`UPDATE units SET self_contained = true WHERE id = $1`, [unitCancelled]);
+  });
+
+  const box = { minLon: 32.5, minLat: 0.25, maxLon: 32.65, maxLat: 0.42, limit: 50 };
+
+  it('reports has_self_contained when an available room is self-contained', async () => {
+    const rows = (await listings.search(box as never)) as { id: string; has_self_contained: boolean }[];
+    expect(rows.find((r) => r.id === listingId)?.has_self_contained).toBe(true);
+  });
+
+  it('includes the listing when filtering for self-contained only', async () => {
+    const rows = (await listings.search({ ...box, selfContained: true } as never)) as { id: string }[];
+    expect(rows.find((r) => r.id === listingId)).toBeDefined();
+  });
+
+  it('excludes the listing when filtering for shared-bathroom only (its one free room is self-contained)', async () => {
+    const rows = (await listings.search({ ...box, selfContained: false } as never)) as { id: string }[];
+    expect(rows.find((r) => r.id === listingId)).toBeUndefined();
+  });
+});
+
 describe('search() availability', () => {
   it('only counts still-available beds, and keeps a partially-booked listing visible', async () => {
     const rows = (await listings.search({

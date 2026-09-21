@@ -71,6 +71,12 @@ export const listingSearchSchema = z.object({
   // "Male only" should not also see a mixed hostel, so this is not a
   // permissive filter the way roomCategory is.
   genderArrangement: z.enum(GENDER_ARRANGEMENTS).optional(),
+  // Exact-match on unit self-containment (0053): 'true' shows only listings
+  // with at least one self-contained room, 'false' only those with a
+  // non-self-contained room. Absent = no filter. Accepts the query-string
+  // form ('true'/'false') as well as a real boolean.
+  selfContained: z
+    .preprocess((v) => (v === 'true' ? true : v === 'false' ? false : v), z.boolean().optional()),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export type ListingSearchInput = z.infer<typeof listingSearchSchema>;
@@ -116,6 +122,9 @@ export const listingSearchResultSchema = z.object({
   max_capacity: z.coerce.number().int().nullable(),
   unit_count: z.coerce.number().int(),
   room_categories: z.array(roomCategoryBreakdownSchema),
+  // True when at least one unit in the listing is self-contained (0053) —
+  // drives the "Self-contained" badge on a search card.
+  has_self_contained: z.boolean(),
 });
 export type ListingSearchResult = z.infer<typeof listingSearchResultSchema>;
 
@@ -127,6 +136,8 @@ export const listingPhotoSchema = z.object({
   storageKey: z.string(),
   isPrimary: z.boolean(),
   sortOrder: z.number().int(),
+  // Whether the room shown is self-contained (0053); null on non-room photos.
+  selfContained: z.boolean().nullable(),
 });
 export type ListingPhoto = z.infer<typeof listingPhotoSchema>;
 
@@ -139,6 +150,7 @@ export const unitSchema = z.object({
   label: z.string(),
   capacity: z.number().int(),
   roomCategory: z.enum(ROOM_CATEGORIES),
+  selfContained: z.boolean(),
   pricePerTermUgx: z.number().int(),
   depositUgx: z.number().int().nullable(),
 });

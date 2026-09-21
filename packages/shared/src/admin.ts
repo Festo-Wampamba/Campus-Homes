@@ -129,6 +129,9 @@ export const adminUnitInputSchema = z.object({
   roomCategory: z.enum(ROOM_CATEGORIES).default('single'),
   // Free-text room type used only when roomCategory is 'other'.
   roomCategoryLabel: z.string().trim().max(40).nullable().optional(),
+  // Whether the room has its own bathroom/facilities (0053). Optional on
+  // input — defaults to false, matching the units.self_contained column.
+  selfContained: z.boolean().optional(),
   pricePerTermUgx: z.number().int().positive().max(100_000_000),
   depositUgx: z.number().int().min(0).max(100_000_000).nullable().optional(),
   operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES).default('available'),

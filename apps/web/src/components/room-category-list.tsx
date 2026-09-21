@@ -21,6 +21,7 @@ type LightboxPhoto = { storageKey: string };
 type CategoryGroup = {
   key: string;
   category: string;
+  selfContained: boolean;
   pricePerTermUgx: number;
   depositUgx: number | null;
   capacity: number;
@@ -53,7 +54,7 @@ function groupByCategory(
 
   const groups = new Map<string, CategoryGroup>();
   for (const unit of units) {
-    const key = `${unit.roomCategory}-${unit.pricePerTermUgx}`;
+    const key = `${unit.roomCategory}-${unit.selfContained}-${unit.pricePerTermUgx}`;
     const beds = availableBedsByUnit.get(unit.id) ?? [];
     const availableBeds = beds.filter((b) => b.available);
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
@@ -67,6 +68,7 @@ function groupByCategory(
       groups.set(key, {
         key,
         category: unit.roomCategory,
+        selfContained: unit.selfContained,
         pricePerTermUgx: unit.pricePerTermUgx,
         depositUgx: unit.depositUgx,
         capacity: unit.capacity,
@@ -125,7 +127,14 @@ export function RoomCategoryList({
           <li key={group.key} className="flex flex-wrap items-center gap-3 p-4">
             <DoorOpen aria-hidden className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">{roomCategoryLabel(group.category)}</p>
+              <p className="font-semibold">
+                {roomCategoryLabel(group.category)}
+                {group.selfContained && (
+                  <span className="ml-2 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                    Self-contained
+                  </span>
+                )}
+              </p>
               <p className="text-sm text-muted-foreground">
                 Sleeps {group.capacity} · {group.roomCount}{" "}
                 {group.roomCount === 1 ? "room" : "rooms"}

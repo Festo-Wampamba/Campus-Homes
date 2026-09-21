@@ -45,11 +45,13 @@ function PhotoThumb({
   onRemove,
   onCategoryChange,
   onLabelChange,
+  onSelfContainedChange,
 }: {
   photo: PendingPhoto;
   onRemove: () => void;
   onCategoryChange: (category: PhotoCategory) => void;
   onLabelChange: (label: string) => void;
+  onSelfContainedChange: (selfContained: boolean) => void;
 }) {
   const [url] = useState(() => URL.createObjectURL(photo.file));
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
@@ -89,8 +91,30 @@ function PhotoThumb({
           className="mt-1 w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
         />
       )}
+      {isBedroomCategory(photo.category) && (
+        <label className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={photo.selfContained ?? false}
+            onChange={(e) => onSelfContainedChange(e.target.checked)}
+          />
+          Self-contained
+        </label>
+      )}
     </div>
   );
+}
+
+// Categories that describe a room, where "self-contained" (own bathroom) is a
+// meaningful attribute — the toggle is hidden for non-room photos.
+const BEDROOM_CATEGORIES = new Set<PhotoCategory>([
+  "bedroom",
+  "single_bedroom",
+  "double_bedroom",
+  "triple_bedroom",
+]);
+function isBedroomCategory(category: PhotoCategory): boolean {
+  return BEDROOM_CATEGORIES.has(category);
 }
 
 const COMPONENT_LABEL: Record<VerificationChecklistComponent, string> = {
@@ -292,7 +316,23 @@ export function InspectionForm({
     persist({
       ...currentDraft,
       photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
-        i === index ? { ...p, category, ...(category === "custom" ? {} : { label: undefined }) } : p,
+        i === index
+          ? {
+              ...p,
+              category,
+              ...(category === "custom" ? {} : { label: undefined }),
+              ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+            }
+          : p,
+      ),
+    });
+  }
+
+  function setUploadedPhotoSelfContained(index: number, selfContained: boolean) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index ? { ...p, selfContained } : p,
       ),
     });
   }
@@ -317,8 +357,22 @@ export function InspectionForm({
     persist({
       ...currentDraft,
       photos: currentDraft.photos.map((p, i) =>
-        i === index ? { ...p, category, ...(category === "custom" ? {} : { label: undefined }) } : p,
+        i === index
+          ? {
+              ...p,
+              category,
+              ...(category === "custom" ? {} : { label: undefined }),
+              ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+            }
+          : p,
       ),
+    });
+  }
+
+  function setPhotoSelfContained(index: number, selfContained: boolean) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) => (i === index ? { ...p, selfContained } : p)),
     });
   }
 
@@ -528,6 +582,17 @@ export function InspectionForm({
                               className="w-28 rounded border border-input bg-background px-1 py-0.5 text-xs"
                             />
                           )}
+                          {isBedroomCategory(photo.category) && (
+                            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                aria-label={`Uploaded photo ${i + 1} self-contained`}
+                                checked={photo.selfContained ?? false}
+                                onChange={(e) => setUploadedPhotoSelfContained(i, e.target.checked)}
+                              />
+                              Self-contained
+                            </label>
+                          )}
                           <button
                             type="button"
                             aria-label={`Remove uploaded photo ${i + 1}`}
@@ -549,6 +614,7 @@ export function InspectionForm({
                           onRemove={() => removePhoto(i)}
                           onCategoryChange={(category) => setPhotoCategory(i, category)}
                           onLabelChange={(label) => setPhotoLabel(i, label)}
+                          onSelfContainedChange={(selfContained) => setPhotoSelfContained(i, selfContained)}
                         />
                       ))}
                     </div>
