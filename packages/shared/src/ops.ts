@@ -55,6 +55,9 @@ export const visitPhotoSchema = z.object({
   // Free-text label used only when category is 'custom' — the preset list is
   // the checklist; this is the fallback when nothing fits.
   label: z.string().trim().max(50).optional(),
+  // Whether the room shown is self-contained. Only meaningful for bedroom
+  // categories; omitted/undefined on non-room photos (0053).
+  selfContained: z.boolean().optional(),
 });
 export type VisitPhoto = z.infer<typeof visitPhotoSchema>;
 
@@ -137,6 +140,10 @@ export const publishListingSchema = z.object({
         roomCategory: z.enum(ROOM_CATEGORIES),
         // Free-text room type used only when roomCategory is 'other'.
         roomCategoryLabel: z.string().trim().max(40).optional(),
+        // Authoritative self-contained flag per room, set by Ops at publish
+        // (0053). Optional on input — defaults to false (non-self-contained),
+        // matching the units.self_contained column default.
+        selfContained: z.boolean().optional(),
         pricePerTermUgx: ugxAmount,
         depositUgx: ugxAmount.optional(),
       }),

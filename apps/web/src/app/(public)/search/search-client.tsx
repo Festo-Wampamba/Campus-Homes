@@ -89,6 +89,8 @@ export function SearchClient() {
   const [maxPrice, setMaxPrice] = useState("");
   const [genderArrangement, setGenderArrangement] = useState("");
   const [roomCategory, setRoomCategory] = useState("");
+  // "" = any, "true" = self-contained only, "false" = non-self-contained only.
+  const [selfContained, setSelfContained] = useState("");
 
   // Debounced so typing a name doesn't fire a request per keystroke.
   useEffect(() => {
@@ -97,7 +99,7 @@ export function SearchClient() {
   }, [q]);
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, genderArrangement, roomCategory],
+    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, genderArrangement, roomCategory, selfContained],
     enabled: bounds !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -115,6 +117,7 @@ export function SearchClient() {
       if (maxPrice) qs.set("maxPriceUgx", maxPrice);
       if (genderArrangement) qs.set("genderArrangement", genderArrangement);
       if (roomCategory) qs.set("roomCategory", roomCategory);
+      if (selfContained) qs.set("selfContained", selfContained);
       return searchResponse.parse(await api<unknown>(`/listings/search?${qs}`));
     },
   });
@@ -275,6 +278,19 @@ export function SearchClient() {
               </option>
             ))}
           </select>
+          <select
+            value={selfContained}
+            onChange={(e) => setSelfContained(e.target.value)}
+            aria-label="Self-contained"
+            className={cn(
+              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
+              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            )}
+          >
+            <option value="">Any bathroom</option>
+            <option value="true">Self-contained</option>
+            <option value="false">Shared bathroom</option>
+          </select>
         </div>
 
         {isPending && bounds !== null && (
@@ -391,6 +407,11 @@ function ResultCard({
             {row.gender_arrangement && (
               <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
                 {GENDER_ARRANGEMENT_LABELS[row.gender_arrangement]}
+              </span>
+            )}
+            {row.has_self_contained && (
+              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                Self-contained
               </span>
             )}
           </div>

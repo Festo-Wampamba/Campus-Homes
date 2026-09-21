@@ -355,6 +355,7 @@ export class OpsService {
           label: units.label,
           capacity: units.capacity,
           roomCategory: units.roomCategory,
+          selfContained: units.selfContained,
           pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
           depositUgx: unitSemesterPricing.depositUgx,
         })
@@ -793,6 +794,7 @@ export class OpsService {
               capacity: u.capacity,
               roomCategory: u.roomCategory,
               roomCategoryLabel: u.roomCategory === 'other' ? (u.roomCategoryLabel ?? null) : null,
+              selfContained: u.selfContained ?? false,
             })),
           ).returning()
         : [];
@@ -863,6 +865,7 @@ export class OpsService {
             storageKey: photo.storageKey,
             category: photo.category,
             customLabel: photo.category === 'custom' ? (photo.label ?? null) : null,
+            selfContained: photo.selfContained ?? null,
             capturedBy: visit.inspectorId,
             gpsLat,
             gpsLon,
