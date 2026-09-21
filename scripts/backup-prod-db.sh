@@ -48,11 +48,11 @@ docker run --rm \
   -e AWS_DEFAULT_REGION="${B2_BACKUP_REGION:-eu-central-003}" \
   -v "$LOCAL_DIR:/data:ro" \
   amazon/aws-cli:latest \
-  s3 cp "/data/$(basename "$file")" "s3://${B2_BACKUP_BUCKET}/$(basename "$file")" \
+  s3 cp "/data/$(basename "$file")" "s3://${B2_BACKUP_BUCKET}/prod/$(basename "$file")" \
   --endpoint-url "$B2_BACKUP_ENDPOINT"
 
 # 4. Prune local dumps past retention. Remote retention is a B2 lifecycle rule
 #    on the bucket (native feature beats a delete loop here).
 find "$LOCAL_DIR" -name 'campushomes-*.dump' -mtime +"$RETAIN_DAYS" -delete
 
-echo "$(date -Is) OK $(basename "$file") ${size} bytes -> b2:${B2_BACKUP_BUCKET}"
+echo "$(date -Is) OK $(basename "$file") ${size} bytes -> b2:${B2_BACKUP_BUCKET}/prod/"
