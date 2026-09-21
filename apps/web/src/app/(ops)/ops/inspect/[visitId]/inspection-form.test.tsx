@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { getDraft, putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
 
-import { InspectionForm } from "./inspection-form";
+import { deriveComponentPassed, InspectionForm } from "./inspection-form";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -17,6 +17,35 @@ async function waitFor(condition: () => boolean, attempts = 20): Promise<void> {
   }
   throw new Error("waitFor: condition never became true");
 }
+
+describe("deriveComponentPassed", () => {
+  // landlord_identity has 3 items: identity_verified, id_matches, authorization.
+  it("passes only when every item is marked pass", () => {
+    expect(
+      deriveComponentPassed("landlord_identity", {
+        identity_verified: true,
+        id_matches: true,
+        authorization: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("fails when any item is marked fail", () => {
+    expect(
+      deriveComponentPassed("landlord_identity", {
+        identity_verified: true,
+        id_matches: false,
+        authorization: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("stays undecided until every item is marked", () => {
+    expect(
+      deriveComponentPassed("landlord_identity", { identity_verified: true, id_matches: true }),
+    ).toBeNull();
+  });
+});
 
 /** putDraft is debounced ~300ms, so reading straight after a click can see the
  * pre-click row. Polls until the stored draft satisfies the predicate. */
@@ -40,12 +69,12 @@ function failedDraft(visitId: string): InspectionDraft {
     visitId,
     clientIdempotencyKey: `key-${visitId}`,
     checklist: {
-      location_gps: { passed: true, notes: "" },
-      rooms_capacity: { passed: true, notes: "" },
-      amenities: { passed: true, notes: "" },
-      photos: { passed: true, notes: "" },
-      landlord_identity: { passed: true, notes: "" },
-      safety: { passed: true, notes: "" },
+      location_gps: { passed: true, notes: "", items: {} },
+      rooms_capacity: { passed: true, notes: "", items: {} },
+      amenities: { passed: true, notes: "", items: {} },
+      photos: { passed: true, notes: "", items: {} },
+      landlord_identity: { passed: true, notes: "", items: {} },
+      safety: { passed: true, notes: "", items: {} },
     },
     visitGpsLat: 0.33,
     visitGpsLon: 32.57,

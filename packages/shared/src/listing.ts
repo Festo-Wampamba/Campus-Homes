@@ -14,6 +14,10 @@ import { ugxAmount, uuid } from './common.js';
 export const checklistComponentResultSchema = z.object({
   passed: z.boolean(),
   notes: z.string().max(500).optional(),
+  // Per-item pass/fail marks (keys from CHECKLIST_ITEMS). Optional for
+  // backward compatibility with visits recorded before item-level checklists;
+  // `passed` stays authoritative and is derived from these when present.
+  items: z.record(z.string(), z.boolean()).optional(),
 });
 
 export const verificationChecklistSchema = z.object(

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { photoCategoryDisplay, type VerificationChecklistComponent, type VisitCorrection, type VisitPhoto } from "@campushomes/shared";
+import { CHECKLIST_ITEMS, photoCategoryDisplay, type VerificationChecklistComponent, type VisitCorrection, type VisitPhoto } from "@campushomes/shared";
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -32,7 +32,7 @@ export function ChecklistItemDialog({
   visitId: string;
   component: VerificationChecklistComponent;
   label: string;
-  entry: { passed: boolean; notes?: string } | undefined;
+  entry: { passed: boolean; notes?: string; items?: Record<string, boolean> } | undefined;
   photos: VisitPhoto[];
   corrections: VisitCorrection[];
   trigger: React.ReactNode;
@@ -78,6 +78,22 @@ export function ChecklistItemDialog({
                 {entry.passed ? "Pass" : "Fail"}
               </StatusChip>
             </div>
+          )}
+          {entry?.items && Object.keys(entry.items).length > 0 && (
+            <ul className="space-y-1">
+              {CHECKLIST_ITEMS[component].map((item) => {
+                const mark = entry.items?.[item.key];
+                if (mark === undefined) return null;
+                return (
+                  <li key={item.key} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-foreground">{item.label}</span>
+                    <StatusChip tone={mark ? "success" : "destructive"}>
+                      {mark ? "Pass" : "Fail"}
+                    </StatusChip>
+                  </li>
+                );
+              })}
+            </ul>
           )}
           {entry?.notes && <p className="text-sm text-foreground">{entry.notes}</p>}
           {!entry?.notes && (

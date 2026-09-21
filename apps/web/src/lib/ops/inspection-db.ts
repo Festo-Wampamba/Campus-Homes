@@ -5,7 +5,12 @@ export type SyncStatus = "draft" | "queued" | "syncing" | "synced" | "failed";
 export interface InspectionDraft {
   visitId: string;
   clientIdempotencyKey: string;
-  checklist: Record<VerificationChecklistComponent, { passed: boolean | null; notes: string }>;
+  checklist: Record<
+    VerificationChecklistComponent,
+    // `passed` is derived from `items` (passes only when every item passes);
+    // it stays the value the sync submits and the DB gate reads.
+    { passed: boolean | null; notes: string; items: Record<string, boolean> }
+  >;
   visitGpsLat: number | null;
   visitGpsLon: number | null;
   startedAt: string;
@@ -41,6 +46,16 @@ function normalizeDraft(draft: InspectionDraft | undefined): InspectionDraft | u
   if (!draft) return draft;
   return {
     ...draft,
+    // Drafts recorded before item-level checklists have no `items` map —
+    // default it so the form can render item rows without a guard everywhere.
+    checklist: draft.checklist
+      ? (Object.fromEntries(
+          Object.entries(draft.checklist).map(([component, entry]) => [
+            component,
+            { ...entry, items: entry.items ?? {} },
+          ]),
+        ) as InspectionDraft["checklist"])
+      : draft.checklist,
     photos: (draft.photos ?? []).map((p) =>
       p instanceof File ? { file: p, category: "other" as const } : p,
     ),
