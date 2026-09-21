@@ -845,3 +845,70 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     too. Anyone re-provisioning a local Logto tenant from scratch needs to
     register the web-origin callback URL (not the API port) AND the exact
     `/sign-in` post-logout URL, on both the staff and consumer applications.
+
+- **Production cutover — brought prod from `e2b4a5b`/37-migrations up to
+  `634aea3`/54, + media + FORCE RLS + backups (2026-09-21):** prod had drifted
+  far behind staging. The old session summary overstated what was missing —
+  live VPS inventory showed prod was already hardened on most axes: role
+  separation done (`campushomes_app`, `rolsuper=f`/`rolbypassrls=f`, `IN ROLE
+  app_user`), Redis `requirepass` set, Logto fully live (container + full env,
+  auth migrations 0035/0036 already applied — the 4 prod users are Logto-era,
+  **no auth reset needed**), and WEB_ORIGIN/AUTH_*/ALLOW_INDEXING/Cloudinary/
+  Resend/Google/Africa's-Talking all present. Data: 4 users, 0 reservations =
+  effectively pre-launch, downtime free.
+  - **Root cause of stuck-at-37: prod API had no `DATABASE_MIGRATIONS_URL`.**
+    The image only self-migrates when it's set (same as staging). Added it to
+    the prod-API Dokploy stored env (superuser `campushomes` conn; rotated the
+    superuser password fresh via trusted-local `ALTER ROLE` so no encoding/
+    secret-in-chat — nothing else connects as `campushomes` over TCP).
+  - Structural fact that shaped the path: **prod's old image (`e2b4a5b`)
+    doesn't contain migration files 0037–0054**, so its migrator can't catch
+    up. Chose self-migrate-on-deploy (Path A): the *new* image boots,
+    self-migrates 37→54 with correct drizzle journal, then serves. Triggered
+    via `gh workflow run CI --ref main` (the `deploy-production` job is
+    `workflow_dispatch`-gated; **note it has no `needs: ci`** — deploys in
+    parallel with the test job, gated only by `environment: production`; fine
+    here since `634aea3` was already CI-green and live on staging).
+  - **The health gate only proves the image is serving** (commit from build
+    arg); `migrate.js` is non-fatal (`;` not `&&`), so it does NOT prove
+    migration succeeded — verified `drizzle.__drizzle_migrations` independently:
+    `/health` reported `schema: applied 54 / expected 54, ledgerPresent true`,
+    API + web both `634aea3`. Pre-migration backup taken first
+    (`pg_dump -Fc`, `pg_restore --list`-verified, 710 objects) as the rollback.
+  - **Media: dropped Cloudinary for new uploads, moved to a new public B2
+    bucket `campushomes-media-production`** (own scoped app key), separate from
+    staging's `campushomes-media-staging` — media is user content, a clean prod
+    bucket is cheap unlike the still-shared DB/Logto. Set the 5 `B2_*` vars on
+    prod-API. `CLOUDINARY_URL` ended up dropped from prod env during the edit —
+    harmless: new uploads pick B2 (the adapter selects B2 whenever `B2_S3_*` is
+    present), and legacy Cloudinary media renders web-side via
+    `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`, not the API's `CLOUDINARY_URL`.
+    next.config uses path-style B2 URLs
+    (`s3.<region>.backblazeb2.com/<bucket>/**`) so the image host is constant
+    across buckets; with no B2 build-args it falls back to a broad
+    `**.backblazeb2.com` allow, which renders the new bucket fine.
+  - **FORCE RLS: was 53/56 forced pre-migration** (`beds`, `product_events`,
+    `reservation_releases` unforced); after the 18 migrations (which added 7
+    more RLS tables, all self-forced) the gap was still just those 3 —
+    `ALTER TABLE … FORCE ROW LEVEL SECURITY` on all three → **63/63 forced ==
+    rls_on**, owner-bypass hole closed platform-wide. (Superuser bypasses RLS
+    unconditionally regardless of FORCE — the reason the runtime role
+    separation matters more than FORCE, but FORCE is defense-in-depth for the
+    table owner.)
+  - **Backups: prod had NONE** (staging's claimed daily-B2 backup wasn't a host
+    cron/systemd timer/backup container anywhere on the VPS — mechanism
+    unconfirmed). Added `scripts/backup-prod-db.sh` (versioned): in-container
+    `pg_dump -Fc` → `pg_restore --list` structural verify → upload to a
+    **private** B2 backup bucket via a throwaway `amazon/aws-cli` container (B2
+    is S3-compatible; no host tooling) → prune local past 14 days. **DB dumps
+    must never share the public media bucket** — needs a separate private
+    bucket + scoped key, creds in `/home/festo/.campushomes-backup.env`
+    (chmod 600), cron `30 2 * * *`. Remote retention = a B2 lifecycle rule on
+    the backup bucket.
+  - Verified end to end: run `success`, `/health` ok + schema 54/54 + db/redis
+    up, web `/version` `634aea3`, `robots.txt` `Allow: /` (indexing on), live
+    prod-API service env carries all 5 `B2_*` + `DATABASE_MIGRATIONS_URL`.
+  - **Still shared staging↔prod (accepted for now, per the Dokploy app note):**
+    Postgres/Redis/Logto apps. Separate prod DB/Logto tenant remains the
+    follow-up. Backup bucket + its scoped key are the one media/backup thing
+    made prod-dedicated this session.
