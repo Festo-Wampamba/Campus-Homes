@@ -208,7 +208,7 @@ export function RoomTypeDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="lg">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl">
       <form onSubmit={handleSubmit} className="flex flex-col h-full">
         <DialogHeader
           title={roomType ? "Edit Room Type Specification" : "Create Room Type"}
