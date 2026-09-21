@@ -43,7 +43,9 @@ import {
   properties,
   roomTypes,
   roomTypeVersions,
+  roomUnitChanges,
   semesters,
+  unitBlocks,
   units,
   unitSemesterPricing,
   users,
@@ -627,7 +629,71 @@ export class OpsService {
    * The 6-component DB trigger independently guards the flip. Each unit
    * carries its own room-category price now — the version's headline price
    * is derived as the cheapest category, not entered directly by Ops. */
+  /** Lead-edit deletions: any physical room the re-publish payload dropped
+   * (a removed row, or a lowered room count) is deleted here, under
+   * service_role (units DELETE is svc_all-only). Guarded hard — a room with
+   * any reservation, or one that's part of another semester's listing, refuses
+   * the whole publish rather than being silently deleted. Cascade removes the
+   * unit's beds/pricing/photos; unit_blocks and room_unit_changes (both
+   * RESTRICT) are cleared first. First publish has no existing units, so this
+   * is a no-op there. */
+  private async deleteRemovedUnits(input: PublishListingInput) {
+    await this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const listing = await db.query.listings.findFirst({
+        where: eq(listings.id, input.listingId),
+      });
+      if (!listing || listing.status !== 'verified') return;
+
+      const keptUnitIds = new Set(
+        input.units.filter((u) => u.unitId).map((u) => u.unitId!),
+      );
+      const currentUnits = await db
+        .select({ id: units.id, label: units.label })
+        .from(units)
+        .innerJoin(
+          unitSemesterPricing,
+          and(
+            eq(unitSemesterPricing.unitId, units.id),
+            eq(unitSemesterPricing.semesterId, listing.semesterId),
+          ),
+        )
+        .where(eq(units.propertyId, listing.propertyId));
+      const removed = currentUnits.filter((u) => !keptUnitIds.has(u.id));
+      if (removed.length === 0) return;
+
+      for (const room of removed) {
+        const [{ hasRes, otherSem }] = (
+          await db.execute(sql`
+            SELECT
+              EXISTS(SELECT 1 FROM beds b JOIN reservations r ON r.bed_id = b.id WHERE b.unit_id = ${room.id}) AS "hasRes",
+              EXISTS(SELECT 1 FROM unit_semester_pricing p WHERE p.unit_id = ${room.id} AND p.semester_id <> ${listing.semesterId}) AS "otherSem"
+          `)
+        ).rows as [{ hasRes: boolean; otherSem: boolean }];
+        if (hasRes) {
+          throw new ConflictException(
+            `Room "${room.label}" has reservations and can't be deleted — cancel or relocate them first.`,
+          );
+        }
+        if (otherSem) {
+          throw new ConflictException(
+            `Room "${room.label}" is part of another semester's listing — remove it there first.`,
+          );
+        }
+      }
+
+      const removedIds = removed.map((u) => u.id);
+      await db.delete(unitBlocks).where(inArray(unitBlocks.unitId, removedIds));
+      await db.update(roomUnitChanges).set({ unitId: null }).where(inArray(roomUnitChanges.unitId, removedIds));
+      // Cascades beds, unit_semester_pricing and unit_photos (0037 FKs).
+      await db.delete(units).where(inArray(units.id, removedIds));
+    });
+  }
+
   async publishListing(ctx: RlsContext, input: PublishListingInput) {
+    // Handle any rooms the lead removed in this edit before re-publishing the
+    // rest — refuses early (nothing else written yet) if a removed room is
+    // unsafe to delete.
+    await this.deleteRemovedUnits(input);
     const startingPriceUgx = Math.min(...input.units.map((u) => u.pricePerTermUgx));
     const published = await this.rlsDb.run(ctx, async (db) => {
       const listing = await db.query.listings.findFirst({

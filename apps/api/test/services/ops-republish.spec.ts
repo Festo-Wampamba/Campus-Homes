@@ -136,4 +136,89 @@ describe('OpsService.publishListing re-publish', () => {
     ).rows[0].n;
     expect(newPhotos).toBe(1);
   });
+
+  it('deletes a room dropped from the re-publish payload', async () => {
+    const propertyId = (
+      await pool.query(`SELECT property_id FROM listings WHERE id = $1`, [listingId])
+    ).rows[0].property_id as string;
+    const room1 = (
+      await pool.query(`SELECT id FROM units WHERE property_id = $1 ORDER BY label`, [propertyId])
+    ).rows[0].id as string;
+
+    // Add a second room.
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: [
+        { unitId: room1, label: 'Room 1', capacity: 1, roomCategory: 'single', pricePerTermUgx: 600_000 },
+        { label: 'Room 2', capacity: 1, roomCategory: 'single', pricePerTermUgx: 400_000 },
+      ],
+    });
+    expect(
+      (await pool.query(`SELECT count(*)::int AS n FROM units WHERE property_id = $1`, [propertyId])).rows[0].n,
+    ).toBe(2);
+
+    // Re-publish without Room 2 — it should be deleted.
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: [
+        { unitId: room1, label: 'Room 1', capacity: 1, roomCategory: 'single', pricePerTermUgx: 600_000 },
+      ],
+    });
+    expect(
+      (await pool.query(`SELECT count(*)::int AS n FROM units WHERE property_id = $1`, [propertyId])).rows[0].n,
+    ).toBe(1);
+  });
+
+  it('refuses to delete a room that has a reservation', async () => {
+    const propertyId = (
+      await pool.query(`SELECT property_id FROM listings WHERE id = $1`, [listingId])
+    ).rows[0].property_id as string;
+    const room1 = (
+      await pool.query(`SELECT id FROM units WHERE property_id = $1 ORDER BY label`, [propertyId])
+    ).rows[0].id as string;
+
+    // Add Room 2 back so the payload can keep >=1 room while we try to drop Room 1.
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: [
+        { unitId: room1, label: 'Room 1', capacity: 1, roomCategory: 'single', pricePerTermUgx: 600_000 },
+        { label: 'Room 2', capacity: 1, roomCategory: 'single', pricePerTermUgx: 400_000 },
+      ],
+    });
+    const room2 = (
+      await pool.query(`SELECT id FROM units WHERE property_id = $1 AND id <> $2`, [propertyId, room1])
+    ).rows[0].id as string;
+
+    // Reserve a bed in Room 1.
+    const studentUserId = (
+      await pool.query(`INSERT INTO users (phone, role, status) VALUES ('+256710000099', 'student', 'active') RETURNING id`)
+    ).rows[0].id as string;
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [studentUserId]);
+    const bed1 = (await pool.query(`SELECT id FROM beds WHERE unit_id = $1 LIMIT 1`, [room1])).rows[0].id as string;
+    const versionId = (
+      await pool.query(`SELECT current_version_id FROM listings WHERE id = $1`, [listingId])
+    ).rows[0].current_version_id as string;
+    await pool.query(
+      `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+       VALUES ($1, $2, $3, 'reserved', 'republish-res-01', 600000)`,
+      [studentUserId, bed1, versionId],
+    );
+
+    // Trying to drop the reserved Room 1 is refused, and it survives.
+    await expect(
+      ops.publishListing(leadCtx(), {
+        listingId,
+        amenities: { water: true },
+        units: [
+          { unitId: room2, label: 'Room 2', capacity: 1, roomCategory: 'single', pricePerTermUgx: 400_000 },
+        ],
+      }),
+    ).rejects.toThrow(/reservations/i);
+    expect(
+      (await pool.query(`SELECT count(*)::int AS n FROM units WHERE id = $1`, [room1])).rows[0].n,
+    ).toBe(1);
+  });
 });

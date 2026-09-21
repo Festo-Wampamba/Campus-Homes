@@ -213,6 +213,8 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
             Saving creates a new version and the listing stays verified and visible to students.
             The {published.photos.length} verification photo
             {published.photos.length === 1 ? "" : "s"} already on it are carried over automatically.
+            Removing a room row (or lowering its count) deletes those rooms — only allowed if they
+            have no reservations.
           </p>
         </div>
       )}
