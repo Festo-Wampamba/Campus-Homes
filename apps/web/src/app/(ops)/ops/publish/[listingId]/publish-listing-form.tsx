@@ -79,8 +79,13 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         if (cancelled) return;
         setVisitPhotoCount(count);
         if (listing.status === "verified" && version) {
+          // Re-opening a live listing to edit it: keep the published snapshot
+          // for the banner, pre-fill amenities/description from it, then fall
+          // through to load the rooms so the whole form is editable. Saving
+          // creates a new version and stays verified (photos carried server-side).
           setPublished({ version, photos });
-          return;
+          setDescription(version.description ?? "");
+          setAmenities(version.amenities ?? {});
         }
 
         const rooms = await api<PropertyRoom[]>(
@@ -196,68 +201,22 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
     }
   }
 
-  if (published) {
-    const amenities = Object.entries(published.version.amenities)
-      .filter(([, on]) => on)
-      .map(([key]) => key);
-    return (
-      <div className="space-y-4">
-        <div className="rounded-md border border-input px-3 py-2 text-sm">
-          <p className="font-semibold">Published — version {published.version.versionNumber}</p>
-          <p className="mt-1 text-muted-foreground">
-            Went live on {new Date(published.version.verifiedAt).toLocaleDateString()}. A published
-            listing is what students have already seen, so it can&apos;t be edited here. If something
-            is wrong, raise a new visit for this property.
-          </p>
-        </div>
-        <dl className="space-y-2 text-sm">
-          <div>
-            <dt className="font-semibold">From</dt>
-            <dd className="text-muted-foreground">
-              UGX {published.version.pricePerTermUgx.toLocaleString()} per term
-            </dd>
-          </div>
-          <div>
-            <dt className="font-semibold">Description</dt>
-            <dd className="text-muted-foreground">{published.version.description || "—"}</dd>
-          </div>
-          <div>
-            <dt className="font-semibold">Amenities</dt>
-            <dd className="text-muted-foreground">
-              {amenities.length > 0
-                ? amenities
-                    .map((key) => AMENITY_OPTIONS.find((a) => a.key === key)?.label ?? key)
-                    .join(", ")
-                : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="font-semibold">Photos ({published.photos.length})</dt>
-            <dd className="text-muted-foreground">
-              {published.photos.length === 0 ? (
-                "No verification photos were published with this listing."
-              ) : (
-                <ul className="mt-1 space-y-1">
-                  {published.photos.map((photo) => (
-                    <li key={photo.id} className="flex items-center gap-2">
-                      <span className="truncate">{photo.storageKey}</span>
-                      <span className="shrink-0 rounded bg-muted px-1 text-xs">
-                        {photo.category ?? "uncategorised"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </dd>
-          </div>
-        </dl>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={submit} className="space-y-4">
-      {visitPhotoCount === 0 && (
+      {published && (
+        <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+          <p className="font-semibold">
+            Editing a live listing — version {published.version.versionNumber} (verified{" "}
+            {new Date(published.version.verifiedAt).toLocaleDateString()})
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Saving creates a new version and the listing stays verified and visible to students.
+            The {published.photos.length} verification photo
+            {published.photos.length === 1 ? "" : "s"} already on it are carried over automatically.
+          </p>
+        </div>
+      )}
+      {published === null && visitPhotoCount === 0 && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           The inspector didn&apos;t stage any photos on this visit — publishing now
           will go live with no verification photos. You can still publish, but
@@ -303,7 +262,13 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         />
       </div>
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "Publishing…" : "Publish listing"}
+        {pending
+          ? published
+            ? "Saving…"
+            : "Publishing…"
+          : published
+            ? "Save changes"
+            : "Publish listing"}
       </Button>
       <p role="status" className="min-h-5 text-sm text-destructive">
         {error}
