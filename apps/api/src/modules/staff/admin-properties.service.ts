@@ -184,6 +184,7 @@ export class AdminPropertiesService {
       const units = await client.query(`
           SELECT un.id, un.label, un.capacity,
                  un.room_category::text AS "roomCategory", un.room_category_label AS "roomCategoryLabel",
+                 un.self_contained AS "selfContained",
                  usp.price_per_term_ugx AS "pricePerTermUgx",
                  usp.deposit_ugx AS "depositUgx",
                  un.operational_status AS "operationalStatus", un.building_name AS "buildingName",
@@ -384,9 +385,9 @@ export class AdminPropertiesService {
       const inserted = (await client.query(`
         INSERT INTO units (
           property_id, label, capacity, room_category, room_category_label,
-          operational_status, building_name, floor_label,
+          self_contained, operational_status, building_name, floor_label,
           electricity_meter_type, amenities, notes
-        ) VALUES ($1, $2, $3, $4::room_category, $5, $6, $7, $8, $9, $10::jsonb, $11)
+        ) VALUES ($1, $2, $3, $4::room_category, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
         RETURNING id, capacity
       `, [
         propertyId,
@@ -394,6 +395,7 @@ export class AdminPropertiesService {
         unit.capacity,
         unit.roomCategory,
         unit.roomCategory === 'other' ? (unit.roomCategoryLabel ?? null) : null,
+        unit.selfContained ?? false,
         unit.operationalStatus,
         unit.buildingName ?? null,
         unit.floorLabel ?? null,

@@ -9,6 +9,7 @@ type PropertyRoom = {
   label: string;
   capacity: number;
   roomCategory: RoomCategory;
+  selfContained: boolean;
   pricePerTermUgx: number | null;
   depositUgx: number | null;
 };
@@ -90,7 +91,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         if (rooms.length > 0) {
           const groups = new Map<string, RoomCategoryRow>();
           for (const room of rooms) {
-            const key = `${room.roomCategory}-${room.pricePerTermUgx ?? "unpriced"}`;
+            const key = `${room.roomCategory}-${room.pricePerTermUgx ?? "unpriced"}-${room.selfContained}`;
             const existing = groups.get(key);
             if (existing) {
               existing.roomCount = String(Number(existing.roomCount) + 1);
@@ -106,7 +107,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
                 roomCount: "1",
                 pricePerTermUgx: room.pricePerTermUgx != null ? String(room.pricePerTermUgx) : "",
                 depositUgx: room.depositUgx != null ? String(room.depositUgx) : "",
-                selfContained: false,
+                selfContained: room.selfContained,
                 unitIds: [room.id],
               });
             }
@@ -173,6 +174,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           capacity: ROOM_CATEGORY_DEFAULT_CAPACITY[category] ?? 1,
           roomCategory: category,
           ...(category === "other" && row.customLabel.trim() ? { roomCategoryLabel: row.customLabel.trim() } : {}),
+          selfContained: row.selfContained,
           pricePerTermUgx: price,
           ...(deposit ? { depositUgx: deposit } : {}),
         }));
@@ -271,6 +273,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         <RoomCategoryRows
           rows={roomCategoryRows}
           onChange={setRoomCategoryRows}
+          showSelfContained
           idPrefix="publish-room"
         />
       </div>

@@ -34,6 +34,8 @@ export interface PendingPhoto {
   category: PhotoCategory;
   // Free-text room type when category is 'custom'.
   label?: string;
+  // Whether the room shown is self-contained — only set for bedroom categories.
+  selfContained?: boolean;
 }
 
 /** Drafts written before photo categories existed hold bare Files and bare

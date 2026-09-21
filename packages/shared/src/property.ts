@@ -239,6 +239,7 @@ export const propertyRoomSchema = z.object({
   label: z.string(),
   capacity: z.number().int(),
   roomCategory: z.enum(ROOM_CATEGORIES),
+  selfContained: z.boolean(),
   pricePerTermUgx: z.number(),
   depositUgx: z.number().nullable(),
   operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES),

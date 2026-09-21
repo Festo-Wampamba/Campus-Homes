@@ -72,6 +72,9 @@ export const listingPhotos = pgTable('listing_photos', {
   category: photoCategory('category'),
   // Free-text label when category is 'custom' (0052).
   customLabel: text('custom_label'),
+  // Whether the room shown is self-contained (0053) — only meaningful for
+  // bedroom categories, null on non-room photos.
+  selfContained: boolean('self_contained'),
   isPrimary: boolean('is_primary').notNull().default(false),
   sortOrder: smallint('sort_order').notNull().default(0),
   metadata: jsonb('metadata'),
@@ -98,6 +101,9 @@ export const units = pgTable('units', {
   roomCategory: roomCategory('room_category').notNull().default('other'),
   // Free-text room type when roomCategory is 'other' (0052).
   roomCategoryLabel: text('room_category_label'),
+  // Whether this room has its own bathroom/facilities (0053). Authoritative
+  // value set by Ops at publish; the landlord's proposal is only a hint.
+  selfContained: boolean('self_contained').notNull().default(false),
   // Room-level manual override (maintenance/blocked take the whole room out
   // of service regardless of individual beds) — walk-in occupancy itself
   // moved to bed-level `beds.blocked` + direct Book-on-Available (0033); this
