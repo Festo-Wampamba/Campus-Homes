@@ -912,3 +912,83 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     Postgres/Redis/Logto apps. Separate prod DB/Logto tenant remains the
     follow-up. Backup bucket + its scoped key are the one media/backup thing
     made prod-dedicated this session.
+
+- **Prod super-admin sign-in was fully broken — Logto staff-secret rotation
+  drift + admin identity mismatch (2026-09-22):** after the cutover, every
+  staff/Administration sign-in failed at `campushomes.co.ug/sign-in?error=
+  sign_in_failed`. Two independent causes, found via `AuthController` logs +
+  the Logto DB (`logto` database on the same prod Postgres cluster):
+  - **Cause 1 — `oidc.invalid_client` at the token exchange.** The prod env's
+    `LOGTO_STAFF_APP_SECRET` didn't match the staff app's actual secret in
+    Logto. Logto 1.42 stores the real client secret in the
+    **`application_secrets`** table (per app), NOT the legacy
+    `applications.secret` column — compare against `application_secrets`, not
+    that column (the legacy one was 42 chars and misled the first check; the
+    real one is 32). The staff app's secret had been **rotated in Logto on
+    2026-09-10** ("CampusHomes production rotation 2026-09-10") but the prod
+    env kept the pre-rotation value. Consumer + M2M app secrets matched fine —
+    only staff was stale, which is why student/landlord login worked and only
+    staff didn't. Fix: set `LOGTO_STAFF_APP_SECRET` to the current
+    `application_secrets.value` for the staff app id, Dokploy env → redeploy.
+    **Gotcha for the future: any Logto app-secret rotation MUST update the
+    matching `LOGTO_*_APP_SECRET` in every environment that uses that app, or
+    that portal's sign-in dies with `invalid_client` while the others keep
+    working.**
+  - **Cause 2 — identity mapping mismatch.** `provisioning.service.ts` links a
+    Logto login to a `users` row **by verified email** (then claims it via
+    `logto_user_id`, which starts NULL). The fully-configured admin row was
+    `festo@akolet.co.ug` (role=admin + an active `super_admin`/`platform_wide`
+    `user_role_assignments` row, "Manual bootstrap after full production
+    reset" 2026-09-08), but the Logto account being used was
+    `festo@campushomes.co.ug` — no matching row, so sign-in would JIT-provision
+    a fresh student instead. Fix: aligned the admin row's email to the Logto
+    identity (`UPDATE users SET email='festo@campushomes.co.ug' WHERE id=…`),
+    so first sign-in claims the existing super-admin row. **The admin model,
+    for reference: (1) a Logto identity with a verified email, (2) a `users`
+    row with the same email + role=admin + a `super_admin` RBAC assignment,
+    (3) first sign-in auto-links them. role=admin (enum) gates portal entry
+    (`requireRole(["admin"])`); the `super_admin` RBAC assignment (147-perm)
+    grants the privileged actions. No self-serve admin creation exists — the
+    `users` email/role/RBAC is seeded via a service/DB path.** Note
+    `user_role_assignments` scope columns are `scope_type`/`scope_id`, not a
+    single `scope`.
+
+- **Prod web↔API Cloudflare hairpin resets — the admin dashboard's real
+  failure (2026-09-22, PR #116):** once staff login worked, the admin Overview
+  and intermittently the whole app failed with `SessionServiceUnavailableError`
+  / "Service unavailable" / "admin API could not be reached", with ~1-minute
+  page loads. Not a permission gap (super_admin has `analytics.read`) and no
+  API 500s. Root cause: the web container's **server-side** API calls — SSR
+  (`lib/session.ts`, `lib/server-api.ts`, server branch of `lib/api.ts`) **and
+  the browser API proxy** (`next.config.ts` rewrites) — all targeted
+  `NEXT_PUBLIC_API_BASE_URL` = `https://api.campushomes.co.ug`, which is
+  **Cloudflare-proxied**. So every call hairpinned container → Cloudflare edge
+  (Munich) → origin Traefik → API, and Cloudflare reset reused keep-alive
+  sockets (`ECONNRESET` / socket hang up). Staging was immune because its API
+  host is DNS-only (grey) — the same reason the Safe-Browsing incident left
+  staging grey-clouded (2026-09-01).
+  - Fix (PR #116): prefer a **server-only** `API_INTERNAL_URL` (NOT
+    `NEXT_PUBLIC_`, so it's read at runtime and never shipped to the browser)
+    in all four spots, falling back to the public URL then localhost. Web + API
+    share the `dokploy-network` overlay, so
+    `http://campus-homes-campushomesapi-nkxusx:4000` reaches the API directly —
+    no Cloudflare, no reset. Browser stays same-origin (`""`, proxied by Next).
+    Verified the internal name resolves from the web container and returns
+    `/health` ok before shipping.
+  - **Gotcha: `API_INTERNAL_URL` must be a Dokploy _Environment_ (runtime) var,
+    NOT a Build-time Argument.** next.config's `rewrites()` runs at server boot
+    and the lib files read `process.env.API_INTERNAL_URL` at runtime; a
+    non-`NEXT_PUBLIC_` var is never baked into the image, so a build-arg-only
+    value is invisible at runtime and the fix silently no-ops (falls back to the
+    public URL). First attempt put it in Build-time Arguments → inactive;
+    moving it to Environment + redeploy activated it. Confirmed live in the
+    running service's env.
+  - Instant mitigation used while the fix shipped: grey-cloud
+    `api.campushomes.co.ug` in Cloudflare (kills the edge reset). Re-orange once
+    `API_INTERNAL_URL` is confirmed live — server-side no longer touches the
+    edge either way.
+  - **Cosmetic: a manual Dokploy redeploy leaves `/version` reporting a stale
+    `GIT_COMMIT_SHA`** (it reuses the stored build arg), so prod may report an
+    old SHA while running current `main`. The `deploy-production` GitHub
+    workflow sets the real SHA; manual Dokploy redeploys don't. Trust the
+    deployment's listed commit, not `/version`, after a manual redeploy.
