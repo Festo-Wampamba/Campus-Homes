@@ -15,16 +15,28 @@ const BASE =
 // browser `credentials: 'include'` (session.ts pattern).
 export async function apiServer<T>(path: string): Promise<T | null> {
   const cookie = (await headers()).get("cookie");
-  if (!cookie) return null;
+  if (!cookie) {
+    // WHY log: apiServer collapses every failure to null (see note below),
+    // which hides the reason a server-rendered page shows "unavailable".
+    // One structured line names the cause without changing the null contract.
+    console.warn(JSON.stringify({ event: "apiServer.null", path, reason: "no-cookie" }));
+    return null;
+  }
   try {
     const res = await fetch(`${BASE}/api/v1${path}`, {
       headers: { cookie },
       cache: "no-store",
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(JSON.stringify({ event: "apiServer.null", path, reason: "status", status: res.status }));
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (err) {
+    console.warn(
+      JSON.stringify({ event: "apiServer.null", path, reason: "throw", error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) }),
+    );
     return null;
   }
 }
