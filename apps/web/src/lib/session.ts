@@ -6,7 +6,10 @@ import { WORKSPACES, type AccountAccess, type UserRole, type Workspace } from "@
 import { API_TIMEOUT_MS } from "./api";
 import { WORKSPACE_HOME, workspaceGuardDestination } from "./auth-routing";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Internal container URL when set (see lib/server-api.ts) to avoid the
+// public-hostname hairpin; falls back to the public URL, then localhost.
+const BASE =
+  process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 export type { UserRole };
 
