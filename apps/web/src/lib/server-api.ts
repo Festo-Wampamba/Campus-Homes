@@ -2,7 +2,13 @@ import { headers } from "next/headers";
 
 import { API_TIMEOUT_MS } from "./api";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Server-side calls the API over the internal container network
+// (API_INTERNAL_URL, e.g. http://<api-service>:4000) when set, so requests
+// don't hairpin out to the public, Cloudflare-proxied hostname and back —
+// that round-trip resets reused keep-alive sockets (ECONNRESET). Falls back
+// to the public URL, then localhost, for envs without an internal address.
+const BASE =
+  process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 // Server-component counterpart to lib/api.ts: forwards the incoming
 // request's session cookie since server components can't rely on fetch's

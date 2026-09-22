@@ -37,7 +37,15 @@ const nextConfig: NextConfig = {
   // components (lib/server-api.ts, lib/session.ts) call the API directly
   // and are unaffected — this only matters for browser fetches.
   async rewrites() {
-    const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000").replace(/\/$/, "");
+    // This proxy runs on the Next server, so it prefers the internal container
+    // URL (API_INTERNAL_URL) when set — otherwise every browser API call would
+    // hairpin out to the public, Cloudflare-proxied hostname and back, which
+    // resets reused keep-alive sockets (ECONNRESET). Public URL is the fallback.
+    const apiOrigin = (
+      process.env.API_INTERNAL_URL ??
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
+      "http://localhost:4000"
+    ).replace(/\/$/, "");
     return [
       { source: "/api/v1/:path*", destination: `${apiOrigin}/api/v1/:path*` },
       { source: "/api/auth/:path*", destination: `${apiOrigin}/api/auth/:path*` },
