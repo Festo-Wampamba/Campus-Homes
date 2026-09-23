@@ -66,7 +66,10 @@ function errorMessage(err: unknown, fallback: string): string {
     const body = err.body as { message?: string | string[] } | null;
     if (typeof body?.message === "string") return body.message;
     if (Array.isArray(body?.message)) return body.message.join(", ");
+    return fallback;
   }
+  // Upload helpers throw plain Errors with user-facing messages.
+  if (err instanceof Error && err.message) return err.message;
   return fallback;
 }
 

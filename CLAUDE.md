@@ -1054,3 +1054,38 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     look for a `JIT:` block first. Caveat: startup `options` are rejected by
     PgBouncer-style poolers (e.g. Neon's pooled endpoint) — if one is ever
     reintroduced, use `ALTER ROLE <login role> SET jit = off` instead.
+
+- **Staff invitations: edit/delete, 24h expiry, one role per account; prod
+  upload CORS gap (2026-09-23):**
+  - **One account = one staff role** (Festo's rule). `assignRoleInTransaction`
+    (`role-assignment.service.ts`, the single grant path used by invites,
+    Users console, staff grants, provisioning) now rejects any *different*
+    staff role on top of an active one, in addition to the existing
+    staff↔student/landlord exclusivity. Same role at another scope is still
+    allowed; **student + landlord may still coexist** (self-service landlord
+    enrollment keeps the student identity — do not tighten this further).
+    Triggered by James Adams ending up Ops Lead + Ops Inspector from two
+    invitations to one email.
+  - Invite/edit reject a contact that belongs to any existing user ("already
+    registered as <role names>") or a live invitation ("pending invitation as
+    <role>"). Expired pending invitations for that contact are auto-cancelled
+    (audited) so the `auth_invitations_pending_uk` index can't collide.
+    Inviting an existing account is no longer a path — change access from
+    Users instead. `target_user_id` is now always NULL on new invitations.
+  - Expiry 7 days → **24 hours** (`INVITATION_TTL`, invite + retry + edit).
+    "Expired" is derived (`status='pending' AND expires_at <= now()`), not a
+    stored status. UI: live → Edit/Resend/Cancel; expired → Edit/Re-invite/
+    Delete; cancelled → Delete. `PATCH /admin/staff/invitations/:id` edits
+    (renews 24h; changed contact or expired link resends — the old one-time
+    link verifies the old contact so it can no longer match);
+    `DELETE /admin/staff/invitations/:id/permanent` removes cancelled/expired
+    rows (DELETE grant already existed from 0049). No migration.
+  - **Landlord "Couldn't submit your property" on prod = B2 CORS, not code.**
+    The prod media bucket `campushomes-media-production` (eu-central-003,
+    created 09-21) has no CORS rule: browser preflight for the presigned PUT
+    returns 403 `AccessDenied`, while `campushomes-media-staging` returns 200.
+    Every browser upload on prod is affected. Fix is bucket config in the B2
+    console (mirror staging's CORS for `https://campushomes.co.ug`). Code now
+    surfaces the upload failure message instead of the generic fallback
+    (`storageFetch` in `lib/cloudinary.ts`). **Any new bucket needs CORS set
+    before browser uploads work.**
