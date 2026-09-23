@@ -250,7 +250,9 @@ export function RoomTypeDialog({
                 onChange={(e) => setCategory(e.target.value as RoomCategory)}
                 className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
               >
-                {ROOM_CATEGORIES.map((cat) => (
+                {/* Bathroom arrangement below covers self-contained; keep the
+                    option only for a room type that already uses it. */}
+                {ROOM_CATEGORIES.filter((cat) => cat !== "self_contained" || cat === category).map((cat) => (
                   <option key={cat} value={cat}>
                     {cat.replace("_", " ").toUpperCase()}
                   </option>

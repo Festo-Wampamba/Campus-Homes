@@ -26,6 +26,7 @@ import { HomeMapPreview } from "@/components/home-map-preview";
 import { HomeSearch } from "@/components/home-search";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { api } from "@/lib/api";
+import { UGANDA_BOUNDS } from "@/lib/campuses";
 import { cn } from "@/lib/utils";
 
 type MarketingIcon = ComponentType<{ className?: string }>;
@@ -106,19 +107,17 @@ const FAQS = [
   },
 ];
 
-const FEATURED_BOUNDS = {
-  minLat: "0.25",
-  maxLat: "0.42",
-  minLon: "32.50",
-  maxLon: "32.65",
-};
 
 async function getFeaturedListings() {
   try {
-    // university: "MUK" — MUK-only for now (2026-09), mirrors CAMPUS_LOCATIONS;
-    // without this the bounding box would still surface any other-university
-    // listing that happens to fall inside it.
-    const query = new URLSearchParams({ ...FEATURED_BOUNDS, limit: "50", university: "MUK" });
+    // university: "MUK" — MUK-only for now (2026-09), mirrors CAMPUS_LOCATIONS.
+    // The catchment is the real filter; the Uganda-wide box only satisfies
+    // the API's required bounds.
+    const query = new URLSearchParams({
+      ...Object.fromEntries(Object.entries(UGANDA_BOUNDS).map(([k, v]) => [k, String(v)])),
+      limit: "50",
+      university: "MUK",
+    });
     const rows = listingSearchResultSchema
       .array()
       .parse(await api<unknown>(`/listings/search?${query}`, { cache: "no-store" }));

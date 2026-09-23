@@ -31,6 +31,7 @@ export function HomeMapPreview({ listings }: { listings: ListingSearchResult[] }
         selectedId={selectedId}
         onSelect={setSelectedId}
         onBoundsChange={() => {}}
+        fitToMarkers
         className="h-full w-full"
       />
       {selected && (
