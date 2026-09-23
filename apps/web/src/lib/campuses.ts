@@ -15,3 +15,9 @@ export type CampusLocation = { code: University; name: string; lat: number; lon:
 export const CAMPUS_LOCATIONS: Partial<Record<University, CampusLocation>> = {
   MUK: { code: "MUK", name: "Makerere University", lat: 0.3345, lon: 32.5687 },
 };
+
+// The catchment filter (`university`) is what scopes results to a campus;
+// the API still requires a bounding box, so pass one covering all of Uganda
+// until the user deliberately pans the map. A tight campus box silently hid
+// verified listings a few km out (Naguru, 2026-09-23).
+export const UGANDA_BOUNDS = { minLat: -1.5, maxLat: 4.3, minLon: 29.5, maxLon: 35.1 };

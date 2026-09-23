@@ -1084,8 +1084,38 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     The prod media bucket `campushomes-media-production` (eu-central-003,
     created 09-21) has no CORS rule: browser preflight for the presigned PUT
     returns 403 `AccessDenied`, while `campushomes-media-staging` returns 200.
-    Every browser upload on prod is affected. Fix is bucket config in the B2
-    console (mirror staging's CORS for `https://campushomes.co.ug`). Code now
+    Every browser upload on prod is affected. **Fixed 2026-09-23 via the B2
+    CLI, not the console:** the console's "share everything" presets only
+    allow downloads (GET/HEAD) — uploads need a custom rule with `s3_put` +
+    `content-type` header: `uvx b2 bucket update --cors-rules '[...web-downloads
+    s3_get/s3_head..., {"corsRuleName":"web-uploads","allowedOrigins":
+    ["https://campushomes.co.ug"],"allowedOperations":["s3_put"],
+    "allowedHeaders":["content-type"],"exposeHeaders":["ETag"],
+    "maxAgeSeconds":3600}]' campushomes-media-production` (the bucket-scoped
+    media key has writeBuckets). Don't touch that bucket's CORS in the console
+    afterwards — it overwrites the custom rule. Code now
     surfaces the upload failure message instead of the generic fallback
     (`storageFetch` in `lib/cloudinary.ts`). **Any new bucket needs CORS set
     before browser uploads work.**
+
+- **Search visibility, Ops scheduling UX, beds per room, staff console (2026-09-23):**
+  - **Verified listing invisible = map bounds, not publish.** Naguru (MUK,
+    verified) sat at lon 32.6500352; the homepage box stopped at 32.65 and the
+    search map opened at zoom 14 on Makerere. Catchment (`university`) is the
+    real scope; the API's required bbox is now `UGANDA_BOUNDS`
+    (`lib/campuses.ts`) until the user pans. `ListingsMap` only reports bounds
+    for user-initiated moves (`event.originalEvent`) and `fitToMarkers` frames
+    results. Listing GPS comes from the inspector's device at the visit —
+    test inspections done from home put pins wherever the tester was.
+  - Ops schedule form: native `datetime-local` popup (no confirm button, and it
+    covered the submit button — the "green button with no text") replaced by
+    date input + 30-min time select. Ops nav "Properties waiting verification"
+    → "Verification queue" (was truncating).
+  - Publish form: per-row "Beds per room" (`RoomCategoryRows showBeds`) —
+    fixed 1–4 for single/double/triple/quad (mirrors roomTypeInputSchema),
+    editable 1–20 otherwise; read-only for existing rooms (server ignores
+    capacity when `unitId` is present). `self_contained` hidden from room-type
+    dropdowns wherever a self-contained checkbox / bathroom field exists.
+  - Staff accounts page reuses `UsersManager` (`staffOnly`) for Edit / Manage
+    access / Delete, and now filters by staff role keys — "has any assignment"
+    had let landlords (Henry K) in, since every account gets an 'own' role.

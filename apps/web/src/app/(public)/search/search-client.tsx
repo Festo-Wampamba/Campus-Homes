@@ -22,7 +22,7 @@ import {
 } from "@campushomes/shared";
 
 import { api } from "@/lib/api";
-import { CAMPUS_LOCATIONS } from "@/lib/campuses";
+import { CAMPUS_LOCATIONS, UGANDA_BOUNDS } from "@/lib/campuses";
 import { listingPhotoUrl } from "@/lib/cloudinary";
 import {
   formatPriceRange,
@@ -54,7 +54,8 @@ const GENDER_OPTIONS = [
 
 const ROOM_TYPE_OPTIONS = [
   { value: "", label: "Any room type" },
-  ...ROOM_CATEGORIES.filter((c) => c !== "other").map((category) => ({
+  // "Any bathroom" filters self-contained separately.
+  ...ROOM_CATEGORIES.filter((c) => c !== "other" && c !== "self_contained").map((category) => ({
     value: category,
     label: humanizeKey(category),
   })),
@@ -77,6 +78,8 @@ export function SearchClient() {
   const searchParams = useSearchParams();
   const campus = CAMPUS_LOCATIONS[searchParams.get("campus") as University];
 
+  // null until the user pans/zooms: search the whole catchment first, so a
+  // verified listing outside the opening viewport is never hidden.
   const [bounds, setBounds] = useState<MapBounds | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(true);
@@ -100,10 +103,9 @@ export function SearchClient() {
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, genderArrangement, roomCategory, selfContained],
-    enabled: bounds !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const b = bounds!;
+      const b = bounds ?? UGANDA_BOUNDS;
       const qs = new URLSearchParams({
         minLat: String(b.minLat),
         minLon: String(b.minLon),
@@ -157,6 +159,7 @@ export function SearchClient() {
             selectedId={selectedId}
             onSelect={selectFromMap}
             onBoundsChange={(b) => setBounds(roundBounds(b))}
+            fitToMarkers={bounds === null}
             className="size-full"
             initialCenter={campus ? [campus.lon, campus.lat] : undefined}
           />

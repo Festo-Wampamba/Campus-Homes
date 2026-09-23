@@ -15,6 +15,7 @@ type PropertyRoom = {
 };
 
 import {
+  bedsPerRoom,
   emptyRoomCategoryRow,
   RoomCategoryRows,
   type RoomCategoryRow,
@@ -23,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { AMENITY_OPTIONS, ROOM_CATEGORY_DEFAULT_CAPACITY, roomCategoryLabel } from "@/lib/format";
+import { AMENITY_OPTIONS, roomCategoryLabel } from "@/lib/format";
 
 type PublishedVersion = {
   versionNumber: number;
@@ -96,7 +97,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         if (rooms.length > 0) {
           const groups = new Map<string, RoomCategoryRow>();
           for (const room of rooms) {
-            const key = `${room.roomCategory}-${room.pricePerTermUgx ?? "unpriced"}-${room.selfContained}`;
+            const key = `${room.roomCategory}-${room.capacity}-${room.pricePerTermUgx ?? "unpriced"}-${room.selfContained}`;
             const existing = groups.get(key);
             if (existing) {
               existing.roomCount = String(Number(existing.roomCount) + 1);
@@ -113,6 +114,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
                 pricePerTermUgx: room.pricePerTermUgx != null ? String(room.pricePerTermUgx) : "",
                 depositUgx: room.depositUgx != null ? String(room.depositUgx) : "",
                 selfContained: room.selfContained,
+                bedsPerRoom: String(room.capacity),
                 unitIds: [room.id],
               });
             }
@@ -176,7 +178,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           // physical details don't change on repricing).
           ...(row.unitIds?.[i] ? { unitId: row.unitIds[i] } : {}),
           label: `${roomCategoryLabel(category)} ${i + 1}`,
-          capacity: ROOM_CATEGORY_DEFAULT_CAPACITY[category] ?? 1,
+          capacity: bedsPerRoom(row),
           roomCategory: category,
           ...(category === "other" && row.customLabel.trim() ? { roomCategoryLabel: row.customLabel.trim() } : {}),
           selfContained: row.selfContained,
@@ -235,6 +237,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           rows={roomCategoryRows}
           onChange={setRoomCategoryRows}
           showSelfContained
+          showBeds
           idPrefix="publish-room"
         />
       </div>

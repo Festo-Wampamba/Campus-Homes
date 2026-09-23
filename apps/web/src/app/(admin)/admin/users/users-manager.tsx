@@ -12,7 +12,7 @@ import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { usePagination } from "@/lib/use-pagination";
 
-type UserRow = Record<string, unknown> & { id: string; name: string; email?: string | null; phone?: string | null; role: string; status: string; university?: string | null; emailVerified?: boolean; phoneVerified?: boolean; authProviders?: string[]; assignments?: Assignment[]; deletedAt?: string | null; deletionReason?: string | null };
+export type UserRow = Record<string, unknown> & { id: string; name: string; email?: string | null; phone?: string | null; role: string; status: string; university?: string | null; emailVerified?: boolean; phoneVerified?: boolean; authProviders?: string[]; assignments?: Assignment[]; deletedAt?: string | null; deletionReason?: string | null };
 type Role = { key: string; name: string; description: string };
 type Permission = { key: string; description: string; requiresStepUp: boolean };
 type Property = { id: string; name: string; catchment: string };
@@ -29,7 +29,9 @@ function buttonClass(tone: "primary" | "secondary" | "danger" = "secondary") {
   return `inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 disabled:cursor-not-allowed disabled:opacity-45 ${tone === "primary" ? "bg-teal-600 text-white hover:bg-teal-700" : tone === "danger" ? "border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950" : "border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-border dark:text-foreground dark:hover:bg-muted"}`;
 }
 
-export function UsersManager({ rows, roles, permissions, properties, canMutate }: { rows: UserRow[]; roles: Role[]; permissions: Permission[]; properties: Property[]; canMutate: boolean }) {
+/** `staffOnly`: the Staff accounts view — staff join through invitations and
+ * the deleted-accounts view spans every user, so both controls are hidden. */
+export function UsersManager({ rows, roles, permissions, properties, canMutate, staffOnly = false }: { rows: UserRow[]; roles: Role[]; permissions: Permission[]; properties: Property[]; canMutate: boolean; staffOnly?: boolean }) {
   const router = useRouter();
   const [list, setList] = useState(rows);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -175,9 +177,9 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate }
     <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-center dark:border-border">
       <label className="relative min-w-0 flex-1"><span className="sr-only">Search users</span><Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className={`${adminFieldClass} pl-9`} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search name, email, phone, role, campus…" /></label>
       <div className="flex gap-2">
-        <button type="button" onClick={() => toggleDeleted(!showDeleted)} className={buttonClass(showDeleted ? "primary" : "secondary")} title="Show soft-deleted accounts to permanently purge them">{showDeleted ? "Active accounts" : "Deleted accounts"}</button>
+        {!staffOnly && <button type="button" onClick={() => toggleDeleted(!showDeleted)} className={buttonClass(showDeleted ? "primary" : "secondary")} title="Show soft-deleted accounts to permanently purge them">{showDeleted ? "Active accounts" : "Deleted accounts"}</button>}
         <ViewToggle view={view} onChange={setView} />
-        {canMutate && !showDeleted && <button type="button" onClick={startCreate} className={buttonClass("primary")}><Plus aria-hidden className="size-4" />Add user</button>}
+        {canMutate && !showDeleted && !staffOnly && <button type="button" onClick={startCreate} className={buttonClass("primary")}><Plus aria-hidden className="size-4" />Add user</button>}
       </div>
     </div>
     {showDeleted && <p className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">Soft-deleted accounts. Purging is permanent — it removes the person and everything they own; historical audit entries are kept but anonymized.</p>}

@@ -30,7 +30,22 @@ export type RoomCategoryRow = {
   // get zipped against these at submit time — the first N reuse an existing
   // room (just priced for this semester), any extra create new ones.
   unitIds?: string[];
+  // Ops publish form only: bed spaces in each room of this row. Fixed for
+  // single/double/triple/quad; set by the lead for the variable types.
+  bedsPerRoom?: string;
 };
+
+// Mirrors roomTypeInputSchema's fixed capacities (shared/room-management.ts).
+export const FIXED_BEDS_PER_ROOM: Partial<Record<RoomCategory, number>> = {
+  single: 1,
+  double: 2,
+  triple: 3,
+  quad: 4,
+};
+
+export function bedsPerRoom(row: RoomCategoryRow): number {
+  return FIXED_BEDS_PER_ROOM[row.category] ?? (Number(row.bedsPerRoom) || 1);
+}
 
 let nextKey = 0;
 export function emptyRoomCategoryRow(): RoomCategoryRow {
@@ -56,6 +71,7 @@ export function RoomCategoryRows({
   onChange,
   idPrefix,
   showSelfContained = false,
+  showBeds = false,
 }: {
   rows: RoomCategoryRow[];
   onChange: (rows: RoomCategoryRow[]) => void;
@@ -63,6 +79,8 @@ export function RoomCategoryRows({
   // Landlord-facing forms only — the Ops publish form doesn't use this flag,
   // so it stays hidden there rather than showing a checkbox with no effect.
   showSelfContained?: boolean;
+  // Ops publish form: per-row "Beds per room" input.
+  showBeds?: boolean;
 }) {
   function update(key: string, patch: Partial<RoomCategoryRow>) {
     onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -83,9 +101,11 @@ export function RoomCategoryRows({
           key={row.key}
           className={cn(
             "grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3",
-            showSelfContained
-              ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
-              : "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
+            showBeds
+              ? "sm:grid-cols-3"
+              : showSelfContained
+                ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
+                : "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
           )}
         >
           <div className="col-span-2 space-y-1.5 sm:col-span-1">
@@ -96,7 +116,11 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { category: e.target.value as RoomCategory })}
               className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10"
             >
-              {ROOM_CATEGORIES.map((category) => (
+              {ROOM_CATEGORIES.filter(
+                // The self-contained checkbox already covers this; keep the
+                // option only for a legacy row that already uses it.
+                (category) => !showSelfContained || category !== "self_contained" || category === row.category,
+              ).map((category) => (
                 <option key={category} value={category}>
                   {roomCategoryLabel(category)}
                 </option>
@@ -124,6 +148,23 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { roomCount: e.target.value })}
             />
           </div>
+          {showBeds && (
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idPrefix}-beds-${i}`}>Beds per room</Label>
+              <Input
+                id={`${idPrefix}-beds-${i}`}
+                type="number"
+                min={1}
+                max={20}
+                inputMode="numeric"
+                // Fixed types always sleep their named count; existing rooms
+                // keep their beds (change those through room management).
+                disabled={FIXED_BEDS_PER_ROOM[row.category] !== undefined || Boolean(row.unitIds?.length)}
+                value={FIXED_BEDS_PER_ROOM[row.category] ?? row.bedsPerRoom ?? "1"}
+                onChange={(e) => update(row.key, { bedsPerRoom: e.target.value })}
+              />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-price-${i}`}>Price per bed / semester (UGX)</Label>
             <Input
@@ -146,25 +187,27 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { depositUgx: e.target.value })}
             />
           </div>
-          {showSelfContained && (
-            <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">
-              <input
-                type="checkbox"
-                checked={row.selfContained}
-                onChange={(e) => update(row.key, { selfContained: e.target.checked })}
-              />
-              Self-contained
-            </label>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Remove room type"
-            onClick={() => remove(row.key)}
-          >
-            <Trash2 aria-hidden className="size-4" />
-          </Button>
+          <div className={cn("col-span-2 flex items-center justify-between gap-2", !showBeds && "contents")}>
+            {showSelfContained && (
+              <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">
+                <input
+                  type="checkbox"
+                  checked={row.selfContained}
+                  onChange={(e) => update(row.key, { selfContained: e.target.checked })}
+                />
+                Self-contained
+              </label>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Remove room type"
+              onClick={() => remove(row.key)}
+            >
+              <Trash2 aria-hidden className="size-4" />
+            </Button>
+          </div>
         </div>
       ))}
       {rows.length === 0 && (

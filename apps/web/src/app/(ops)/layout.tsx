@@ -22,7 +22,7 @@ export default async function OpsLayout({
         isInspector
           ? [{ label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> }]
           : [
-              { label: "Properties waiting verification", href: "/ops", icon: <ClipboardCheck aria-hidden className="size-4 shrink-0" /> },
+              { label: "Verification queue", href: "/ops", icon: <ClipboardCheck aria-hidden className="size-4 shrink-0" /> },
               // Lets a lead self-assign and run a visit end-to-end with no
               // separate inspector (MVP full-parity decision) — the same
               // checklist screen an inspector uses, reachable from the
