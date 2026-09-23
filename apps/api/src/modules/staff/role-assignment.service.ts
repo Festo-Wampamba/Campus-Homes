@@ -85,24 +85,26 @@ export async function assignRoleInTransaction(
   }
   const role = (await client.query<{ id: string }>('SELECT id FROM roles WHERE key = $1', [input.roleKey])).rows[0];
   if (!role) throw new NotFoundException('Role not found');
-  // Staff and consumer (student/landlord) roles are mutually exclusive — one
-  // person is one kind of account. Block the cross-family grant; the admin must
-  // revoke the existing role first (the user row is FOR UPDATE-locked above, so
-  // this check serializes against concurrent grants).
-  const conflictingFamily = STAFF_ROLE_KEYS.includes(input.roleKey)
-    ? CONSUMER_ROLE_KEYS
+  // One account holds one staff role, and staff never mix with consumer
+  // (student/landlord) roles. Student + landlord may coexist (self-service
+  // landlord enrollment keeps the student identity). The same staff role at
+  // another scope is still one role. The admin must revoke the existing role
+  // first (the user row is FOR UPDATE-locked above, so this check serializes
+  // against concurrent grants).
+  const conflictingKeys = STAFF_ROLE_KEYS.includes(input.roleKey)
+    ? [...CONSUMER_ROLE_KEYS, ...STAFF_ROLE_KEYS.filter((key) => key !== input.roleKey)]
     : CONSUMER_ROLE_KEYS.includes(input.roleKey)
       ? STAFF_ROLE_KEYS
       : null;
-  if (conflictingFamily) {
+  if (conflictingKeys) {
     const held = (await client.query<{ key: string }>(`
       SELECT r.key FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
       WHERE a.user_id = $1 AND a.revoked_at IS NULL
         AND (a.valid_until IS NULL OR a.valid_until > now())
-        AND r.key = ANY($2::text[]) LIMIT 1`, [userId, conflictingFamily])).rows[0];
+        AND r.key = ANY($2::text[]) LIMIT 1`, [userId, conflictingKeys])).rows[0];
     if (held) {
       throw new BadRequestException(
-        `This account already holds the "${held.key}" role. Revoke it before assigning "${input.roleKey}" — a user cannot be both staff and a student/landlord.`,
+        `This account already holds the "${held.key}" role. Revoke it before assigning "${input.roleKey}" — an account holds one staff role, and is never both staff and a student/landlord.`,
       );
     }
   }

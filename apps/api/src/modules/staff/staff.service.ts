@@ -97,6 +97,25 @@ export class StaffService {
     return this.invitations.retry(actor, permissions, scopes, invitationId);
   }
 
+  updateInvitation(
+    actor: RlsContext,
+    permissions: Set<string>,
+    scopes: RoleAssignment[],
+    invitationId: string,
+    input: InviteStaffInput,
+  ) {
+    return this.invitations.update(actor, permissions, scopes, invitationId, input);
+  }
+
+  deleteInvitation(
+    actor: RlsContext,
+    permissions: Set<string>,
+    scopes: RoleAssignment[],
+    invitationId: string,
+  ) {
+    return this.invitations.remove(actor, permissions, scopes, invitationId);
+  }
+
   cancelInvitation(
     actor: RlsContext,
     permissions: Set<string>,

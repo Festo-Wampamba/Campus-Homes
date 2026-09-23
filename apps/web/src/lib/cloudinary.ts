@@ -30,6 +30,16 @@ export type CloudinarySignature =
 // pass) — B2's S3 PUT presign has no size clause.
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
+// A network-level failure (CORS rejection, offline) surfaces as a bare
+// TypeError("Failed to fetch"); give callers a message a user can act on.
+async function storageFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error("Couldn't upload the photo — the storage service didn't accept it. Try again, or continue without the photo.");
+  }
+}
+
 export async function uploadToCloudinary(
   file: File,
   sig: CloudinarySignature,
@@ -39,7 +49,7 @@ export async function uploadToCloudinary(
   }
   if (sig.provider === "b2") {
     // Content-Type must match exactly what was signed (see uploads.module.ts).
-    const res = await fetch(sig.uploadUrl, {
+    const res = await storageFetch(sig.uploadUrl, {
       method: "PUT",
       body: file,
       headers: { "Content-Type": file.type },
@@ -57,7 +67,7 @@ export async function uploadToCloudinary(
   body.set("folder", sig.folder);
   body.set("signature", sig.signature);
 
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, {
+  const res = await storageFetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, {
     method: "POST",
     body,
   });

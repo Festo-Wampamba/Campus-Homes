@@ -21,6 +21,6 @@ export default async function StaffAccountsPage() {
     <SectionCard title={`${rows.length} staff accounts`} description="Active assignments determine access; the coarse account type is only an RLS backstop"><AdminTable rows={rows} filename="campushomes-staff.csv" searchPlaceholder="Search staff, role, scope, status…" columns={[
       { key: "name", label: "Staff member" }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "assignments", label: "Role & scope", format: "roles" }, { key: "status", label: "Account", format: "status" }, { key: "createdAt", label: "Added", format: "date" },
     ]} /></SectionCard>
-    <div className="mt-5"><SectionCard title="Invitation lifecycle" description="Pending invitations can be retried or cancelled. Accepted invitations retain their audit history."><StaffInvitations rows={invitations ?? []} /></SectionCard></div>
+    <div className="mt-5"><SectionCard title="Invitation lifecycle" description="Invitations expire 24 hours after sending. Pending ones can be edited, resent or cancelled; cancelled or expired ones can be deleted."><StaffInvitations rows={invitations ?? []} /></SectionCard></div>
     {data && <div className="mt-3"><Freshness asOf={data.asOf} /></div>}</>;
 }

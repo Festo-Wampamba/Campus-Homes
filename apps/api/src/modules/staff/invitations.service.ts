@@ -60,6 +60,66 @@ const INVITATION_COLUMNS = `id, name, email, phone, role_key AS "roleKey", scope
   delivery_attempts AS "deliveryAttempts", last_delivery_error AS "lastDeliveryError",
   delivered_at AS "deliveredAt", created_at AS "createdAt"`;
 
+// An unclicked invitation lapses after a day; Resend / Re-invite renews it.
+const INVITATION_TTL = "interval '24 hours'";
+
+function validateInvitation(permissions: Set<string>, scopes: RoleAssignment[], input: StaffInvitationInput) {
+  assertGrantAllowed(permissions, scopes, input);
+  if (!STAFF_ROLE_KEYS.includes(input.roleKey)) throw new BadRequestException('Invitation must grant a staff role');
+  if (!['platform_wide', 'catchment'].includes(input.scopeType) ||
+    (input.scopeType === 'catchment' && !input.scopeId) ||
+    (input.scopeType === 'platform_wide' && input.scopeId != null)) {
+    throw new BadRequestException('Invalid invitation scope');
+  }
+  if (input.validUntil && (!Number.isFinite(new Date(input.validUntil).getTime()) || new Date(input.validUntil).getTime() <= Date.now())) {
+    throw new BadRequestException('Role validity must end in the future');
+  }
+  const email = input.email?.trim().toLowerCase() ?? '';
+  if (!z.email().safeParse(email).success) throw new BadRequestException('A valid invitation email is required');
+  return { email, phone: input.phone ? normalizePhone(input.phone) : null };
+}
+
+/** One contact = one account = one role. Rejects contacts that already belong
+ * to a registered account or another live invitation, naming the role they
+ * hold. Expired invitations for the contact are cancelled so a fresh one can
+ * replace them (the pending unique index would otherwise collide). */
+async function assertContactAvailable(
+  client: PoolClient, actor: RlsContext, email: string, phone: string | null, exceptInvitationId: string | null,
+) {
+  const user = (await client.query<{ id: string; email: string | null; deletedAt: Date | null; roles: string | null; accountType: string }>(`
+    SELECT u.id, lower(btrim(u.email)) AS email, u.deleted_at AS "deletedAt", u.role::text AS "accountType",
+      (SELECT string_agg(DISTINCT r.name, ', ') FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+        WHERE a.user_id = u.id AND a.revoked_at IS NULL AND (a.valid_until IS NULL OR a.valid_until > now())) AS roles
+    FROM users u
+    WHERE lower(btrim(u.email)) = $1 OR ($2::text IS NOT NULL AND u.phone = $2)
+    LIMIT 1`, [email, phone])).rows[0];
+  if (user) {
+    if (user.id === actor.userId) throw new ForbiddenException('Cannot invite yourself');
+    const contact = user.email === email ? 'email' : 'phone number';
+    const role = user.roles ?? user.accountType.replaceAll('_', ' ');
+    throw new ConflictException(user.deletedAt
+      ? `This ${contact} belongs to a deleted ${role} account. Permanently delete that account before inviting it again.`
+      : `This ${contact} is already registered as ${role}. One account can hold only one role — change that user's access from Users instead.`);
+  }
+  const expired = (await client.query<{ id: string }>(`UPDATE auth_invitations
+    SET status = 'cancelled', cancelled_at = now(), cancelled_by = $3, updated_at = now()
+    WHERE status = 'pending' AND expires_at <= now() AND id IS DISTINCT FROM $4
+      AND (email = $1 OR ($2::text IS NOT NULL AND phone = $2))
+    RETURNING id`, [email, phone, actor.userId, exceptInvitationId])).rows;
+  for (const row of expired) {
+    await recordAccessAudit(client, actor, 'staff.invitation.cancel', 'auth_invitation', row.id, { reason: 'expired, replaced' });
+  }
+  const pending = (await client.query<{ email: string | null; roleName: string }>(`
+    SELECT i.email, r.name AS "roleName" FROM auth_invitations i JOIN roles r ON r.key = i.role_key
+    WHERE i.status = 'pending' AND i.expires_at > now() AND i.id IS DISTINCT FROM $3
+      AND (i.email = $1 OR ($2::text IS NOT NULL AND i.phone = $2))
+    LIMIT 1`, [email, phone, exceptInvitationId])).rows[0];
+  if (pending) {
+    const contact = pending.email === email ? 'email' : 'phone number';
+    throw new ConflictException(`This ${contact} already has a pending invitation as ${pending.roleName}. Edit, resend, or cancel that invitation instead.`);
+  }
+}
+
 /** Verified email is the invitation proof; the one-time token verifies that
  * contact at Logto but never supplies MFA or bypasses account binding.
  * Call before creating a new staff identity and again, locked, when accepting. */
@@ -132,48 +192,51 @@ export class InvitationsService {
   constructor(private readonly rlsDb: RlsDb, private readonly delivery: InvitationDeliveryService) {}
 
   async invite(actor: RlsContext, permissions: Set<string>, scopes: RoleAssignment[], input: StaffInvitationInput) {
-    assertGrantAllowed(permissions, scopes, input);
-    if (!STAFF_ROLE_KEYS.includes(input.roleKey)) throw new BadRequestException('Invitation must grant a staff role');
-    if (!['platform_wide', 'catchment'].includes(input.scopeType) ||
-      (input.scopeType === 'catchment' && !input.scopeId) ||
-      (input.scopeType === 'platform_wide' && input.scopeId != null)) {
-      throw new BadRequestException('Invalid invitation scope');
-    }
-    if (input.validUntil && (!Number.isFinite(new Date(input.validUntil).getTime()) || new Date(input.validUntil).getTime() <= Date.now())) {
-      throw new BadRequestException('Role validity must end in the future');
-    }
-    const email = input.email?.trim().toLowerCase() ?? null;
-    const phone = input.phone ? normalizePhone(input.phone) : null;
-    if (!z.email().safeParse(email).success) throw new BadRequestException('A valid invitation email is required');
+    const { email, phone } = validateInvitation(permissions, scopes, input);
     const invitation = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      // Serialize duplicate invitations without holding a network call open.
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`invite:${email ?? phone}`]);
-      const targets = (await client.query<{ id: string; status: string; deletedAt: Date | null }>(`
-        SELECT id, status, deleted_at AS "deletedAt" FROM users
-        WHERE ($1::text IS NOT NULL AND lower(btrim(email)) = $1) OR ($2::text IS NOT NULL AND phone = $2)`, [email, phone])).rows;
-      if (targets.length > 1) throw new ConflictException('Invitation contacts identify different accounts');
-      const target = targets[0];
-      if (target?.id === actor.userId) throw new ForbiddenException('Cannot invite yourself');
-      if (target && (target.deletedAt || target.status !== 'active')) throw new ForbiddenException('Cannot invite an inactive account');
-      const role = (await client.query('SELECT id FROM roles WHERE key = $1', [input.roleKey])).rows[0];
-      if (!role) throw new NotFoundException('Role not found');
-      const existing = (await client.query<Invitation>(`SELECT ${INVITATION_COLUMNS} FROM auth_invitations
-        WHERE email IS NOT DISTINCT FROM $1 AND phone IS NOT DISTINCT FROM $2 AND role_key = $3
-          AND scope_type = $4 AND scope_id IS NOT DISTINCT FROM $5 AND status = 'pending'
-        FOR UPDATE`, [email, phone, input.roleKey, input.scopeType, input.scopeId ?? null])).rows[0];
-      if (existing) return existing;
+      // Serialize invitations for one contact without holding a network call open.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`invite:${email}`]);
+      await assertContactAvailable(client, actor, email, phone, null);
       const created = (await client.query<Invitation>(`INSERT INTO auth_invitations
-        (name, email, phone, role_key, scope_type, scope_id, valid_until, reason, invited_by, target_user_id, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + interval '7 days')
+        (name, email, phone, role_key, scope_type, scope_id, valid_until, reason, invited_by, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + ${INVITATION_TTL})
         RETURNING ${INVITATION_COLUMNS}`,
       [input.name, email, phone, input.roleKey, input.scopeType, input.scopeId ?? null,
-        input.validUntil ?? null, input.reason, actor.userId, target?.id ?? null])).rows[0]!;
+        input.validUntil ?? null, input.reason, actor.userId])).rows[0]!;
       await recordAccessAudit(client, actor, 'staff.invite', 'auth_invitation', created.id, { roleKey: input.roleKey });
       return created;
     });
-    // An identical create request is idempotent; explicit retry renews expiry.
-    if (invitation.deliveryAttempts > 0) return invitation;
     return this.deliver(invitation.id);
+  }
+
+  /** Edits a pending (or expired) invitation. Renews the 24h window; a changed
+   * contact or an expired link gets a fresh email, since the old one-time link
+   * verifies the old contact and can no longer match this invitation. */
+  async update(actor: RlsContext, permissions: Set<string>, scopes: RoleAssignment[], id: string, input: StaffInvitationInput) {
+    const { email, phone } = validateInvitation(permissions, scopes, input);
+    const { updated, resend } = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`invite:${email}`]);
+      const current = (await client.query<Invitation>(`SELECT ${INVITATION_COLUMNS} FROM auth_invitations WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      if (!current) throw new NotFoundException('Invitation not found');
+      assertGrantAllowed(permissions, scopes, current);
+      if (current.status !== 'pending') throw new ConflictException('Only pending or expired invitations can be edited');
+      await assertContactAvailable(client, actor, email, phone, id);
+      const contactChanged = current.email !== email || current.phone !== phone;
+      const resend = contactChanged || new Date(current.expiresAt).getTime() <= Date.now();
+      const updated = (await client.query<Invitation>(`UPDATE auth_invitations SET name = $2, email = $3, phone = $4,
+          role_key = $5, scope_type = $6, scope_id = $7, valid_until = $8, reason = $9, target_user_id = NULL,
+          expires_at = now() + ${INVITATION_TTL}, updated_at = now(),
+          last_delivery_attempt_at = CASE WHEN $10 THEN NULL ELSE last_delivery_attempt_at END,
+          delivered_at = CASE WHEN $10 THEN NULL ELSE delivered_at END,
+          last_delivery_error = CASE WHEN $10 THEN NULL ELSE last_delivery_error END
+        WHERE id = $1 RETURNING ${INVITATION_COLUMNS}`,
+      [id, input.name, email, phone, input.roleKey, input.scopeType, input.scopeId ?? null,
+        input.validUntil ?? null, input.reason, resend])).rows[0]!;
+      await recordAccessAudit(client, actor, 'staff.invitation.update', 'auth_invitation', id,
+        { fromRoleKey: current.roleKey, roleKey: input.roleKey, contactChanged });
+      return { updated, resend };
+    });
+    return resend ? this.deliver(id) : updated;
   }
 
   list(scopes: RoleAssignment[]) {
@@ -199,6 +262,24 @@ export class InvitationsService {
     });
   }
 
+  /** Removes a cancelled or expired invitation record. The audit log keeps
+   * the invite/cancel/delete history. */
+  async remove(actor: RlsContext, permissions: Set<string>, scopes: RoleAssignment[], id: string) {
+    return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const row = (await client.query<Invitation>(`SELECT ${INVITATION_COLUMNS} FROM auth_invitations WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      if (!row) throw new NotFoundException('Invitation not found');
+      assertGrantAllowed(permissions, scopes, row);
+      const expired = row.status === 'pending' && new Date(row.expiresAt).getTime() <= Date.now();
+      if (row.status !== 'cancelled' && !expired) {
+        throw new ConflictException('Only cancelled or expired invitations can be deleted');
+      }
+      await client.query('DELETE FROM auth_invitations WHERE id = $1', [id]);
+      await recordAccessAudit(client, actor, 'staff.invitation.delete', 'auth_invitation', id,
+        { roleKey: row.roleKey, status: expired ? 'expired' : row.status });
+      return { id, deleted: true };
+    });
+  }
+
   async retry(actor: RlsContext, permissions: Set<string>, scopes: RoleAssignment[], id: string) {
     await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const row = (await client.query<Invitation>(`SELECT ${INVITATION_COLUMNS} FROM auth_invitations WHERE id = $1 FOR UPDATE`, [id])).rows[0];
@@ -206,7 +287,7 @@ export class InvitationsService {
       assertGrantAllowed(permissions, scopes, row);
       if (row.status !== 'pending') throw new ConflictException('Only pending invitations can be retried');
       if (row.validUntil && new Date(row.validUntil).getTime() <= Date.now()) throw new ConflictException('The invited role has expired');
-      await client.query(`UPDATE auth_invitations SET expires_at = now() + interval '7 days', updated_at = now() WHERE id = $1`, [id]);
+      await client.query(`UPDATE auth_invitations SET expires_at = now() + ${INVITATION_TTL}, updated_at = now() WHERE id = $1`, [id]);
       await recordAccessAudit(client, actor, 'staff.invitation.retry', 'auth_invitation', id, {});
     });
     return this.deliver(id);

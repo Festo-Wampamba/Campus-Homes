@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CATCHMENTS, STAFF_ROLE_KEYS, type StaffRoleKey } from "@campushomes/shared";
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -25,27 +25,45 @@ const ROLE_LABELS: Record<StaffRoleKey, string> = {
 const selectClassName =
   "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground";
 
-export function InviteStaffForm() {
+export type EditableInvitation = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  roleKey: string;
+  scopeType: string;
+  scopeId: string | null;
+  reason: string;
+};
+
+/** Creates an invitation, or edits a pending/expired one when `invitation` is given. */
+export function InviteStaffForm({ invitation }: { invitation?: EditableInvitation }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [roleKey, setRoleKey] = useState<StaffRoleKey>("ops_inspector");
-  const [scopeType, setScopeType] = useState<"platform_wide" | "catchment">("platform_wide");
-  const [scopeId, setScopeId] = useState<(typeof CATCHMENTS)[number]>("MUK");
-  const [reason, setReason] = useState("");
+  const [name, setName] = useState(invitation?.name ?? "");
+  const [email, setEmail] = useState(invitation?.email ?? "");
+  const [phone, setPhone] = useState(invitation?.phone ?? "");
+  const [roleKey, setRoleKey] = useState<StaffRoleKey>((invitation?.roleKey as StaffRoleKey) ?? "ops_inspector");
+  const [scopeType, setScopeType] = useState<"platform_wide" | "catchment">(
+    invitation?.scopeType === "catchment" ? "catchment" : "platform_wide",
+  );
+  const [scopeId, setScopeId] = useState<(typeof CATCHMENTS)[number]>(
+    (invitation?.scopeId as (typeof CATCHMENTS)[number]) ?? "MUK",
+  );
+  const [reason, setReason] = useState(invitation?.reason ?? "");
+  // Each table row mounts its own edit dialog; ids must stay unique per page.
+  const idPrefix = invitation ? `invite-${invitation.id}` : "invite";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setPending(true);
     try {
-      await api("/admin/staff/invite", {
-        method: "POST",
+      await api(invitation ? `/admin/staff/invitations/${invitation.id}` : "/admin/staff/invite", {
+        method: invitation ? "PATCH" : "POST",
         body: JSON.stringify({
           name,
           email: email.trim(),
@@ -57,16 +75,18 @@ export function InviteStaffForm() {
         }),
       });
       setOpen(false);
-      setName("");
-      setEmail("");
-      setPhone("");
-      setReason("");
+      if (!invitation) {
+        setName("");
+        setEmail("");
+        setPhone("");
+        setReason("");
+      }
       router.refresh();
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 403
           ? "You don't have permission to grant this role at this scope."
-          : "Invite failed — check the details and try again.",
+          : apiErrorMessage(err, invitation ? "Saving the invitation failed." : "Invite failed — check the details and try again."),
       );
     } finally {
       setPending(false);
@@ -75,23 +95,35 @@ export function InviteStaffForm() {
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>
-        <UserPlus aria-hidden className="size-4" />
-        Invite staff
-      </Button>
+      {invitation ? (
+        <button
+          type="button"
+          className="rounded-md border border-border px-3 py-2 font-semibold hover:bg-muted"
+          onClick={() => setOpen(true)}
+        >
+          Edit
+        </button>
+      ) : (
+        <Button type="button" onClick={() => setOpen(true)}>
+          <UserPlus aria-hidden className="size-4" />
+          Invite staff
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen} dismissible={false}>
         <DialogHeader
-          title="Invite staff"
-          description="Sends a one-time email invitation. Staff complete authenticator verification to access their workspace."
+          title={invitation ? "Edit invitation" : "Invite staff"}
+          description={invitation
+            ? "Saving renews the 24-hour window. Changing the email sends a fresh link and the old one stops working."
+            : "Sends a one-time email invitation that expires after 24 hours. Staff complete authenticator verification to access their workspace."}
           onClose={() => setOpen(false)}
         />
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="invite-name" required>Full name</Label>
+              <Label htmlFor={`${idPrefix}-name`} required>Full name</Label>
               <Input
-                id="invite-name"
+                id={`${idPrefix}-name`}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -99,9 +131,9 @@ export function InviteStaffForm() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="invite-email" required>Email</Label>
+                <Label htmlFor={`${idPrefix}-email`} required>Email</Label>
                 <Input
-                  id="invite-email"
+                  id={`${idPrefix}-email`}
                   type="email"
                   required
                   value={email}
@@ -109,7 +141,7 @@ export function InviteStaffForm() {
                 />
               </div>
               <PhoneField
-                id="invite-phone"
+                id={`${idPrefix}-phone`}
                 label="Phone (optional)"
                 value={phone}
                 onChange={setPhone}
@@ -117,9 +149,9 @@ export function InviteStaffForm() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="invite-role">Role</Label>
+                <Label htmlFor={`${idPrefix}-role`}>Role</Label>
                 <select
-                  id="invite-role"
+                  id={`${idPrefix}-role`}
                   className={selectClassName}
                   value={roleKey}
                   onChange={(e) => setRoleKey(e.target.value as StaffRoleKey)}
@@ -132,9 +164,9 @@ export function InviteStaffForm() {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="invite-scope">Scope</Label>
+                <Label htmlFor={`${idPrefix}-scope`}>Scope</Label>
                 <select
-                  id="invite-scope"
+                  id={`${idPrefix}-scope`}
                   className={selectClassName}
                   value={scopeType}
                   onChange={(e) => setScopeType(e.target.value as "platform_wide" | "catchment")}
@@ -146,9 +178,9 @@ export function InviteStaffForm() {
             </div>
             {scopeType === "catchment" && (
               <div className="space-y-1.5">
-                <Label htmlFor="invite-catchment">Catchment</Label>
+                <Label htmlFor={`${idPrefix}-catchment`}>Catchment</Label>
                 <select
-                  id="invite-catchment"
+                  id={`${idPrefix}-catchment`}
                   className={selectClassName}
                   value={scopeId}
                   onChange={(e) => setScopeId(e.target.value as (typeof CATCHMENTS)[number])}
@@ -162,9 +194,9 @@ export function InviteStaffForm() {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label htmlFor="invite-reason" required>Reason</Label>
+              <Label htmlFor={`${idPrefix}-reason`} required>Reason</Label>
               <Input
-                id="invite-reason"
+                id={`${idPrefix}-reason`}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Why this person needs this role"
@@ -182,7 +214,7 @@ export function InviteStaffForm() {
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Inviting…" : "Send invite"}
+              {pending ? (invitation ? "Saving…" : "Inviting…") : invitation ? "Save changes" : "Send invite"}
             </Button>
           </DialogFooter>
         </form>
