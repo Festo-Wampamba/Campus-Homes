@@ -1040,3 +1040,17 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     using the session cookie visible in the browser's own request headers —
     read-only, the user's own session, deleted nothing. That split
     auth/permissions (fast) from the handler (47s) cleanly.
+  - **Real root cause found after (2026-09-23): Postgres JIT, not RLS
+    execution.** Overview still took ~5s with near-empty tables. Per-
+    statement EXPLAIN showed ~1s *execution* on 0-row `payments`/`refunds`/
+    `reservations` — nested RLS policies inflate planner cost past
+    `jit_above_cost` (100000), so Postgres LLVM-compiled ~1,500 functions
+    per query. Locally: payments count 1211ms JIT on → 8.6ms off; refunds
+    1971ms → 10ms. Fix: `createDbPool()` (`src/db/client.ts`, the API's only
+    pool) sets `options: '-c jit=off'`; guarded by
+    `test/services/db-pool.spec.ts`. The one-table-per-statement rule above
+    still stands (planning cost is real), but JIT was most of the time.
+    Diagnose any "slow query on a tiny table" with `EXPLAIN (ANALYZE)` and
+    look for a `JIT:` block first. Caveat: startup `options` are rejected by
+    PgBouncer-style poolers (e.g. Neon's pooled endpoint) — if one is ever
+    reintroduced, use `ALTER ROLE <login role> SET jit = off` instead.
