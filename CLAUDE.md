@@ -992,3 +992,51 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     old SHA while running current `main`. The `deploy-production` GitHub
     workflow sets the real SHA; manual Dokploy redeploys don't. Trust the
     deployment's listed commit, not `/version`, after a manual redeploy.
+
+- **Admin Overview 47s → ~5s: never combine RLS-heavy counts in one statement
+  (2026-09-23, PRs #118/#119/#120):** after the hairpin fix, the admin
+  `/admin/overview` still showed "Overview unavailable". Not auth, not
+  permissions (super_admin has `analytics.read`; `/admin/access/me` 305ms,
+  `/admin/users` 58ms). The tell was hidden because **`apiServer()` swallows
+  every failure to `null`** — added a structured `apiServer.null` warn log
+  (PR #118, kept as a permanent observability win the code's own comments
+  had asked for). It revealed `reason:"throw" TimeoutError` (SSR aborts at
+  `API_TIMEOUT_MS`=15s). A direct browser hit of `campushomes.co.ug/api/v1/
+  admin/overview` returned **500 after `cfOrigin;dur=30230`** (~30s origin) —
+  the endpoint genuinely took **47s** (200, but past every proxy/SSR timeout).
+  - **Root cause: RLS-heavy count subqueries combined in one statement.**
+    `overview()`'s summary packed **14 count subqueries** across many
+    RLS-policied tables (reservations, listings, verification_visits, refunds,
+    notifications, landlords→properties) into ONE `SELECT`; the 6-month
+    `growth` chart used a **correlated** `(SELECT count(*) FROM reservations
+    WHERE …month…)` per month. Each such table's RLS policy expands 200+
+    nested subplans (reservations→beds→units→properties→listings, recursively
+    policied — and this holds **even under `service_role`**, since Postgres
+    plans every OR'd policy branch regardless of the runtime GUC). Combining
+    them was catastrophic: the 14-count summary executed in **39s**, growth in
+    **7.7s** — yet **each count runs <1.2s on its own.** This is the exact
+    blowup the code had already split `revenue` off for; summary and growth
+    were just never split.
+  - **Fixes:** #119 — summary → **one statement per RLS-heavy table**, windows
+    via `FILTER` so each table is scanned once (39s → 2.6s). #120 — growth →
+    **group each table by month once, LEFT JOIN the month series** instead of
+    6 correlated subqueries (7.7s → 0.9s). Net `/admin/overview` 47s → ~5s;
+    full `/admin` SSR render 8.6s, "Overview unavailable" gone, live metrics
+    shown. **Rule (make it a review reflex): never put more than one RLS-heavy
+    table in a single dashboard/aggregate statement, and never correlate an
+    RLS-heavy count per row — one scan per policied table, FILTER/GROUP BY for
+    windows.** `service_role` does NOT make this cheap.
+  - **Diagnosis gotcha:** `set_config(..., true)` is **transaction-local**, so
+    `psql -c "SELECT set_config(...,true); <query>"` runs the query in a
+    *different* auto-committed transaction with the GUC already gone — the
+    query silently runs under the wrong RLS context and mismeasures. Reproduce
+    the API's `rlsDb.run` context with an explicit `BEGIN; SET ROLE
+    campushomes_app; SELECT set_config('app.user_role','service_role',true);
+    <query>; ROLLBACK;` in one `-c`, or the timings lie (a flawed split-tx
+    test showed 4s for what was really 39s).
+  - **Live-endpoint diagnosis, no cookie-minting:** timed the real authed
+    endpoints from inside the web container over the internal overlay
+    (`docker exec <web> node -e "fetch('http://<api-svc>:4000/api/v1/…',{headers:{cookie}})"`)
+    using the session cookie visible in the browser's own request headers —
+    read-only, the user's own session, deleted nothing. That split
+    auth/permissions (fast) from the handler (47s) cleanly.
