@@ -133,6 +133,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
             pricePerTermUgx: String(p.pricePerTermUgx),
             depositUgx: p.depositUgx != null ? String(p.depositUgx) : "",
             selfContained: p.selfContained ?? false,
+            bedsPerRoom: p.bedsPerRoom != null ? String(p.bedsPerRoom) : undefined,
           })),
         );
       })

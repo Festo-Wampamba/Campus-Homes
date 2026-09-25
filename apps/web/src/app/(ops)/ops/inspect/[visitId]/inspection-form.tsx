@@ -113,6 +113,7 @@ const BEDROOM_CATEGORIES = new Set<PhotoCategory>([
   "single_bedroom",
   "double_bedroom",
   "triple_bedroom",
+  "quad_bedroom",
 ]);
 function isBedroomCategory(category: PhotoCategory): boolean {
   return BEDROOM_CATEGORIES.has(category);

@@ -29,7 +29,7 @@ import {
   serializePropertyExtendedFields,
   type PropertyExtendedFieldsValue,
 } from "@/components/property-extended-fields";
-import { RoomCategoryRows, type RoomCategoryRow } from "@/components/room-category-rows";
+import { RoomCategoryRows, bedsPerRoom, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -193,6 +193,8 @@ export function OnboardingWizard({
         roomCount: Number(row.roomCount),
         pricePerTermUgx: Number(row.pricePerTermUgx),
         selfContained: row.selfContained,
+        bedsPerRoom: bedsPerRoom(row),
+        ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
       }));
       // Derived from the rows above, not entered separately — see the
       // comment on proposedRoomCategorySchema.selfContained.
@@ -387,6 +389,7 @@ export function OnboardingWizard({
                   onChange={setRoomCategoryRows}
                   idPrefix="onboarding-room"
                   showSelfContained
+                  showBeds
                 />
               </div>
               <div className="space-y-1.5">
