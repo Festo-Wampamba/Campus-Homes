@@ -35,16 +35,16 @@ export const UGANDA_GPS_BOUNDS = { minLat: -2.5, maxLat: 5, minLon: 28.5, maxLon
 // What part of the property a photo shows. Chosen by the inspector at capture
 // time so the lead reviewing for quality, and the student browsing the listing,
 // both see photos grouped rather than one undifferentiated roll.
-// Mirrors the `photo_category` pgEnum (migration 0047) — update both together.
+// Mirrors the `photo_category` pgEnum (0047, +0052, +0055) — update both together.
 export const PHOTO_CATEGORIES = [
-  'bedroom', 'single_bedroom', 'double_bedroom', 'triple_bedroom',
+  'bedroom', 'single_bedroom', 'double_bedroom', 'triple_bedroom', 'quad_bedroom',
   'bathroom', 'kitchen', 'compound', 'shops', 'exterior', 'common_area', 'custom', 'other',
 ] as const;
 export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number];
 
 export const PHOTO_CATEGORY_LABELS: Record<PhotoCategory, string> = {
   bedroom: 'Bedroom', single_bedroom: 'Single bedroom', double_bedroom: 'Double bedroom (2 beds)',
-  triple_bedroom: 'Triple bedroom (3 beds)', bathroom: 'Bathroom', kitchen: 'Kitchen',
+  triple_bedroom: 'Triple bedroom (3 beds)', quad_bedroom: 'Quad bedroom (4 beds)', bathroom: 'Bathroom', kitchen: 'Kitchen',
   compound: 'Compound', shops: 'Shops', exterior: 'Exterior', common_area: 'Common area',
   custom: 'Custom…', other: 'Other',
 };
