@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import type {
   AdminPermissionGrantInput,
   AdminRoleAssignmentInput,
@@ -357,71 +358,43 @@ export class AdminUsersService {
     return result;
   }
 
-  async softDelete(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string) {
+  /** Hard-deletes an active user and everything they own in one step — no
+   * recoverable soft-delete stage, so the account (and its inflated dashboard
+   * counts) disappears immediately. Runs the same footprint cascade as
+   * purgeUser. Keeps the self-delete, super-admin tier, and last-active-
+   * super-admin guards so an admin can't lock everyone out. */
+  async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
-    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      try {
-        const target = (await client.query<{ id: string; isSuperAdmin: boolean }>(`
-          SELECT u.id, EXISTS (
-            SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
-            WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
-          ) AS "isSuperAdmin"
-          FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
-        `, [userId])).rows[0];
-        if (!target) throw new NotFoundException('User not found');
-        if (target.isSuperAdmin) {
-          if (!actorPermissions.has('roles.manage_super_admin')) {
-            throw new ForbiddenException('Only a Super Admin can delete a Super Admin');
-          }
-          const count = Number((await client.query(`
-            SELECT count(DISTINCT ura.user_id) AS count
-            FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id JOIN users u ON u.id = ura.user_id
-            WHERE r.key = 'super_admin' AND ura.revoked_at IS NULL AND u.deleted_at IS NULL AND u.status = 'active'
-          `)).rows[0]?.count ?? 0);
-          if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
+    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const target = (await client.query<{ id: string; isSuperAdmin: boolean }>(`
+        SELECT u.id, EXISTS (
+          SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
+          WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
+        ) AS "isSuperAdmin"
+        FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
+      `, [userId])).rows[0];
+      if (!target) throw new NotFoundException('User not found');
+      if (target.isSuperAdmin) {
+        if (!actorPermissions.has('roles.manage_super_admin')) {
+          throw new ForbiddenException('Only a Super Admin can delete a Super Admin');
         }
-
-        // email/phone keep their plain UNIQUE constraints (not partial on
-        // deleted_at), and Better Auth's own sign-up lookup has no idea about
-        // our deleted_at convention anyway — leaving them intact permanently
-        // blocks the same person from ever signing up again. Mangle both to a
-        // deterministic, guaranteed-unique value derived from the row's own
-        // id so they're freed for reuse immediately; the row (and its id)
-        // stays intact for audit_log/FK history.
-        await client.query(
-          `UPDATE users SET status = 'suspended', deleted_at = now(), deletion_reason = $2, updated_at = now(),
-                  email = 'deleted-' || id || '@deleted.campushomes.internal', phone = NULL
-           WHERE id = $1`,
-          [userId, reason],
-        );
-        await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
-        await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
-        await client.query('UPDATE user_permission_grants SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, actor.userId]);
-        await client.query(`UPDATE property_memberships SET status = 'revoked', revoked_at = now(), revoked_by = $2, revocation_reason = $3 WHERE user_id = $1 AND revoked_at IS NULL`, [userId, actor.userId, reason]);
-        // Mirrors enforce_strike_suspension() (0001_rls_hardening.sql): a
-        // deleted landlord's previously-verified listings must stop being
-        // publicly searchable immediately, not just vanish from admin lists.
-        await client.query(
-          `UPDATE listings SET status = 'suspended'
-           WHERE status = 'verified' AND property_id IN (SELECT id FROM properties WHERE landlord_id = $1)`,
-          [userId],
-        );
-        return { id: userId, deleted: true };
-      } catch (error) {
-        throw error;
+        const count = Number((await client.query(`
+          SELECT count(DISTINCT ura.user_id) AS count
+          FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id JOIN users u ON u.id = ura.user_id
+          WHERE r.key = 'super_admin' AND ura.revoked_at IS NULL AND u.deleted_at IS NULL AND u.status = 'active'
+        `)).rows[0]?.count ?? 0);
+        if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
       }
+      await this.runPurgeCascade(client, userId);
     });
     await this.audit.record(actor, 'users.delete', 'user', userId, { reason });
-    return result;
+    return { id: userId, deleted: true };
   }
 
-  /** Hard-deletes a soft-deleted user and everything they own (properties and
-   * their whole subtree, reservations, the student/landlord profile, RBAC
-   * rows, chat). Historical records that merely reference the person as an
-   * actor (audit_log, who-reviewed/uploaded/assigned) are anonymized to NULL
-   * so the event survives without the identity. Requires the account to be
-   * soft-deleted first (two-step safety); super-admin targets need the
-   * super-admin tier permission, same as softDelete. */
+  /** Cleanup path for accounts already soft-deleted by the legacy two-step
+   * flow: permanently removes the row and its whole footprint (same cascade as
+   * deleteUser). Requires the account to be soft-deleted first; super-admin
+   * targets need the super-admin tier permission. */
   async purgeUser(actor: RlsContext, actorPermissions: Set<string>, userId: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot purge your own account');
     await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
@@ -437,10 +410,21 @@ export class AdminUsersService {
       if (target.isSuperAdmin && !actorPermissions.has('roles.manage_super_admin')) {
         throw new ForbiddenException('Only a Super Admin can purge a Super Admin');
       }
-      // Seed the target set, then derive and remove its whole footprint. The
-      // derived block references only _pg_g (no external input), so it runs as
-      // one statement. Order is strict child-before-parent: the schema's
-      // RESTRICT/NO-ACTION FKs would otherwise block the delete.
+      await this.runPurgeCascade(client, userId);
+    });
+    await this.audit.record(actor, 'users.purge', 'user', userId, {});
+    return { id: userId, purged: true };
+  }
+
+  /** Deletes a user and their whole owned footprint (properties→listings→
+   * units→beds→reservations→payments, profiles, RBAC rows, chat). Historical
+   * records that merely reference the person as an actor are anonymized to
+   * NULL so the event survives without the identity. Seeds the target set,
+   * then derives and removes its footprint. The derived block references only
+   * _pg_g (no external input), so it runs as one statement. Order is strict
+   * child-before-parent: the schema's RESTRICT/NO-ACTION FKs would otherwise
+   * block the delete. */
+  private async runPurgeCascade(client: PoolClient, userId: string) {
       await client.query(`CREATE TEMP TABLE _pg_g(id uuid PRIMARY KEY) ON COMMIT DROP`);
       await client.query(`INSERT INTO _pg_g VALUES ($1)`, [userId]);
       await client.query(`
@@ -462,12 +446,12 @@ export class AdminUsersService {
         DELETE FROM refunds WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM landlord_strikes WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM student_flags WHERE reservation_id IN (SELECT id FROM _pg_res);
-        DELETE FROM reservation_releases WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM payments WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM move_ins WHERE reservation_id IN (SELECT id FROM _pg_res);
-        DELETE FROM journal_entries WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM reservations WHERE id IN (SELECT id FROM _pg_res);
 
+        DELETE FROM room_unit_changes WHERE change_set_id IN (SELECT id FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props)) OR unit_id IN (SELECT id FROM _pg_unts) OR room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
+        DELETE FROM unit_blocks WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM unit_photos WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM unit_semester_pricing WHERE unit_id IN (SELECT id FROM _pg_unts);
         DELETE FROM beds WHERE id IN (SELECT id FROM _pg_bds);
@@ -480,22 +464,41 @@ export class AdminUsersService {
         DELETE FROM listings WHERE id IN (SELECT id FROM _pg_lists);
         DELETE FROM tenant_agreements WHERE property_id IN (SELECT id FROM _pg_props);
         DELETE FROM verification_visits WHERE property_id IN (SELECT id FROM _pg_props);
+        UPDATE room_types SET current_version_id = NULL WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM room_type_photos WHERE room_type_version_id IN (SELECT id FROM room_type_versions WHERE room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props)));
+        DELETE FROM room_type_versions WHERE room_type_id IN (SELECT id FROM room_types WHERE property_id IN (SELECT id FROM _pg_props));
+        DELETE FROM room_inventory_change_sets WHERE property_id IN (SELECT id FROM _pg_props);
+        DELETE FROM room_types WHERE property_id IN (SELECT id FROM _pg_props);
         DELETE FROM properties WHERE id IN (SELECT id FROM _pg_props);
 
         DELETE FROM inquiries WHERE student_id IN (SELECT id FROM _pg_g);
         UPDATE inquiries SET landlord_id = NULL WHERE landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM property_memberships WHERE user_id IN (SELECT id FROM _pg_g);
 
-        UPDATE audit_log SET actor_id = NULL WHERE actor_id IN (SELECT id FROM _pg_g);
+        -- Strikes/flags/agreements referencing the user directly (RESTRICT on
+        -- landlords/students, which cascade-delete with the user). The
+        -- reservation-keyed deletes above only catch rows tied to a deleted
+        -- reservation; one with a NULL/foreign reservation_id would otherwise
+        -- block the users delete (23503).
+        DELETE FROM landlord_strikes WHERE landlord_id IN (SELECT id FROM _pg_g);
+        DELETE FROM student_flags WHERE student_id IN (SELECT id FROM _pg_g);
+        DELETE FROM tenant_agreements WHERE student_id IN (SELECT id FROM _pg_g);
+
         UPDATE landlords SET kyc_reviewed_by = NULL WHERE kyc_reviewed_by IN (SELECT id FROM _pg_g);
         UPDATE reservations SET booked_by = NULL WHERE booked_by IN (SELECT id FROM _pg_g);
         UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
         UPDATE approval_requests SET requested_by = NULL WHERE requested_by IN (SELECT id FROM _pg_g);
         UPDATE approval_requests SET decided_by = NULL WHERE decided_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET invited_by = NULL WHERE invited_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET cancelled_by = NULL WHERE cancelled_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET accepted_by = NULL WHERE accepted_by IN (SELECT id FROM _pg_g);
-        UPDATE auth_invitations SET target_user_id = NULL WHERE target_user_id IN (SELECT id FROM _pg_g);
+        -- Invitations can't be anonymized in place: invited_by is NOT NULL, and
+        -- the status CHECKs require accepted_by/cancelled_by to stay non-null on
+        -- an accepted/cancelled invite (nulling them raised 23514). They're
+        -- ephemeral onboarding artifacts — the permanent record is audit_log —
+        -- so delete any row that references the purged user in any of its slots.
+        DELETE FROM auth_invitations
+          WHERE invited_by IN (SELECT id FROM _pg_g)
+             OR cancelled_by IN (SELECT id FROM _pg_g)
+             OR accepted_by IN (SELECT id FROM _pg_g)
+             OR target_user_id IN (SELECT id FROM _pg_g);
         UPDATE campus_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
         UPDATE onboarding_leads SET contacted_by = NULL WHERE contacted_by IN (SELECT id FROM _pg_g);
         UPDATE platform_integrations SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
@@ -506,19 +509,14 @@ export class AdminUsersService {
         UPDATE property_memberships SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE property_memberships SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE report_exports SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
-        UPDATE reservation_releases SET released_by = NULL WHERE released_by IN (SELECT id FROM _pg_g);
         UPDATE tenant_agreement_templates SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);
         UPDATE unit_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
         UPDATE user_permission_grants SET granted_by = NULL WHERE granted_by IN (SELECT id FROM _pg_g);
         UPDATE user_permission_grants SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET assigned_by = NULL WHERE assigned_by IN (SELECT id FROM _pg_g);
         UPDATE user_role_assignments SET revoked_by = NULL WHERE revoked_by IN (SELECT id FROM _pg_g);
-
         DELETE FROM users WHERE id IN (SELECT id FROM _pg_g);
       `);
-    });
-    await this.audit.record(actor, 'users.purge', 'user', userId, {});
-    return { id: userId, purged: true };
   }
 
   async assignRole(

@@ -281,6 +281,111 @@
       "when": 1789272000000,
       "tag": "0040_room_management",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789300000000,
+      "tag": "0041_delete_no_step_up",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0042_purge_delete_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789480000000,
+      "tag": "0043_purge_update_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789500000000,
+      "tag": "0044_purge_append_only_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1789600000000,
+      "tag": "0045_purge_users_delete_grant",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0046_purge_ops_staff_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0047_listing_photo_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0048_health_migrations_read",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0049_auth_invitations_purge_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0050_email_change_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0051_user_username",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0052_room_photo_categories_custom",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0053_self_contained_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0054_unit_semester_pricing_ops_update",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0055_quad_bedroom_photo_category",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { CheckCircle2, X } from "lucide-react";
 import {
   PROPERTY_TYPES,
   UNIVERSITIES,
@@ -29,7 +29,7 @@ import {
   serializePropertyExtendedFields,
   type PropertyExtendedFieldsValue,
 } from "@/components/property-extended-fields";
-import { RoomCategoryRows, type RoomCategoryRow } from "@/components/room-category-rows";
+import { RoomCategoryRows, bedsPerRoom, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -66,7 +66,10 @@ function errorMessage(err: unknown, fallback: string): string {
     const body = err.body as { message?: string | string[] } | null;
     if (typeof body?.message === "string") return body.message;
     if (Array.isArray(body?.message)) return body.message.join(", ");
+    return fallback;
   }
+  // Upload helpers throw plain Errors with user-facing messages.
+  if (err instanceof Error && err.message) return err.message;
   return fallback;
 }
 
@@ -108,6 +111,7 @@ export function OnboardingWizard({
     emptyPropertyDeclarationFields(),
   );
   const [pending, setPending] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const knownAmenityKeys = useMemo(() => new Set(AMENITY_OPTIONS.map((o) => o.key)), []);
@@ -177,7 +181,7 @@ export function OnboardingWizard({
     try {
       let coverPhotoKey: string | undefined;
       if (coverPhotoFile) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: coverPhotoFile.type }) });
         const { publicId } = await uploadToCloudinary(coverPhotoFile, sig);
         coverPhotoKey = publicId;
       }
@@ -189,6 +193,8 @@ export function OnboardingWizard({
         roomCount: Number(row.roomCount),
         pricePerTermUgx: Number(row.pricePerTermUgx),
         selfContained: row.selfContained,
+        bedsPerRoom: bedsPerRoom(row),
+        ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
       }));
       // Derived from the rows above, not entered separately — see the
       // comment on proposedRoomCategorySchema.selfContained.
@@ -214,7 +220,11 @@ export function OnboardingWizard({
           ...(coverPhotoKey ? { coverPhotoKey } : {}),
         }),
       });
-      router.push("/landlord?submitted=property");
+      // Show an in-place confirmation immediately instead of pushing straight
+      // into the dashboard's server render — on a slow connection that RSC
+      // fetch left the landlord staring at a blank screen until they reloaded.
+      // refresh() warms the dashboard data in the background for when they go.
+      setSubmitted(true);
       router.refresh();
     } catch (err) {
       setError(errorMessage(err, "Couldn't submit your property — try again."));
@@ -222,8 +232,34 @@ export function OnboardingWizard({
     }
   }
 
+  if (submitted) {
+    return (
+      <Card className="w-full max-w-lg shadow-md" aria-live="polite">
+        <CardContent className="flex flex-col items-center gap-5 p-8 text-center sm:p-10">
+          <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <CheckCircle2 aria-hidden className="size-7" />
+          </span>
+          <div>
+            <h1 className="font-display text-xl font-bold text-foreground">Property submitted</h1>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Your property and profile are saved and now with our Ops team for a physical
+              verification visit and review. You&apos;ll get full landlord dashboard access once your
+              account is approved — until then your listing isn&apos;t visible to students.
+            </p>
+          </div>
+          <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            Status: pending review
+          </p>
+          <Button className="w-full" onClick={() => router.push("/landlord?submitted=property")}>
+            Go to your dashboard
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card className={cn("w-full shadow-md", step === "property" ? "max-w-xl" : "max-w-md")}>
+    <Card className={cn("w-full shadow-md", step === "property" ? "max-w-3xl" : "max-w-md")}>
       <CardContent className="p-6 sm:p-8">
         {step === "legal" && (
           <>
@@ -264,63 +300,67 @@ export function OnboardingWizard({
               description="Our Ops team schedules a physical verification visit once this is submitted."
             />
             <form onSubmit={submitProperty} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="propertyName" required>Property name</Label>
-                <Input
-                  id="propertyName"
-                  required
-                  minLength={2}
-                  value={propertyName}
-                  onChange={(e) => setPropertyName(e.target.value)}
-                  placeholder="e.g. Sunrise Hostel"
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="propertyName" required>Property name</Label>
+                  <Input
+                    id="propertyName"
+                    required
+                    minLength={2}
+                    value={propertyName}
+                    onChange={(e) => setPropertyName(e.target.value)}
+                    placeholder="e.g. Sunrise Hostel"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="streetAddress" required>Street address</Label>
+                  <Input
+                    id="streetAddress"
+                    required
+                    minLength={3}
+                    value={streetAddress}
+                    onChange={(e) => setStreetAddress(e.target.value)}
+                    placeholder="Street, area, city"
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="streetAddress" required>Street address</Label>
-                <Input
-                  id="streetAddress"
-                  required
-                  minLength={3}
-                  value={streetAddress}
-                  onChange={(e) => setStreetAddress(e.target.value)}
-                  placeholder="Street, area, city"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="propertyType">Property type</Label>
-                <select
-                  id="propertyType"
-                  value={type}
-                  onChange={(e) => setType(e.target.value as PropertyType)}
-                  className={cn(
-                    "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
-                    "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
-                  )}
-                >
-                  {PROPERTY_TYPES.map((value) => (
-                    <option key={value} value={value}>
-                      {PROPERTY_TYPE_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="catchment">Nearest university</Label>
-                <select
-                  id="catchment"
-                  value={catchment}
-                  onChange={(e) => setCatchment(e.target.value as University)}
-                  className={cn(
-                    "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
-                    "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
-                  )}
-                >
-                  {UNIVERSITIES.map((code) => (
-                    <option key={code} value={code}>
-                      {UNIVERSITY_LABELS[code]}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="propertyType">Property type</Label>
+                  <select
+                    id="propertyType"
+                    value={type}
+                    onChange={(e) => setType(e.target.value as PropertyType)}
+                    className={cn(
+                      "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
+                      "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
+                    )}
+                  >
+                    {PROPERTY_TYPES.map((value) => (
+                      <option key={value} value={value}>
+                        {PROPERTY_TYPE_LABELS[value]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="catchment">Nearest university</Label>
+                  <select
+                    id="catchment"
+                    value={catchment}
+                    onChange={(e) => setCatchment(e.target.value as University)}
+                    className={cn(
+                      "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
+                      "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
+                    )}
+                  >
+                    {UNIVERSITIES.map((code) => (
+                      <option key={code} value={code}>
+                        {UNIVERSITY_LABELS[code]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="propertyPhoto">Cover photo (optional)</Label>
@@ -349,6 +389,7 @@ export function OnboardingWizard({
                   onChange={setRoomCategoryRows}
                   idPrefix="onboarding-room"
                   showSelfContained
+                  showBeds
                 />
               </div>
               <div className="space-y-1.5">
@@ -356,7 +397,7 @@ export function OnboardingWizard({
                 <p className="text-xs text-muted-foreground">
                   What the property offers — Ops confirms these during verification.
                 </p>
-                <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3">
+                <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
                   {AMENITY_OPTIONS.map((option) => (
                     <label key={option.key} className="flex items-center gap-2 text-sm">
                       <input

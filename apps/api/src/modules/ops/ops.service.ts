@@ -7,7 +7,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
   UGANDA_GPS_BOUNDS,
@@ -23,6 +23,7 @@ import {
   type SyncVisitInput,
   type UnitOperationalStatus,
   type University,
+  normalizeVisitPhotos,
 } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
@@ -42,7 +43,9 @@ import {
   properties,
   roomTypes,
   roomTypeVersions,
+  roomUnitChanges,
   semesters,
+  unitBlocks,
   units,
   unitSemesterPricing,
   users,
@@ -218,11 +221,13 @@ export class OpsService {
     await this.audit.record(ctx, 'visit.correction_raise', 'verification_visit', visitId, {
       component: input.component,
     });
-    await this.notifications.notify(visit.inspectorId, 'visit.correction_requested', 'in_app', {
-      visitId,
-      component: input.component,
-      message: input.message,
-    });
+    if (visit.inspectorId) {
+      await this.notifications.notify(visit.inspectorId, 'visit.correction_requested', 'in_app', {
+        visitId,
+        component: input.component,
+        message: input.message,
+      });
+    }
     return correction;
   }
 
@@ -287,6 +292,7 @@ export class OpsService {
       component: input.component,
     });
     for (const correction of resolved) {
+      if (!correction.raisedBy) continue;
       await this.notifications.notify(correction.raisedBy, 'visit.correction_resolved', 'in_app', {
         visitId,
         component: input.component,
@@ -351,6 +357,7 @@ export class OpsService {
           label: units.label,
           capacity: units.capacity,
           roomCategory: units.roomCategory,
+          selfContained: units.selfContained,
           pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
           depositUgx: unitSemesterPricing.depositUgx,
         })
@@ -462,25 +469,60 @@ export class OpsService {
   }
 
   async scheduleVisit(ctx: RlsContext, input: ScheduleVisitInput) {
-    const visit = await this.rlsDb.run(ctx, async (db) =>
-      firstRow(
+    const scheduledAt = new Date(input.scheduledAt);
+    const { visit, created } = await this.rlsDb.run(ctx, async (db) => {
+      // The picker only lists active inspectors, but a direct API call could
+      // target any user with an ops_staff row — assigning an inactive one
+      // creates a visit nobody can work (RLS denies their update).
+      const inspector = await db.query.opsStaff.findFirst({
+        where: and(eq(opsStaff.userId, input.inspectorId), eq(opsStaff.active, true)),
+      });
+      if (!inspector) {
+        throw new BadRequestException('Assign an active ops inspector');
+      }
+      // Idempotent against a double-submit: the same (property, inspector,
+      // time) assignment that is still open (unworked, unapproved) returns the
+      // existing visit instead of creating a duplicate the inspector sees twice.
+      const existing = await db.query.verificationVisits.findFirst({
+        where: and(
+          eq(verificationVisits.propertyId, input.propertyId),
+          eq(verificationVisits.inspectorId, input.inspectorId),
+          eq(verificationVisits.scheduledAt, scheduledAt),
+          eq(verificationVisits.result, 'pending'),
+          isNull(verificationVisits.approvedAt),
+        ),
+      });
+      if (existing) {
+        return { visit: existing, created: false };
+      }
+      const inserted = firstRow(
         await db
           .insert(verificationVisits)
           .values({
             propertyId: input.propertyId,
             inspectorId: input.inspectorId,
-            scheduledAt: new Date(input.scheduledAt),
+            scheduledAt,
             // Server-created rows still need the NOT NULL idempotency slot; the
             // inspector's offline sync replaces it with the client's own key.
             clientIdempotencyKey: `visit-scheduled-${crypto.randomUUID()}`,
           })
           .returning(),
-      ),
-    );
-    await this.audit.record(ctx, 'visit.schedule', 'verification_visit', visit.id, {
-      propertyId: input.propertyId,
-      inspectorId: input.inspectorId,
+      );
+      return { visit: inserted, created: true };
     });
+    // Only a genuinely new assignment audits and notifies — a replayed submit
+    // must not double-notify the inspector.
+    if (created) {
+      await this.audit.record(ctx, 'visit.schedule', 'verification_visit', visit.id, {
+        propertyId: input.propertyId,
+        inspectorId: input.inspectorId,
+      });
+      await this.notifications.notify(input.inspectorId, 'visit.assigned', 'in_app', {
+        visitId: visit.id,
+        propertyId: input.propertyId,
+        scheduledAt: input.scheduledAt,
+      });
+    }
     return visit;
   }
 
@@ -587,7 +629,71 @@ export class OpsService {
    * The 6-component DB trigger independently guards the flip. Each unit
    * carries its own room-category price now — the version's headline price
    * is derived as the cheapest category, not entered directly by Ops. */
+  /** Lead-edit deletions: any physical room the re-publish payload dropped
+   * (a removed row, or a lowered room count) is deleted here, under
+   * service_role (units DELETE is svc_all-only). Guarded hard — a room with
+   * any reservation, or one that's part of another semester's listing, refuses
+   * the whole publish rather than being silently deleted. Cascade removes the
+   * unit's beds/pricing/photos; unit_blocks and room_unit_changes (both
+   * RESTRICT) are cleared first. First publish has no existing units, so this
+   * is a no-op there. */
+  private async deleteRemovedUnits(input: PublishListingInput) {
+    await this.rlsDb.run(SERVICE_CTX, async (db) => {
+      const listing = await db.query.listings.findFirst({
+        where: eq(listings.id, input.listingId),
+      });
+      if (!listing || listing.status !== 'verified') return;
+
+      const keptUnitIds = new Set(
+        input.units.filter((u) => u.unitId).map((u) => u.unitId!),
+      );
+      const currentUnits = await db
+        .select({ id: units.id, label: units.label })
+        .from(units)
+        .innerJoin(
+          unitSemesterPricing,
+          and(
+            eq(unitSemesterPricing.unitId, units.id),
+            eq(unitSemesterPricing.semesterId, listing.semesterId),
+          ),
+        )
+        .where(eq(units.propertyId, listing.propertyId));
+      const removed = currentUnits.filter((u) => !keptUnitIds.has(u.id));
+      if (removed.length === 0) return;
+
+      for (const room of removed) {
+        const [{ hasRes, otherSem }] = (
+          await db.execute(sql`
+            SELECT
+              EXISTS(SELECT 1 FROM beds b JOIN reservations r ON r.bed_id = b.id WHERE b.unit_id = ${room.id}) AS "hasRes",
+              EXISTS(SELECT 1 FROM unit_semester_pricing p WHERE p.unit_id = ${room.id} AND p.semester_id <> ${listing.semesterId}) AS "otherSem"
+          `)
+        ).rows as [{ hasRes: boolean; otherSem: boolean }];
+        if (hasRes) {
+          throw new ConflictException(
+            `Room "${room.label}" has reservations and can't be deleted — cancel or relocate them first.`,
+          );
+        }
+        if (otherSem) {
+          throw new ConflictException(
+            `Room "${room.label}" is part of another semester's listing — remove it there first.`,
+          );
+        }
+      }
+
+      const removedIds = removed.map((u) => u.id);
+      await db.delete(unitBlocks).where(inArray(unitBlocks.unitId, removedIds));
+      await db.update(roomUnitChanges).set({ unitId: null }).where(inArray(roomUnitChanges.unitId, removedIds));
+      // Cascades beds, unit_semester_pricing and unit_photos (0037 FKs).
+      await db.delete(units).where(inArray(units.id, removedIds));
+    });
+  }
+
   async publishListing(ctx: RlsContext, input: PublishListingInput) {
+    // Handle any rooms the lead removed in this edit before re-publishing the
+    // rest — refuses early (nothing else written yet) if a removed room is
+    // unsafe to delete.
+    await this.deleteRemovedUnits(input);
     const startingPriceUgx = Math.min(...input.units.map((u) => u.pricePerTermUgx));
     const published = await this.rlsDb.run(ctx, async (db) => {
       const listing = await db.query.listings.findFirst({
@@ -596,9 +702,12 @@ export class OpsService {
       if (!listing) {
         throw new NotFoundException('Listing not found');
       }
-      if (listing.status === 'verified') {
-        throw new ConflictException('Listing is already verified');
-      }
+      // A verified listing can be re-opened and edited by the lead (rooms,
+      // prices, amenities, description) — it stays verified and gets a fresh
+      // immutable version snapshot rather than being rejected. The prior
+      // version's photos are carried onto the new version below.
+      const isRepublish = listing.status === 'verified';
+      const priorVersionId = listing.currentVersionId;
       // Defense in depth alongside submitProperty()'s own gate: the
       // landlord could have been verified at submission time and rejected
       // or suspended (3-strike auto-suspend) any time before this, the
@@ -627,15 +736,42 @@ export class OpsService {
           "This property's landlord account is not active — publishing is blocked",
         );
       }
-      // The visit whose photos (staged at sync time) get promoted below —
-      // the most recently approved, passed visit for this property.
+      // Publish gate: a listing only goes public behind an ops-lead-approved
+      // inspection. A passed-but-unapproved visit is the inspector's evidence
+      // waiting on the lead's decision — it is NOT sufficient to publish, so
+      // approved_at must be set, not merely result = 'passed'. This visit's
+      // staged photos are also what gets promoted below.
       const approvedVisit = await db.query.verificationVisits.findFirst({
         where: and(
           eq(verificationVisits.propertyId, listing.propertyId),
           eq(verificationVisits.result, 'passed'),
+          isNotNull(verificationVisits.approvedAt),
         ),
         orderBy: (v, ops) => [ops.desc(v.approvedAt)],
       });
+      if (!approvedVisit) {
+        throw new ConflictException(
+          'This property has no ops-lead-approved inspection — approve the passed visit before publishing',
+        );
+      }
+
+      // Don't publish inventory that is mid-review: an open change set for this
+      // property + semester means the room data a student would see could still
+      // change under review. Gate on the same semester the listing is for, so a
+      // pending change for a different term doesn't block this one.
+      const [{ pending }] = (
+        await db.execute(sql`
+          SELECT count(*)::int AS pending FROM room_inventory_change_sets
+          WHERE property_id = ${listing.propertyId}
+            AND semester_id = ${listing.semesterId}
+            AND status IN ('pending_review', 'visit_required')
+        `)
+      ).rows as [{ pending: number }];
+      if (pending > 0) {
+        throw new ConflictException(
+          'A room inventory change for this semester is still under review — resolve it before publishing',
+        );
+      }
       const [{ next }] = (
         await db.execute(
           sql`SELECT COALESCE(MAX(version_number), 0) + 1 AS next
@@ -726,6 +862,8 @@ export class OpsService {
               label: u.label,
               capacity: u.capacity,
               roomCategory: u.roomCategory,
+              roomCategoryLabel: u.roomCategory === 'other' ? (u.roomCategoryLabel ?? null) : null,
+              selfContained: u.selfContained ?? false,
             })),
           ).returning()
         : [];
@@ -767,31 +905,85 @@ export class OpsService {
               depositUgx: row.input.depositUgx ?? null,
             })),
           )
-          .onConflictDoNothing({ target: [unitSemesterPricing.unitId, unitSemesterPricing.semesterId] });
+          // On a re-publish the lead may change a room's price/deposit for this
+          // semester, so update rather than ignore the conflict. (Existing
+          // reservations locked their own price at reservation time, so this
+          // only affects new reservations.)
+          .onConflictDoUpdate({
+            target: [unitSemesterPricing.unitId, unitSemesterPricing.semesterId],
+            set: {
+              pricePerTermUgx: sql`excluded.price_per_term_ugx`,
+              depositUgx: sql`excluded.deposit_ugx`,
+            },
+          });
       }
 
-      return { listing: updated, version, approvedVisit };
+      return { listing: updated, version, approvedVisit, isRepublish, priorVersionId };
     });
-    await this.audit.record(ctx, 'listing.publish', 'listing', input.listingId, {
-      versionId: published.version.id,
-      priceUgx: startingPriceUgx,
-    });
+    await this.audit.record(
+      ctx,
+      published.isRepublish ? 'listing.republish' : 'listing.publish',
+      'listing',
+      input.listingId,
+      { versionId: published.version.id, priceUgx: startingPriceUgx },
+    );
 
-    // Promote the visit's staged photos (uploaded at sync time) now that a
-    // listing_version — the FK they attach to — finally exists. A visit with
-    // no photos staged, or missing GPS (shouldn't happen: the inspection form
-    // requires GPS before a visit can even be submitted), is skipped rather
-    // than blocking the publish itself on it.
+    if (published.isRepublish) {
+      // A re-publish makes a fresh immutable version; photos belong to the
+      // listing, not to whichever version was current, so copy the prior
+      // version's listing_photos onto the new one rather than re-promoting the
+      // visit's staged photos (which would duplicate them every edit).
+      if (published.priorVersionId) {
+        const priorVersionId = published.priorVersionId;
+        const newVersionId = published.version.id;
+        await this.rlsDb.run(SERVICE_CTX, async (db) => {
+          const prior = await db
+            .select()
+            .from(listingPhotos)
+            .where(eq(listingPhotos.listingVersionId, priorVersionId))
+            .orderBy(asc(listingPhotos.sortOrder));
+          if (prior.length > 0) {
+            await db.insert(listingPhotos).values(
+              prior.map((p) => ({
+                listingVersionId: newVersionId,
+                storageKey: p.storageKey,
+                category: p.category,
+                customLabel: p.customLabel,
+                selfContained: p.selfContained,
+                capturedBy: p.capturedBy,
+                gpsLat: p.gpsLat,
+                gpsLon: p.gpsLon,
+                capturedAt: p.capturedAt,
+                isPrimary: p.isPrimary,
+                sortOrder: p.sortOrder,
+              })),
+            );
+          }
+        });
+      }
+      return published;
+    }
+
+    // First publish: promote the visit's staged photos (uploaded at sync time)
+    // now that a listing_version — the FK they attach to — finally exists. A
+    // visit with no photos staged, or missing GPS (shouldn't happen: the
+    // inspection form requires GPS before a visit can even be submitted), is
+    // skipped rather than blocking the publish itself on it.
     const visit = published.approvedVisit;
-    const photoKeys = (visit?.photoStorageKeys ?? []) as string[];
+    // Staged photos are jsonb and may be bare keys (staged before categories)
+    // or {storageKey, category} — normalizeVisitPhotos reads both.
+    const visitPhotos = normalizeVisitPhotos(visit?.photoStorageKeys);
     const gpsLat = visit?.visitGpsLat;
     const gpsLon = visit?.visitGpsLon;
-    if (visit && photoKeys.length > 0 && gpsLat != null && gpsLon != null) {
+    if (visit && visitPhotos.length > 0 && gpsLat != null && gpsLon != null) {
       await this.rlsDb.run(SERVICE_CTX, (db) =>
         db.insert(listingPhotos).values(
-          photoKeys.map((storageKey, i) => ({
+          visitPhotos.map((photo, i) => ({
             listingVersionId: published.version.id,
-            storageKey,
+            storageKey: photo.storageKey,
+            category: photo.category,
+            customLabel: photo.category === 'custom' ? (photo.label ?? null) : null,
+            selfContained: photo.selfContained ?? null,
             capturedBy: visit.inspectorId,
             gpsLat,
             gpsLon,
@@ -830,7 +1022,7 @@ export class OpsService {
         ),
         orderBy: (v, ops) => [ops.desc(v.approvedAt)],
       });
-      const visitPhotoCount = (approvedVisit?.photoStorageKeys as string[] | null)?.length ?? 0;
+      const visitPhotoCount = normalizeVisitPhotos(approvedVisit?.photoStorageKeys).length;
       const photos = listing.currentVersionId
         ? await db
             .select()
@@ -838,7 +1030,16 @@ export class OpsService {
             .where(eq(listingPhotos.listingVersionId, listing.currentVersionId))
             .orderBy(asc(listingPhotos.sortOrder))
         : [];
-      return { listing, property, visitPhotoCount, photos };
+      // The published snapshot, so a lead can open a listing they already
+      // published and read back exactly what went live. publishListing()
+      // rejects a second publish, so without this the form is a dead end:
+      // it offers edits that can only ever come back as a 409.
+      const version = listing.currentVersionId
+        ? ((await db.query.listingVersions.findFirst({
+            where: eq(listingVersions.id, listing.currentVersionId),
+          })) ?? null)
+        : null;
+      return { listing, property, visitPhotoCount, photos, version };
     });
   }
 

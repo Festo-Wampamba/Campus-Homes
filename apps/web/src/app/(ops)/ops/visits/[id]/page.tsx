@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   VERIFICATION_CHECKLIST_COMPONENTS,
+  normalizeVisitPhotos,
   type VerificationChecklistComponent,
 } from "@campushomes/shared";
 
@@ -40,6 +41,10 @@ export default async function VisitDetailPage({
   // stay lead-only actions, the API would 403 an inspector anyway, but there
   // is no reason to render controls they can't legally use.
   const isLead = session?.access.roles.includes("ops_lead") || session?.access.workspaces.includes("admin");
+  // Staged photos are jsonb {storageKey, category} since 0047 (back-compatible
+  // with legacy bare strings) — normalize before rendering, or listingPhotoUrl
+  // calls .startsWith on an object and 500s the whole page.
+  const photos = normalizeVisitPhotos(visit.photoStorageKeys);
 
   const listings = visit.approvedAt && isLead ? await getPropertyListings(visit.propertyId) : [];
   // A landlord-onboarded property has no listing at all, so an approved visit
@@ -91,7 +96,7 @@ export default async function VisitDetailPage({
               component={component}
               label={COMPONENT_LABEL[component]}
               entry={entry}
-              photoStorageKeys={(visit.photoStorageKeys as string[] | null) ?? []}
+              photos={photos}
               corrections={itemCorrections}
               trigger={
                 <Card className="transition-colors hover:bg-muted">

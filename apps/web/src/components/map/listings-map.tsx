@@ -64,6 +64,7 @@ export function ListingsMap({
   selectedId,
   onSelect,
   onBoundsChange,
+  fitToMarkers = false,
   className,
   initialCenter = INITIAL_CENTER,
   initialZoom = INITIAL_ZOOM,
@@ -71,7 +72,12 @@ export function ListingsMap({
   markers: MapMarker[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  // Fires only for user-initiated moves (drag, zoom buttons, gestures) —
+  // never for the initial camera or a fitToMarkers pan, so the caller can
+  // tell "the user chose this area" apart from "the map framed results".
   onBoundsChange: (bounds: MapBounds) => void;
+  // While true, frame every marker whenever the marker set changes.
+  fitToMarkers?: boolean;
   className?: string;
   // Lets a caller open the map centered on a specific campus (browse-by-
   // university) instead of the Makerere default — read once, at mount.
@@ -133,16 +139,12 @@ export function ListingsMap({
       if (el && el.clientWidth > 0 && el.clientHeight > 0) map.resize();
     });
     resizeObserver.observe(containerRef.current);
-    // Bounds come from the camera transform (center/zoom/container size),
-    // available the instant the map is constructed — they don't need tiles
-    // to have finished downloading. Search must never depend on tile-load
-    // success: MapLibre's "load" event specifically waits for the initial
-    // viewport's tiles, so gating the first search on it means one slow or
-    // blocked OSM request (ad-blocker, flaky network) permanently stalls
-    // the results list even though the listings API is fine.
-    onBoundsChangeRef.current(boundsOf(map));
+    // Search never waits on the map: the caller queries its own default area
+    // until the user moves the camera. Programmatic moves (fitBounds) carry
+    // no originalEvent, so they don't count as the user choosing an area.
     let timer: ReturnType<typeof setTimeout>;
-    map.on("moveend", () => {
+    map.on("moveend", (event) => {
+      if (!event.originalEvent) return;
       clearTimeout(timer);
       timer = setTimeout(() => onBoundsChangeRef.current(boundsOf(map)), 350);
     });
@@ -175,6 +177,14 @@ export function ListingsMap({
       markerRefs.current.set(marker.id, m);
     }
   }, [markers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !fitToMarkers || !markers.length) return;
+    const box = new maplibregl.LngLatBounds();
+    for (const marker of markers) box.extend([marker.lon, marker.lat]);
+    map.fitBounds(box, { padding: 64, maxZoom: 15, duration: 0 });
+  }, [fitToMarkers, markers]);
 
   // Selected pin treatment without rebuilding markers
   useEffect(() => {

@@ -44,11 +44,11 @@ jobs:
       TEST_DATABASE_URL: postgresql://campushomes:campushomes_test@localhost:5432/campushomes_test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -75,14 +75,14 @@ jobs:
       - run: pnpm --filter @campushomes/web build
 
       - name: Validate API container builds
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
           push: false
 
       - name: Validate web container builds
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web/Dockerfile

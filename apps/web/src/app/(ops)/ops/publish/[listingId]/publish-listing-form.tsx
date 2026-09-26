@@ -2,18 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Property, RoomCategory } from "@campushomes/shared";
+import { MAX_PUBLISH_UNITS, type Property, type RoomCategory } from "@campushomes/shared";
 
 type PropertyRoom = {
   id: string;
   label: string;
   capacity: number;
   roomCategory: RoomCategory;
+  selfContained: boolean;
   pricePerTermUgx: number | null;
   depositUgx: number | null;
 };
 
 import {
+  bedsPerRoom,
   emptyRoomCategoryRow,
   RoomCategoryRows,
   type RoomCategoryRow,
@@ -22,7 +24,19 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { AMENITY_OPTIONS, ROOM_CATEGORY_DEFAULT_CAPACITY, roomCategoryLabel } from "@/lib/format";
+import { AMENITY_OPTIONS, roomCategoryLabel } from "@/lib/format";
+
+type PublishedVersion = {
+  versionNumber: number;
+  pricePerTermUgx: number;
+  amenities: Record<string, boolean>;
+  description: string | null;
+  verifiedAt: string;
+};
+
+type PublishedPhoto = { id: string; storageKey: string; category: string | null };
+
+type PublishedSnapshot = { version: PublishedVersion; photos: PublishedPhoto[] };
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -43,6 +57,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visitPhotoCount, setVisitPhotoCount] = useState<number | null>(null);
+  // Set once the listing is already live. publishListing() rejects a second
+  // publish, so a verified listing is shown read-only rather than as a form
+  // whose only possible outcome is a 409.
+  const [published, setPublished] = useState<PublishedSnapshot | null>(null);
 
   // Rooms are permanent/property-level (2026-09) — once a property has real
   // rooms, they're what gets pre-filled here (grouped by category+price,
@@ -51,12 +69,25 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   // landlord's proposed categories from onboarding, same as before.
   useEffect(() => {
     let cancelled = false;
-    api<{ listing: { propertyId: string; semesterId: string }; property: Property; visitPhotoCount: number }>(
-      `/ops/listings/${listingId}`,
-    )
-      .then(async ({ listing, property, visitPhotoCount: count }) => {
+    api<{
+      listing: { propertyId: string; semesterId: string; status: string };
+      property: Property;
+      visitPhotoCount: number;
+      version: PublishedVersion | null;
+      photos: PublishedPhoto[];
+    }>(`/ops/listings/${listingId}`)
+      .then(async ({ listing, property, visitPhotoCount: count, version, photos }) => {
         if (cancelled) return;
         setVisitPhotoCount(count);
+        if (listing.status === "verified" && version) {
+          // Re-opening a live listing to edit it: keep the published snapshot
+          // for the banner, pre-fill amenities/description from it, then fall
+          // through to load the rooms so the whole form is editable. Saving
+          // creates a new version and stays verified (photos carried server-side).
+          setPublished({ version, photos });
+          setDescription(version.description ?? "");
+          setAmenities(version.amenities ?? {});
+        }
 
         const rooms = await api<PropertyRoom[]>(
           `/ops/properties/${listing.propertyId}/rooms?semesterId=${listing.semesterId}`,
@@ -66,7 +97,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         if (rooms.length > 0) {
           const groups = new Map<string, RoomCategoryRow>();
           for (const room of rooms) {
-            const key = `${room.roomCategory}-${room.pricePerTermUgx ?? "unpriced"}`;
+            const key = `${room.roomCategory}-${room.capacity}-${room.pricePerTermUgx ?? "unpriced"}-${room.selfContained}`;
             const existing = groups.get(key);
             if (existing) {
               existing.roomCount = String(Number(existing.roomCount) + 1);
@@ -75,10 +106,15 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
               groups.set(key, {
                 key,
                 category: room.roomCategory,
+                // ponytail: existing-room prefill drops any custom label (rare
+                // for 'other' rooms); the lead can retype it. Wire through
+                // PropertyRoom when that becomes a real need.
+                customLabel: "",
                 roomCount: "1",
                 pricePerTermUgx: room.pricePerTermUgx != null ? String(room.pricePerTermUgx) : "",
                 depositUgx: room.depositUgx != null ? String(room.depositUgx) : "",
-                selfContained: false,
+                selfContained: room.selfContained,
+                bedsPerRoom: String(room.capacity),
                 unitIds: [room.id],
               });
             }
@@ -92,10 +128,12 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           property.proposedRoomCategories.map((p) => ({
             key: `prefill-${p.category}-${p.pricePerTermUgx}-${Math.random()}`,
             category: p.category,
+            customLabel: "",
             roomCount: String(p.roomCount),
             pricePerTermUgx: String(p.pricePerTermUgx),
             depositUgx: p.depositUgx != null ? String(p.depositUgx) : "",
             selfContained: p.selfContained ?? false,
+            bedsPerRoom: p.bedsPerRoom != null ? String(p.bedsPerRoom) : undefined,
           })),
         );
       })
@@ -119,6 +157,14 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       return;
     }
 
+    const totalRooms = validRows.reduce((sum, row) => sum + Number(row.roomCount), 0);
+    if (totalRooms > MAX_PUBLISH_UNITS) {
+      setError(
+        `This publish has ${totalRooms} rooms — the maximum per listing is ${MAX_PUBLISH_UNITS}. Reduce the room counts or publish the remaining rooms separately.`,
+      );
+      return;
+    }
+
     setPending(true);
     try {
       const units = validRows.flatMap((row) => {
@@ -133,8 +179,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           // physical details don't change on repricing).
           ...(row.unitIds?.[i] ? { unitId: row.unitIds[i] } : {}),
           label: `${roomCategoryLabel(category)} ${i + 1}`,
-          capacity: ROOM_CATEGORY_DEFAULT_CAPACITY[category] ?? 1,
+          capacity: bedsPerRoom(row),
           roomCategory: category,
+          ...(category === "other" && row.customLabel.trim() ? { roomCategoryLabel: row.customLabel.trim() } : {}),
+          selfContained: row.selfContained,
           pricePerTermUgx: price,
           ...(deposit ? { depositUgx: deposit } : {}),
         }));
@@ -158,7 +206,22 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {visitPhotoCount === 0 && (
+      {published && (
+        <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+          <p className="font-semibold">
+            Editing a live listing — version {published.version.versionNumber} (verified{" "}
+            {new Date(published.version.verifiedAt).toLocaleDateString()})
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Saving creates a new version and the listing stays verified and visible to students.
+            The {published.photos.length} verification photo
+            {published.photos.length === 1 ? "" : "s"} already on it are carried over automatically.
+            Removing a room row (or lowering its count) deletes those rooms — only allowed if they
+            have no reservations.
+          </p>
+        </div>
+      )}
+      {published === null && visitPhotoCount === 0 && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           The inspector didn&apos;t stage any photos on this visit — publishing now
           will go live with no verification photos. You can still publish, but
@@ -174,6 +237,8 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         <RoomCategoryRows
           rows={roomCategoryRows}
           onChange={setRoomCategoryRows}
+          showSelfContained
+          showBeds
           idPrefix="publish-room"
         />
       </div>
@@ -203,7 +268,13 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         />
       </div>
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "Publishing…" : "Publish listing"}
+        {pending
+          ? published
+            ? "Saving…"
+            : "Publishing…"
+          : published
+            ? "Save changes"
+            : "Publish listing"}
       </Button>
       <p role="status" className="min-h-5 text-sm text-destructive">
         {error}

@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Camera, LocateFixed, X } from "lucide-react";
 import {
+  CHECKLIST_ITEMS,
   VERIFICATION_CHECKLIST_COMPONENTS,
   type OpsVisitDetail,
   type VerificationChecklistComponent,
+  PHOTO_CATEGORIES,
+  PHOTO_CATEGORY_LABELS,
+  type PhotoCategory,
+  normalizeVisitPhotos,
 } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -13,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
-import { getDraft, putDraft, type InspectionDraft } from "@/lib/ops/inspection-db";
+import { getDraft, putDraft, type InspectionDraft, type PendingPhoto } from "@/lib/ops/inspection-db";
 import { syncQueuedDrafts } from "@/lib/ops/sync-manager";
 import { CorrectionFixPanel } from "./correction-fix-panel";
 
@@ -36,8 +41,20 @@ function useOnline(): boolean {
 /** Local blob preview for a not-yet-uploaded File — captured offline, so
  * there's no storage URL to point an <img> at yet. Revokes its object URL
  * on unmount so removing/replacing photos doesn't leak them. */
-function PhotoThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const [url] = useState(() => URL.createObjectURL(file));
+function PhotoThumb({
+  photo,
+  onRemove,
+  onCategoryChange,
+  onLabelChange,
+  onSelfContainedChange,
+}: {
+  photo: PendingPhoto;
+  onRemove: () => void;
+  onCategoryChange: (category: PhotoCategory) => void;
+  onLabelChange: (label: string) => void;
+  onSelfContainedChange: (selfContained: boolean) => void;
+}) {
+  const [url] = useState(() => URL.createObjectURL(photo.file));
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return (
     <div className="group relative">
@@ -51,8 +68,55 @@ function PhotoThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
       >
         <X aria-hidden className="size-3" />
       </button>
+      {/* Categorised on site, while the inspector can still see the room —
+          not left for whoever reviews the listing later to guess from a thumbnail. */}
+      <select
+        aria-label="Photo category"
+        value={photo.category}
+        onChange={(e) => onCategoryChange(e.target.value as PhotoCategory)}
+        className="mt-1 w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
+      >
+        {PHOTO_CATEGORIES.map((c) => (
+          <option key={c} value={c}>
+            {PHOTO_CATEGORY_LABELS[c]}
+          </option>
+        ))}
+      </select>
+      {photo.category === "custom" && (
+        <input
+          aria-label="Custom photo label"
+          value={photo.label ?? ""}
+          onChange={(e) => onLabelChange(e.target.value)}
+          maxLength={50}
+          placeholder="Describe the room"
+          className="mt-1 w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
+        />
+      )}
+      {isBedroomCategory(photo.category) && (
+        <label className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={photo.selfContained ?? false}
+            onChange={(e) => onSelfContainedChange(e.target.checked)}
+          />
+          Self-contained
+        </label>
+      )}
     </div>
   );
+}
+
+// Categories that describe a room, where "self-contained" (own bathroom) is a
+// meaningful attribute — the toggle is hidden for non-room photos.
+const BEDROOM_CATEGORIES = new Set<PhotoCategory>([
+  "bedroom",
+  "single_bedroom",
+  "double_bedroom",
+  "triple_bedroom",
+  "quad_bedroom",
+]);
+function isBedroomCategory(category: PhotoCategory): boolean {
+  return BEDROOM_CATEGORIES.has(category);
 }
 
 const COMPONENT_LABEL: Record<VerificationChecklistComponent, string> = {
@@ -66,8 +130,19 @@ const COMPONENT_LABEL: Record<VerificationChecklistComponent, string> = {
 
 function emptyChecklist(): InspectionDraft["checklist"] {
   return Object.fromEntries(
-    VERIFICATION_CHECKLIST_COMPONENTS.map((c) => [c, { passed: null, notes: "" }]),
+    VERIFICATION_CHECKLIST_COMPONENTS.map((c) => [c, { passed: null, notes: "", items: {} }]),
   ) as InspectionDraft["checklist"];
+}
+
+/** A component passes only when every one of its items is marked pass; it fails
+ * if any item is marked fail; it stays undecided (null) until all are marked. */
+export function deriveComponentPassed(
+  component: VerificationChecklistComponent,
+  items: Record<string, boolean>,
+): boolean | null {
+  const keys = CHECKLIST_ITEMS[component].map((i) => i.key);
+  if (keys.some((k) => items[k] === undefined)) return null;
+  return keys.every((k) => items[k] === true);
 }
 
 function newDraft(visitId: string): InspectionDraft {
@@ -98,7 +173,11 @@ function draftFromServer(visitId: string, visit: OpsVisitDetail): InspectionDraf
   const checklist = emptyChecklist();
   for (const component of VERIFICATION_CHECKLIST_COMPONENTS) {
     const entry = visit.checklist[component];
-    checklist[component] = { passed: entry?.passed ?? null, notes: entry?.notes ?? "" };
+    checklist[component] = {
+      passed: entry?.passed ?? null,
+      notes: entry?.notes ?? "",
+      items: entry?.items ?? {},
+    };
   }
   return {
     visitId,
@@ -112,7 +191,10 @@ function draftFromServer(visitId: string, visit: OpsVisitDetail): InspectionDraf
     failureReason: visit.failureReason ?? "",
     syncStatus: "synced",
     photos: [],
-    photoStorageKeys: [],
+    // Carry the already-uploaded photos. A resubmit sends this array as the
+    // visit's whole photo set, so seeding it empty would silently wipe every
+    // photo the inspector captured the first time.
+    photoStorageKeys: normalizeVisitPhotos(visit.photoStorageKeys),
   };
 }
 
@@ -169,12 +251,26 @@ export function InspectionForm({
     }, 300);
   }, []);
 
+  /** Reopens an already-submitted checklist for correction. The new
+   * clientIdempotencyKey is what makes the edit actually land: syncVisit
+   * treats a repeat of the same key as a replayed retry and returns the
+   * stored row untouched, so reusing it would make the resubmit look like it
+   * worked while changing nothing. */
+  function reopenForEdit() {
+    if (!draft) return;
+    persist({ ...draft, syncStatus: "draft", clientIdempotencyKey: crypto.randomUUID() });
+  }
+
   if (!draft) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
   if (draft.syncStatus === "synced") {
     const failed = draft.result === "failed";
+    // The server accepts a resubmit until the lead approves the visit and
+    // rejects it with a 409 afterwards, so the button mirrors that rule
+    // rather than inventing a second one that could drift from it.
+    const approved = Boolean(serverVisit?.approvedAt);
     return (
       <div className="space-y-4">
         <Card>
@@ -183,10 +279,17 @@ export function InspectionForm({
               {failed ? "Synced — failed" : "Synced"}
             </StatusChip>
             <p className="mt-2 text-sm text-muted-foreground">
-              {failed
-                ? "This checklist was submitted and recorded as failed. It can't be approved — a lead needs to schedule a new visit before this property can be verified."
-                : "This checklist has already been submitted and is waiting on lead approval."}
+              {approved
+                ? "A lead has approved this checklist, so it can no longer be changed. Ask a lead to schedule a new visit if something here is wrong."
+                : failed
+                  ? "This checklist was submitted and recorded as failed. It can't be approved — a lead needs to schedule a new visit before this property can be verified. You can still correct it until a lead acts on it."
+                  : "This checklist has already been submitted and is waiting on lead approval. You can still correct it until a lead approves it."}
             </p>
+            {!approved && (
+              <Button type="button" variant="secondary" className="mt-3" onClick={reopenForEdit}>
+                Edit submission
+              </Button>
+            )}
           </CardContent>
         </Card>
         {serverVisit && (
@@ -219,8 +322,102 @@ export function InspectionForm({
     });
   }
 
+  function setChecklistItem(
+    component: VerificationChecklistComponent,
+    itemKey: string,
+    passed: boolean,
+  ) {
+    const items = { ...currentDraft.checklist[component].items, [itemKey]: passed };
+    persist({
+      ...currentDraft,
+      checklist: {
+        ...currentDraft.checklist,
+        [component]: {
+          ...currentDraft.checklist[component],
+          items,
+          // Section pass/fail is derived, never set directly.
+          passed: deriveComponentPassed(component, items),
+        },
+      },
+    });
+  }
+
   function addPhotos(files: File[]) {
-    persist({ ...currentDraft, photos: [...currentDraft.photos, ...files] });
+    // Defaults to 'bedroom' — the category an inspector shoots most — and is
+    // changeable per photo below, so capture is never blocked on a dropdown.
+    const added = files.map((file) => ({ file, category: "bedroom" as PhotoCategory }));
+    persist({ ...currentDraft, photos: [...currentDraft.photos, ...added] });
+  }
+
+  function setUploadedPhotoCategory(index: number, category: PhotoCategory) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index
+          ? {
+              ...p,
+              category,
+              ...(category === "custom" ? {} : { label: undefined }),
+              ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+            }
+          : p,
+      ),
+    });
+  }
+
+  function setUploadedPhotoSelfContained(index: number, selfContained: boolean) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index ? { ...p, selfContained } : p,
+      ),
+    });
+  }
+
+  function setUploadedPhotoLabel(index: number, label: string) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index ? { ...p, label } : p,
+      ),
+    });
+  }
+
+  function removeUploadedPhoto(index: number) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.filter((_, i) => i !== index),
+    });
+  }
+
+  function setPhotoCategory(index: number, category: PhotoCategory) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) =>
+        i === index
+          ? {
+              ...p,
+              category,
+              ...(category === "custom" ? {} : { label: undefined }),
+              ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+            }
+          : p,
+      ),
+    });
+  }
+
+  function setPhotoSelfContained(index: number, selfContained: boolean) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) => (i === index ? { ...p, selfContained } : p)),
+    });
+  }
+
+  function setPhotoLabel(index: number, label: string) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) => (i === index ? { ...p, label } : p)),
+    });
   }
 
   function removePhoto(index: number) {
@@ -360,39 +557,126 @@ export function InspectionForm({
             <CardContent className="space-y-3 p-5">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-semibold text-foreground">{COMPONENT_LABEL[component]}</p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={entry.passed === true ? "primary" : "secondary"}
-                    onClick={() => setComponent(component, { passed: true })}
-                  >
-                    Pass
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={entry.passed === false ? "destructive" : "secondary"}
-                    onClick={() => setComponent(component, { passed: false })}
-                  >
-                    Fail
-                  </Button>
-                </div>
+                <span
+                  className={
+                    entry.passed === true
+                      ? "rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700"
+                      : entry.passed === false
+                        ? "rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
+                        : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+                  }
+                >
+                  {entry.passed === true
+                    ? "Passed"
+                    : entry.passed === false
+                      ? "Failed"
+                      : `${CHECKLIST_ITEMS[component].filter((i) => entry.items[i.key] !== undefined).length}/${CHECKLIST_ITEMS[component].length}`}
+                </span>
               </div>
+              <ul className="space-y-1.5">
+                {CHECKLIST_ITEMS[component].map((item) => {
+                  const mark = entry.items[item.key];
+                  return (
+                    <li key={item.key} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-foreground">{item.label}</span>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mark === true ? "primary" : "secondary"}
+                          onClick={() => setChecklistItem(component, item.key, true)}
+                        >
+                          Pass
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mark === false ? "destructive" : "secondary"}
+                          onClick={() => setChecklistItem(component, item.key, false)}
+                        >
+                          Fail
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
               <Textarea
-                placeholder="Notes (optional)"
+                placeholder="Notes — only if the items above don't capture what you saw"
                 value={entry.notes}
                 onChange={(e) => setComponent(component, { notes: e.target.value })}
               />
               {component === "photos" && (
                 <div className="space-y-2">
+                  {/* Photos uploaded on an earlier submission. Shown so a
+                      reopened checklist can be genuinely reviewed rather than
+                      only added to — a resubmit sends this list as the visit's
+                      whole photo set, so a wrong one has to be removable. */}
+                  {draft.photoStorageKeys.length > 0 && (
+                    <ul className="space-y-1">
+                      {draft.photoStorageKeys.map((photo, i) => (
+                        <li
+                          key={photo.storageKey}
+                          className="flex items-center gap-2 rounded-md border border-input px-2 py-1 text-xs"
+                        >
+                          <span className="flex-1 truncate text-muted-foreground">
+                            {photo.storageKey}
+                          </span>
+                          <select
+                            aria-label={`Category for uploaded photo ${i + 1}`}
+                            value={photo.category}
+                            onChange={(e) => setUploadedPhotoCategory(i, e.target.value as PhotoCategory)}
+                            className="rounded border border-input bg-background px-1 py-0.5 text-xs"
+                          >
+                            {PHOTO_CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {PHOTO_CATEGORY_LABELS[c]}
+                              </option>
+                            ))}
+                          </select>
+                          {photo.category === "custom" && (
+                            <input
+                              aria-label={`Custom label for uploaded photo ${i + 1}`}
+                              value={photo.label ?? ""}
+                              onChange={(e) => setUploadedPhotoLabel(i, e.target.value)}
+                              maxLength={50}
+                              placeholder="Describe the room"
+                              className="w-28 rounded border border-input bg-background px-1 py-0.5 text-xs"
+                            />
+                          )}
+                          {isBedroomCategory(photo.category) && (
+                            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                aria-label={`Uploaded photo ${i + 1} self-contained`}
+                                checked={photo.selfContained ?? false}
+                                onChange={(e) => setUploadedPhotoSelfContained(i, e.target.checked)}
+                              />
+                              Self-contained
+                            </label>
+                          )}
+                          <button
+                            type="button"
+                            aria-label={`Remove uploaded photo ${i + 1}`}
+                            onClick={() => removeUploadedPhoto(i)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X aria-hidden className="size-3" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {draft.photos.length > 0 && (
                     <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                      {draft.photos.map((file, i) => (
+                      {draft.photos.map((photo, i) => (
                         <PhotoThumb
-                          key={`${file.name}-${file.lastModified}-${i}`}
-                          file={file}
+                          key={`${photo.file.name}-${photo.file.lastModified}-${i}`}
+                          photo={photo}
                           onRemove={() => removePhoto(i)}
+                          onCategoryChange={(category) => setPhotoCategory(i, category)}
+                          onLabelChange={(label) => setPhotoLabel(i, label)}
+                          onSelfContainedChange={(selfContained) => setPhotoSelfContained(i, selfContained)}
                         />
                       ))}
                     </div>

@@ -92,11 +92,9 @@ export const reservations = pgTable(
 export const reservationReleases = pgTable('reservation_releases', {
   id: uuid('id').primaryKey().defaultRandom(),
   reservationId: uuid('reservation_id')
-    .notNull()
-    .references(() => reservations.id, { onDelete: 'restrict' }),
+    .references(() => reservations.id, { onDelete: 'set null' }),
   releasedBy: uuid('released_by')
-    .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'set null' }),
   reason: text('reason').notNull(),
   // Automated refund execution is a later phase (§16 of the redesign doc) —
   // this just preserves the information a future refund workflow will need.
@@ -160,7 +158,7 @@ export const moveIns = pgTable(
     noShow: boolean('no_show').notNull().default(false),
     landlordFailureFlag: boolean('landlord_failure_flag').notNull().default(false),
     landlordFailureReason: text('landlord_failure_reason'),
-    opsVerifiedBy: uuid('ops_verified_by').references(() => opsStaff.userId),
+    opsVerifiedBy: uuid('ops_verified_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('move_ins_reservation_uk').on(t.reservationId)],

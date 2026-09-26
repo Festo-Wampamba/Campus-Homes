@@ -167,7 +167,7 @@ export const propertyDocuments = pgTable('property_documents', {
     .notNull()
     .references(() => users.id),
   uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
-  verifiedBy: uuid('verified_by').references(() => opsStaff.userId),
+  verifiedBy: uuid('verified_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
 });
 
@@ -178,9 +178,10 @@ export const verificationVisits = pgTable(
     propertyId: uuid('property_id')
       .notNull()
       .references(() => properties.id, { onDelete: 'restrict' }),
-    inspectorId: uuid('inspector_id')
-      .notNull()
-      .references(() => opsStaff.userId),
+    // Nullable + ON DELETE SET NULL (0046): a purged inspector's past visits
+    // survive as history with the actor anonymized, rather than blocking the
+    // staff delete.
+    inspectorId: uuid('inspector_id').references(() => opsStaff.userId, { onDelete: 'set null' }),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -199,7 +200,7 @@ export const verificationVisits = pgTable(
     clientIdempotencyKey: text('client_idempotency_key').notNull(),
     result: visitResult('result').notNull().default('pending'),
     failureReason: text('failure_reason'),
-    approvedBy: uuid('approved_by').references(() => opsStaff.userId),
+    approvedBy: uuid('approved_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -222,9 +223,7 @@ export const visitCorrections = pgTable('visit_corrections', {
   component: text('component').notNull(),
   message: text('message').notNull(),
   status: text('status').notNull().default('open'),
-  raisedBy: uuid('raised_by')
-    .notNull()
-    .references(() => opsStaff.userId),
+  raisedBy: uuid('raised_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
   raisedAt: timestamp('raised_at', { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
 });

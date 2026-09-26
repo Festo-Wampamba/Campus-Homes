@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { VerificationChecklistComponent, VisitCorrection } from "@campushomes/shared";
+import { CHECKLIST_ITEMS, photoCategoryDisplay, type VerificationChecklistComponent, type VisitCorrection, type VisitPhoto } from "@campushomes/shared";
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -25,15 +25,15 @@ export function ChecklistItemDialog({
   component,
   label,
   entry,
-  photoStorageKeys,
+  photos,
   corrections,
   trigger,
 }: {
   visitId: string;
   component: VerificationChecklistComponent;
   label: string;
-  entry: { passed: boolean; notes?: string } | undefined;
-  photoStorageKeys: string[];
+  entry: { passed: boolean; notes?: string; items?: Record<string, boolean> } | undefined;
+  photos: VisitPhoto[];
   corrections: VisitCorrection[];
   trigger: React.ReactNode;
 }) {
@@ -79,6 +79,22 @@ export function ChecklistItemDialog({
               </StatusChip>
             </div>
           )}
+          {entry?.items && Object.keys(entry.items).length > 0 && (
+            <ul className="space-y-1">
+              {CHECKLIST_ITEMS[component].map((item) => {
+                const mark = entry.items?.[item.key];
+                if (mark === undefined) return null;
+                return (
+                  <li key={item.key} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-foreground">{item.label}</span>
+                    <StatusChip tone={mark ? "success" : "destructive"}>
+                      {mark ? "Pass" : "Fail"}
+                    </StatusChip>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           {entry?.notes && <p className="text-sm text-foreground">{entry.notes}</p>}
           {!entry?.notes && (
             <p className="text-sm text-muted-foreground">No notes recorded by the inspector.</p>
@@ -87,22 +103,23 @@ export function ChecklistItemDialog({
           {component === "photos" && (
             <div>
               <p className="mb-2 text-sm font-semibold text-foreground">Photos</p>
-              {photoStorageKeys.length === 0 ? (
+              {photos.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No photos captured.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {photoStorageKeys.map((key) => {
-                    const url = listingPhotoUrl(key, 400);
+                  {photos.map((photo) => {
+                    const url = listingPhotoUrl(photo.storageKey, 400);
                     return (
-                      <div key={key} className="overflow-hidden rounded-md border border-border">
+                      <div key={photo.storageKey} className="overflow-hidden rounded-md border border-border">
                         {url ? (
                           // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                          <img src={url} alt="" className="aspect-square w-full object-cover" />
+                          <img src={url} alt={photo.category} className="aspect-square w-full object-cover" />
                         ) : (
                           <div className="grid aspect-square place-items-center bg-muted text-xs text-muted-foreground">
                             No preview
                           </div>
                         )}
+                        <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground">{photoCategoryDisplay(photo)}</p>
                       </div>
                     );
                   })}

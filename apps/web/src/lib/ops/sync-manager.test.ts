@@ -8,12 +8,12 @@ function queuedDraft(visitId: string): InspectionDraft {
     visitId,
     clientIdempotencyKey: `key-${visitId}`,
     checklist: {
-      location_gps: { passed: true, notes: "" },
-      rooms_capacity: { passed: true, notes: "" },
-      amenities: { passed: true, notes: "" },
-      photos: { passed: true, notes: "" },
-      landlord_identity: { passed: true, notes: "" },
-      safety: { passed: true, notes: "" },
+      location_gps: { passed: true, notes: "", items: {} },
+      rooms_capacity: { passed: true, notes: "", items: {} },
+      amenities: { passed: true, notes: "", items: {} },
+      photos: { passed: true, notes: "", items: {} },
+      landlord_identity: { passed: true, notes: "", items: {} },
+      safety: { passed: true, notes: "", items: {} },
     },
     visitGpsLat: 0.33,
     visitGpsLon: 32.57,
@@ -114,7 +114,7 @@ describe("syncQueuedDrafts", () => {
 
   it("uploads pending photos to Cloudinary before syncing, and stages the resulting key", async () => {
     const photo = new File(["fake-bytes"], "room.jpg", { type: "image/jpeg" });
-    await putDraft({ ...queuedDraft("visit-with-photo"), photos: [photo] });
+    await putDraft({ ...queuedDraft("visit-with-photo"), photos: [{ file: photo, category: "bedroom" as const }] });
 
     const fetchMock = jest.fn(async (url: string) => {
       if (url.includes("/uploads/sign")) {
@@ -144,17 +144,17 @@ describe("syncQueuedDrafts", () => {
     const updated = await getDraft("visit-with-photo");
     expect(updated?.syncStatus).toBe("synced");
     expect(updated?.photos).toEqual([]);
-    expect(updated?.photoStorageKeys).toEqual(["uploaded-photo-key"]);
+    expect(updated?.photoStorageKeys).toEqual([{ storageKey: "uploaded-photo-key", category: "bedroom" }]);
 
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
     const syncCall = calls.find(([url]) => url.includes("/ops/visits/sync"));
     const body = JSON.parse(syncCall?.[1]?.body as string);
-    expect(body.photoStorageKeys).toEqual(["uploaded-photo-key"]);
+    expect(body.photoStorageKeys).toEqual([{ storageKey: "uploaded-photo-key", category: "bedroom" }]);
   });
 
   it("leaves already-uploaded photos staged when the sync POST itself fails", async () => {
     const photo = new File(["fake-bytes"], "room.jpg", { type: "image/jpeg" });
-    await putDraft({ ...queuedDraft("visit-photo-sync-fails"), photos: [photo] });
+    await putDraft({ ...queuedDraft("visit-photo-sync-fails"), photos: [{ file: photo, category: "bedroom" as const }] });
 
     global.fetch = jest.fn(async (url: string) => {
       if (url.includes("/uploads/sign")) {
@@ -185,6 +185,6 @@ describe("syncQueuedDrafts", () => {
     // next attempt since it already moved into photoStorageKeys.
     expect(updated?.syncStatus).toBe("queued");
     expect(updated?.photos).toEqual([]);
-    expect(updated?.photoStorageKeys).toEqual(["uploaded-photo-key"]);
+    expect(updated?.photoStorageKeys).toEqual([{ storageKey: "uploaded-photo-key", category: "bedroom" }]);
   });
 });

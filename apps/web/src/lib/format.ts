@@ -19,16 +19,6 @@ export function roomCategoryLabel(category: string): string {
   return ROOM_CATEGORY_LABELS[category] ?? category;
 }
 
-// Default sleeping capacity implied by a category — lets Ops skip a redundant
-// "how many people" field for the standard types.
-export const ROOM_CATEGORY_DEFAULT_CAPACITY: Record<string, number> = {
-  single: 1,
-  double: 2,
-  triple: 3,
-  quad: 4,
-  other: 1,
-};
-
 // A listing rarely has one price — this is the "from X" / "X–Y" line every
 // card and pin uses instead of implying a single flat rate.
 export function formatPriceRange(minUgx: number, maxUgx: number): string {

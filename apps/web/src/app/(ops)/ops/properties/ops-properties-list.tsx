@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Images, Search } from "lucide-react";
+import { Images, Search, SquarePen } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
@@ -60,13 +60,22 @@ export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
               <div className="flex shrink-0 items-center gap-3">
                 <StatusChip tone={row.status === "active" ? "success" : "neutral"}>{row.status}</StatusChip>
                 {row.listingId && (
-                  <Link
-                    href={`/ops/listings/${row.listingId}/photos`}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-                  >
-                    <Images aria-hidden className="size-4" />
-                    Photos
-                  </Link>
+                  <>
+                    <Link
+                      href={`/ops/publish/${row.listingId}`}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      <SquarePen aria-hidden className="size-4" />
+                      View / edit listing
+                    </Link>
+                    <Link
+                      href={`/ops/listings/${row.listingId}/photos`}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      <Images aria-hidden className="size-4" />
+                      Photos
+                    </Link>
+                  </>
                 )}
                 <button
                   type="button"

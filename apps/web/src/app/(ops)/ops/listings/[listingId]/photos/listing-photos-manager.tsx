@@ -59,7 +59,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
     try {
       const storageKeys: string[] = [];
       for (const file of files) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
         const { publicId } = await uploadToCloudinary(file, sig);
         storageKeys.push(publicId);
       }

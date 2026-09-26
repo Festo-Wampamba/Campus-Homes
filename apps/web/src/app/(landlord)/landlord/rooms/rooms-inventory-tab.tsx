@@ -150,6 +150,10 @@ export function RoomsInventoryTab({
       setSrError("Room code is required.");
       return;
     }
+    if (!srTypeId) {
+      setSrError("Select a room type first — create one in the Room Types tab before adding physical rooms.");
+      return;
+    }
 
     setSrSubmitting(true);
     setSrError(null);
@@ -416,7 +420,7 @@ export function RoomsInventoryTab({
           {rooms.length === 0 && (
             <div className="mt-5 flex justify-center gap-3">
               <Button variant="secondary" onClick={openAddSingleRoom}>
-                Add Single Room
+                Add Room
               </Button>
               <Button onClick={() => setBulkDialogOpen(true)}>
                 Bulk Generate Rooms
@@ -707,7 +711,7 @@ export function RoomsInventoryTab({
       <Dialog open={singleRoomDialogOpen} onOpenChange={setSingleRoomDialogOpen} size="sm">
         <form onSubmit={handleSingleRoomSubmit} className="flex flex-col h-full">
           <DialogHeader
-            title={editingRoom ? `Edit Room ${editingRoom.roomCode}` : "Add Single Room"}
+            title={editingRoom ? `Edit Room ${editingRoom.roomCode}` : "Add Room"}
             description="Create or modify a physical room code and associate it with a room type specification."
             onClose={() => setSingleRoomDialogOpen(false)}
           />
@@ -737,8 +741,12 @@ export function RoomsInventoryTab({
                 id="sr-type"
                 value={srTypeId}
                 onChange={(e) => setSrTypeId(e.target.value)}
-                className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                disabled={roomTypes.length === 0}
+                className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
+                <option value="" disabled>
+                  {roomTypes.length === 0 ? "No room types yet" : "Select a room type…"}
+                </option>
                 {roomTypes.map((rt) => {
                   const t = rt.currentVersion?.title ?? rt.pendingVersion?.title ?? "Room";
                   return (
@@ -748,6 +756,11 @@ export function RoomsInventoryTab({
                   );
                 })}
               </select>
+              {roomTypes.length === 0 && (
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Create a room type in the <span className="font-medium text-foreground">Room Types</span> tab first — a physical room must be linked to one.
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -781,7 +794,7 @@ export function RoomsInventoryTab({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={srSubmitting}>
+            <Button type="submit" disabled={srSubmitting || (!editingRoom && roomTypes.length === 0)}>
               {editingRoom ? "Save Changes" : "Create Room"}
             </Button>
           </DialogFooter>

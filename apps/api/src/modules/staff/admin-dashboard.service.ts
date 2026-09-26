@@ -63,49 +63,81 @@ export class AdminDashboardService {
 
   overview() {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      // Split off the payment revenue sums: payments (and refunds) carry
-      // deeply nested RLS policies (reservations→beds→units→properties→
-      // listings, each recursively policied), so the planner expands 200+
-      // subplans per scan. Three revenue sums plus refunds in one statement
-      // combined into a plan that took >15s to build and timed the endpoint
-      // out. Keeping at most one RLS-heavy table per statement holds each
-      // query near ~1s.
-      const summary = await client.query<{
+      // Every RLS-heavy table gets its OWN statement. payments/refunds/
+      // reservations/listings/etc. carry deeply nested RLS policies
+      // (reservations→beds→units→properties→listings, each recursively
+      // policied), so the planner expands 200+ subplans per scan. Combining
+      // many such counts into one SELECT is catastrophic — the 14-subquery
+      // summary this replaces executed in ~39s on production (one table per
+      // statement, same counts, runs in ~2.6s). Per-table windows use FILTER
+      // so each table is scanned once. Keep at most one RLS-heavy table per
+      // statement — never re-merge these into a single SELECT.
+      const [userRow] = (await client.query<{
         totalUsers: string;
         activeUsers: string;
         newUsers30d: string;
         priorUsers30d: string;
-        properties: string;
-        verifiedListings: string;
+      }>(`
+        SELECT
+          count(*) FILTER (WHERE deleted_at IS NULL)::text AS "totalUsers",
+          count(*) FILTER (WHERE status = 'active' AND deleted_at IS NULL)::text AS "activeUsers",
+          count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= now() - interval '30 days')::text AS "newUsers30d",
+          count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorUsers30d"
+        FROM users
+      `)).rows;
+      const [propertyRow] = (await client.query<{ properties: string }>(
+        `SELECT count(*)::text AS properties FROM properties`,
+      )).rows;
+      const [listingRow] = (await client.query<{ verifiedListings: string }>(
+        `SELECT count(*)::text AS "verifiedListings" FROM listings WHERE status = 'verified'`,
+      )).rows;
+      const [reservationRow] = (await client.query<{
         reservations: string;
         reservations30d: string;
         priorReservations30d: string;
-        pendingKyc: string;
-        pendingVisits: string;
-        pendingRoomChanges: string;
-        pendingRefunds: string;
-        failedNotifications: string;
       }>(`
         SELECT
-          (SELECT count(*) FROM users)::text AS "totalUsers",
-          (SELECT count(*) FROM users WHERE status = 'active')::text AS "activeUsers",
-          (SELECT count(*) FROM users WHERE created_at >= now() - interval '30 days')::text AS "newUsers30d",
-          (SELECT count(*) FROM users WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorUsers30d",
-          (SELECT count(*) FROM properties)::text AS properties,
-          (SELECT count(*) FROM listings WHERE status = 'verified')::text AS "verifiedListings",
-          (SELECT count(*) FROM reservations)::text AS reservations,
-          (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '30 days')::text AS "reservations30d",
-          (SELECT count(*) FROM reservations WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorReservations30d",
-          (SELECT count(*) FROM landlords l JOIN users u ON u.id=l.user_id
-            WHERE l.kyc_status='pending' AND u.status='active' AND u.deleted_at IS NULL
-              AND EXISTS (SELECT 1 FROM properties p WHERE p.landlord_id=l.user_id))::text AS "pendingKyc",
-          (SELECT count(*) FROM verification_visits
-            WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL))::text AS "pendingVisits",
-          (SELECT count(*) FROM room_inventory_change_sets
-            WHERE status IN ('pending_review', 'visit_required'))::text AS "pendingRoomChanges",
-          (SELECT count(*) FROM refunds WHERE status = 'pending')::text AS "pendingRefunds",
-          (SELECT count(*) FROM notifications WHERE status = 'failed')::text AS "failedNotifications"
-      `);
+          count(*)::text AS reservations,
+          count(*) FILTER (WHERE created_at >= now() - interval '30 days')::text AS "reservations30d",
+          count(*) FILTER (WHERE created_at >= now() - interval '60 days' AND created_at < now() - interval '30 days')::text AS "priorReservations30d"
+        FROM reservations
+      `)).rows;
+      const [kycRow] = (await client.query<{ pendingKyc: string }>(`
+        SELECT count(*)::text AS "pendingKyc"
+        FROM landlords l JOIN users u ON u.id = l.user_id
+        WHERE l.kyc_status = 'pending' AND u.status = 'active' AND u.deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM properties p WHERE p.landlord_id = l.user_id)
+      `)).rows;
+      const [visitsRow] = (await client.query<{ pendingVisits: string }>(`
+        SELECT count(*)::text AS "pendingVisits"
+        FROM verification_visits
+        WHERE result = 'pending' OR result = 'failed' OR (result = 'passed' AND approved_at IS NULL)
+      `)).rows;
+      const [roomChangeRow] = (await client.query<{ pendingRoomChanges: string }>(`
+        SELECT count(*)::text AS "pendingRoomChanges"
+        FROM room_inventory_change_sets WHERE status IN ('pending_review', 'visit_required')
+      `)).rows;
+      const [refundRow] = (await client.query<{ pendingRefunds: string }>(
+        `SELECT count(*)::text AS "pendingRefunds" FROM refunds WHERE status = 'pending'`,
+      )).rows;
+      const [notificationRow] = (await client.query<{ failedNotifications: string }>(
+        `SELECT count(*)::text AS "failedNotifications" FROM notifications WHERE status = 'failed'`,
+      )).rows;
+      const summary = {
+        rows: [
+          {
+            ...userRow!,
+            ...propertyRow!,
+            ...listingRow!,
+            ...reservationRow!,
+            ...kycRow!,
+            ...visitsRow!,
+            ...roomChangeRow!,
+            ...refundRow!,
+            ...notificationRow!,
+          },
+        ],
+      };
 
       // Payment revenue on its own statement, all three windows in one scan.
       const revenue = await client.query<{
@@ -121,17 +153,36 @@ export class AdminDashboardService {
         FROM payments WHERE status = 'succeeded'
       `);
 
+      // Group each table by month ONCE, then left-join to the month series —
+      // the correlated per-month subqueries this replaces re-evaluated the
+      // RLS-heavy reservations policy 6× (once per month), ~7.7s on prod;
+      // one grouped scan per table is ~0.9s. Same rule as the summary split.
       const growth = await client.query<{ month: string; users: string; reservations: string }>(`
         WITH months AS (
           SELECT generate_series(
             date_trunc('month', now()) - interval '5 months',
             date_trunc('month', now()), interval '1 month'
           ) AS month
+        ),
+        u AS (
+          SELECT date_trunc('month', created_at) AS month, count(*) AS c
+          FROM users
+          WHERE deleted_at IS NULL AND created_at >= date_trunc('month', now()) - interval '5 months'
+          GROUP BY 1
+        ),
+        r AS (
+          SELECT date_trunc('month', created_at) AS month, count(*) AS c
+          FROM reservations
+          WHERE created_at >= date_trunc('month', now()) - interval '5 months'
+          GROUP BY 1
         )
         SELECT to_char(m.month, 'Mon') AS month,
-          (SELECT count(*) FROM users u WHERE u.created_at >= m.month AND u.created_at < m.month + interval '1 month')::text AS users,
-          (SELECT count(*) FROM reservations r WHERE r.created_at >= m.month AND r.created_at < m.month + interval '1 month')::text AS reservations
-        FROM months m ORDER BY m.month
+          coalesce(u.c, 0)::text AS users,
+          coalesce(r.c, 0)::text AS reservations
+        FROM months m
+        LEFT JOIN u ON u.month = m.month
+        LEFT JOIN r ON r.month = m.month
+        ORDER BY m.month
       `);
 
       const reservationStatus = await client.query<{ status: string; count: string }>(`

@@ -47,9 +47,7 @@ export const landlordStrikes = pgTable('landlord_strikes', {
   reason: strikeReason('reason').notNull(),
   reservationId: uuid('reservation_id').references(() => reservations.id),
   description: text('description').notNull(),
-  issuedBy: uuid('issued_by')
-    .notNull()
-    .references(() => opsStaff.userId),
+  issuedBy: uuid('issued_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
   issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -61,9 +59,7 @@ export const studentFlags = pgTable('student_flags', {
   reason: studentFlagReason('reason').notNull(),
   reservationId: uuid('reservation_id').references(() => reservations.id),
   description: text('description').notNull(),
-  issuedBy: uuid('issued_by')
-    .notNull()
-    .references(() => opsStaff.userId),
+  issuedBy: uuid('issued_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
   issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

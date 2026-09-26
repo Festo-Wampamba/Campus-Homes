@@ -40,6 +40,18 @@ export class StaffController {
     return this.staffService.retryInvitation(rlsCtx(req), req.permissions, req.assignments, id);
   }
 
+  @Patch('invitations/:id')
+  @RequirePermission('staff.invite')
+  updateInvitation(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: InviteStaffDto) {
+    return this.staffService.updateInvitation(rlsCtx(req), req.permissions, req.assignments, id, body);
+  }
+
+  @Delete('invitations/:id/permanent')
+  @RequirePermission('staff.invite')
+  deleteInvitation(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.staffService.deleteInvitation(rlsCtx(req), req.permissions, req.assignments, id);
+  }
+
   @Delete('invitations/:id')
   @RequirePermission('staff.invite')
   cancelInvitation(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {

@@ -1,5 +1,15 @@
 import type { Env } from '../../config/env';
 
+/** Logto rejected a primary-email update because the address is already in
+ * use by another Logto identity (HTTP 422). Kept Nest-free so the client
+ * stays framework-agnostic; callers map it to a ConflictException. */
+export class LogtoEmailConflictError extends Error {
+  constructor() {
+    super('That email is already in use by another account');
+    this.name = 'LogtoEmailConflictError';
+  }
+}
+
 /**
  * Thin wrapper around Logto's Management API for provisioning — creating
  * users, setting passwords, and issuing one-time-token magic links. Auths
@@ -69,6 +79,22 @@ export class LogtoManagementClient {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  }
+
+  /** Sets the identity's sign-in email at Logto (the source of truth for
+   * email/password and magic-link sign-in). Only call once the caller has
+   * proven ownership of the address — a management PATCH is trusted by Logto
+   * and marks the email verified. A 422 means it is already on another
+   * identity. */
+  async updatePrimaryEmail(logtoUserId: string, email: string): Promise<void> {
+    const token = await this.getToken();
+    const res = await fetch(`${this.env.LOGTO_ENDPOINT}/api/users/${logtoUserId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primaryEmail: email }),
+    });
+    if (res.status === 422) throw new LogtoEmailConflictError();
+    if (!res.ok) throw new Error(`Logto Management API PATCH user failed: HTTP ${res.status}`);
   }
 
   async setPassword(logtoUserId: string, password: string): Promise<void> {
