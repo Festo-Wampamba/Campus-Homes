@@ -17,7 +17,7 @@ import {
   serializePropertyExtendedFields,
   type PropertyExtendedFieldsValue,
 } from "@/components/property-extended-fields";
-import { RoomCategoryRows, emptyRoomCategoryRow, type RoomCategoryRow } from "@/components/room-category-rows";
+import { RoomCategoryRows, bedsPerRoom, emptyRoomCategoryRow, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,7 @@ function roomRowsFromProperty(property: Property | null): RoomCategoryRow[] {
     pricePerTermUgx: String(row.pricePerTermUgx),
     depositUgx: row.depositUgx != null ? String(row.depositUgx) : "",
     selfContained: row.selfContained ?? false,
+    bedsPerRoom: row.bedsPerRoom != null ? String(row.bedsPerRoom) : undefined,
   }));
 }
 
@@ -145,7 +146,7 @@ function PropertyForm({
     try {
       let newCoverPhotoKey: string | undefined;
       if (coverPhotoFile) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: coverPhotoFile.type }) });
         const { publicId } = await uploadToCloudinary(coverPhotoFile, sig);
         newCoverPhotoKey = publicId;
       }
@@ -157,6 +158,7 @@ function PropertyForm({
         roomCount: Number(row.roomCount),
         pricePerTermUgx: Number(row.pricePerTermUgx),
         selfContained: row.selfContained,
+        bedsPerRoom: bedsPerRoom(row),
         ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
       }));
       // Derived from the rows above, not entered separately — see the
@@ -310,6 +312,7 @@ function PropertyForm({
               onChange={setRoomCategoryRows}
               idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
               showSelfContained
+              showBeds
             />
           </div>
           <div className="space-y-1.5">

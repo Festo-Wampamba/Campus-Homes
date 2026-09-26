@@ -845,3 +845,277 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     too. Anyone re-provisioning a local Logto tenant from scratch needs to
     register the web-origin callback URL (not the API port) AND the exact
     `/sign-in` post-logout URL, on both the staff and consumer applications.
+
+- **Production cutover — brought prod from `e2b4a5b`/37-migrations up to
+  `634aea3`/54, + media + FORCE RLS + backups (2026-09-21):** prod had drifted
+  far behind staging. The old session summary overstated what was missing —
+  live VPS inventory showed prod was already hardened on most axes: role
+  separation done (`campushomes_app`, `rolsuper=f`/`rolbypassrls=f`, `IN ROLE
+  app_user`), Redis `requirepass` set, Logto fully live (container + full env,
+  auth migrations 0035/0036 already applied — the 4 prod users are Logto-era,
+  **no auth reset needed**), and WEB_ORIGIN/AUTH_*/ALLOW_INDEXING/Cloudinary/
+  Resend/Google/Africa's-Talking all present. Data: 4 users, 0 reservations =
+  effectively pre-launch, downtime free.
+  - **Root cause of stuck-at-37: prod API had no `DATABASE_MIGRATIONS_URL`.**
+    The image only self-migrates when it's set (same as staging). Added it to
+    the prod-API Dokploy stored env (superuser `campushomes` conn; rotated the
+    superuser password fresh via trusted-local `ALTER ROLE` so no encoding/
+    secret-in-chat — nothing else connects as `campushomes` over TCP).
+  - Structural fact that shaped the path: **prod's old image (`e2b4a5b`)
+    doesn't contain migration files 0037–0054**, so its migrator can't catch
+    up. Chose self-migrate-on-deploy (Path A): the *new* image boots,
+    self-migrates 37→54 with correct drizzle journal, then serves. Triggered
+    via `gh workflow run CI --ref main` (the `deploy-production` job is
+    `workflow_dispatch`-gated; **note it has no `needs: ci`** — deploys in
+    parallel with the test job, gated only by `environment: production`; fine
+    here since `634aea3` was already CI-green and live on staging).
+  - **The health gate only proves the image is serving** (commit from build
+    arg); `migrate.js` is non-fatal (`;` not `&&`), so it does NOT prove
+    migration succeeded — verified `drizzle.__drizzle_migrations` independently:
+    `/health` reported `schema: applied 54 / expected 54, ledgerPresent true`,
+    API + web both `634aea3`. Pre-migration backup taken first
+    (`pg_dump -Fc`, `pg_restore --list`-verified, 710 objects) as the rollback.
+  - **Media: dropped Cloudinary for new uploads, moved to a new public B2
+    bucket `campushomes-media-production`** (own scoped app key), separate from
+    staging's `campushomes-media-staging` — media is user content, a clean prod
+    bucket is cheap unlike the still-shared DB/Logto. Set the 5 `B2_*` vars on
+    prod-API. `CLOUDINARY_URL` ended up dropped from prod env during the edit —
+    harmless: new uploads pick B2 (the adapter selects B2 whenever `B2_S3_*` is
+    present), and legacy Cloudinary media renders web-side via
+    `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`, not the API's `CLOUDINARY_URL`.
+    next.config uses path-style B2 URLs
+    (`s3.<region>.backblazeb2.com/<bucket>/**`) so the image host is constant
+    across buckets; with no B2 build-args it falls back to a broad
+    `**.backblazeb2.com` allow, which renders the new bucket fine.
+  - **FORCE RLS: was 53/56 forced pre-migration** (`beds`, `product_events`,
+    `reservation_releases` unforced); after the 18 migrations (which added 7
+    more RLS tables, all self-forced) the gap was still just those 3 —
+    `ALTER TABLE … FORCE ROW LEVEL SECURITY` on all three → **63/63 forced ==
+    rls_on**, owner-bypass hole closed platform-wide. (Superuser bypasses RLS
+    unconditionally regardless of FORCE — the reason the runtime role
+    separation matters more than FORCE, but FORCE is defense-in-depth for the
+    table owner.)
+  - **Backups: prod had NONE** (staging's claimed daily-B2 backup wasn't a host
+    cron/systemd timer/backup container anywhere on the VPS — mechanism
+    unconfirmed). Added `scripts/backup-prod-db.sh` (versioned): in-container
+    `pg_dump -Fc` → `pg_restore --list` structural verify → upload to a
+    **private** B2 backup bucket via a throwaway `amazon/aws-cli` container (B2
+    is S3-compatible; no host tooling) → prune local past 14 days. **DB dumps
+    must never share the public media bucket** — needs a separate private
+    bucket + scoped key, creds in `/home/festo/.campushomes-backup.env`
+    (chmod 600), cron `30 2 * * *`. Remote retention = a B2 lifecycle rule on
+    the backup bucket.
+  - Verified end to end: run `success`, `/health` ok + schema 54/54 + db/redis
+    up, web `/version` `634aea3`, `robots.txt` `Allow: /` (indexing on), live
+    prod-API service env carries all 5 `B2_*` + `DATABASE_MIGRATIONS_URL`.
+  - **Still shared staging↔prod (accepted for now, per the Dokploy app note):**
+    Postgres/Redis/Logto apps. Separate prod DB/Logto tenant remains the
+    follow-up. Backup bucket + its scoped key are the one media/backup thing
+    made prod-dedicated this session.
+
+- **Prod super-admin sign-in was fully broken — Logto staff-secret rotation
+  drift + admin identity mismatch (2026-09-22):** after the cutover, every
+  staff/Administration sign-in failed at `campushomes.co.ug/sign-in?error=
+  sign_in_failed`. Two independent causes, found via `AuthController` logs +
+  the Logto DB (`logto` database on the same prod Postgres cluster):
+  - **Cause 1 — `oidc.invalid_client` at the token exchange.** The prod env's
+    `LOGTO_STAFF_APP_SECRET` didn't match the staff app's actual secret in
+    Logto. Logto 1.42 stores the real client secret in the
+    **`application_secrets`** table (per app), NOT the legacy
+    `applications.secret` column — compare against `application_secrets`, not
+    that column (the legacy one was 42 chars and misled the first check; the
+    real one is 32). The staff app's secret had been **rotated in Logto on
+    2026-09-10** ("CampusHomes production rotation 2026-09-10") but the prod
+    env kept the pre-rotation value. Consumer + M2M app secrets matched fine —
+    only staff was stale, which is why student/landlord login worked and only
+    staff didn't. Fix: set `LOGTO_STAFF_APP_SECRET` to the current
+    `application_secrets.value` for the staff app id, Dokploy env → redeploy.
+    **Gotcha for the future: any Logto app-secret rotation MUST update the
+    matching `LOGTO_*_APP_SECRET` in every environment that uses that app, or
+    that portal's sign-in dies with `invalid_client` while the others keep
+    working.**
+  - **Cause 2 — identity mapping mismatch.** `provisioning.service.ts` links a
+    Logto login to a `users` row **by verified email** (then claims it via
+    `logto_user_id`, which starts NULL). The fully-configured admin row was
+    `festo@akolet.co.ug` (role=admin + an active `super_admin`/`platform_wide`
+    `user_role_assignments` row, "Manual bootstrap after full production
+    reset" 2026-09-08), but the Logto account being used was
+    `festo@campushomes.co.ug` — no matching row, so sign-in would JIT-provision
+    a fresh student instead. Fix: aligned the admin row's email to the Logto
+    identity (`UPDATE users SET email='festo@campushomes.co.ug' WHERE id=…`),
+    so first sign-in claims the existing super-admin row. **The admin model,
+    for reference: (1) a Logto identity with a verified email, (2) a `users`
+    row with the same email + role=admin + a `super_admin` RBAC assignment,
+    (3) first sign-in auto-links them. role=admin (enum) gates portal entry
+    (`requireRole(["admin"])`); the `super_admin` RBAC assignment (147-perm)
+    grants the privileged actions. No self-serve admin creation exists — the
+    `users` email/role/RBAC is seeded via a service/DB path.** Note
+    `user_role_assignments` scope columns are `scope_type`/`scope_id`, not a
+    single `scope`.
+
+- **Prod web↔API Cloudflare hairpin resets — the admin dashboard's real
+  failure (2026-09-22, PR #116):** once staff login worked, the admin Overview
+  and intermittently the whole app failed with `SessionServiceUnavailableError`
+  / "Service unavailable" / "admin API could not be reached", with ~1-minute
+  page loads. Not a permission gap (super_admin has `analytics.read`) and no
+  API 500s. Root cause: the web container's **server-side** API calls — SSR
+  (`lib/session.ts`, `lib/server-api.ts`, server branch of `lib/api.ts`) **and
+  the browser API proxy** (`next.config.ts` rewrites) — all targeted
+  `NEXT_PUBLIC_API_BASE_URL` = `https://api.campushomes.co.ug`, which is
+  **Cloudflare-proxied**. So every call hairpinned container → Cloudflare edge
+  (Munich) → origin Traefik → API, and Cloudflare reset reused keep-alive
+  sockets (`ECONNRESET` / socket hang up). Staging was immune because its API
+  host is DNS-only (grey) — the same reason the Safe-Browsing incident left
+  staging grey-clouded (2026-09-01).
+  - Fix (PR #116): prefer a **server-only** `API_INTERNAL_URL` (NOT
+    `NEXT_PUBLIC_`, so it's read at runtime and never shipped to the browser)
+    in all four spots, falling back to the public URL then localhost. Web + API
+    share the `dokploy-network` overlay, so
+    `http://campus-homes-campushomesapi-nkxusx:4000` reaches the API directly —
+    no Cloudflare, no reset. Browser stays same-origin (`""`, proxied by Next).
+    Verified the internal name resolves from the web container and returns
+    `/health` ok before shipping.
+  - **Gotcha: `API_INTERNAL_URL` must be a Dokploy _Environment_ (runtime) var,
+    NOT a Build-time Argument.** next.config's `rewrites()` runs at server boot
+    and the lib files read `process.env.API_INTERNAL_URL` at runtime; a
+    non-`NEXT_PUBLIC_` var is never baked into the image, so a build-arg-only
+    value is invisible at runtime and the fix silently no-ops (falls back to the
+    public URL). First attempt put it in Build-time Arguments → inactive;
+    moving it to Environment + redeploy activated it. Confirmed live in the
+    running service's env.
+  - Instant mitigation used while the fix shipped: grey-cloud
+    `api.campushomes.co.ug` in Cloudflare (kills the edge reset). Re-orange once
+    `API_INTERNAL_URL` is confirmed live — server-side no longer touches the
+    edge either way.
+  - **Cosmetic: a manual Dokploy redeploy leaves `/version` reporting a stale
+    `GIT_COMMIT_SHA`** (it reuses the stored build arg), so prod may report an
+    old SHA while running current `main`. The `deploy-production` GitHub
+    workflow sets the real SHA; manual Dokploy redeploys don't. Trust the
+    deployment's listed commit, not `/version`, after a manual redeploy.
+
+- **Admin Overview 47s → ~5s: never combine RLS-heavy counts in one statement
+  (2026-09-23, PRs #118/#119/#120):** after the hairpin fix, the admin
+  `/admin/overview` still showed "Overview unavailable". Not auth, not
+  permissions (super_admin has `analytics.read`; `/admin/access/me` 305ms,
+  `/admin/users` 58ms). The tell was hidden because **`apiServer()` swallows
+  every failure to `null`** — added a structured `apiServer.null` warn log
+  (PR #118, kept as a permanent observability win the code's own comments
+  had asked for). It revealed `reason:"throw" TimeoutError` (SSR aborts at
+  `API_TIMEOUT_MS`=15s). A direct browser hit of `campushomes.co.ug/api/v1/
+  admin/overview` returned **500 after `cfOrigin;dur=30230`** (~30s origin) —
+  the endpoint genuinely took **47s** (200, but past every proxy/SSR timeout).
+  - **Root cause: RLS-heavy count subqueries combined in one statement.**
+    `overview()`'s summary packed **14 count subqueries** across many
+    RLS-policied tables (reservations, listings, verification_visits, refunds,
+    notifications, landlords→properties) into ONE `SELECT`; the 6-month
+    `growth` chart used a **correlated** `(SELECT count(*) FROM reservations
+    WHERE …month…)` per month. Each such table's RLS policy expands 200+
+    nested subplans (reservations→beds→units→properties→listings, recursively
+    policied — and this holds **even under `service_role`**, since Postgres
+    plans every OR'd policy branch regardless of the runtime GUC). Combining
+    them was catastrophic: the 14-count summary executed in **39s**, growth in
+    **7.7s** — yet **each count runs <1.2s on its own.** This is the exact
+    blowup the code had already split `revenue` off for; summary and growth
+    were just never split.
+  - **Fixes:** #119 — summary → **one statement per RLS-heavy table**, windows
+    via `FILTER` so each table is scanned once (39s → 2.6s). #120 — growth →
+    **group each table by month once, LEFT JOIN the month series** instead of
+    6 correlated subqueries (7.7s → 0.9s). Net `/admin/overview` 47s → ~5s;
+    full `/admin` SSR render 8.6s, "Overview unavailable" gone, live metrics
+    shown. **Rule (make it a review reflex): never put more than one RLS-heavy
+    table in a single dashboard/aggregate statement, and never correlate an
+    RLS-heavy count per row — one scan per policied table, FILTER/GROUP BY for
+    windows.** `service_role` does NOT make this cheap.
+  - **Diagnosis gotcha:** `set_config(..., true)` is **transaction-local**, so
+    `psql -c "SELECT set_config(...,true); <query>"` runs the query in a
+    *different* auto-committed transaction with the GUC already gone — the
+    query silently runs under the wrong RLS context and mismeasures. Reproduce
+    the API's `rlsDb.run` context with an explicit `BEGIN; SET ROLE
+    campushomes_app; SELECT set_config('app.user_role','service_role',true);
+    <query>; ROLLBACK;` in one `-c`, or the timings lie (a flawed split-tx
+    test showed 4s for what was really 39s).
+  - **Live-endpoint diagnosis, no cookie-minting:** timed the real authed
+    endpoints from inside the web container over the internal overlay
+    (`docker exec <web> node -e "fetch('http://<api-svc>:4000/api/v1/…',{headers:{cookie}})"`)
+    using the session cookie visible in the browser's own request headers —
+    read-only, the user's own session, deleted nothing. That split
+    auth/permissions (fast) from the handler (47s) cleanly.
+  - **Real root cause found after (2026-09-23): Postgres JIT, not RLS
+    execution.** Overview still took ~5s with near-empty tables. Per-
+    statement EXPLAIN showed ~1s *execution* on 0-row `payments`/`refunds`/
+    `reservations` — nested RLS policies inflate planner cost past
+    `jit_above_cost` (100000), so Postgres LLVM-compiled ~1,500 functions
+    per query. Locally: payments count 1211ms JIT on → 8.6ms off; refunds
+    1971ms → 10ms. Fix: `createDbPool()` (`src/db/client.ts`, the API's only
+    pool) sets `options: '-c jit=off'`; guarded by
+    `test/services/db-pool.spec.ts`. The one-table-per-statement rule above
+    still stands (planning cost is real), but JIT was most of the time.
+    Diagnose any "slow query on a tiny table" with `EXPLAIN (ANALYZE)` and
+    look for a `JIT:` block first. Caveat: startup `options` are rejected by
+    PgBouncer-style poolers (e.g. Neon's pooled endpoint) — if one is ever
+    reintroduced, use `ALTER ROLE <login role> SET jit = off` instead.
+
+- **Staff invitations: edit/delete, 24h expiry, one role per account; prod
+  upload CORS gap (2026-09-23):**
+  - **One account = one staff role** (Festo's rule). `assignRoleInTransaction`
+    (`role-assignment.service.ts`, the single grant path used by invites,
+    Users console, staff grants, provisioning) now rejects any *different*
+    staff role on top of an active one, in addition to the existing
+    staff↔student/landlord exclusivity. Same role at another scope is still
+    allowed; **student + landlord may still coexist** (self-service landlord
+    enrollment keeps the student identity — do not tighten this further).
+    Triggered by James Adams ending up Ops Lead + Ops Inspector from two
+    invitations to one email.
+  - Invite/edit reject a contact that belongs to any existing user ("already
+    registered as <role names>") or a live invitation ("pending invitation as
+    <role>"). Expired pending invitations for that contact are auto-cancelled
+    (audited) so the `auth_invitations_pending_uk` index can't collide.
+    Inviting an existing account is no longer a path — change access from
+    Users instead. `target_user_id` is now always NULL on new invitations.
+  - Expiry 7 days → **24 hours** (`INVITATION_TTL`, invite + retry + edit).
+    "Expired" is derived (`status='pending' AND expires_at <= now()`), not a
+    stored status. UI: live → Edit/Resend/Cancel; expired → Edit/Re-invite/
+    Delete; cancelled → Delete. `PATCH /admin/staff/invitations/:id` edits
+    (renews 24h; changed contact or expired link resends — the old one-time
+    link verifies the old contact so it can no longer match);
+    `DELETE /admin/staff/invitations/:id/permanent` removes cancelled/expired
+    rows (DELETE grant already existed from 0049). No migration.
+  - **Landlord "Couldn't submit your property" on prod = B2 CORS, not code.**
+    The prod media bucket `campushomes-media-production` (eu-central-003,
+    created 09-21) has no CORS rule: browser preflight for the presigned PUT
+    returns 403 `AccessDenied`, while `campushomes-media-staging` returns 200.
+    Every browser upload on prod is affected. **Fixed 2026-09-23 via the B2
+    CLI, not the console:** the console's "share everything" presets only
+    allow downloads (GET/HEAD) — uploads need a custom rule with `s3_put` +
+    `content-type` header: `uvx b2 bucket update --cors-rules '[...web-downloads
+    s3_get/s3_head..., {"corsRuleName":"web-uploads","allowedOrigins":
+    ["https://campushomes.co.ug"],"allowedOperations":["s3_put"],
+    "allowedHeaders":["content-type"],"exposeHeaders":["ETag"],
+    "maxAgeSeconds":3600}]' campushomes-media-production` (the bucket-scoped
+    media key has writeBuckets). Don't touch that bucket's CORS in the console
+    afterwards — it overwrites the custom rule. Code now
+    surfaces the upload failure message instead of the generic fallback
+    (`storageFetch` in `lib/cloudinary.ts`). **Any new bucket needs CORS set
+    before browser uploads work.**
+
+- **Search visibility, Ops scheduling UX, beds per room, staff console (2026-09-23):**
+  - **Verified listing invisible = map bounds, not publish.** Naguru (MUK,
+    verified) sat at lon 32.6500352; the homepage box stopped at 32.65 and the
+    search map opened at zoom 14 on Makerere. Catchment (`university`) is the
+    real scope; the API's required bbox is now `UGANDA_BOUNDS`
+    (`lib/campuses.ts`) until the user pans. `ListingsMap` only reports bounds
+    for user-initiated moves (`event.originalEvent`) and `fitToMarkers` frames
+    results. Listing GPS comes from the inspector's device at the visit —
+    test inspections done from home put pins wherever the tester was.
+  - Ops schedule form: native `datetime-local` popup (no confirm button, and it
+    covered the submit button — the "green button with no text") replaced by
+    date input + 30-min time select. Ops nav "Properties waiting verification"
+    → "Verification queue" (was truncating).
+  - Publish form: per-row "Beds per room" (`RoomCategoryRows showBeds`) —
+    fixed 1–4 for single/double/triple/quad (mirrors roomTypeInputSchema),
+    editable 1–20 otherwise; read-only for existing rooms (server ignores
+    capacity when `unitId` is present). `self_contained` hidden from room-type
+    dropdowns wherever a self-contained checkbox / bathroom field exists.
+  - Staff accounts page reuses `UsersManager` (`staffOnly`) for Edit / Manage
+    access / Delete, and now filters by staff role keys — "has any assignment"
+    had let landlords (Henry K) in, since every account gets an 'own' role.

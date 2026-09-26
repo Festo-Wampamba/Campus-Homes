@@ -80,6 +80,11 @@ export class RoomManagementService {
       const currentSemester = semesters.find((semester) => semester.id === semesterId);
       if (!currentSemester) throw new BadRequestException('Selected semester is not available');
 
+      // Bridge any physical rooms that exist without a room-type link (e.g.
+      // rooms created outside this module, or imported/seeded inventory) so
+      // they appear here and the category dropdowns are populated.
+      await this.ensureCategoryRoomTypes(client, propertyId, semesterId, ctx.userId);
+
       const changeSet = await this.openChangeSet(client, propertyId, semesterId);
       const roomTypes = await this.loadRoomTypes(client, propertyId, changeSet?.id ?? null);
       const rooms = await this.loadRooms(client, propertyId, changeSet?.id ?? null);
@@ -751,6 +756,59 @@ export class RoomManagementService {
         sortOrder: Number(photo.sort_order), isPrimary: photo.is_primary, uploadedBy: photo.uploaded_by,
         createdAt: photo.created_at.toISOString() })),
     };
+  }
+
+  /** Ensures every live physical room is linked to a room type. For each
+   * category that has unlinked units, reuse an existing live room type of that
+   * category if present, otherwise create a baseline (approved) one derived
+   * from the units' own capacity/pricing, then link the orphan units. Only
+   * touches units whose room_type_id is NULL — beds, pricing and listings are
+   * left untouched, so the public listing/reservation path is unaffected.
+   * Idempotent: once linked there are no orphans, so it no-ops thereafter. */
+  private async ensureCategoryRoomTypes(client: PoolClient, propertyId: string, semesterId: string, userId: string) {
+    const orphanCategories = await client.query<{ category: string }>(
+      `SELECT DISTINCT room_category::text AS category FROM units
+       WHERE property_id=$1 AND archived_at IS NULL AND room_type_id IS NULL`,
+      [propertyId],
+    );
+    for (const { category } of orphanCategories.rows) {
+      const existing = await client.query<{ id: string }>(
+        `SELECT rt.id FROM room_types rt JOIN room_type_versions v ON v.id=rt.current_version_id
+         WHERE rt.property_id=$1 AND v.category=$2 LIMIT 1`,
+        [propertyId, category],
+      );
+      let roomTypeId = existing.rows[0]?.id;
+      if (!roomTypeId) {
+        const info = await client.query<{ capacity: number; price: number | null; deposit: number | null }>(
+          `SELECT u.capacity, usp.price_per_term_ugx AS price, usp.deposit_ugx AS deposit
+           FROM units u LEFT JOIN unit_semester_pricing usp ON usp.unit_id=u.id AND usp.semester_id=$3
+           WHERE u.property_id=$1 AND u.room_category::text=$2 AND u.archived_at IS NULL
+           ORDER BY usp.price_per_term_ugx NULLS LAST LIMIT 1`,
+          [propertyId, category, semesterId],
+        );
+        const capacity = Number(info.rows[0]?.capacity ?? 1);
+        const price = Number(info.rows[0]?.price ?? 0);
+        const deposit = info.rows[0]?.deposit ?? null;
+        const title = category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ') + ' Room';
+        const rt = await client.query<{ id: string }>(
+          `INSERT INTO room_types(property_id, created_by) VALUES($1,$2) RETURNING id`,
+          [propertyId, userId],
+        );
+        roomTypeId = rt.rows[0]!.id;
+        const ver = await client.query<{ id: string }>(
+          `INSERT INTO room_type_versions(room_type_id, change_set_id, version_number, title, category,
+             capacity, semester_id, price_per_term_ugx, deposit_ugx, status, created_by)
+           VALUES($1,NULL,1,$2,$3,$4,$5,$6,$7,'approved',$8) RETURNING id`,
+          [roomTypeId, title, category, capacity, semesterId, price, deposit, userId],
+        );
+        await client.query(`UPDATE room_types SET current_version_id=$2 WHERE id=$1`, [roomTypeId, ver.rows[0]!.id]);
+      }
+      await client.query(
+        `UPDATE units SET room_type_id=$3
+         WHERE property_id=$1 AND room_category::text=$2 AND room_type_id IS NULL AND archived_at IS NULL`,
+        [propertyId, category, roomTypeId],
+      );
+    }
   }
 
   private async loadRooms(client: PoolClient, propertyId: string, changeSetId: string | null) {

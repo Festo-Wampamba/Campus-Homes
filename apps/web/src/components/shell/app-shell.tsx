@@ -362,6 +362,7 @@ export function AppShell({
                 <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
                   <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
                     <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">{user.name || "Unnamed"}</p>
+                    {user.username && <p className="truncate text-xs text-teal-700 dark:text-teal-300">@{user.username}</p>}
                     {user.email && <p className="truncate text-xs text-slate-500 dark:text-muted-foreground">{user.email}</p>}
                     {user.phoneNumber && <p className="truncate text-xs text-slate-500 dark:text-muted-foreground">{user.phoneNumber}</p>}
                     <p className="mt-1.5 inline-block rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">{portalLabel}</p>

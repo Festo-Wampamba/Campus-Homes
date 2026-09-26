@@ -125,7 +125,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
   async function uploadImages(): Promise<string[]> {
     const keys = imageUrls.split(/\n|,/).map((item) => item.trim()).filter(Boolean);
     for (const file of imageFiles) {
-      const signature = await api<CloudinarySignature>("/uploads/sign", { method: "POST" });
+      const signature = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
       keys.push((await uploadToCloudinary(file, signature)).publicId);
     }
     return keys;

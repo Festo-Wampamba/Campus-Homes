@@ -19,6 +19,7 @@ describe('HealthController', () => {
       status: 'ok',
       checks: { database: 'up', redis: 'up' },
       commit: expect.any(String),
+      schema: expect.any(Object),
     });
   });
 
@@ -27,6 +28,7 @@ describe('HealthController', () => {
       status: 'ok',
       checks: { database: 'up', redis: 'disabled' },
       commit: expect.any(String),
+      schema: expect.any(Object),
     });
   });
 
@@ -46,6 +48,47 @@ describe('HealthController', () => {
       status: 'degraded',
       checks: expect.objectContaining({ database: expect.any(String), redis: expect.any(String) }),
       commit: expect.any(String),
+      schema: expect.any(Object),
     });
+  });
+
+  it('reports how many migrations the database has applied', async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [{ applied: 46 }] });
+    const result = await controller(query).check();
+    expect((result as { schema: { applied: number | null } }).schema.applied).toBe(46);
+  });
+
+  // Query order in check(): SELECT 1, then to_regclass, then the count.
+  it('reports applied as null when the migrations table cannot be read', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ present: true }] })
+      .mockRejectedValueOnce(new Error('permission denied for schema drizzle'));
+    const result = await controller(query).check();
+    expect((result as { schema: { applied: number | null } }).schema.applied).toBeNull();
+  });
+
+  // The distinction that makes a null `applied` actionable: the ledger being
+  // present but unreadable means migrations ran and the role lacks a grant,
+  // while absent means they never ran against this database at all.
+  it('reports the migrations ledger as present when it exists but cannot be counted', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ present: true }] })
+      .mockRejectedValueOnce(new Error('permission denied for schema drizzle'));
+    const result = await controller(query).check();
+    expect((result as { schema: { ledgerPresent: boolean | null } }).schema.ledgerPresent).toBe(true);
+  });
+
+  it('reports the migrations ledger as absent when migrations never ran', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ present: false }] })
+      .mockRejectedValueOnce(new Error('relation does not exist'));
+    const result = await controller(query).check();
+    expect((result as { schema: { ledgerPresent: boolean | null } }).schema.ledgerPresent).toBe(false);
   });
 });

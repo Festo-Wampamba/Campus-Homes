@@ -9,6 +9,9 @@ export const STAFF_ROLE_KEYS = [
   'super_admin', 'platform_admin', 'finance_admin', 'support_admin',
   'auditor', 'ops_lead', 'ops_inspector',
 ];
+// A user is one kind of account: staff, or a consumer (student/landlord),
+// never both. These two families are mutually exclusive at assignment time.
+export const CONSUMER_ROLE_KEYS = ['student', 'landlord'];
 export const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000', role: 'service_role',
 };
@@ -82,6 +85,29 @@ export async function assignRoleInTransaction(
   }
   const role = (await client.query<{ id: string }>('SELECT id FROM roles WHERE key = $1', [input.roleKey])).rows[0];
   if (!role) throw new NotFoundException('Role not found');
+  // One account holds one staff role, and staff never mix with consumer
+  // (student/landlord) roles. Student + landlord may coexist (self-service
+  // landlord enrollment keeps the student identity). The same staff role at
+  // another scope is still one role. The admin must revoke the existing role
+  // first (the user row is FOR UPDATE-locked above, so this check serializes
+  // against concurrent grants).
+  const conflictingKeys = STAFF_ROLE_KEYS.includes(input.roleKey)
+    ? [...CONSUMER_ROLE_KEYS, ...STAFF_ROLE_KEYS.filter((key) => key !== input.roleKey)]
+    : CONSUMER_ROLE_KEYS.includes(input.roleKey)
+      ? STAFF_ROLE_KEYS
+      : null;
+  if (conflictingKeys) {
+    const held = (await client.query<{ key: string }>(`
+      SELECT r.key FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+      WHERE a.user_id = $1 AND a.revoked_at IS NULL
+        AND (a.valid_until IS NULL OR a.valid_until > now())
+        AND r.key = ANY($2::text[]) LIMIT 1`, [userId, conflictingKeys])).rows[0];
+    if (held) {
+      throw new BadRequestException(
+        `This account already holds the "${held.key}" role. Revoke it before assigning "${input.roleKey}" — an account holds one staff role, and is never both staff and a student/landlord.`,
+      );
+    }
+  }
   if (input.scopeType === 'property') {
     const property = (await client.query('SELECT id FROM properties WHERE id = $1', [input.scopeId])).rows[0];
     if (!property) throw new NotFoundException('Property scope not found');

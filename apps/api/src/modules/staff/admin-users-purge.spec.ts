@@ -55,4 +55,21 @@ describe('AdminUsersService.purgeUser', () => {
     const { service } = make({ deletedAt: new Date(), isSuperAdmin: true });
     await expect(service.purgeUser(actor, new Set(['roles.manage_super_admin']), target)).resolves.toEqual({ id: target, purged: true });
   });
+
+  it('tears down room-management rows while preserving append-only audit records', async () => {
+    const { service, queries } = make({ deletedAt: new Date(), isSuperAdmin: false });
+    await service.purgeUser(actor, new Set(), target);
+
+    const cascade = queries.find((query) => query.includes('DELETE FROM users WHERE id IN (SELECT id FROM _pg_g)'));
+    expect(cascade).toContain('DELETE FROM room_unit_changes');
+    expect(cascade).toContain('DELETE FROM unit_blocks');
+    expect(cascade).toContain('DELETE FROM room_type_photos');
+    expect(cascade).toContain('DELETE FROM room_type_versions');
+    expect(cascade).toContain('DELETE FROM room_inventory_change_sets');
+    expect(cascade).toContain('DELETE FROM room_types');
+    expect(cascade).not.toContain('UPDATE audit_log');
+    expect(cascade).not.toContain('DELETE FROM journal_entries');
+    expect(cascade).not.toContain('DELETE FROM reservation_releases');
+    expect(cascade).not.toContain('UPDATE reservation_releases');
+  });
 });

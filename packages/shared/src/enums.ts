@@ -184,6 +184,52 @@ export const VERIFICATION_CHECKLIST_COMPONENTS = [
   'safety',
 ] as const;
 
+// Predefined tick-items the inspector marks pass/fail within each of the 6
+// checklist components. A component's overall pass/fail is DERIVED from these
+// (it passes only when every item passes); the free-text notes on a component
+// are a fallback for anything the items don't capture. Stored inside the
+// existing verification_visits.checklist jsonb (no migration) — the 6-component
+// DB gate still reads each component's `passed`, which stays authoritative.
+export const CHECKLIST_ITEMS = {
+  location_gps: [
+    { key: 'gps_match', label: 'GPS matches property location' },
+    { key: 'address_found', label: 'Property found at the stated address' },
+    { key: 'neighborhood', label: 'Neighborhood matches the listing' },
+  ],
+  rooms_capacity: [
+    { key: 'room_count', label: 'Room count matches the listing' },
+    { key: 'beds_per_room', label: 'Beds per room match' },
+    { key: 'self_contained_match', label: 'Self-contained status matches the claim' },
+    { key: 'room_sizes', label: 'Room sizes are reasonable' },
+  ],
+  amenities: [
+    { key: 'water', label: 'Water' },
+    { key: 'electricity', label: 'Electricity' },
+    { key: 'wifi', label: 'Wi-Fi (if claimed)' },
+    { key: 'security', label: 'Security (gate / guard)' },
+    { key: 'bathroom', label: 'Bathroom / toilet' },
+    { key: 'kitchen', label: 'Kitchen' },
+    { key: 'furniture', label: 'Furniture matches the listing' },
+  ],
+  photos: [
+    { key: 'photos_of_property', label: 'Photos are of this property' },
+    { key: 'no_stock', label: 'No stock / misleading photos' },
+    { key: 'key_areas', label: 'Key areas photographed' },
+  ],
+  landlord_identity: [
+    { key: 'identity_verified', label: 'Identity verified' },
+    { key: 'id_matches', label: 'ID document matches' },
+    { key: 'authorization', label: 'Authorization to list confirmed' },
+  ],
+  safety: [
+    { key: 'fire', label: 'Fire safety (extinguisher / exits)' },
+    { key: 'electrical', label: 'Electrical wiring safe' },
+    { key: 'structural', label: 'Structural condition sound' },
+    { key: 'lighting', label: 'Adequate lighting' },
+    { key: 'emergency_access', label: 'Emergency access' },
+  ],
+} as const satisfies Record<VerificationChecklistComponent, readonly { key: string; label: string }[]>;
+
 export type UserRole = (typeof USER_ROLES)[number];
 export type UserStatus = (typeof USER_STATUSES)[number];
 export type PropertyMembershipRole = (typeof PROPERTY_MEMBERSHIP_ROLES)[number];

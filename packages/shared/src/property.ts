@@ -34,6 +34,10 @@ export const proposedRoomCategorySchema = z.object({
   // see selfContainedRoomCount/nonSelfContainedRoomCount below, which are
   // now derived from these rows client-side rather than entered separately.
   selfContained: z.boolean().default(false),
+  // Bed spaces in each room of this row. Implied for single..quad (1..4);
+  // the landlord sets it for dormitories and other variable types. Optional
+  // so proposals saved before this field (2026-09-25) still parse.
+  bedsPerRoom: z.number().int().min(1).max(20).optional(),
 });
 export type ProposedRoomCategory = z.infer<typeof proposedRoomCategorySchema>;
 
@@ -239,6 +243,7 @@ export const propertyRoomSchema = z.object({
   label: z.string(),
   capacity: z.number().int(),
   roomCategory: z.enum(ROOM_CATEGORIES),
+  selfContained: z.boolean(),
   pricePerTermUgx: z.number(),
   depositUgx: z.number().nullable(),
   operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES),

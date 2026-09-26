@@ -248,6 +248,7 @@ export class ListingsService {
           label: units.label,
           capacity: units.capacity,
           roomCategory: units.roomCategory,
+          selfContained: units.selfContained,
           operationalStatus: units.operationalStatus,
           pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
           depositUgx: unitSemesterPricing.depositUgx,
@@ -316,6 +317,7 @@ export class ListingsService {
           label: u.label,
           capacity: u.capacity,
           roomCategory: u.roomCategory,
+          selfContained: u.selfContained,
           pricePerTermUgx: u.pricePerTermUgx,
           depositUgx: u.depositUgx,
           operationalStatus: u.operationalStatus,
@@ -489,6 +491,7 @@ export class ListingsService {
                 ph.storage_key AS photo_storage_key,
                 u.min_capacity, u.max_capacity, COALESCE(u.unit_count, 0) AS unit_count,
                 COALESCE(u.max_price, lv.price_per_term_ugx) AS max_price_per_term_ugx,
+                COALESCE(u.has_self_contained, false) AS has_self_contained,
                 COALESCE(rc.categories, '[]'::jsonb) AS room_categories
          FROM listings l
          JOIN listing_versions lv ON lv.id = l.current_version_id
@@ -505,7 +508,9 @@ export class ListingsService {
            -- partially-let double still contributes its one free bed. MIN/MAX
            -- capacity describe the room itself and are unaffected by the fan-out.
            SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, MAX(usp.price_per_term_ugx) AS max_price
+                  COUNT(*) AS unit_count, MAX(usp.price_per_term_ugx) AS max_price,
+                  bool_or(un.self_contained) AS has_self_contained,
+                  bool_or(NOT un.self_contained) AS has_non_self_contained
            FROM units un
            JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
            JOIN beds bd ON bd.unit_id = un.id
@@ -583,6 +588,11 @@ export class ListingsService {
             )
             AND ($13::text IS NULL OR p.catchment = $13::university)
             AND ($14::text IS NULL OR p.gender_arrangement = $14)
+            AND (
+              $15::boolean IS NULL
+              OR ($15 = true AND COALESCE(u.has_self_contained, false))
+              OR ($15 = false AND COALESCE(u.has_non_self_contained, false))
+            )
             AND COALESCE(u.unit_count, 0) > 0
           ORDER BY lv.price_per_term_ugx ASC
           LIMIT $9`,
@@ -601,6 +611,7 @@ export class ListingsService {
           input.roomCategory ?? null,
           input.university ?? null,
           input.genderArrangement ?? null,
+          input.selfContained ?? null,
         ],
       );
       // Pilot-funnel backstop (0032) — best-effort: a logging failure must
@@ -644,6 +655,7 @@ export class ListingsService {
           label: units.label,
           capacity: units.capacity,
           roomCategory: units.roomCategory,
+          selfContained: units.selfContained,
           operationalStatus: units.operationalStatus,
           pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
           depositUgx: unitSemesterPricing.depositUgx,

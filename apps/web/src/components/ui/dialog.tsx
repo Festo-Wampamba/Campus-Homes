@@ -21,6 +21,10 @@ const DIALOG_WIDTH = {
   // form's worth of fields laid out two-up (see PropertyForm).
   md: "w-[min(38rem,calc(100vw-2rem))]",
   lg: "w-[min(56rem,calc(100vw-2rem))]",
+  // Dense multi-column forms (the room-type spec: 2- and 3-up rows plus
+  // amenities, description and photos) need more room before columns get
+  // cramped — the body still scrolls vertically within max-h.
+  xl: "w-[min(72rem,calc(100vw-2rem))]",
 };
 
 function Dialog({
@@ -32,7 +36,7 @@ function Dialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   // false = a backdrop click or Escape can't close this — only an explicit
   // Cancel/X click can. For a long form (the tenant-agreement builder, the
   // property form) a stray click just outside the card used to silently

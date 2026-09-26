@@ -40,3 +40,6 @@ db-backups/
 # Claude Code local machine settings (personal permission overrides)
 .claude/settings.local.json
 .gstack/
+
+# Local demo seed material (photos/docs) — not versioned
+/CampusHomes_Demo_Hostels/

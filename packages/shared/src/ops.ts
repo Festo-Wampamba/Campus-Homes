@@ -32,6 +32,54 @@ export type ScheduleVisitInput = z.infer<typeof scheduleVisitSchema>;
 // rather than fail silently downstream.
 export const UGANDA_GPS_BOUNDS = { minLat: -2.5, maxLat: 5, minLon: 28.5, maxLon: 35.5 };
 
+// What part of the property a photo shows. Chosen by the inspector at capture
+// time so the lead reviewing for quality, and the student browsing the listing,
+// both see photos grouped rather than one undifferentiated roll.
+// Mirrors the `photo_category` pgEnum (0047, +0052, +0055) — update both together.
+export const PHOTO_CATEGORIES = [
+  'bedroom', 'single_bedroom', 'double_bedroom', 'triple_bedroom', 'quad_bedroom',
+  'bathroom', 'kitchen', 'compound', 'shops', 'exterior', 'common_area', 'custom', 'other',
+] as const;
+export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number];
+
+export const PHOTO_CATEGORY_LABELS: Record<PhotoCategory, string> = {
+  bedroom: 'Bedroom', single_bedroom: 'Single bedroom', double_bedroom: 'Double bedroom (2 beds)',
+  triple_bedroom: 'Triple bedroom (3 beds)', quad_bedroom: 'Quad bedroom (4 beds)', bathroom: 'Bathroom', kitchen: 'Kitchen',
+  compound: 'Compound', shops: 'Shops', exterior: 'Exterior', common_area: 'Common area',
+  custom: 'Custom…', other: 'Other',
+};
+
+export const visitPhotoSchema = z.object({
+  storageKey: z.string(),
+  category: z.enum(PHOTO_CATEGORIES),
+  // Free-text label used only when category is 'custom' — the preset list is
+  // the checklist; this is the fallback when nothing fits.
+  label: z.string().trim().max(50).optional(),
+  // Whether the room shown is self-contained. Only meaningful for bedroom
+  // categories; omitted/undefined on non-room photos (0053).
+  selfContained: z.boolean().optional(),
+});
+export type VisitPhoto = z.infer<typeof visitPhotoSchema>;
+
+/** What to show for a photo: the typed custom label when present, else the
+ * preset category's label. */
+export function photoCategoryDisplay(photo: Pick<VisitPhoto, 'category' | 'label'>): string {
+  if (photo.category === 'custom' && photo.label) return photo.label;
+  return PHOTO_CATEGORY_LABELS[photo.category];
+}
+
+/** Reads a visit's staged photos in either format. Photos staged before
+ * categories existed are bare storage keys; they surface as 'other' rather than
+ * being dropped, so an older visit still publishes all of its photos. */
+export function normalizeVisitPhotos(raw: unknown): VisitPhoto[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): VisitPhoto[] => {
+    if (typeof item === 'string') return [{ storageKey: item, category: 'other' }];
+    const parsed = visitPhotoSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
 // Offline-sync checklist submission (§9 flow 2). The client generates the
 // idempotency key when the visit starts; a retried sync can never double-submit.
 export const syncVisitSchema = z.object({
@@ -52,7 +100,11 @@ export const syncVisitSchema = z.object({
   // sync-manager.ts once the device is back online (same deferred-network
   // pattern as the sync itself). Staged on the visit; promoted into
   // listing_photos at publish time once a listing_version exists.
-  photoStorageKeys: z.array(z.string()).max(20).default([]),
+  //
+  // A bare string is the pre-category format still present on visits synced
+  // before photo categories existed, and still accepted from an Inspection Mode
+  // draft saved offline before this deploy. Read it through normalizeVisitPhotos.
+  photoStorageKeys: z.array(z.union([z.string(), visitPhotoSchema])).max(20).default([]),
 });
 export type SyncVisitInput = z.infer<typeof syncVisitSchema>;
 
@@ -61,6 +113,13 @@ export type SyncVisitInput = z.infer<typeof syncVisitSchema>;
 // There's no single flat price: each room category (single/double/...) is
 // priced independently, so the version snapshot's headline price is derived
 // server-side as the cheapest category, not entered directly by Ops.
+// One `units` entry is published per physical room, so a large hostel's single
+// publish can run to several hundred rooms (e.g. 200 singles + 100 doubles).
+// The cap only bounds request/transaction size, not real inventory — keep it
+// comfortably above any real property. Exported so the publish form can warn
+// before submitting instead of the server returning a bare "Validation failed".
+export const MAX_PUBLISH_UNITS = 1000;
+
 export const publishListingSchema = z.object({
   listingId: uuid,
   amenities: z.record(z.string(), z.boolean()),
@@ -79,12 +138,18 @@ export const publishListingSchema = z.object({
         label: z.string().min(1).max(100),
         capacity: z.number().int().min(1).max(20).default(1),
         roomCategory: z.enum(ROOM_CATEGORIES),
+        // Free-text room type used only when roomCategory is 'other'.
+        roomCategoryLabel: z.string().trim().max(40).optional(),
+        // Authoritative self-contained flag per room, set by Ops at publish
+        // (0053). Optional on input — defaults to false (non-self-contained),
+        // matching the units.self_contained column default.
+        selfContained: z.boolean().optional(),
         pricePerTermUgx: ugxAmount,
         depositUgx: ugxAmount.optional(),
       }),
     )
     .min(1)
-    .max(200),
+    .max(MAX_PUBLISH_UNITS),
 });
 export type PublishListingInput = z.infer<typeof publishListingSchema>;
 
@@ -201,7 +266,7 @@ export const opsVisitDetailSchema = z.object({
   visitGpsLat: z.string().nullable(),
   visitGpsLon: z.string().nullable(),
   checklist: verificationChecklistSchema.partial(),
-  photoStorageKeys: z.array(z.string()).nullable(),
+  photoStorageKeys: z.array(z.union([z.string(), visitPhotoSchema])).nullable(),
   result: z.enum(VISIT_RESULTS),
   failureReason: z.string().nullable(),
   approvedBy: uuid.nullable(),

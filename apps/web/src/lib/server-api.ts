@@ -2,23 +2,41 @@ import { headers } from "next/headers";
 
 import { API_TIMEOUT_MS } from "./api";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Server-side calls the API over the internal container network
+// (API_INTERNAL_URL, e.g. http://<api-service>:4000) when set, so requests
+// don't hairpin out to the public, Cloudflare-proxied hostname and back —
+// that round-trip resets reused keep-alive sockets (ECONNRESET). Falls back
+// to the public URL, then localhost, for envs without an internal address.
+const BASE =
+  process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 // Server-component counterpart to lib/api.ts: forwards the incoming
 // request's session cookie since server components can't rely on fetch's
 // browser `credentials: 'include'` (session.ts pattern).
 export async function apiServer<T>(path: string): Promise<T | null> {
   const cookie = (await headers()).get("cookie");
-  if (!cookie) return null;
+  if (!cookie) {
+    // WHY log: apiServer collapses every failure to null (see note below),
+    // which hides the reason a server-rendered page shows "unavailable".
+    // One structured line names the cause without changing the null contract.
+    console.warn(JSON.stringify({ event: "apiServer.null", path, reason: "no-cookie" }));
+    return null;
+  }
   try {
     const res = await fetch(`${BASE}/api/v1${path}`, {
       headers: { cookie },
       cache: "no-store",
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(JSON.stringify({ event: "apiServer.null", path, reason: "status", status: res.status }));
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (err) {
+    console.warn(
+      JSON.stringify({ event: "apiServer.null", path, reason: "throw", error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) }),
+    );
     return null;
   }
 }

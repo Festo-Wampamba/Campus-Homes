@@ -11,7 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { listingStatus, roomCategory } from './enums';
+import { listingStatus, photoCategory, roomCategory } from './enums';
 import { opsStaff, users } from './identity';
 import { properties, semesters } from './property';
 
@@ -50,9 +50,7 @@ export const listingVersions = pgTable(
     amenities: jsonb('amenities').notNull(),
     description: text('description'),
     verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull(),
-    verifiedBy: uuid('verified_by')
-      .notNull()
-      .references(() => opsStaff.userId),
+    verifiedBy: uuid('verified_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
     supersededAt: timestamp('superseded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -65,13 +63,18 @@ export const listingPhotos = pgTable('listing_photos', {
     .notNull()
     .references(() => listingVersions.id, { onDelete: 'restrict' }),
   storageKey: text('storage_key').notNull(),
-  capturedBy: uuid('captured_by')
-    .notNull()
-    .references(() => opsStaff.userId),
+  capturedBy: uuid('captured_by').references(() => opsStaff.userId, { onDelete: 'set null' }),
   // EXIF-verified server-side on upload — client-reported values are never trusted.
   gpsLat: numeric('gps_lat', { precision: 10, scale: 7 }).notNull(),
   gpsLon: numeric('gps_lon', { precision: 10, scale: 7 }).notNull(),
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+  // Nullable: rows captured before categories existed (0047) have none.
+  category: photoCategory('category'),
+  // Free-text label when category is 'custom' (0052).
+  customLabel: text('custom_label'),
+  // Whether the room shown is self-contained (0053) — only meaningful for
+  // bedroom categories, null on non-room photos.
+  selfContained: boolean('self_contained'),
   isPrimary: boolean('is_primary').notNull().default(false),
   sortOrder: smallint('sort_order').notNull().default(0),
   metadata: jsonb('metadata'),
@@ -96,6 +99,11 @@ export const units = pgTable('units', {
   // Room type (single/double/triple/...) — priced independently per category,
   // not one flat price for the whole listing. CHECK price > 0 in SQL migration.
   roomCategory: roomCategory('room_category').notNull().default('other'),
+  // Free-text room type when roomCategory is 'other' (0052).
+  roomCategoryLabel: text('room_category_label'),
+  // Whether this room has its own bathroom/facilities (0053). Authoritative
+  // value set by Ops at publish; the landlord's proposal is only a hint.
+  selfContained: boolean('self_contained').notNull().default(false),
   // Room-level manual override (maintenance/blocked take the whole room out
   // of service regardless of individual beds) — walk-in occupancy itself
   // moved to bed-level `beds.blocked` + direct Book-on-Available (0033); this
