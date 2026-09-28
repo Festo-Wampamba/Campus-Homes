@@ -18,7 +18,7 @@ export default async function MyVisitsPage() {
           <EmptyState
             icon={ClipboardList}
             title="No visits assigned"
-            body="Scheduled verification visits appear here. Tap one to run the 6-component checklist — it works offline too."
+            body="Scheduled verification visits appear here. Tap one to run the 6-component checklist. It works offline too."
           />
         </div>
       ) : (

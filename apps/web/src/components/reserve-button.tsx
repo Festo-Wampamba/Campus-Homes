@@ -50,7 +50,7 @@ export function ReserveButton({
       });
       router.push("/reservations");
     } catch (err) {
-      setError(errorMessage(err, "Couldn't start your reservation — try again."));
+      setError(errorMessage(err, "Couldn't start your reservation. Try again."));
       setPending(false);
     }
   }
@@ -75,7 +75,7 @@ export function ReserveButton({
         body: JSON.stringify({ university, yearOfStudy: null }),
       });
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save your university — try again."));
+      setError(errorMessage(err, "Couldn't save your university. Try again."));
       setPending(false);
       return;
     }
@@ -96,7 +96,7 @@ export function ReserveButton({
       <Dialog open={showProfileStep} onOpenChange={setShowProfileStep}>
         <DialogHeader
           title="Just one thing first"
-          description="Which university are you at? This finishes setting up your student account — you only need to do it once."
+          description="Which university are you at? This finishes setting up your student account. You only need to do it once."
           onClose={() => setShowProfileStep(false)}
         />
         <DialogBody>

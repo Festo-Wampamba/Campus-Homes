@@ -53,7 +53,7 @@ export function AdminProfileForm({ particulars }: { particulars: MyParticulars }
       setSaved(true);
       router.refresh();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't save your profile — try again."));
+      setError(apiErrorMessage(err, "Couldn't save your profile. Try again."));
     } finally {
       setPending(false);
     }
@@ -89,8 +89,8 @@ export function AdminProfileForm({ particulars }: { particulars: MyParticulars }
         <PhoneField label="Emergency contact phone" value={emergencyContactPhone} onChange={setEmergencyContactPhone} />
       </div>
       <div className="grid gap-4 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 sm:grid-cols-2 dark:bg-muted dark:text-muted-foreground">
-        <p><span className="font-bold text-slate-700 dark:text-foreground">Email:</span> {particulars.email ?? "—"}</p>
-        <p><span className="font-bold text-slate-700 dark:text-foreground">Phone:</span> {particulars.phone ?? "—"}</p>
+        <p><span className="font-bold text-slate-700 dark:text-foreground">Email:</span> {particulars.email ?? "N/A"}</p>
+        <p><span className="font-bold text-slate-700 dark:text-foreground">Phone:</span> {particulars.phone ?? "N/A"}</p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div className="flex items-center gap-3">

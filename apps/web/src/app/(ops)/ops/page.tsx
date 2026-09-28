@@ -21,7 +21,7 @@ function ageTone(ageHours: number): "success" | "warning" | "destructive" {
 function visitStageLabel(row: OpsQueueRow): string | null {
   if (row.visit_id === null) return null;
   if (row.result === "passed") return "Awaiting your approval";
-  if (row.result === "failed") return "Visit failed — schedule a re-visit";
+  if (row.result === "failed") return "Visit failed. Schedule a re-visit";
   if (row.result === "pending") return row.scheduled_at ? "Visit scheduled" : "Not yet scheduled";
   return null;
 }
@@ -110,7 +110,7 @@ export default async function OpsQueuePage() {
             </span>
             <h2 className="mt-4 text-lg">Couldn&apos;t load the queue</h2>
             <p className="mt-1.5 max-w-sm text-base text-muted-foreground">
-              The API didn&apos;t respond — this is not the same as an empty queue. Refresh in a
+              The API didn&apos;t respond. This is not the same as an empty queue. Refresh in a
               moment; if it keeps happening, check whether the API is up.
             </p>
           </div>
@@ -120,7 +120,7 @@ export default async function OpsQueuePage() {
           <EmptyState
             icon={ClipboardCheck}
             title="The queue is clear"
-            body="New verification requests appear here with their SLA age. Leads schedule visits; inspectors run the 6-component checklist on site — offline if they have to."
+            body="New verification requests appear here with their SLA age. Leads schedule visits; inspectors run the 6-component checklist on site. Offline if they have to."
           />
         </div>
       ) : (

@@ -14,7 +14,7 @@ export default async function ListingPhotosPage({
     <>
       <h1 className="text-2xl">Listing photos</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Add verification photos any time — for a visit where the inspector
+        Add verification photos any time. For a visit where the inspector
         didn&apos;t stage any, or to add more later.
       </p>
       <div className="mt-6 max-w-3xl">

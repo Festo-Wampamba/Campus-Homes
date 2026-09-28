@@ -23,7 +23,7 @@ export default async function OpsInquiriesPage() {
       <header>
         <h1 className="text-xl font-bold">Student inquiries</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Questions and reports submitted from the student support desk — each
+          Questions and reports submitted from the student support desk. Each
           one also lands in the team inbox.
         </p>
       </header>

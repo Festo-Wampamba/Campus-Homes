@@ -139,7 +139,7 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
     for (const listing of rows) {
       await this.notifications.notify(listing.landlord_id, 'listing.reverify_reminder', 'sms', {
         listingId: listing.id,
-        message: `CampusHomes: your listing for "${listing.name}" expires soon — book re-verification.`,
+        message: `CampusHomes: your listing for "${listing.name}" expires soon. Book re-verification.`,
       });
     }
   }

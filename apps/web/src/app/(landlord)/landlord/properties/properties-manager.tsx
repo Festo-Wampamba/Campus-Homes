@@ -101,7 +101,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
           className="mt-6"
           icon={Building2}
           title="No properties yet"
-          body="Add your first hostel to get started — our Ops team schedules a verification visit once it's submitted."
+          body="Add your first hostel to get started. Our Ops team schedules a verification visit once it's submitted."
           action={
             <Button type="button" onClick={openAdd}>
               <Plus aria-hidden className="size-4" />

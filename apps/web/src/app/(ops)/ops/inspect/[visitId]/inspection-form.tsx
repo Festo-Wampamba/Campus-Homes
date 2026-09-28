@@ -276,13 +276,13 @@ export function InspectionForm({
         <Card>
           <CardContent className="p-5">
             <StatusChip tone={failed ? "destructive" : "success"}>
-              {failed ? "Synced — failed" : "Synced"}
+              {failed ? "Synced, failed" : "Synced"}
             </StatusChip>
             <p className="mt-2 text-sm text-muted-foreground">
               {approved
                 ? "A lead has approved this checklist, so it can no longer be changed. Ask a lead to schedule a new visit if something here is wrong."
                 : failed
-                  ? "This checklist was submitted and recorded as failed. It can't be approved — a lead needs to schedule a new visit before this property can be verified. You can still correct it until a lead acts on it."
+                  ? "This checklist was submitted and recorded as failed. It can't be approved. A lead needs to schedule a new visit before this property can be verified. You can still correct it until a lead acts on it."
                   : "This checklist has already been submitted and is waiting on lead approval. You can still correct it until a lead approves it."}
             </p>
             {!approved && (
@@ -485,8 +485,8 @@ export function InspectionForm({
         setGpsStatus("error");
         setGpsError(
           err.code === err.PERMISSION_DENIED
-            ? "Location access was denied — allow it in your browser settings, or enter coordinates manually below."
-            : "Couldn't get your location — try again, or enter coordinates manually below.",
+            ? "Location access was denied. Allow it in your browser settings, or enter coordinates manually below."
+            : "Couldn't get your location. Try again, or enter coordinates manually below.",
         );
       },
       { enableHighAccuracy: true, timeout: 15_000 },
@@ -602,7 +602,7 @@ export function InspectionForm({
                 })}
               </ul>
               <Textarea
-                placeholder="Notes — only if the items above don't capture what you saw"
+                placeholder="Notes (only if the items above don't capture what you saw)"
                 value={entry.notes}
                 onChange={(e) => setComponent(component, { notes: e.target.value })}
               />
@@ -741,13 +741,13 @@ export function InspectionForm({
       </Button>
       {draft.syncStatus === "queued" && !online && (
         <p role="status" className="text-sm text-warning">
-          Saved on this device — will sync automatically when back online.
+          Saved on this device. Will sync automatically when back online.
         </p>
       )}
       {draft.syncStatus === "queued" && online && (
         <div className="rounded-md border border-warning/30 bg-warning-subtle p-3">
           <p role="status" className="text-sm text-warning">
-            Saved on this device — still waiting to sync.
+            Saved on this device. Still waiting to sync.
           </p>
           <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={retrying} onClick={retrySync}>
             {retrying ? "Retrying…" : "Retry sync now"}

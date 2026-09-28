@@ -51,7 +51,7 @@ export default async function FinanceOverviewPage() {
         <StatCard label="Net income" value={ugx(pl.netIncomeUgx)} detail={`${from} → ${to}`} icon={Wallet} tone="teal" />
         <StatCard label="Hold fee revenue" value={ugx(pl.totalRevenueUgx + refundsUgx)} detail="Gross, before refunds" icon={CircleDollarSign} tone="blue" />
         <StatCard label="Refunds" value={ugx(refundsUgx)} detail="Cancellations and expired holds" icon={TrendingDown} tone="amber" />
-        <StatCard label="Operating expenses" value={ugx(pl.totalExpensesUgx)} detail="Manually recorded" icon={ReceiptText} tone="violet" />
+        <StatCard label="Operating expenses" value={ugx(pl.totalExpensesUgx)} detail="Manually recorded" icon={ReceiptText} tone="slate" />
       </div>
 
       <div className="mt-5">

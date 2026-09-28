@@ -23,7 +23,7 @@ export function SavedListingsList({ initial }: { initial: ListingSearchResult[] 
   }
 
   if (listings.length === 0) {
-    return <p className="mt-6 text-sm text-muted-foreground">All caught up — nothing saved right now.</p>;
+    return <p className="mt-6 text-sm text-muted-foreground">All caught up. Nothing saved right now.</p>;
   }
 
   return (

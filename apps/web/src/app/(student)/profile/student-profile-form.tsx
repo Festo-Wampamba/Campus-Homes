@@ -88,7 +88,7 @@ export function StudentProfileForm({
         router.refresh();
       }
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save your profile — try again."));
+      setError(errorMessage(err, "Couldn't save your profile. Try again."));
     } finally {
       setPending(false);
     }

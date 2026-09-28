@@ -21,7 +21,7 @@ export function assertStubAllowed(env: Env, secretName: string, moduleName: stri
   // Loud on every boot: a staging deploy that quietly forgot it was running on
   // stubs is exactly how a stub reaches real users.
   new Logger(moduleName).warn(
-    `${secretName} is not set — running on the stub adapter because ALLOW_STUB_INTEGRATIONS=true. ` +
+    `${secretName} is not set. Running on the stub adapter because ALLOW_STUB_INTEGRATIONS=true. ` +
       'Not suitable for real users; set the real secret before launch.',
   );
 }

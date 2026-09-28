@@ -74,7 +74,7 @@ export function TenantAgreementForm({
         signature = { type: "typed", signedName: signedName.trim() };
       } else {
         const blob = await signaturePadRef.current?.toBlob();
-        if (!blob) throw new Error("Couldn't capture your signature — try again.");
+        if (!blob) throw new Error("Couldn't capture your signature. Try again.");
         const file = new File([blob], "signature.png", { type: "image/png" });
         const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
         const { publicId } = await uploadToCloudinary(file, sig);
@@ -94,7 +94,7 @@ export function TenantAgreementForm({
       });
       router.refresh();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't submit your tenant agreement — try again."));
+      setError(apiErrorMessage(err, "Couldn't submit your tenant agreement. Try again."));
     } finally {
       setPending(false);
     }

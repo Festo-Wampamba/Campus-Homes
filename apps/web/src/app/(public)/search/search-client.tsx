@@ -184,7 +184,7 @@ export function SearchClient() {
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 self-start rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-300 hover:border-teal-700 hover:text-teal-700"
+            className="inline-flex items-center gap-1.5 self-start rounded-md border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-300 hover:border-teal-700 hover:text-teal-700"
           >
             <ArrowLeft aria-hidden className="size-4" />
             Home

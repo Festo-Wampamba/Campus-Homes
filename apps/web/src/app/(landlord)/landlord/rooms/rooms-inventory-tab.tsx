@@ -151,7 +151,7 @@ export function RoomsInventoryTab({
       return;
     }
     if (!srTypeId) {
-      setSrError("Select a room type first — create one in the Room Types tab before adding physical rooms.");
+      setSrError("Select a room type first. Create one in the Room Types tab before adding physical rooms.");
       return;
     }
 
@@ -758,7 +758,7 @@ export function RoomsInventoryTab({
               </select>
               {roomTypes.length === 0 && (
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  Create a room type in the <span className="font-medium text-foreground">Room Types</span> tab first — a physical room must be linked to one.
+                  Create a room type in the <span className="font-medium text-foreground">Room Types</span> tab first. A physical room must be linked to one.
                 </p>
               )}
             </div>

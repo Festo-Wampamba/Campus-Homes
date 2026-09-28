@@ -60,7 +60,7 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
       setSaved(true);
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save your profile — try again."));
+      setError(errorMessage(err, "Couldn't save your profile. Try again."));
     } finally {
       setPending(false);
     }
@@ -86,7 +86,7 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
       setParticularsSaved(true);
       router.refresh();
     } catch (err) {
-      setParticularsError(errorMessage(err, "Couldn't save your details — try again."));
+      setParticularsError(errorMessage(err, "Couldn't save your details. Try again."));
     } finally {
       setParticularsPending(false);
     }

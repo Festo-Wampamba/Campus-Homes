@@ -8,7 +8,7 @@ import { Wordmark } from "@/components/shell/wordmark";
 import { signInUrl } from "@/lib/auth";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  not_invited: "This account hasn't been invited yet — contact an administrator.",
+  not_invited: "This account hasn't been invited yet. Contact an administrator.",
   sign_in_failed: "Sign-in didn't complete. Please try again.",
   sign_in_expired: "This sign-in attempt expired or was already used. Please start again.",
   auth_unavailable: "Authentication is temporarily unavailable. Please try again shortly.",

@@ -22,7 +22,7 @@ export default async function AdminProfilePage() {
           {particulars ? (
             <AdminProfileForm particulars={particulars} />
           ) : (
-            <p className="text-sm text-slate-500 dark:text-muted-foreground">Couldn&apos;t load your profile — refresh the page.</p>
+            <p className="text-sm text-slate-500 dark:text-muted-foreground">Couldn&apos;t load your profile. Refresh the page.</p>
           )}
         </div>
       </SectionCard>

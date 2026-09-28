@@ -24,4 +24,4 @@ export function containsContactInfo(text: string): boolean {
 }
 
 export const CONTACT_INFO_BLOCKED_MESSAGE =
-  "Please keep phone numbers and links out of your message — reply and follow-up all happen right here on CampusHomes.";
+  "Please keep phone numbers and links out of your message. Reply and follow-up all happen right here on CampusHomes.";

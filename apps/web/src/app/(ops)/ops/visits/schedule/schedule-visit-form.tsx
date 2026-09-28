@@ -68,7 +68,7 @@ export function ScheduleVisitForm({
       router.push("/ops");
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't schedule the visit — try again."));
+      setError(errorMessage(err, "Couldn't schedule the visit. Try again."));
       setPending(false);
     }
   }
@@ -90,7 +90,7 @@ export function ScheduleVisitForm({
           {inspectors.map((inspector) => (
             <option key={inspector.id} value={inspector.id}>
               {inspector.name} ({inspector.catchment}
-              {inspector.team === "lead" ? ", lead — self-assign" : ""})
+              {inspector.team === "lead" ? ", lead, self-assign" : ""})
             </option>
           ))}
         </select>

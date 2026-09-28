@@ -132,8 +132,8 @@ export function UnitBlockDialog({
         <DialogHeader
           title={
             isBlocked
-              ? `Manage Maintenance Block — ${room.roomCode}`
-              : `Block Room for Maintenance — ${room.roomCode}`
+              ? `Manage Maintenance Block: ${room.roomCode}`
+              : `Block Room for Maintenance: ${room.roomCode}`
           }
           onClose={() => onOpenChange(false)}
           description={

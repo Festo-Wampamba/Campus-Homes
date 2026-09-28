@@ -142,7 +142,7 @@ export default async function VisitDetailPage({
           <Card>
             <CardContent className="space-y-3 p-5">
               <p className="text-sm text-muted-foreground">
-                This property has no listing yet — pick the semester to publish it for.
+                This property has no listing yet. Pick the semester to publish it for.
               </p>
               <CreateListingToPublish
                 propertyId={visit.propertyId}

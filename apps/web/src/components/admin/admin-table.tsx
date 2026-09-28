@@ -16,15 +16,15 @@ export interface AdminColumn {
 
 function display(value: unknown, format: AdminColumn["format"]) {
   if (format === "status") return <StatusBadge value={value} />;
-  if (format === "date") return value ? new Date(String(value)).toLocaleString() : "—";
+  if (format === "date") return value ? new Date(String(value)).toLocaleString() : "N/A";
   if (format === "money") return new Intl.NumberFormat("en-UG", { style: "currency", currency: "UGX", maximumFractionDigits: 0 }).format(Number(value ?? 0));
   if (format === "boolean") return <StatusBadge value={value ? "configured" : "unconfigured"} />;
-  if (format === "id") return value ? <code className="text-[11px]">{String(value).slice(0, 8)}</code> : "—";
+  if (format === "id") return value ? <code className="text-[11px]">{String(value).slice(0, 8)}</code> : "N/A";
   if (format === "roles") {
     const roles = Array.isArray(value) ? value as { name?: string; key?: string; scopeId?: string | null }[] : [];
-    return roles.length ? <div className="flex flex-wrap gap-1">{roles.map((role, index) => <span key={`${role.key}-${index}`} className="rounded bg-slate-100 px-1.5 py-1 text-[10px] font-semibold text-slate-700 dark:bg-muted dark:text-muted-foreground">{role.name ?? role.key}{role.scopeId ? ` · ${role.scopeId}` : ""}</span>)}</div> : "—";
+    return roles.length ? <div className="flex flex-wrap gap-1">{roles.map((role, index) => <span key={`${role.key}-${index}`} className="rounded bg-slate-100 px-1.5 py-1 text-[10px] font-semibold text-slate-700 dark:bg-muted dark:text-muted-foreground">{role.name ?? role.key}{role.scopeId ? ` · ${role.scopeId}` : ""}</span>)}</div> : "N/A";
   }
-  return value === null || value === undefined || value === "" ? "—" : String(value).replaceAll("_", " ");
+  return value === null || value === undefined || value === "" ? "N/A" : String(value).replaceAll("_", " ");
 }
 
 function csvCell(value: unknown) {

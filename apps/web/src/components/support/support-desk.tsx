@@ -39,7 +39,7 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
       setForm(EMPTY_FORM);
       setSubmitted(true);
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't send your inquiry — try again."));
+      setError(apiErrorMessage(err, "Couldn't send your inquiry. Try again."));
     } finally {
       setPending(false);
     }
@@ -53,14 +53,14 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
           <h2 className="text-base font-bold">Send an inquiry</h2>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Goes straight to our Ops team and admins — you&apos;ll see the reply here.
+          Goes straight to our Ops team and admins. You&apos;ll see the reply here.
         </p>
 
         {submitted && (
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950 dark:text-teal-100">
             <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0" />
             <p>
-              Sent — the team has been notified by email. Track it under
+              Sent. The team has been notified by email. Track it under
               &ldquo;Your inquiries&rdquo; below.
             </p>
           </div>
@@ -133,7 +133,7 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
         <h2 className="text-base font-bold">Your inquiries</h2>
         {rows.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            Nothing yet — anything you send shows up here with the team&apos;s response.
+            Nothing yet. Anything you send shows up here with the team&apos;s response.
           </p>
         ) : (
           <ul className="mt-3 space-y-3">
