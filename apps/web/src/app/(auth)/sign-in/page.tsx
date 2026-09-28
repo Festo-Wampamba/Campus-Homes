@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { safeAuthDestination } from "@campushomes/shared";
 import { redirect } from "next/navigation";
@@ -35,8 +36,13 @@ export default async function SignInPage({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden p-8 sm:block sm:p-10">
         <LiveClock />
       </div>
-      <div className="flex h-full w-full items-center justify-center overflow-y-auto p-4 py-8 sm:p-8">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-y-auto p-4 py-8 sm:p-8">
         <SignInForm next={next} error={params.error ?? null} />
+        <p className="max-w-sm text-center text-xs leading-5 text-white/85">
+          By continuing you agree to our{" "}
+          <Link href="/terms" className="font-semibold text-white underline underline-offset-4">Terms</Link> and{" "}
+          <Link href="/privacy" className="font-semibold text-white underline underline-offset-4">Privacy policy</Link>.
+        </p>
       </div>
     </div>
   );

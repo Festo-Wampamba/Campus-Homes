@@ -16,7 +16,8 @@
   --teal-600: oklch(0.54 0.09 195);
   --teal-100: oklch(0.95 0.02 195);
   --teal-50: oklch(0.977 0.01 195);
-  --coral-600: oklch(0.65 0.13 22);
+  /* 0.55 lightness: 5.2:1 on white, 4.9:1 on teal-50 (small coral text). */
+  --coral-600: oklch(0.55 0.13 22);
   --coral-500: oklch(0.735 0.115 22);
 
   /* semantic */

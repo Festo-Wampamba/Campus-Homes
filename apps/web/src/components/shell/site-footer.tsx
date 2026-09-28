@@ -93,9 +93,12 @@ async function SiteFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 pt-6 text-xs text-white/42 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 pt-6 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} CampusHomes Uganda. All rights reserved.</p>
-          <p>Live, Learn, Succeed.</p>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link href="/privacy" className="transition-colors duration-300 hover:text-white">Privacy policy</Link>
+            <Link href="/terms" className="transition-colors duration-300 hover:text-white">Terms and conditions</Link>
+          </nav>
         </div>
       </div>
     </footer>

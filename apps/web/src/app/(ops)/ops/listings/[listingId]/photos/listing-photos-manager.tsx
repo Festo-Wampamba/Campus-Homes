@@ -109,7 +109,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
                 <div key={photo.id} className="overflow-hidden rounded-md border border-border">
                   {url ? (
                     // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                    <img src={url} alt="" className="aspect-square w-full object-cover" />
+                    <img src={url} alt="Listing photo" className="aspect-square w-full object-cover" />
                   ) : (
                     <div className="grid aspect-square place-items-center bg-muted text-xs text-muted-foreground">
                       No preview

@@ -6,7 +6,9 @@ import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { RlsDb } from './db/db.module';
+import { REDIS } from './db/redis.module';
 import { cookieOriginGuard } from './modules/auth/csrf';
+import { writeRateLimit } from './rate-limit';
 
 // Routes that must NOT get the /api/v1 prefix — their exact paths are
 // already registered as Logto/Google redirect URIs and connector webhook
@@ -49,6 +51,8 @@ async function bootstrap() {
     res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     next();
   });
+  // ponytail: one global write budget; per-route limits if a single form needs tighter caps.
+  http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 60, windowSec: 60 }));
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
     const isExempt = req.originalUrl.startsWith('/api/v1/admin') || req.originalUrl.startsWith('/api/v1/health');
     if (isExempt || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();

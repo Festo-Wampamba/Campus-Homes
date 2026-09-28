@@ -59,7 +59,7 @@ function PhotoThumb({
   return (
     <div className="group relative">
       {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview, not a storage URL */}
-      <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+      <img src={url} alt="Inspection photo preview" className="aspect-square w-full rounded-md object-cover" />
       <button
         type="button"
         aria-label="Remove photo"

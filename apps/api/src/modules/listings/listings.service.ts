@@ -6,6 +6,7 @@ import type {
   SubmitPropertyInput,
   UnitOperationalStatus,
   UpdatePropertyInput,
+  TrackEvent,
 } from '@campushomes/shared';
 
 import type { RlsContext } from '../../db/rls-context';
@@ -627,6 +628,15 @@ export class ListingsService {
       }
       return res.rows as unknown[];
     });
+  }
+
+  recordEvent(event: TrackEvent) {
+    return this.rlsDb.run(SERVICE_CTX, (_db, client) =>
+      client.query(`INSERT INTO product_events (event_type, payload) VALUES ($1, $2::jsonb)`, [
+        event.type,
+        JSON.stringify({ path: event.path, cta: event.cta ?? null }),
+      ]),
+    );
   }
 
   detail(listingId: string) {

@@ -1130,3 +1130,23 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
   - Staff accounts page reuses `UsersManager` (`staffOnly`) for Edit / Manage
     access / Delete, and now filters by staff role keys — "has any assignment"
     had let landlords (Henry K) in, since every account gets an 'own' role.
+
+- **Launch-readiness pass (2026-09-29):** privacy/terms pages, cookie notice,
+  first-party analytics, rate limiting, SEO files, contrast, 404.
+  - **Prod was sending `X-Robots-Tag: noindex, nofollow`** despite robots.txt
+    allowing crawl: `next.config.ts` `headers()` is evaluated at **build**
+    time, so the `ALLOW_INDEXING` check was baked into the image. Moved to
+    `src/proxy.ts` (runtime). Prod robots.txt was also serving the
+    indexing-OFF branch, meaning `ALLOW_INDEXING=true` is **not** set on the
+    prod web service's runtime env. Set it (plus `SITE_URL=https://campushomes.co.ug`)
+    as Dokploy **Environment** vars, not build args.
+  - Analytics = `POST /api/v1/events` (public, `page_view`/`cta_click`,
+    pathname only, no user id) into existing `product_events` (svc_all, no
+    migration). CTA buttons carry `data-cta`. Shown in admin Reports pilot
+    funnel. No cookies, so the cookie notice is informational only; adding
+    any tracking tool means turning it into a real opt-in gate.
+  - Rate limit: `src/rate-limit.ts`, Redis fixed window, 60 writes/min per
+    session cookie or client IP (`cf-connecting-ip` → `x-real-ip`), mounted
+    on `/api/v1` in main.ts, fails open when Redis is down.
+  - `--coral-600` light theme darkened to `oklch(0.55 0.13 22)` for 4.5:1
+    small-text contrast. Coral eyebrows on dark teal use coral-500.

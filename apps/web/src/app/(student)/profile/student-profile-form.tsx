@@ -139,12 +139,12 @@ export function StudentProfileForm({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="name">Full name</Label>
-            <input id="name" className={inputClass} placeholder="Jane Doe" value={name} onChange={(e) => setName(e.target.value)} />
+            <input id="name" maxLength={200} className={inputClass} placeholder="Jane Doe" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="dateOfBirth">Date of birth</Label>
-              <input id="dateOfBirth" type="date" className={inputClass} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+              <input id="dateOfBirth" type="date" max={new Date().toISOString().slice(0, 10)} className={inputClass} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="gender">Gender</Label>
@@ -157,15 +157,15 @@ export function StudentProfileForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="nationality">Nationality</Label>
-            <input id="nationality" className={inputClass} placeholder="Ugandan" value={nationality} onChange={(e) => setNationality(e.target.value)} />
+            <input id="nationality" maxLength={100} className={inputClass} placeholder="Ugandan" value={nationality} onChange={(e) => setNationality(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="address">Address</Label>
-            <input id="address" className={inputClass} placeholder="Plot 12, Makerere Hill Road" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <input id="address" maxLength={500} className={inputClass} placeholder="Plot 12, Makerere Hill Road" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="emergencyContactName">Emergency contact name</Label>
-            <input id="emergencyContactName" className={inputClass} placeholder="Jane Doe" value={emergencyContactName} onChange={(e) => setEmergencyContactName(e.target.value)} />
+            <input id="emergencyContactName" maxLength={200} className={inputClass} placeholder="Jane Doe" value={emergencyContactName} onChange={(e) => setEmergencyContactName(e.target.value)} />
           </div>
           <PhoneField
             id="emergencyContactPhone"

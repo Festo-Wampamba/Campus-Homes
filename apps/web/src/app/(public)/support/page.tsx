@@ -8,7 +8,11 @@ import type { Inquiry } from "@campushomes/shared";
 
 import { SupportDesk } from "@/components/support/support-desk";
 
-export const metadata: Metadata = { title: "Support" };
+export const metadata: Metadata = {
+  title: "Support",
+  description: "Contact the CampusHomes team about a listing, a reservation or a safety concern.",
+  alternates: { canonical: "/support" },
+};
 
 export default async function SupportPage() {
   const session = await getServerSession();
