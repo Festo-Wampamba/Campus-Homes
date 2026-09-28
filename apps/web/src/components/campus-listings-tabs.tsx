@@ -59,7 +59,13 @@ export function CampusListingsTabs({
       )}
 
       {visible.length > 0 ? (
-        <ul className="mt-8 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        <ul
+          className={cn(
+            "mt-8 grid items-stretch gap-x-6 gap-y-10 sm:grid-cols-2",
+            visible.length > 2 ? "lg:grid-cols-3" : "max-w-4xl",
+            visible.length === 1 && "max-w-md sm:grid-cols-1",
+          )}
+        >
           {visible.map((listing) => (
             <FeaturedCard key={listing.id} row={listing} />
           ))}
@@ -112,7 +118,7 @@ function FilterButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm font-bold transition duration-300 active:scale-[0.98]",
+        "inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-sm font-bold transition duration-300 active:scale-[0.98]",
         active
           ? "border-teal-900 bg-teal-900 text-white"
           : "border-border bg-background text-muted-foreground hover:border-teal-700 hover:text-teal-700",

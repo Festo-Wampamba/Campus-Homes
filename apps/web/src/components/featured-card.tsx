@@ -16,7 +16,7 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
 
   return (
     <li className="min-w-0">
-      <Link href={`/listings/${row.id}`} className="group block h-full">
+      <Link href={`/listings/${row.id}`} className="group flex h-full flex-col">
         <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-teal-900">
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- listing photo hosts can vary in local demo data
@@ -39,25 +39,27 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
           </span>
         </div>
 
-        <div className="pt-4">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-coral-600">
+        <div className="flex flex-1 flex-col pt-4">
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-5 text-coral-600">
             <SewingPinIcon className="size-3.5" />
-            {row.street_address}
+            <span className="truncate">{row.street_address}</span>
           </p>
-          <h3 className="mt-2 line-clamp-1 text-lg leading-snug transition-colors duration-300 group-hover:text-teal-700">
+          <h3 className="mt-2 truncate font-display text-lg font-semibold leading-snug transition-colors duration-300 group-hover:text-teal-700">
             {row.name}
           </h3>
-          <p className="mt-1.5 line-clamp-1 text-sm text-muted-foreground">
+          <p className="mt-1.5 min-h-5 line-clamp-1 text-sm leading-5 text-muted-foreground">
             {[roomSummary, ...amenities].filter(Boolean).join(" · ")}
           </p>
-          <div className="mt-4 flex items-end justify-between gap-3 border-t border-border pt-3">
-            <p className="tabular font-display text-lg font-semibold text-foreground">
+          <div className="mt-auto flex flex-wrap items-end gap-x-3 gap-y-1 border-t border-border pt-3">
+            <p className="tabular shrink-0 whitespace-nowrap font-display text-lg font-semibold text-foreground">
               {row.room_categories.length > 1 && (
                 <span className="mr-1 text-xs font-semibold text-muted-foreground">From</span>
               )}
               {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
             </p>
-            <span className="text-xs text-muted-foreground">per bed, per semester</span>
+            <span className="shrink-0 whitespace-nowrap text-right text-xs leading-4 text-muted-foreground">
+              per bed, per semester
+            </span>
           </div>
         </div>
       </Link>

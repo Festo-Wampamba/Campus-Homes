@@ -1,7 +1,8 @@
 const ugx = new Intl.NumberFormat("en-UG", { maximumFractionDigits: 0 });
 
 export function formatUgx(amount: number): string {
-  return `UGX ${ugx.format(amount)}`;
+  // Keep the currency label attached to its amount in narrow listing cards.
+  return `UGX\u00a0${ugx.format(amount)}`;
 }
 
 // A listing prices each room type independently — this is the one label map

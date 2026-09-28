@@ -26,7 +26,7 @@ export default async function SupportPage() {
       <h1 className="text-2xl">Support</h1>
       <p className="text-sm text-muted-foreground">
         Questions about a listing, a reservation, or something that doesn&apos;t
-        look right — reach the CampusHomes team directly.
+        look right? Reach the CampusHomes team directly.
       </p>
 
       {isStudent && <SupportDesk initialInquiries={inquiries} />}
@@ -58,7 +58,7 @@ export default async function SupportPage() {
             <p className="text-muted-foreground">
               If a property doesn&apos;t match what was verified, or you have a
               safety concern about a landlord or a room, email us with the
-              property name and reservation ID (if any) — our Ops team
+              property name and reservation ID, if you have one. Our team
               investigates every report.
             </p>
           </div>
