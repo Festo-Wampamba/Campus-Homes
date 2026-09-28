@@ -49,7 +49,7 @@ export function OnboardingLeadForm() {
       });
       setSubmitted(true);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't send this — try again, or call/email us directly."));
+      setError(errorMessage(err, "Couldn't send this. Try again, or contact us directly."));
     } finally {
       setPending(false);
     }
@@ -58,7 +58,7 @@ export function OnboardingLeadForm() {
   if (submitted) {
     return (
       <div className="rounded-2xl border border-border bg-card p-6 text-center sm:p-8">
-        <h3 className="text-lg font-semibold text-foreground">Thanks — we&apos;ve got it</h3>
+        <h3 className="text-lg font-semibold text-foreground">Thanks, we&apos;ve got it</h3>
         <p className="mt-2 text-sm text-muted-foreground">
           Our team will reach out to get your property onboarded.
         </p>

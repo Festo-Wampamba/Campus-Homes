@@ -203,14 +203,14 @@ export function SearchClient() {
           )}
         </div>
         <div className="flex items-baseline justify-between gap-3">
-          <h1 className="text-2xl tracking-tight">
+          <h1 className="font-display text-xl leading-tight tracking-tight sm:text-2xl">
             {campus ? `Near ${campus.name}` : "Verified places here"}
           </h1>
-          <p aria-live="polite" className="text-sm text-muted-foreground">
+          <p aria-live="polite" className="shrink-0 text-xs font-semibold tracking-wide text-muted-foreground">
             {data ? `${data.length} found` : "Searching…"}
           </p>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-[42ch] text-sm leading-6 text-muted-foreground">
           Move the map to search a different area. Every result passed a
           physical inspection.
         </p>
@@ -302,7 +302,7 @@ export function SearchClient() {
             aria-hidden
           >
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+              <Skeleton key={i} className="h-32 w-full rounded-xl" />
             ))}
           </div>
         )}
@@ -311,7 +311,7 @@ export function SearchClient() {
           <EmptyState
             icon={RefreshCw}
             title="Search didn't load"
-            body="Check your connection and try again — your map position is kept."
+            body="Check your connection and try again. Your map position is kept."
             action={
               <Button variant="secondary" onClick={() => refetch()}>
                 Try again
@@ -324,7 +324,7 @@ export function SearchClient() {
           <EmptyState
             icon={MapPin}
             title="No verified places in this area yet"
-            body="Pan or zoom the map toward your campus — new hostels go live as our inspectors verify them."
+            body="Pan or zoom the map toward your campus. New hostels go live as our inspectors verify them."
           />
         )}
 
@@ -376,12 +376,12 @@ function ResultCard({
       ref={ref}
       onMouseEnter={onHover}
       className={cn(
-        "rounded-xl border border-border bg-card p-3 shadow-xs transition duration-300 hover:-translate-y-0.5 hover:border-teal-700/40 hover:shadow-md",
+        "min-w-0 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xs transition duration-300 hover:-translate-y-0.5 hover:border-teal-700/40 hover:shadow-md",
         selected && "border-teal-600 ring-1 ring-teal-600",
       )}
     >
-      <Link href={`/listings/${row.id}`} className="group flex gap-3">
-        <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-teal-700 to-teal-900">
+      <Link href={`/listings/${row.id}`} className="group flex h-full min-w-0 gap-3">
+        <div className="relative size-24 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-teal-700 to-teal-900 sm:size-28">
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a thumbnail
             <img
@@ -394,16 +394,16 @@ function ResultCard({
             <Building2 aria-hidden className="absolute inset-0 m-auto size-6 text-white/70" />
           )}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col py-0.5">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate text-lg leading-snug group-hover:text-teal-700">
+            <h3 className="min-w-0 truncate font-display text-base font-semibold leading-5 group-hover:text-teal-700 sm:text-lg sm:leading-snug">
               {row.name}
             </h3>
             <VerifiedBadge size="sm" className="shrink-0" />
           </div>
-          <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
+          <p className="mt-0.5 flex min-w-0 items-center gap-1 text-sm leading-5 text-muted-foreground">
             <MapPin aria-hidden className="size-3.5 shrink-0" />
-            {row.street_address}
+            <span className="truncate">{row.street_address}</span>
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {rooms && <span className="text-sm text-muted-foreground">{rooms}</span>}
@@ -423,12 +423,16 @@ function ResultCard({
               {amenities.join(" · ")}
             </p>
           )}
-          <p className="tabular mt-1.5 font-display text-lg font-semibold text-foreground">
-            {row.room_categories.length > 1 && (
-              <span className="mr-1 text-sm font-normal text-muted-foreground">From</span>
-            )}
-            {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
-            <span className="text-sm font-normal text-muted-foreground"> / semester</span>
+          <p className="tabular mt-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 pt-2 font-display text-base font-semibold text-foreground sm:text-lg">
+            <span className="shrink-0 whitespace-nowrap">
+              {row.room_categories.length > 1 && (
+                <span className="mr-1 text-sm font-normal text-muted-foreground">From</span>
+              )}
+              {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
+            </span>
+            <span className="shrink-0 whitespace-nowrap text-xs font-normal text-muted-foreground sm:text-sm">
+              per bed, per semester
+            </span>
           </p>
           {row.room_categories.length > 1 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
