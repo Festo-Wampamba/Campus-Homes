@@ -24,7 +24,7 @@ const VALUE_PROPS = [
   {
     icon: EyeOpenIcon,
     title: "Improved visibility",
-    body: "Your rooms show up in front of students actively searching near their campus — a verified badge draws demand that is already primed to book.",
+    body: "Your rooms appear when students search near their campus. A verified badge helps them choose with confidence.",
   },
   {
     icon: DashboardIcon,
@@ -39,7 +39,7 @@ const VALUE_PROPS = [
   {
     icon: StarFilledIcon,
     title: "Trusted, with support on hand",
-    body: "CampusHomes is built on inspected, verified housing students trust — and our team is readily available whenever you need help.",
+    body: "CampusHomes helps students find inspected housing, and our team is available when you need help.",
   },
 ] as const;
 
@@ -48,7 +48,7 @@ const STEPS = [
     number: "01",
     icon: PersonIcon,
     title: "Create an account",
-    body: "Use the link below to create your secure CampusHomes account and add a landlord workspace — you keep any student access you already have.",
+    body: "Create a secure CampusHomes account and add a landlord workspace. You keep any student access you already have.",
   },
   {
     number: "02",
@@ -60,13 +60,13 @@ const STEPS = [
     number: "03",
     icon: HomeIcon,
     title: "List your property",
-    body: "Once verified, you can advertise your rooms — types, photos, pricing and availability — for the public to view and book.",
+    body: "Once verified, you can publish room types, photos, prices and availability for students to view and book.",
   },
   {
     number: "04",
     icon: CalendarIcon,
     title: "Manage your bookings",
-    body: "Respond to bookings, register and message your tenants, and keep availability accurate as rooms fill — all from your dashboard.",
+    body: "Use your dashboard to respond to bookings, message tenants and keep room availability current.",
   },
 ] as const;
 
@@ -112,7 +112,7 @@ export default async function LandlordsPage() {
                 For hostel &amp; property owners
               </span>
             </div>
-            <h1 className="font-brand text-4xl leading-[1.1] text-white sm:text-5xl">
+            <h1 className="font-display text-4xl font-bold leading-[1.12] tracking-[-0.035em] text-white sm:text-5xl">
               Fill rooms with students who know what to expect.
             </h1>
             <p className="mt-6 text-base leading-7 text-white/78 sm:text-lg">
@@ -204,8 +204,7 @@ export default async function LandlordsPage() {
               Your dashboard keeps every listing current.
             </h2>
             <p className="mt-5 max-w-md text-md leading-7 text-muted-foreground">
-              After your first property is verified, you manage it directly —
-              no need to go through operations for routine updates.
+              After your first property is verified, you can manage routine updates directly.
             </p>
           </div>
           <ul className="divide-y divide-border border-y border-border">
@@ -228,8 +227,8 @@ export default async function LandlordsPage() {
             Request onboarding
           </h2>
           <p className="mt-3 text-center text-sm text-muted-foreground">
-            Tell us a bit about your property — especially useful if you&apos;re far from Kampala,
-            since we can&apos;t always drop by first. Our team will reach out to arrange next steps.
+            Tell us about your property, especially if you are far from Kampala. Our team
+            will reach out to arrange the next steps.
           </p>
           <div className="mt-8">
             <OnboardingLeadForm />

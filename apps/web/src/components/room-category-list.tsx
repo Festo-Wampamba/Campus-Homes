@@ -122,79 +122,97 @@ export function RoomCategoryList({
 
   return (
     <>
-      <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
+      <ul className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {groups.map((group) => (
-          <li key={group.key} className="flex flex-wrap items-center gap-3 p-4">
-            <DoorOpen aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">
-                {roomCategoryLabel(group.category)}
-                {group.selfContained && (
-                  <span className="ml-2 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                    Self-contained
+          <li
+            key={group.key}
+            className="grid gap-x-4 gap-y-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-5"
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
+                <DoorOpen aria-hidden className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="font-display font-semibold">
+                    {roomCategoryLabel(group.category)}
+                  </p>
+                  {group.selfContained && (
+                    <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                      Self-contained
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+                  <span>Sleeps {group.capacity}</span>
+                  <span aria-hidden>·</span>
+                  <span>
+                    {group.roomCount} {group.roomCount === 1 ? "room" : "rooms"}
                   </span>
-                )}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Sleeps {group.capacity} · {group.roomCount}{" "}
-                {group.roomCount === 1 ? "room" : "rooms"}
-              </p>
+                </p>
+              </div>
             </div>
-            <p className="tabular text-sm font-semibold text-foreground">
-              {formatUgx(group.pricePerTermUgx)}
-              <span className="font-normal text-muted-foreground"> / bed / semester</span>
+
+            <div className="min-w-0 text-left sm:text-right">
+              <p className="tabular whitespace-nowrap text-sm font-semibold text-foreground">
+                {formatUgx(group.pricePerTermUgx)}
+              </p>
+              <p className="whitespace-nowrap text-xs text-muted-foreground">per bed / semester</p>
               {group.depositUgx != null && (
-                <span className="block text-xs font-normal text-muted-foreground">
-                  + {formatUgx(group.depositUgx)} deposit
-                </span>
+                <p className="mt-0.5 whitespace-nowrap text-xs text-muted-foreground">
+                  Deposit {formatUgx(group.depositUgx)}
+                </p>
               )}
-            </p>
-            {group.availableCount > 0 ? (
-              <StatusChip tone="success">{group.availableCount} free</StatusChip>
-            ) : (
-              <StatusChip tone="warning">Fully booked</StatusChip>
-            )}
-            {group.roomPhotos.length > 0 && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  setLightbox({
-                    photos: group.roomPhotos,
-                    index: 0,
-                    caption: `Photos of this room, uploaded by the landlord.`,
-                  })
-                }
-              >
-                <Images aria-hidden className="size-4" />
-                Room photos
-              </Button>
-            )}
-            {photos.length > 0 && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  setLightbox({
-                    photos,
-                    index: 0,
-                    caption: "General photos of the property.",
-                  })
-                }
-              >
-                <Images aria-hidden className="size-4" />
-                Property photos
-              </Button>
-            )}
-            {canReserve && group.firstAvailableBedId && (
-              <ReserveButton
-                bedId={group.firstAvailableBedId}
-                listingId={listingId}
-                needsProfile={needsProfile}
-              />
-            )}
+            </div>
+
+            <div className="col-span-full flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3 sm:justify-end">
+              {group.availableCount > 0 ? (
+                <StatusChip tone="success">{group.availableCount} free</StatusChip>
+              ) : (
+                <StatusChip tone="warning">Fully booked</StatusChip>
+              )}
+              {group.roomPhotos.length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setLightbox({
+                      photos: group.roomPhotos,
+                      index: 0,
+                      caption: "Photos of this room, uploaded by the landlord.",
+                    })
+                  }
+                >
+                  <Images aria-hidden className="size-4" />
+                  Room photos
+                </Button>
+              )}
+              {photos.length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setLightbox({
+                      photos,
+                      index: 0,
+                      caption: "General photos of the property.",
+                    })
+                  }
+                >
+                  <Images aria-hidden className="size-4" />
+                  Property photos
+                </Button>
+              )}
+              {canReserve && group.firstAvailableBedId && (
+                <ReserveButton
+                  bedId={group.firstAvailableBedId}
+                  listingId={listingId}
+                  needsProfile={needsProfile}
+                />
+              )}
+            </div>
           </li>
         ))}
       </ul>
@@ -294,7 +312,7 @@ function Lightbox({
           // spinner without a setState-in-effect.
           key={`${photo.storageKey}-${state.index}`}
           url={url}
-          alt={`${propertyName} — photo ${state.index + 1}`}
+          alt={`${propertyName}, photo ${state.index + 1}`}
         />
       )}
       <p className="mt-3 text-center text-sm text-white/70">
