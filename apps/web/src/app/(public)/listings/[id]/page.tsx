@@ -103,46 +103,57 @@ export default async function ListingDetailPage({
       />
       <BackButton fallbackHref="/search" label="Back" />
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl tracking-[-0.035em] sm:text-4xl">{property.name}</h1>
-        <VerifiedBadge />
-        {property.gender_arrangement && (
-          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-            {GENDER_ARRANGEMENT_LABELS[property.gender_arrangement]}
-          </span>
-        )}
-        <Link href="/#verified" className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
-          What does Verified mean?
-        </Link>
-        {listing.verifiedAt && (
-          <span className="text-xs text-muted-foreground">
-            Inspected{" "}
-            {new Date(listing.verifiedAt).toLocaleDateString(undefined, {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        )}
+      <header className="mt-6 flex items-start justify-between gap-4 sm:mt-7">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="min-w-0 text-3xl leading-tight tracking-[-0.035em] sm:text-4xl">
+              {property.name}
+            </h1>
+            <VerifiedBadge />
+            {property.gender_arrangement && (
+              <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
+                {GENDER_ARRANGEMENT_LABELS[property.gender_arrangement]}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <p className="text-md text-muted-foreground">{property.street_address}</p>
+            {listing.verifiedAt && (
+              <span className="text-xs text-muted-foreground">
+                Inspected{" "}
+                {new Date(listing.verifiedAt).toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+            <Link
+              href="/#verified"
+              className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300"
+            >
+              What does Verified mean?
+            </Link>
+          </div>
+        </div>
         {isStudent && (
-          <div className="ml-auto">
+          <div className="shrink-0 pt-0.5">
             <SaveButton listingId={listingId} initialSaved={isSaved} />
           </div>
         )}
-      </div>
-      <p className="mt-1 text-md text-muted-foreground">{property.street_address}</p>
+      </header>
 
       {/* Gallery + money/custodian card sit side by side on large screens,
           starting at the same vertical position — the reservation card is
           never scrolled below the photos, same layout logic as an
           e-commerce product image + buy box. */}
-      <div className="mt-7 grid gap-10 lg:grid-cols-[1fr_minmax(0,24rem)] lg:items-start">
+      <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start xl:gap-10">
         <div>
           {/* Photos — inspector-captured (EXIF-verified) plus the
               landlord's own whole-property shots (property_media, 0026) */}
-          <div className="mb-8">
+          <div className="mb-10">
             {galleryPhotos.length === 0 ? (
-              <div className="flex h-72 items-center justify-center rounded-2xl bg-teal-50 text-muted-foreground">
+              <div className="flex aspect-[4/3] items-center justify-center rounded-2xl bg-teal-50 text-muted-foreground sm:aspect-auto sm:h-[31rem]">
                 <span className="inline-flex items-center gap-2 text-sm">
                   <Camera aria-hidden className="size-4" />
                   Photos coming soon
@@ -157,14 +168,14 @@ export default async function ListingDetailPage({
                       key={photo.id}
                       className={
                         i === 0
-                          ? "relative h-72 overflow-hidden rounded-2xl sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-[30rem]"
-                          : "relative hidden overflow-hidden rounded-xl sm:block"
+                          ? "relative aspect-[4/3] overflow-hidden rounded-2xl bg-muted sm:aspect-auto sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-[31rem]"
+                          : "relative hidden min-h-36 overflow-hidden rounded-xl bg-muted sm:block"
                       }
                     >
                       {url ? (
                         <Image
                           src={url}
-                          alt={`${property.name} — photo ${i + 1}`}
+                          alt={`${property.name}, photo ${i + 1}`}
                           fill
                           sizes={i === 0 ? "(min-width: 640px) 66vw, 100vw" : "33vw"}
                           className="object-cover"
@@ -194,7 +205,7 @@ export default async function ListingDetailPage({
           )}
 
           {amenities.length > 0 && (
-            <section aria-labelledby="amenities-heading" className="mt-8">
+            <section aria-labelledby="amenities-heading" className="mt-10">
               <h2 id="amenities-heading" className="text-xl">
                 Amenities we confirmed
               </h2>
@@ -209,7 +220,7 @@ export default async function ListingDetailPage({
             </section>
           )}
 
-          <section aria-labelledby="units-heading" className="mt-8">
+          <section aria-labelledby="units-heading" className="mt-10">
             <h2 id="units-heading" className="text-xl">
               Room types
             </h2>
@@ -228,12 +239,12 @@ export default async function ListingDetailPage({
           {/* Pre-reservation channel to the landlord — separate from the
               reservation chat thread (only opens once a hold exists) and
               from /support (staff-routed, never reaches the landlord). */}
-          <section aria-labelledby="ask-heading" className="mt-8 max-w-sm">
+          <section aria-labelledby="ask-heading" className="mt-10 max-w-sm">
             <h2 id="ask-heading" className="text-xl">
               Have a question?
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Ask the landlord directly, or request a viewing — no reservation needed.
+              Ask the landlord directly, or request a viewing. No reservation needed.
             </p>
             <div className="mt-3">
               {session ? (
@@ -253,7 +264,7 @@ export default async function ListingDetailPage({
         {/* Reservation panel — pinned so price + CTA are never scrolled out
             of view: a sticky sidebar on desktop, a fixed bottom bar on
             mobile (there's no room beside the content there). */}
-        <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
+        <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start">
           <MoneyCard
             session={session}
             canReserve={canReserve}
@@ -304,18 +315,33 @@ function MoneyCard({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "flex items-center justify-between gap-3" : "rounded-2xl border border-border bg-card p-6 shadow-[0_22px_50px_-32px_rgba(0,47,47,0.35)]"}>
-      <div>
-        <p className="tabular font-display text-2xl font-semibold">
+    <div
+      className={cn(
+        compact
+          ? "flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+          : "rounded-2xl border border-border bg-card p-5 shadow-[0_22px_50px_-32px_rgba(0,47,47,0.35)] sm:p-6",
+      )}
+    >
+      <div className={cn("min-w-0", compact && "flex-1")}>
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           {minPriceUgx !== maxPriceUgx && (
-            <span className="mr-1 text-base font-normal text-muted-foreground">From</span>
+            <span className="text-sm font-normal text-muted-foreground">From</span>
           )}
-          {formatPriceRange(minPriceUgx, maxPriceUgx)}
-          <span className="text-sm font-normal text-muted-foreground"> / bed / semester</span>
+          <span
+            className={cn(
+              "tabular whitespace-nowrap font-display font-semibold leading-tight",
+              compact ? "text-lg" : "text-2xl",
+            )}
+          >
+            {formatPriceRange(minPriceUgx, maxPriceUgx)}
+          </span>
+          <span className="whitespace-nowrap text-sm font-normal text-muted-foreground">
+            per bed / semester
+          </span>
         </p>
         {!compact && (
           <p className="mt-2 text-sm text-muted-foreground">
-            Reserve any available room — it&apos;s free to hold your spot.
+            Reserve any available room. It&apos;s free to hold your spot.
           </p>
         )}
       </div>
@@ -333,8 +359,8 @@ function MoneyCard({
       {canReserve && (
         <p
           className={cn(
-            "text-sm font-semibold text-foreground",
-            compact ? "shrink-0 text-right" : "mt-4",
+            "font-semibold leading-snug text-foreground",
+            compact ? "max-w-48 shrink-0 text-right text-xs sm:text-sm" : "mt-4 text-sm",
           )}
         >
           Select an available room{compact ? "" : " below to reserve."}
@@ -364,7 +390,7 @@ function MoneyCard({
             Before you move in
           </p>
           <ol className="mt-1.5 list-inside list-decimal space-y-1 text-xs text-muted-foreground">
-            <li>Reserve a free room — no payment needed to hold it.</li>
+            <li>Reserve a free room. No payment is needed to hold it.</li>
             <li>Agree tenancy terms and pay the landlord directly.</li>
             <li>Confirm your move-in here so the room is marked occupied.</li>
           </ol>

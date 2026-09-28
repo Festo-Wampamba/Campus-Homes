@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ArrowRightIcon,
   CameraIcon,
-  ChevronDownIcon,
   DimensionsIcon,
   LockClosedIcon,
   MixIcon,
@@ -67,12 +66,6 @@ const CHECKLIST_LABELS: Record<
   },
 };
 
-const HERO_SLIDES = [
-  "/images/campushomes/hero-hostel-hd-v2.webp",
-  "/images/campushomes/student-lounge-hd-v2.webp",
-  "/images/campushomes/student-room-hd-v2.webp",
-] as const;
-
 // MUK-only for now (2026-09) — mirrors CAMPUS_LOCATIONS (lib/campuses.ts),
 // the platform-wide gate on which universities are visible during first
 // testing. Add an entry back here once another catchment goes live.
@@ -88,7 +81,7 @@ const CAMPUS_CARDS = [
 const FAQS = [
   {
     question: "How much does it cost to reserve a room?",
-    answer: "Nothing right now — reserving a room is free while the platform grows.",
+    answer: "Reserving a room is free while the platform grows.",
   },
   {
     question: "Do I pay rent through CampusHomes?",
@@ -156,76 +149,35 @@ export default async function HomePage() {
 
   return (
     <>
-      <section className="relative isolate flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-teal-900 text-white">
-        <div className="absolute inset-0 z-0">
-          {HERO_SLIDES.map((src, index) => (
-            <div
-              key={src}
-              className="hero-crossfade absolute inset-0 overflow-hidden"
-              style={{ animationDelay: `${(index * 9) / HERO_SLIDES.length}s` }}
-            >
-              <Image
-                src={src}
-                alt=""
-                fill
-                priority={index === 0}
-                sizes="100vw"
-                className="hero-kenburns object-cover"
-                style={{ animationDelay: `${index * -8}s` }}
-              />
-            </div>
-          ))}
-          <div className="absolute inset-0 bg-linear-to-t from-teal-900/80 via-teal-900/35 to-teal-900/45" />
-          <div className="absolute inset-0 opacity-[0.055] [background-image:radial-gradient(circle_at_center,white_1px,transparent_1px)] [background-size:24px_24px]" />
+      <section className="relative isolate flex min-h-[34rem] flex-col overflow-hidden bg-teal-900 text-white sm:min-h-[39rem]">
+        <div className="absolute inset-0">
+          <Image
+            src="/images/campushomes/hero-hostel-hd-v2.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-center"
+          />
+          <div className="absolute inset-0 bg-linear-to-r from-teal-900/95 via-teal-900/75 to-teal-900/25 max-sm:bg-teal-900/75" />
         </div>
 
-        <div className="relative z-10 mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col items-center justify-center px-4 pt-6 pb-2 text-center sm:px-6 sm:pt-8 lg:px-8">
-          <div className="marketing-reveal mx-auto flex max-w-3xl flex-col items-center [text-shadow:0_2px_16px_rgba(0,0,0,0.35)]">
-            <div className="mb-2 inline-flex items-center gap-3">
-              <VerifiedBadge className="shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]" />
-              <span className="text-xs font-bold tracking-[0.16em] text-white/66 uppercase">
-                Kampala&apos;s inspected student housing
-              </span>
-            </div>
-
-            <h1 className="max-w-[28ch] font-brand text-3xl leading-[1.05] text-white sm:text-4xl">
-              Your room. Your campus. <span className="text-coral-500">Verified.</span>
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+          <div className="marketing-reveal max-w-[46rem]">
+            <p className="mb-5 text-xs font-bold tracking-[0.13em] text-white/85 uppercase sm:text-sm">
+              Student housing, checked in person
+            </p>
+            <h1 className="max-w-[19ch] font-display text-4xl font-bold leading-[1.12] tracking-[-0.035em] text-white sm:text-5xl">
+              Find a room near campus you can trust.
             </h1>
-            <p className="mt-2 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
-              Find a hostel we have physically inspected, compare honest room
-              details, and reserve your choice for free before someone else does.
+            <p className="mt-5 max-w-2xl text-base leading-7 text-white/90 sm:text-lg sm:leading-8">
+              Compare inspected hostels, room details and prices. Reserve for free.
             </p>
 
             <HomeSearch />
           </div>
         </div>
 
-        <div className="relative z-10 shrink-0 border-t border-white/15 bg-teal-900/70 backdrop-blur-md">
-          <a
-            href="#featured-heading"
-            className="mx-auto -mt-4 hidden size-9 items-center justify-center rounded-full border border-white/25 bg-teal-900 text-white/90 shadow-lg transition duration-300 hover:text-white sm:flex"
-            aria-label="Scroll to featured listings"
-          >
-            <ChevronDownIcon className="size-4 animate-bounce" />
-          </a>
-          <div className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-x divide-white/15 sm:grid-cols-4">
-            {[
-              ["MUK", "launch university"],
-              ["6", "inspection checks"],
-              ["Free", "to reserve a room"],
-              ["Instant", "reservation confirmed"],
-            ].map(([value, label]) => (
-              <div key={label} className="px-5 py-2 text-center sm:px-6 sm:py-3">
-                <p className="tabular font-display text-lg font-bold text-coral-500 sm:text-xl">
-                  {value}
-                </p>
-                <p className="mt-0.5 text-xs font-semibold tracking-wide text-white/80 uppercase">
-                  {label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
 
       <section aria-labelledby="featured-heading" className="bg-background">
@@ -233,10 +185,10 @@ export default async function HomePage() {
           <div className="max-w-2xl">
             <p className="eyebrow">Available now</p>
             <h2 id="featured-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              Verified hostels near campus.
+              Verified hostels near campus
             </h2>
             <p className="mt-4 text-md leading-7 text-muted-foreground">
-              Every live card is backed by an inspected listing and current room data.
+              Explore inspected places with clear room details and current availability.
             </p>
           </div>
           <div className="mt-9">
@@ -252,7 +204,7 @@ export default async function HomePage() {
               <div>
                 <p className="eyebrow">See where you would live</p>
                 <h2 id="map-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
-                  Every pin is a verified room, not a guess.
+                  See where each hostel is located
                 </h2>
               </div>
               <Link href="/search" className="text-link group">
@@ -273,7 +225,7 @@ export default async function HomePage() {
             <div>
               <p className="eyebrow">Start with your campus</p>
               <h2 id="campus-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
-                Live close enough to make mornings easier.
+                Find a place near your campus
               </h2>
             </div>
             <Link href="/search" className="text-link group">
@@ -302,7 +254,7 @@ export default async function HomePage() {
                     {campus.code}
                   </span>
                   <h3 className="mt-3 text-xl font-semibold text-white sm:text-2xl">{campus.name}</h3>
-                  <p className="mt-1 text-sm text-white/68">{campus.area}</p>
+                  <p className="mt-1 text-sm text-white/85">{campus.area}</p>
                 </div>
               </Link>
             ))}
@@ -328,12 +280,12 @@ export default async function HomePage() {
           <div className="max-w-xl lg:pl-8">
             <p className="eyebrow">More than four walls</p>
             <h2 className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              Find the place where study and life fit together.
+              Find a place that fits student life
             </h2>
             <p className="mt-5 text-md leading-7 text-muted-foreground">
               Compare room capacity, Wi-Fi, water, power, security and shared
-              spaces before you travel across Kampala for a viewing. What you see
-              is grounded in an on-site inspection.
+              spaces before travelling across Kampala for a viewing. Each published
+              listing has been checked on site.
             </p>
             <Link href="/search" className="mt-7 inline-flex h-12 items-center gap-2 rounded-lg bg-teal-900 px-6 font-bold text-white transition duration-300 hover:bg-teal-700 active:scale-[0.98]">
               Explore verified rooms
@@ -347,16 +299,16 @@ export default async function HomePage() {
         <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
           <div className="lg:sticky lg:top-28 lg:self-start">
             <p className="eyebrow text-coral-500">The CampusHomes badge</p>
-            <h2 id="verified-heading" className="mt-4 max-w-[11ch] text-3xl tracking-[-0.035em] text-white sm:text-4xl">
-              Verified means we stood in the room.
+            <h2 id="verified-heading" className="mt-4 max-w-lg text-3xl tracking-[-0.035em] text-white sm:text-4xl">
+              We check every hostel in person
             </h2>
-            <p className="mt-5 max-w-md text-base leading-7 text-white/62">
+            <p className="mt-5 max-w-md text-base leading-7 text-white/80">
               A listing earns the badge only after all six checks pass on site.
               The rule is enforced by the platform, not left to marketing language.
             </p>
             <div className="mt-8 inline-flex items-center gap-3 rounded-xl border border-white/12 bg-white/6 p-3 pr-5">
               <VerifiedBadge />
-              <span className="text-xs font-semibold text-white/68">One badge. One clear standard.</span>
+              <span className="text-xs font-semibold text-white/85">One badge. One clear standard.</span>
             </div>
           </div>
 
@@ -365,7 +317,7 @@ export default async function HomePage() {
               const item = CHECKLIST_LABELS[component];
               const Icon = item.icon;
               return (
-                <li key={component} className="group grid grid-cols-[2.5rem_1fr_auto] items-start gap-4 py-5 sm:grid-cols-[3rem_0.75fr_1.25fr] sm:gap-6 sm:py-7">
+                <li key={component} className="group grid grid-cols-[2.5rem_1fr] items-start gap-4 py-5 sm:grid-cols-[3rem_1fr_1.2fr] sm:gap-6 sm:py-7">
                   <span className="tabular pt-1 font-display text-sm font-semibold text-white/32">
                     0{index + 1}
                   </span>
@@ -375,7 +327,7 @@ export default async function HomePage() {
                     </span>
                     <h3 className="text-base font-semibold text-white">{item.label}</h3>
                   </div>
-                  <p className="col-span-2 col-start-2 text-sm leading-6 text-white/54 sm:col-span-1 sm:col-start-auto">
+                  <p className="col-span-2 col-start-2 text-sm leading-6 text-white/78 sm:col-span-1 sm:col-start-auto">
                     {item.description}
                   </p>
                 </li>
@@ -383,11 +335,10 @@ export default async function HomePage() {
             })}
           </ol>
 
-          <p className="mt-8 max-w-2xl text-sm leading-6 text-white/54">
-            What the badge doesn&apos;t cover: day-to-day conduct after you move in, tenant
-            reviews before your stay, and anything that changes after the inspection date
-            shown on the listing. Rent and tenancy terms are still agreed directly with the
-            landlord — see something that doesn&apos;t match what was verified?{" "}
+          <p className="mt-8 max-w-2xl text-sm leading-6 text-white/78">
+            The badge records what we checked on the inspection date. It does not cover
+            day-to-day conduct or later changes. You agree rent and tenancy terms directly
+            with the landlord. See something that does not match?{" "}
             <Link href="/support" className="font-semibold text-white underline underline-offset-4">
               Report it
             </Link>
@@ -400,7 +351,7 @@ export default async function HomePage() {
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <p className="eyebrow">Three clear steps</p>
           <h2 id="how-heading" className="mt-3 max-w-2xl text-3xl tracking-[-0.035em] sm:text-4xl">
-            From search to move-in, without the guessing.
+            From search to move-in
           </h2>
 
           <ol className="mt-10 grid gap-6 sm:grid-cols-3">
@@ -516,7 +467,7 @@ export default async function HomePage() {
               <h2 className="mt-4 max-w-xl text-3xl tracking-[-0.035em] text-white sm:text-4xl">
                 Fill rooms with students who know what to expect.
               </h2>
-              <p className="mt-5 max-w-lg text-base leading-7 text-white/68">
+              <p className="mt-5 max-w-lg text-base leading-7 text-white/80">
                 Get inspected once, publish honest room details and reach students searching near your campus catchment.
               </p>
               <Link
