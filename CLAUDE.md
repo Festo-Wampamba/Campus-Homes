@@ -1179,7 +1179,16 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     `support@campushomes.com` (a .com) and served publicly on prod/staging.
     `0056_support_contact_email.sql` replaces it with
     `hello@campushomes.co.ug` only while it still equals the placeholder.
-  - `bootstrap-logto-super-admin.cjs` leaves the account's `student` own
-    assignment and `users.role='student'` in place (bypasses the
-    staff↔student exclusivity `assignRoleInTransaction` enforces). Flagged,
-    not changed.
+  - `bootstrap-logto-super-admin.cjs` used to leave the self-provisioned
+    `student` grant and `users.role='student'` on the new super admin
+    (bypassing the staff↔consumer rule in `assignRoleInTransaction`): the
+    admin landed on student onboarding + "Choose workspace", kept a student
+    workspace (could reserve/review/enquire as a student), and showed as
+    "Student" in Users/reports. Not a privilege escalation (admin routes
+    still need the assignment + MFA). Fixed: bootstrap revokes the student
+    grant (audited `roles.bootstrap_revoke_consumer`), sets role=admin, and
+    refuses accounts with landlord access. Prod's super admin was set up
+    manually as role=admin, so it was not affected.
+  - Local compose services use `restart: unless-stopped` (they stayed down
+    after a reboot before, and the setup script only said `fetch failed`;
+    it now names the port and says to run `pnpm local:up`).

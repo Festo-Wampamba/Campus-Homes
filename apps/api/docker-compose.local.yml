@@ -5,6 +5,7 @@ name: campushomes-local
 services:
   db:
     image: postgis/postgis:18-3.6-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: campushomes
       POSTGRES_PASSWORD: campushomes_dev
@@ -25,6 +26,7 @@ services:
 
   redis:
     image: redis:8.2-alpine
+    restart: unless-stopped
     command:
       - redis-server
       - --appendonly
@@ -47,6 +49,7 @@ services:
   # dev-only infra with its own isolated tenant and data.
   logto-db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: logto
       POSTGRES_PASSWORD: logto_dev
@@ -62,6 +65,7 @@ services:
   logto:
     # Pinned: a floating tag silently changes auth behaviour between laptops.
     image: svhd/logto:1.43.0
+    restart: unless-stopped
     # Seed on first boot (--swe = skip when the schema already exists), as in
     # Logto's own compose file; without it a fresh logto-db never starts.
     entrypoint: ['sh', '-c', 'npm run cli db seed -- --swe && npm start']

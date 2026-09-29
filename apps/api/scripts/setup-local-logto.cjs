@@ -207,4 +207,9 @@ Next: pnpm dev, then sign in at ${WEB}/sign-in
 `);
 }
 
-main().catch((err) => fail(err.message));
+main().catch((err) => {
+  const refused = err.cause?.code === 'ECONNREFUSED' ? err.cause : null;
+  fail(refused
+    ? `Nothing is answering on ${refused.address}:${refused.port}. Start the local services with \`pnpm local:up\` and run this again.`
+    : err.message);
+});
