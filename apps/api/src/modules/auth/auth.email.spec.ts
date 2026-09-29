@@ -1,4 +1,4 @@
-import { sendAuthEmail } from './auth.email';
+import { sendAuthEmail, sendVerificationCodeEmail } from './auth.email';
 import type { Env } from '../../config/env';
 
 const baseEnv = {
@@ -40,5 +40,21 @@ describe('sendAuthEmail', () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
     fetchMock.mockRestore();
+  });
+});
+
+describe('sendVerificationCodeEmail without a provider', () => {
+  it('prints the code in development so local sign-in can complete', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined);
+    await sendVerificationCodeEmail({ ...baseEnv, NODE_ENV: 'development' }, { to: 'dev@example.com', code: '482913', kind: 'sign-in' });
+    expect(info).toHaveBeenCalledWith(expect.stringMatching(/To dev@example\.com: .*482913/));
+    info.mockRestore();
+  });
+
+  it('never prints the code outside development', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined);
+    await sendVerificationCodeEmail(baseEnv, { to: 'dev@example.com', code: '482913', kind: 'sign-in' });
+    expect(info.mock.calls.flat().join(' ')).not.toContain('482913');
+    info.mockRestore();
   });
 });

@@ -9,8 +9,10 @@ services:
       POSTGRES_USER: campushomes
       POSTGRES_PASSWORD: campushomes_dev
       POSTGRES_DB: campushomes_dev
+    # Below the kernel's ephemeral range (32768-60999): a 5xxxx host port can
+    # be taken at random by an outgoing connection and block `up`.
     ports:
-      - '54328:5432'
+      - '25432:5432'
     volumes:
       # PG18's image moved the data directory: the volume must mount the parent
       # /var/lib/postgresql, not .../data, or the container crash-loops on restart.
@@ -49,8 +51,6 @@ services:
       POSTGRES_USER: logto
       POSTGRES_PASSWORD: logto_dev
       POSTGRES_DB: logto
-    ports:
-      - '54330:5432'
     volumes:
       - logto_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -60,7 +60,11 @@ services:
       retries: 20
 
   logto:
-    image: svhd/logto:latest
+    # Pinned: a floating tag silently changes auth behaviour between laptops.
+    image: svhd/logto:1.43.0
+    # Seed on first boot (--swe = skip when the schema already exists), as in
+    # Logto's own compose file; without it a fresh logto-db never starts.
+    entrypoint: ['sh', '-c', 'npm run cli db seed -- --swe && npm start']
     depends_on:
       logto-db:
         condition: service_healthy
@@ -68,6 +72,10 @@ services:
       DB_URL: postgres://logto:logto_dev@logto-db:5432/logto
       ENDPOINT: http://localhost:3001
       ADMIN_ENDPOINT: http://localhost:3002
+    # The HTTP Email connector calls the API's /api/auth/logto/email-webhook
+    # on the host (pnpm dev runs the API outside Docker).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - '3001:3001'
       - '3002:3002'

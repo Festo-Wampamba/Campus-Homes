@@ -1,6 +1,6 @@
 import { apiServerPublic } from "@/lib/server-api";
 
-const FALLBACK_EMAIL = "hello@campushomes.ug";
+const FALLBACK_EMAIL = "hello@campushomes.co.ug";
 
 /** Admin-configured support email (Platform settings), with the backend's own default. */
 export async function getSupportEmail(): Promise<string> {

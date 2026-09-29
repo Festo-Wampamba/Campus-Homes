@@ -83,7 +83,7 @@ const DASHBOARD_CAPABILITIES = [
 
 async function getSupportContact() {
   return api<{ email: string; phone: string }>("/listings/support-contact").catch(() => ({
-    email: "hello@campushomes.ug",
+    email: "hello@campushomes.co.ug",
     phone: "",
   }));
 }

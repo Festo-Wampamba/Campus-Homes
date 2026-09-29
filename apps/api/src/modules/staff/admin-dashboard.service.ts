@@ -460,7 +460,7 @@ export class AdminDashboardService {
           registrationsOpen: Boolean(values.registrations_open ?? true),
           maintenanceMode: Boolean(values.maintenance_mode ?? false),
           reportRetentionDays: number(values.report_retention_days ?? 365),
-          supportContact: values.support_contact ?? { email: 'support@campushomes.com', phone: '' },
+          supportContact: values.support_contact ?? { email: 'hello@campushomes.co.ug', phone: '' },
         },
         settingRecords: settings.rows,
         asOf: new Date().toISOString(),

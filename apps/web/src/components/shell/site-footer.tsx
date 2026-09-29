@@ -19,7 +19,7 @@ async function SiteFooter() {
   // falls back to the same default the backend itself uses if the fetch
   // fails, so the footer never renders with no contact route at all.
   const support = await api<{ email: string; phone: string }>("/listings/support-contact").catch(
-    () => ({ email: "hello@campushomes.ug", phone: "" }),
+    () => ({ email: "hello@campushomes.co.ug", phone: "" }),
   );
   return (
     <footer className="mt-auto bg-teal-900 text-white">

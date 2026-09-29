@@ -925,7 +925,7 @@ export class ListingsService {
       const res = await client.query<{ value: { email: string; phone: string } }>(
         `SELECT value FROM platform_settings WHERE key = 'support_contact'`,
       );
-      return res.rows[0]?.value ?? { email: 'support@campushomes.com', phone: '' };
+      return res.rows[0]?.value ?? { email: 'hello@campushomes.co.ug', phone: '' };
     });
   }
 }

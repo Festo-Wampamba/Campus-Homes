@@ -37,11 +37,11 @@ export default async function SupportPage() {
 
       <div className="space-y-3 rounded-xl border border-border bg-card p-5">
         <a
-          href={`mailto:${support?.email ?? "hello@campushomes.ug"}`}
+          href={`mailto:${support?.email ?? "hello@campushomes.co.ug"}`}
           className="flex items-center gap-3 text-sm font-semibold hover:underline"
         >
           <Mail aria-hidden className="size-4 text-muted-foreground" />
-          {support?.email ?? "hello@campushomes.ug"}
+          {support?.email ?? "hello@campushomes.co.ug"}
         </a>
         {support?.phone && (
           <a
