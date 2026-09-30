@@ -110,6 +110,10 @@ const envSchema = z.object({
   B2_BUCKET: z.string().min(1).optional(),
   B2_ACCESS_KEY_ID: z.string().min(1).optional(),
   B2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  // PRIVATE bucket (same endpoint/credentials) for identity and ownership
+  // documents; reads go through presigned GETs from /uploads/document-url.
+  // Production refuses document uploads while it is unset.
+  B2_PRIVATE_BUCKET: z.string().min(1).optional(),
   SENTRY_DSN: z.string().optional(),
   POWER_BI_PUSH_URL: z.string().url().optional(),
   POWER_BI_API_TOKEN: z.string().min(1).optional(),

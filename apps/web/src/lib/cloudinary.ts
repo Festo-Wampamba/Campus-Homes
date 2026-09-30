@@ -17,14 +17,17 @@ export function listingPhotoUrl(storageKey: string, width = 800): string | null 
 // Backblaze B2 presigned PUT depending on which storage is configured.
 export type CloudinarySignature =
   | { provider: "cloudinary"; cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string; allowedFormats?: string }
-  | { provider: "b2"; uploadUrl: string; publicUrl: string };
+  | { provider: "b2"; uploadUrl: string; publicUrl: string }
+  // purpose: "document" — private bucket; the key is shown via lib/documents.
+  | { provider: "b2"; uploadUrl: string; storageKey: string };
 
 // Direct browser→storage upload (§10). Cloudinary: multipart POST carrying the
 // signed params (any extra field invalidates the signature). B2: PUT the raw
 // bytes to the presigned URL — the Content-Type header is stored by B2 as the
 // object type (bound by the signature). `publicId` is
-// what gets stored as storage_key: a Cloudinary public_id, or the B2 object's
-// public URL (rendered as-is by listingPhotoUrl's http passthrough).
+// what gets stored as storage_key: a Cloudinary public_id, the B2 object's
+// public URL (rendered as-is by listingPhotoUrl's http passthrough), or a
+// private document's bare key.
 // Client-side ceiling for a fast error; the API enforces the real cap when
 // signing and (for B2) binds the exact Content-Length, which fetch sets from
 // the File body — never override it here.
@@ -57,7 +60,7 @@ export async function uploadToCloudinary(
     if (!res.ok) {
       throw new Error("Upload failed. Check the file and try again.");
     }
-    return { publicId: sig.publicUrl };
+    return { publicId: "storageKey" in sig ? sig.storageKey : sig.publicUrl };
   }
 
   const body = new FormData();

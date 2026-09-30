@@ -41,6 +41,18 @@ credentials, session tokens, personal records, or exploit payloads in public iss
   it is not malware scanning or proof of actual file contents. Cloudinary binds
   `allowed_formats`. Configure provider-side file-size/storage quotas and scanning
   before accepting untrusted documents at scale; the 15 MB UI cap is not a server cap.
+- Identity and ownership documents (landlord ID scans, property documents,
+  tenant-agreement signatures) upload with `purpose: 'document'` into a separate
+  **private** B2 bucket named by `B2_PRIVATE_BUCKET` (same endpoint, region and
+  key as the media bucket; the key needs read and write on it). Create it with
+  "Files in Bucket are: Private" and a CORS rule allowing `s3_put` from the exact
+  web origin with headers `content-type` and `content-length`, e.g.
+  `uvx b2 bucket update --cors-rules '[{"corsRuleName":"doc-uploads","allowedOrigins":["https://campushomes.co.ug"],"allowedOperations":["s3_put"],"allowedHeaders":["content-type","content-length"],"exposeHeaders":["ETag"],"maxAgeSeconds":3600}]' <private-bucket>`.
+  No GET rule is needed: reads are presigned navigations issued by
+  `GET /api/v1/uploads/document-url` after an ownership/permission check, valid
+  300 seconds. A production API without `B2_PRIVATE_BUCKET` answers document
+  uploads with 503 by design rather than putting personal data on the public
+  bucket. Documents uploaded before this change stay public until migrated.
 
 ## Identity and database
 

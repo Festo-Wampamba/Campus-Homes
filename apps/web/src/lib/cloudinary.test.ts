@@ -23,4 +23,11 @@ describe('direct upload metadata', () => {
     await uploadToCloudinary(file, { provider: 'b2', uploadUrl: 'https://storage.invalid/signed', publicUrl: 'https://storage.invalid/photo' });
     expect(fetchMock).toHaveBeenCalledWith('https://storage.invalid/signed', { method: 'PUT', body: file, headers: { 'Content-Type': 'image/png' } });
   });
+
+  it('returns the bare private key for a document upload', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    const file = new File(['%PDF'], 'id.pdf', { type: 'application/pdf' });
+    await expect(uploadToCloudinary(file, { provider: 'b2', uploadUrl: 'https://storage.invalid/signed', storageKey: 'uploads/u1/doc' }))
+      .resolves.toEqual({ publicId: 'uploads/u1/doc' });
+  });
 });

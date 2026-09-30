@@ -4,7 +4,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 
 import { signUploadSchema } from '@campushomes/shared';
 
-import { UploadsController, UploadsService } from './uploads.module';
+import { DocumentsService, UploadsController, UploadsService } from './uploads.module';
 
 const MB = 1024 * 1024;
 
@@ -38,7 +38,7 @@ describe('upload signing boundary', () => {
   it('uses the real SDK to bind MIME in the B2 signature without network calls', async () => {
     const result = await new UploadsService(fakeRedis()).sign('user', jpeg);
     expect(result.provider).toBe('b2');
-    if (result.provider !== 'b2') throw new Error('Expected B2');
+    if (result.provider !== 'b2' || !('publicUrl' in result)) throw new Error('Expected B2 media');
     const url = new URL(result.uploadUrl);
     const signed = url.searchParams.get('X-Amz-SignedHeaders')?.split(';');
     expect(signed).toContain('content-type');
@@ -91,19 +91,74 @@ describe('upload signing boundary', () => {
     },
   );
 
+  describe('document purpose', () => {
+    const pdf = { contentType: 'application/pdf', size: MB, purpose: 'document' as const };
+    const production = {
+      NODE_ENV: 'production', WEB_ORIGIN: 'https://example.test', AUTH_APP_URL: 'https://example.test',
+      LOGTO_ENDPOINT: 'https://auth.example.test', TRUSTED_PROXY_CIDRS: '127.0.0.1',
+    };
+
+    it('presigns the PUT against the private bucket', async () => {
+      process.env.B2_PRIVATE_BUCKET = 'private-docs';
+      const result = await new UploadsService(fakeRedis()).sign('user', pdf);
+      if (result.provider !== 'b2') throw new Error('Expected B2');
+      expect(new URL(result.uploadUrl).pathname).toMatch(/^\/private-docs\/uploads\/user\//);
+    });
+
+    it('returns a bare storage key instead of a public URL', async () => {
+      process.env.B2_PRIVATE_BUCKET = 'private-docs';
+      const result = await new UploadsService(fakeRedis()).sign('user', pdf);
+      expect(result).toEqual({ provider: 'b2', uploadUrl: expect.any(String), storageKey: expect.stringMatching(/^uploads\/user\/[0-9a-f-]{36}$/) });
+    });
+
+    it('refuses with 503 in production when no private bucket is configured', async () => {
+      Object.assign(process.env, production);
+      await expect(new UploadsService(fakeRedis()).sign('user', pdf)).rejects.toMatchObject({ status: 503, message: 'Document uploads are not configured' });
+    });
+
+    it('falls back to the media bucket outside production when no private bucket is configured', async () => {
+      const result = await new UploadsService(fakeRedis()).sign('user', pdf);
+      expect(result).toMatchObject({ provider: 'b2', publicUrl: expect.stringMatching(/^https:\/\/s3.example.invalid\/photos\/uploads\/user\//) });
+    });
+
+    it('defaults the purpose to media when the body omits it', () => {
+      expect(new ZodValidationPipe(signUploadSchema).transform(jpeg, { type: 'body' })).toEqual({ ...jpeg, purpose: 'media' });
+    });
+
+    it('rejects an unknown purpose', () => {
+      expect(() => new ZodValidationPipe(signUploadSchema).transform({ ...jpeg, purpose: 'secret' }, { type: 'body' })).toThrow();
+    });
+  });
+
+  describe('document-url reader identity', () => {
+    const echo = { documentUrl: async (ctx: unknown) => ctx } as unknown as DocumentsService;
+    const req = (roles: string[], mfaVerified: boolean) =>
+      ({ session: { user: { id: 'u1' }, access: { roles, assurance: { mfaVerified } } } }) as never;
+
+    it('reads as the MFA-verified staff role mapped from the session', async () => {
+      const controller = new UploadsController(new UploadsService(fakeRedis()), echo);
+      await expect(controller.documentUrl(req(['super_admin'], true), { key: 'k' })).resolves.toEqual({ userId: 'u1', role: 'admin', mfaVerified: true });
+    });
+
+    it('reads as a non-staff identity when the staff session lacks MFA', async () => {
+      const controller = new UploadsController(new UploadsService(fakeRedis()), echo);
+      await expect(controller.documentUrl(req(['ops_lead'], false), { key: 'k' })).resolves.toMatchObject({ role: 'student' });
+    });
+  });
+
   describe('per-user sign quota', () => {
     it('returns 429 with Retry-After on the 51st sign in an hour while another user still succeeds', async () => {
       const service = new UploadsService(fakeRedis());
       for (let i = 0; i < 50; i += 1) await service.sign('heavy-user', jpeg);
       const headers: Record<string, string> = {};
-      const controller = new UploadsController(service);
+      const controller = new UploadsController(service, {} as DocumentsService);
       const res = { setHeader: (k: string, v: string) => { headers[k] = v; } } as never;
       const req = (id: string) => ({ session: { user: { id } } }) as never;
 
-      await expect(controller.sign(req('heavy-user'), res, jpeg)).rejects.toMatchObject({ status: 429 });
+      await expect(controller.sign(req('heavy-user'), res, { ...jpeg, purpose: 'media' })).rejects.toMatchObject({ status: 429 });
       expect(Number(headers['Retry-After'])).toBeGreaterThan(0);
       expect(Number(headers['Retry-After'])).toBeLessThanOrEqual(3600);
-      await expect(controller.sign(req('other-user'), res, jpeg)).resolves.toMatchObject({ provider: 'b2' });
+      await expect(controller.sign(req('other-user'), res, { ...jpeg, purpose: 'media' })).resolves.toMatchObject({ provider: 'b2' });
     });
 
     it('fails closed with 503 when Redis is not ready', async () => {

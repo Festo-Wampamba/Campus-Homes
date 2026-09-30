@@ -1,21 +1,30 @@
 import crypto from 'node:crypto';
 
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
-  BadRequestException, Body, Controller, HttpException, Inject, Injectable, Module, Optional, Post, Req, Res, UseGuards,
+  BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Inject, Injectable, Logger, Module,
+  Optional, Post, Query, Req, Res, ServiceUnavailableException, UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import type { Redis } from 'ioredis';
 import { createZodDto } from 'nestjs-zod';
+import type { PoolClient } from 'pg';
 
-import { signUploadSchema, type SignUploadInput } from '@campushomes/shared';
+import { documentUrlQuerySchema, signUploadSchema, type SignUploadInput } from '@campushomes/shared';
 
-import { loadEnv } from '../../config/env';
+import { loadEnv, type Env } from '../../config/env';
+import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
+import type { RlsContext } from '../../db/rls-context';
 import { countInWindow } from '../../rate-limit';
+import { effectiveRoles } from '../auth/access-resolver';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { AuthModule } from '../auth/auth.module';
+import { loadPermissions } from '../auth/permissions';
+import { rlsCtx } from '../auth/roles';
+import { assertStaffScope } from '../auth/staff-scope';
+import { isOwnedStorageKey } from './storage-key';
 
 // Only these can be uploaded/stored. Binding the type at signing (below) stops
 // a caller from parking active content (text/html, image/svg+xml) on the
@@ -30,7 +39,27 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const SIGN_QUOTA_PER_HOUR = 50;
 const SIGN_QUOTA_WINDOW_SEC = 3600;
 
+const DOCUMENT_URL_TTL_SEC = 300;
+const STAFF_ROLES = ['admin', 'ops_lead', 'ops_inspector'];
+const SERVICE_CTX: RlsContext = { userId: '00000000-0000-0000-0000-000000000000', role: 'service_role' };
+
 class SignUploadDto extends createZodDto(signUploadSchema) {}
+class DocumentUrlQueryDto extends createZodDto(documentUrlQuerySchema) {}
+
+type B2Env = Env & Required<Pick<Env, 'B2_S3_ENDPOINT' | 'B2_S3_REGION' | 'B2_BUCKET' | 'B2_ACCESS_KEY_ID' | 'B2_SECRET_ACCESS_KEY'>>;
+
+function isB2Configured(env: Env): env is B2Env {
+  return Boolean(env.B2_S3_ENDPOINT && env.B2_S3_REGION && env.B2_BUCKET && env.B2_ACCESS_KEY_ID && env.B2_SECRET_ACCESS_KEY);
+}
+
+function b2Client(env: B2Env): S3Client {
+  return new S3Client({
+    endpoint: env.B2_S3_ENDPOINT,
+    region: env.B2_S3_REGION,
+    forcePathStyle: true,
+    credentials: { accessKeyId: env.B2_ACCESS_KEY_ID, secretAccessKey: env.B2_SECRET_ACCESS_KEY },
+  });
+}
 
 /** HttpException whose Retry-After the controller copies onto the response. */
 class RetryAfterException extends HttpException {
@@ -57,7 +86,14 @@ export interface B2SignParams {
   publicUrl: string;
 }
 
-export type UploadSignParams = CloudinarySignParams | B2SignParams;
+export interface B2DocumentSignParams {
+  provider: 'b2';
+  uploadUrl: string;
+  /** Bare private-bucket key; readable only via GET /uploads/document-url. */
+  storageKey: string;
+}
+
+export type UploadSignParams = CloudinarySignParams | B2SignParams | B2DocumentSignParams;
 
 /** Signed direct-upload params (§10): clients upload straight to storage, the
  * API never proxies bytes. Backblaze B2 (S3-compatible) is used when its env
@@ -66,9 +102,11 @@ export type UploadSignParams = CloudinarySignParams | B2SignParams;
  * CLOUDINARY_URL = cloudinary://<api_key>:<api_secret>@<cloud_name>. */
 @Injectable()
 export class UploadsService {
+  private readonly logger = new Logger(UploadsService.name);
+
   constructor(@Optional() @Inject(REDIS) private readonly redis: Redis | null = null) {}
 
-  async sign(userId: string, { contentType, size }: SignUploadInput): Promise<UploadSignParams> {
+  async sign(userId: string, { contentType, size, purpose }: SignUploadInput): Promise<UploadSignParams> {
     const env = loadEnv();
     if (!ALLOWED_UPLOAD_TYPES.has(contentType)) {
       throw new BadRequestException('Unsupported file type');
@@ -76,27 +114,30 @@ export class UploadsService {
     if (size > (contentType === 'application/pdf' ? MAX_PDF_BYTES : MAX_IMAGE_BYTES)) {
       throw new BadRequestException('File is too large');
     }
+    const privateBucket = purpose === 'document' && isB2Configured(env) ? env.B2_PRIVATE_BUCKET : undefined;
+    // Identity documents must never land on public storage in production.
+    if (purpose === 'document' && !privateBucket && env.NODE_ENV === 'production') {
+      throw new ServiceUnavailableException('Document uploads are not configured');
+    }
     await this.enforceQuota(userId);
-    if (env.B2_S3_ENDPOINT && env.B2_S3_REGION && env.B2_BUCKET && env.B2_ACCESS_KEY_ID && env.B2_SECRET_ACCESS_KEY) {
+    if (purpose === 'document' && !privateBucket) {
+      this.logger.warn('B2_PRIVATE_BUCKET is not set; storing a document in public media storage (non-production only)');
+    }
+    if (isB2Configured(env)) {
       const key = `uploads/${userId}/${crypto.randomUUID()}`;
-      const client = new S3Client({
-        endpoint: env.B2_S3_ENDPOINT,
-        region: env.B2_S3_REGION,
-        forcePathStyle: true,
-        credentials: { accessKeyId: env.B2_ACCESS_KEY_ID, secretAccessKey: env.B2_SECRET_ACCESS_KEY },
-      });
       // ContentType and ContentLength are part of the signature: the browser PUT must send exactly
       // this type, and it is what B2 stores and later serves — so a caller
       // cannot park text/html or image/svg+xml (both scriptable) on the public
       // bucket. A PUT of any other length fails verification, so the size
       // cap above cannot be bypassed after signing.
       const uploadUrl = await getSignedUrl(
-        client,
-        new PutObjectCommand({ Bucket: env.B2_BUCKET, Key: key, ContentType: contentType, ContentLength: size }),
+        b2Client(env),
+        new PutObjectCommand({ Bucket: privateBucket ?? env.B2_BUCKET, Key: key, ContentType: contentType, ContentLength: size }),
         // The AWS presigner excludes these by default even when they are on
         // the command. Explicitly opt them into the signed headers.
         { expiresIn: 600, signableHeaders: new Set(['content-type', 'content-length']) },
       );
+      if (privateBucket) return { provider: 'b2', uploadUrl, storageKey: key };
       const base = env.B2_S3_ENDPOINT.replace(/\/+$/, '');
       return { provider: 'b2', uploadUrl, publicUrl: `${base}/${env.B2_BUCKET}/${key}` };
     }
@@ -136,10 +177,94 @@ export class UploadsService {
   }
 }
 
+type DocumentAccess = boolean | 'needs_kyc_permission';
+
+/** Presigned reads of private documents, issued only to a reader authorized
+ * for a row that references the key (or to its uploader before submission). */
+@Injectable()
+export class DocumentsService {
+  constructor(private readonly rlsDb: RlsDb) {}
+
+  /** `ctx.role` is the caller's MFA-verified staff role, else a non-staff role. */
+  async documentUrl(ctx: RlsContext, key: string): Promise<{ url: string }> {
+    const access = await this.rlsDb.run(SERVICE_CTX, (_db, client) => this.access(client, ctx, key));
+    // Same rule PermissionsGuard applies to the admin KYC routes.
+    const allowed = access === 'needs_kyc_permission'
+      ? STAFF_ROLES.includes(ctx.role) && ctx.mfaVerified === true &&
+        (await loadPermissions(this.rlsDb, ctx.userId)).permissions.has('landlords.review_kyc')
+      : access;
+    if (!allowed) throw new ForbiddenException('You cannot view this document');
+    // Legacy rows hold public object URLs from before the private bucket existed.
+    if (/^https?:\/\//i.test(key)) return { url: key };
+    const env = loadEnv();
+    if (!isB2Configured(env) || !env.B2_PRIVATE_BUCKET) {
+      throw new ServiceUnavailableException('Document storage is not configured');
+    }
+    const url = await getSignedUrl(
+      b2Client(env),
+      new GetObjectCommand({ Bucket: env.B2_PRIVATE_BUCKET, Key: key }),
+      { expiresIn: DOCUMENT_URL_TTL_SEC },
+    );
+    return { url };
+  }
+
+  private async access(client: PoolClient, ctx: RlsContext, key: string): Promise<DocumentAccess> {
+    const { rows: idDocs } = await client.query<{ user_id: string }>(
+      'SELECT user_id FROM landlords WHERE id_doc_storage_key = $1',
+      [key],
+    );
+    const { rows: propertyDocs } = await client.query<{ property_id: string; landlord_id: string }>(
+      `SELECT d.property_id, p.landlord_id FROM property_documents d
+       JOIN properties p ON p.id = d.property_id WHERE d.storage_key = $1`,
+      [key],
+    );
+    const { rows: signatures } = await client.query<{ student_id: string; landlord_id: string; is_custodian: boolean }>(
+      `SELECT a.student_id, p.landlord_id, EXISTS (
+         SELECT 1 FROM property_memberships m
+         WHERE m.property_id = a.property_id AND m.user_id = $2 AND m.role = 'custodian'
+           AND m.status = 'active' AND m.revoked_at IS NULL AND m.starts_at <= now()
+           AND (m.ends_at IS NULL OR m.ends_at > now())
+       ) AS is_custodian
+       FROM tenant_agreements a JOIN properties p ON p.id = a.property_id
+       WHERE a.signature_storage_key = $1`,
+      [key, ctx.userId],
+    );
+    if (!idDocs.length && !propertyDocs.length && !signatures.length) {
+      // Unsubmitted upload: only its uploader may preview it.
+      return isOwnedStorageKey(ctx.userId, key);
+    }
+    if (idDocs.some((row) => row.user_id === ctx.userId)
+      || propertyDocs.some((row) => row.landlord_id === ctx.userId)
+      || signatures.some((row) => row.student_id === ctx.userId || row.landlord_id === ctx.userId || row.is_custodian)) {
+      return true;
+    }
+    for (const row of propertyDocs) {
+      try {
+        await assertStaffScope(client, ctx, row.property_id);
+        return true;
+      } catch (error) {
+        if (!(error instanceof ForbiddenException)) throw error;
+      }
+    }
+    return idDocs.length ? 'needs_kyc_permission' : false;
+  }
+}
+
 @Controller('uploads')
 @UseGuards(AuthGuard)
 export class UploadsController {
-  constructor(private readonly uploads: UploadsService) {}
+  constructor(
+    private readonly uploads: UploadsService,
+    private readonly documents: DocumentsService,
+  ) {}
+
+  @Get('document-url')
+  documentUrl(@Req() req: AuthenticatedRequest, @Query() query: DocumentUrlQueryDto) {
+    // No route-level role here, so resolve the staff role the way
+    // PermissionsGuard does; rlsCtx drops it again when MFA is missing.
+    req.effectiveRole = effectiveRoles(req.session.access.roles).find((role) => STAFF_ROLES.includes(role));
+    return this.documents.documentUrl(rlsCtx(req), query.key);
+  }
 
   @Post('sign')
   async sign(
@@ -159,6 +284,6 @@ export class UploadsController {
 @Module({
   imports: [AuthModule],
   controllers: [UploadsController],
-  providers: [UploadsService],
+  providers: [UploadsService, DocumentsService],
 })
 export class UploadsModule {}
