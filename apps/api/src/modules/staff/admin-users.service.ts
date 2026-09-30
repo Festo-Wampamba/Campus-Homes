@@ -16,9 +16,15 @@ import type {
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { LogtoManagementClient } from '../auth/logto-management.client';
-import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
+import {
+  assertFreshSignIn,
+  assignmentsForPermission,
+  hasCoveringScope,
+  loadPermissions,
+  type RoleAssignment,
+} from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
-import { RoleAssignmentService } from './role-assignment.service';
+import { RoleAssignmentService, STAFF_ROLE_KEYS } from './role-assignment.service';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -43,6 +49,9 @@ function nullable(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   return value === '' ? null : value;
 }
+
+const redactEmail = (email: string | null) => email?.split('@')[1] ?? null;
+const redactPhone = (phone: string | null) => phone?.slice(-3) ?? null;
 
 // Keep this category mapping aligned with AdminDashboardService.users(). The
 // list endpoint uses the same three permissions to decide which account rows
@@ -262,8 +271,17 @@ export class AdminUsersService {
     });
   }
 
-  async revokeSessions(actor: RlsContext, userId: string) {
+  async revokeSessions(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+  ) {
     const revoked = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      // Revoking your own sessions is sign-out everywhere, not an escalation.
+      if (actor.userId !== userId) {
+        await this.assertMayActOnStaffTarget(client, actorPermissions, actorAssignments, userId);
+      }
       const result = await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
       return result.rowCount ?? 0;
     });
@@ -271,23 +289,58 @@ export class AdminUsersService {
     return { revoked };
   }
 
-  async update(actor: RlsContext, userId: string, input: UpdateAdminUserInput) {
+  async update(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+    input: UpdateAdminUserInput,
+    authenticatedAt?: string | null,
+  ) {
     if (input.accountType !== undefined) {
       throw new BadRequestException('Use role assignments to change access; account type is compatibility data');
     }
+    let contactChange: Record<string, { from: string | null; to: string | null }> | null = null;
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       try {
-        const current = (await client.query<{ id: string; accountType: string; status: string }>(
-          `SELECT id, role::text AS "accountType", status::text AS status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        const current = (await client.query<{
+          id: string; accountType: string; status: string; email: string | null; phone: string | null;
+          isClaimed: boolean;
+        }>(
+          `SELECT id, role::text AS "accountType", status::text AS status, email, phone,
+                  logto_user_id IS NOT NULL AS "isClaimed"
+           FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
           [userId],
         )).rows[0];
         if (!current) throw new NotFoundException('User not found');
+        const isStaff = actor.userId === userId
+          ? (await this.staffAssignments(client, userId)).length > 0
+          : await this.assertMayActOnStaffTarget(client, actorPermissions, actorAssignments, userId);
         // Editing your own identity/particulars is fine; only a real change to
         // your own status is blocked (self-lockout guard). The edit form
         // re-submits the unchanged status field, so compare rather than reject
         // its mere presence.
         if (actor.userId === userId && input.status !== undefined && input.status !== current.status) {
           throw new ForbiddenException('You cannot change your own status');
+        }
+
+        // An unclaimed staff row is claimed by whichever verified identity
+        // matches its email/phone at next sign-in, so rewriting it here would
+        // hand the account to the editor. Claimed rows are bound by
+        // logto_user_id, but a contact rewrite is still sensitive.
+        const changed = (Object.entries({ email: current.email, phone: current.phone }) as [
+          'email' | 'phone', string | null][])
+          .filter(([key, old]) => input[key] !== undefined &&
+            (nullable(input[key]) ?? null)?.toLowerCase() !== old?.toLowerCase());
+        if (isStaff && changed.length) {
+          if (!current.isClaimed) {
+            throw new BadRequestException('Change a staff contact by re-issuing their invitation');
+          }
+          assertFreshSignIn(authenticatedAt, 'Changing a staff contact');
+          contactChange = Object.fromEntries(changed.map(([key, old]) => {
+            const redact = key === 'email' ? redactEmail : redactPhone;
+            return [key, { from: redact(old), to: redact(nullable(input[key]) ?? null) }];
+          }));
         }
 
         const columnMap: Record<string, string> = {
@@ -404,7 +457,34 @@ export class AdminUsersService {
     await this.audit.record(actor, 'users.update', 'user', userId, {
       fields: Object.keys(input),
     });
+    if (contactChange) await this.audit.record(actor, 'users.contact_change', 'user', userId, contactChange);
     return result;
+  }
+
+  private async staffAssignments(client: PoolClient, userId: string) {
+    return (await client.query<{ roleKey: string; scopeType: string; scopeId: string | null }>(`
+      SELECT r.key AS "roleKey", a.scope_type AS "scopeType", a.scope_id AS "scopeId"
+      FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+      WHERE a.user_id = $1 AND r.key = ANY($2::text[]) AND a.revoked_at IS NULL
+    `, [userId, STAFF_ROLE_KEYS])).rows;
+  }
+
+  /** Same tier + scope rules as staff deactivation, applied to edits that can
+   * lock out or take over another account. Returns whether the target is staff. */
+  private async assertMayActOnStaffTarget(
+    client: PoolClient,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+  ): Promise<boolean> {
+    const assignments = await this.staffAssignments(client, userId);
+    if (assignments.some((a) => a.roleKey === 'super_admin') && !actorPermissions.has('roles.manage_super_admin')) {
+      throw new ForbiddenException('Only a Super Admin can modify a Super Admin');
+    }
+    if (!assignments.every((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId))) {
+      throw new ForbiddenException('Cannot modify a staff member outside your own scope');
+    }
+    return assignments.length > 0;
   }
 
   /** Hard-deletes an active user and everything they own in one step — no
@@ -609,6 +689,14 @@ export class AdminUsersService {
     }
     if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
       throw new ForbiddenException('Cannot grant a permission outside your own scope');
+    }
+    // Loaded before the transaction: loadPermissions opens its own, and
+    // nesting rlsDb.run would deadlock on a second pooled client.
+    const { grants: held } = await loadPermissions(this.rlsDb, actor.userId);
+    for (const key of new Set(input.permissionKeys)) {
+      if (!hasCoveringScope(assignmentsForPermission(held, key), input.scopeType, input.scopeId ?? null)) {
+        throw new ForbiddenException(`Cannot grant ${key}: you do not hold it at that scope`);
+      }
     }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       try {

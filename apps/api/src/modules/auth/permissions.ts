@@ -28,6 +28,14 @@ export const PERMISSION_KEY = 'permission';
 // step-up is kept ON for every sensitive action rather than removed.
 export const STEP_UP_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
+/** Throws 401 unless the session's original sign-in is inside the step-up window. */
+export function assertFreshSignIn(authenticatedAt: string | null | undefined, action: string): void {
+  const signedInAt = Date.parse(authenticatedAt ?? '');
+  if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > STEP_UP_MAX_AGE_MS) {
+    throw new UnauthorizedException(`${action} requires a fresh sign-in`);
+  }
+}
+
 /** Restricts a route to callers holding the given permission. Must be paired
  * with AuthGuard (AuthGuard attaches the session PermissionsGuard reads). */
 export const RequirePermission = (permission: string) => SetMetadata(PERMISSION_KEY, permission);
@@ -195,10 +203,7 @@ export class PermissionsGuard implements CanActivate {
       return false;
     }
     if (grants.some((grant) => grant.permissionKey === matched && grant.requiresStepUp)) {
-      const signedInAt = Date.parse(req.session.access.assurance.authenticatedAt ?? '');
-      if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > STEP_UP_MAX_AGE_MS) {
-        throw new UnauthorizedException(`${matched} requires a fresh sign-in`);
-      }
+      assertFreshSignIn(req.session.access.assurance.authenticatedAt, matched);
     }
     req.effectiveRole = staffRole;
     req.permissions = new Set([...granted, matched]);

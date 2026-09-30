@@ -38,9 +38,17 @@ async function seed(sql: string, params: unknown[] = []): Promise<string> {
   return res.rows[0]?.id as string;
 }
 
+async function assign(userId: string, roleKey: string, scopeType = 'platform_wide', scopeId: string | null = null) {
+  await pool.query(`
+    INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+    SELECT $1, id, $2, $3, $1, 'seed' FROM roles WHERE key = $4
+  `, [userId, scopeType, scopeId, roleKey]);
+}
+
 const superAdminCtx = (): RlsContext => ({ userId: superAdmin, role: 'admin' });
 const mukAdminCtx = (): RlsContext => ({ userId: mukAdmin, role: 'admin' });
 const platformWide = [{ scopeType: 'platform_wide', scopeId: null }];
+const superPerms = new Set(['users.update', 'roles.manage_super_admin']);
 const catchmentMuk = [{ scopeType: 'catchment', scopeId: 'MUK' }];
 
 beforeAll(async () => {
@@ -54,6 +62,13 @@ beforeAll(async () => {
     `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'MUK Admin') RETURNING id`,
     ['+256700001302'],
   );
+  await assign(superAdmin, 'super_admin');
+  // The grantor must actually hold what it grants; mukAdmin holds audit.read
+  // only inside the MUK catchment.
+  await pool.query(`
+    INSERT INTO user_permission_grants (user_id, permission_id, scope_type, scope_id, granted_by, reason)
+    SELECT $1, id, 'catchment', 'MUK', $2, 'seed' FROM permissions WHERE key = 'audit.read'
+  `, [mukAdmin, superAdmin]);
 });
 
 afterAll(async () => {
@@ -148,7 +163,7 @@ describe('AdminUsersService identity boundaries', () => {
       `INSERT INTO users (phone, role, status, name) VALUES ($1, 'student', 'active', 'Profile Type Target') RETURNING id`,
       ['+256700001315'],
     );
-    await expect(adminUsers.update(superAdminCtx(), target, { accountType: 'landlord' }))
+    await expect(adminUsers.update(superAdminCtx(), superPerms, platformWide, target, { accountType: 'landlord' }))
       .rejects.toThrow('Use role assignments to change access');
   });
 });
@@ -346,5 +361,173 @@ describe('AdminUsersService.grantPermissions/revokePermission — round trip', (
     await expect(
       adminUsers.revokePermission(mukAdminCtx(), new Set(['users.permissions_manage']), platformWide, target, grants[0]!.id),
     ).rejects.toThrow('Only a Super Admin can revoke Super Admin management');
+  });
+});
+
+describe('AdminUsersService.grantPermissions — grantor must hold what it grants', () => {
+  const grantInput = (permissionKeys: string[], scopeType: 'platform_wide' | 'catchment' = 'catchment') => ({
+    permissionKeys,
+    scopeType,
+    scopeId: scopeType === 'catchment' ? 'MUK' : undefined,
+    reason: 'escalation attempt',
+  });
+
+  it('refuses a permission the grantor does not hold', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Grant Target A') RETURNING id`,
+      ['+256700001401'],
+    );
+    await expect(
+      adminUsers.grantPermissions(mukAdminCtx(), new Set(['users.permissions_manage']), catchmentMuk, target,
+        grantInput(['roles.assign'])),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('allows a permission the grantor holds at a covering scope', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Grant Target B') RETURNING id`,
+      ['+256700001402'],
+    );
+    const { grants } = await adminUsers.grantPermissions(
+      superAdminCtx(), new Set(['users.permissions_manage']), platformWide, target, grantInput(['roles.assign'], 'platform_wide'));
+    expect(grants.map((g) => g.permissionKey)).toEqual(['roles.assign']);
+  });
+
+  it('refuses a platform-wide grant of a key the grantor holds only in one catchment', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Grant Target C') RETURNING id`,
+      ['+256700001403'],
+    );
+    await expect(
+      adminUsers.grantPermissions(mukAdminCtx(), new Set(['users.permissions_manage']), platformWide, target,
+        grantInput(['audit.read'], 'platform_wide')),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('AdminUsersService.update / revokeSessions — staff target guards', () => {
+  let platformAdmin: string;
+  let targetSuper: string;
+  let targetOps: string;
+  const platformAdminCtx = (): RlsContext => ({ userId: platformAdmin, role: 'admin' });
+  const adminPerms = new Set(['users.update']);
+
+  beforeAll(async () => {
+    platformAdmin = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Platform Admin') RETURNING id`,
+      ['+256700001410'],
+    );
+    await assign(platformAdmin, 'platform_admin');
+    targetSuper = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'admin', 'active', 'Target Super') RETURNING id`,
+      ['+256700001411'],
+    );
+    await assign(targetSuper, 'super_admin');
+    targetOps = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ($1, 'ops_lead', 'active', 'Target Ops') RETURNING id`,
+      ['+256700001412'],
+    );
+    await assign(targetOps, 'ops_lead');
+  });
+
+  it('refuses suspending a super_admin without roles.manage_super_admin', async () => {
+    await expect(
+      adminUsers.update(platformAdminCtx(), adminPerms, platformWide, targetSuper, { status: 'suspended' }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('lets a super_admin actor suspend another super_admin', async () => {
+    const updated = await adminUsers.update(superAdminCtx(), superPerms, platformWide, targetSuper, { status: 'suspended' });
+    expect(updated?.status).toBe('suspended');
+    await pool.query(`UPDATE users SET status = 'active' WHERE id = $1`, [targetSuper]);
+  });
+
+  it('refuses revoking the sessions of a super_admin without roles.manage_super_admin', async () => {
+    await expect(
+      adminUsers.revokeSessions(platformAdminCtx(), adminPerms, platformWide, targetSuper),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('lets a super_admin actor revoke the sessions of another super_admin', async () => {
+    await expect(adminUsers.revokeSessions(superAdminCtx(), superPerms, platformWide, targetSuper))
+      .resolves.toEqual({ revoked: 0 });
+  });
+
+  it('lets an actor revoke their own sessions', async () => {
+    await expect(adminUsers.revokeSessions(superAdminCtx(), new Set(['users.update']), platformWide, superAdmin))
+      .resolves.toEqual({ revoked: 0 });
+  });
+
+  it('refuses a catchment-scoped actor updating a staff member assigned platform-wide', async () => {
+    await expect(
+      adminUsers.update(mukAdminCtx(), adminPerms, catchmentMuk, targetOps, { name: 'Renamed' }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('refuses a catchment-scoped actor revoking the sessions of a platform-wide staff member', async () => {
+    await expect(adminUsers.revokeSessions(mukAdminCtx(), adminPerms, catchmentMuk, targetOps))
+      .rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('AdminUsersService.update — staff contact changes', () => {
+  const fresh = () => new Date().toISOString();
+  const stale = () => new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString();
+  const perms = new Set(['users.update']);
+
+  async function staff(phone: string, claimed: boolean, email: string) {
+    const id = await seed(
+      `INSERT INTO users (phone, email, role, status, name, logto_user_id)
+       VALUES ($1, $2, 'ops_lead', 'active', 'Contact Target', $3) RETURNING id`,
+      [phone, email, claimed ? `logto-${phone}` : null],
+    );
+    await assign(id, 'ops_lead');
+    return id;
+  }
+
+  it('refuses an email change on an unclaimed staff row', async () => {
+    const target = await staff('+256700001420', false, 'unclaimed@example.com');
+    await expect(
+      adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'hijack@example.org' }, fresh()),
+    ).rejects.toThrow('Change a staff contact by re-issuing their invitation');
+  });
+
+  it('refuses a phone change on an unclaimed staff row', async () => {
+    const target = await staff('+256700001421', false, 'unclaimed2@example.com');
+    await expect(
+      adminUsers.update(superAdminCtx(), perms, platformWide, target, { phone: '+256700001499' }, fresh()),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('refuses a claimed staff email change without a fresh sign-in', async () => {
+    const target = await staff('+256700001422', true, 'claimed@example.com');
+    await expect(
+      adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'moved@example.org' }, stale()),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('applies a claimed staff email change after a fresh sign-in and audits it redacted', async () => {
+    const target = await staff('+256700001423', true, 'claimed2@example.com');
+    await adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'moved2@example.org' }, fresh());
+    const { rows } = await pool.query(
+      `SELECT payload FROM audit_log WHERE action = 'users.contact_change' AND target_id = $1`, [target]);
+    expect(rows.map((r) => r.payload)).toEqual([{ email: { from: 'example.com', to: 'example.org' } }]);
+  });
+
+  it('does not require a fresh sign-in to re-submit an unchanged contact', async () => {
+    const target = await staff('+256700001424', true, 'same@example.com');
+    const updated = await adminUsers.update(
+      superAdminCtx(), perms, platformWide, target, { email: 'same@example.com', name: 'Same' }, stale());
+    expect(updated?.name).toBe('Same');
+  });
+
+  it('leaves a student email change unaffected', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, email, role, status, name) VALUES ($1, 'stu@example.com', 'student', 'active', 'Stu') RETURNING id`,
+      ['+256700001425'],
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [target]);
+    const updated = await adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'stu2@example.com' });
+    expect(updated?.email).toBe('stu2@example.com');
   });
 });
