@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { Logger } from '@nestjs/common';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import { signUploadSchema } from '@campushomes/shared';
@@ -135,21 +136,53 @@ describe('upload signing boundary', () => {
     const req = (roles: string[], mfaVerified: boolean) =>
       ({ session: { user: { id: 'u1' }, access: { roles, assurance: { mfaVerified } } } }) as never;
 
+    const res = () => ({ setHeader: () => undefined }) as never;
+
+    it('marks the per-user presigned URL response no-store so no shared cache keeps it', async () => {
+      const headers: Record<string, string> = {};
+      const controller = new UploadsController(new UploadsService(fakeRedis()), echo);
+      await controller.documentUrl(req(['super_admin'], true), { setHeader: (k: string, v: string) => { headers[k] = v; } } as never, { key: 'k' });
+      expect(headers['Cache-Control']).toBe('no-store');
+    });
+
     it('reads as the MFA-verified staff role mapped from the session', async () => {
       const controller = new UploadsController(new UploadsService(fakeRedis()), echo);
-      await expect(controller.documentUrl(req(['super_admin'], true), { key: 'k' })).resolves.toEqual({ userId: 'u1', role: 'admin', mfaVerified: true });
+      await expect(controller.documentUrl(req(['super_admin'], true), res(), { key: 'k' })).resolves.toEqual({ userId: 'u1', role: 'admin', mfaVerified: true });
     });
 
     it('reads as a non-staff identity when the staff session lacks MFA', async () => {
       const controller = new UploadsController(new UploadsService(fakeRedis()), echo);
-      await expect(controller.documentUrl(req(['ops_lead'], false), { key: 'k' })).resolves.toMatchObject({ role: 'student' });
+      await expect(controller.documentUrl(req(['ops_lead'], false), res(), { key: 'k' })).resolves.toMatchObject({ role: 'student' });
+    });
+  });
+
+  describe('private-bucket startup check', () => {
+    const production = () => Object.assign(process.env, {
+      NODE_ENV: 'production', WEB_ORIGIN: 'https://example.test', AUTH_APP_URL: 'https://example.test', TRUSTED_PROXY_CIDRS: 'uniquelocal',
+    });
+
+    it('warns once, without values, when production has B2 but no private bucket', () => {
+      production();
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      new UploadsService(fakeRedis()).onModuleInit();
+      expect(warn.mock.calls).toEqual([['B2_PRIVATE_BUCKET is not set: document uploads will return 503 until it is configured']]);
+      warn.mockRestore();
+    });
+
+    it('stays quiet when the private bucket is configured', () => {
+      production();
+      process.env.B2_PRIVATE_BUCKET = 'private-docs';
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      new UploadsService(fakeRedis()).onModuleInit();
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 
   describe('per-user sign quota', () => {
-    it('returns 429 with Retry-After on the 51st sign in an hour while another user still succeeds', async () => {
+    it('returns 429 with Retry-After on the 301st sign in an hour while another user still succeeds', async () => {
       const service = new UploadsService(fakeRedis());
-      for (let i = 0; i < 50; i += 1) await service.sign('heavy-user', jpeg);
+      for (let i = 0; i < 300; i += 1) await service.sign('heavy-user', jpeg);
       const headers: Record<string, string> = {};
       const controller = new UploadsController(service, {} as DocumentsService);
       const res = { setHeader: (k: string, v: string) => { headers[k] = v; } } as never;

@@ -4,15 +4,19 @@ import { z } from 'zod';
 
 const PROXY_PRESETS = new Set(['loopback', 'linklocal', 'uniquelocal']);
 
-// Prefix 0 and the bare wildcard tokens would trust every visitor-supplied
+// Wide prefixes and the bare wildcard tokens would trust visitor-supplied
 // X-Forwarded-For, so they are config errors rather than "convenient" values.
+// `::ffff:` CIDRs are applied by Express to every IPv4 peer, so /96 there would
+// trust the whole IPv4 internet.
+
 function isTrustedProxyEntry(entry: string): boolean {
   if (PROXY_PRESETS.has(entry)) return true;
   const [address = '', prefix, ...rest] = entry.split('/');
   const version = isIP(address);
-  if (!version || rest.length) return false;
+  if (!version || rest.length || address.toLowerCase().includes('::ffff:')) return false;
   if (prefix === undefined) return true;
-  return /^[1-9]\d*$/.test(prefix) && Number(prefix) <= (version === 4 ? 32 : 128);
+  const [min, max] = version === 4 ? [8, 32] : [7, 128];
+  return /^[1-9]\d*$/.test(prefix) && Number(prefix) >= min && Number(prefix) <= max;
 }
 
 const trustedProxyList = z.string().optional().transform((value) => (value ?? '').split(',').map((entry) => entry.trim()).filter(Boolean))
@@ -23,7 +27,7 @@ const trustedProxyList = z.string().optional().transform((value) => (value ?? ''
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
-  // Comma-separated trusted proxy IPs, CIDRs (prefix >= 1) or Express presets
+  // Comma-separated trusted proxy IPs, CIDRs (prefix >= /8 IPv4, /7 IPv6) or Express presets
   // (loopback, linklocal, uniquelocal). Required in production: without it
   // every visitor shares the proxy's req.ip and one rate-limit bucket.
   TRUSTED_PROXY_CIDRS: trustedProxyList,

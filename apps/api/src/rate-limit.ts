@@ -33,18 +33,41 @@ export async function countInWindow(redis: Redis, key: string, windowSec: number
   }
 }
 
-/** Use Express's verified proxy chain, never unverified cookies or IP headers. */
 const logger = new Logger('RateLimit');
 const OUTAGE_LOG_INTERVAL_MS = 60_000;
 
-/** `failOpen` is only for endpoints where an outage must not block users; writes stay fail-closed. */
+/** IPv4-mapped IPv6 keys as its IPv4 address; other IPv6 keys by /64, since one host owns a whole /64
+ * and could otherwise rotate addresses for unlimited buckets. */
+export function clientKey(ip: string): string {
+  const addr = (ip.split('%')[0] ?? ip).toLowerCase();
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(addr);
+  if (dotted) return dotted[1]!;
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(addr);
+  if (hex) {
+    const [hi, lo] = [parseInt(hex[1]!, 16), parseInt(hex[2]!, 16)];
+    return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  }
+  if (!addr.includes(':')) return addr;
+  const [head = '', tail] = addr.split('::');
+  const before = head ? head.split(':') : [];
+  const after = tail ? tail.split(':') : [];
+  const groups = tail === undefined ? before : [...before, ...Array<string>(Math.max(0, 8 - before.length - after.length)).fill('0'), ...after];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
+/** The analytics beacon fires on every navigation, so it gets its own bucket instead of the write quota. */
+export function isEventsRequest(req: Pick<Request, 'originalUrl'>): boolean {
+  return /^\/api\/v1\/events(?:[/?]|$)/.test(req.originalUrl);
+}
+
+/** Buckets on Express's verified `req.ip` (never cookies or client IP headers). `failOpen` is only for endpoints where an outage must not block users; writes stay fail-closed. */
 export function writeRateLimit(redis: Redis | null, {
-  limit, windowSec, namespace = 'write', includeReads = false, failOpen = false,
-}: { limit: number; windowSec: number; namespace?: string; includeReads?: boolean; failOpen?: boolean }) {
+  limit, windowSec, namespace = 'write', includeReads = false, failOpen = false, skip,
+}: { limit: number; windowSec: number; namespace?: string; includeReads?: boolean; failOpen?: boolean; skip?: (req: Request) => boolean }) {
   let lastOutageLog = 0;
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!redis || (!includeReads && ['GET', 'HEAD', 'OPTIONS'].includes(req.method))) return next();
-    const who = createHash('sha256').update(req.ip ?? req.socket?.remoteAddress ?? 'unknown').digest('hex');
+    if (!redis || (!includeReads && ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) || skip?.(req)) return next();
+    const who = createHash('sha256').update(clientKey(req.ip ?? req.socket?.remoteAddress ?? 'unknown')).digest('hex');
     const now = Math.floor(Date.now() / 1000);
     const retryAfter = windowSec - now % windowSec;
     const key = `rl:${namespace}:${who}:${Math.floor(now / windowSec)}`;

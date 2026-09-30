@@ -30,6 +30,12 @@ describe('security configuration', () => {
     it('accepts an IPv6 address and CIDR', () => {
       expect(loadEnv({ ...prod, TRUSTED_PROXY_CIDRS: '::1,fd00::/8' }).TRUSTED_PROXY_CIDRS).toEqual(['::1', 'fd00::/8']);
     });
+    it.each(['10.0.0.0/8', '172.16.0.0/12', 'fc00::/7', '173.245.48.0/20', '2400:cb00::/32'])('accepts wide-but-real range %s', (value) => {
+      expect(loadEnv({ ...base, TRUSTED_PROXY_CIDRS: value }).TRUSTED_PROXY_CIDRS).toEqual([value]);
+    });
+    it.each(['0.0.0.0/1', '128.0.0.0/1', '10.0.0.0/7', '::/1', 'fc00::/6', '::ffff:0:0/96', '::ffff:10.0.0.0/104', '::FFFF:1.2.3.4', '::ffff:1.2.3.4/128'])('rejects over-broad or IPv4-mapped entry %s', (value) => {
+      expect(() => loadEnv({ ...base, TRUSTED_PROXY_CIDRS: value })).toThrow(/^Invalid environment configuration: TRUSTED_PROXY_CIDRS$/);
+    });
     it('trusts no proxy in development when unset', () => {
       expect(loadEnv(base).TRUSTED_PROXY_CIDRS).toEqual([]);
     });

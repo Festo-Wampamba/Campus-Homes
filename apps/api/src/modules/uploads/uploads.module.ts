@@ -4,7 +4,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Inject, Injectable, Logger, Module,
-  Optional, Post, Query, Req, Res, ServiceUnavailableException, UseGuards,
+  OnModuleInit, Optional, Post, Query, Req, Res, ServiceUnavailableException, UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import type { Redis } from 'ioredis';
@@ -36,7 +36,8 @@ const ALLOWED_UPLOAD_TYPES = new Set([
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
-const SIGN_QUOTA_PER_HOUR = 50;
+// One hostel onboarding signs 30+ images; 300 fits an inspector syncing several visits. The size cap bounds abuse.
+const SIGN_QUOTA_PER_HOUR = 300;
 const SIGN_QUOTA_WINDOW_SEC = 3600;
 
 const DOCUMENT_URL_TTL_SEC = 300;
@@ -101,10 +102,18 @@ export type UploadSignParams = CloudinarySignParams | B2SignParams | B2DocumentS
  * (the web helper's http passthrough renders it). Otherwise Cloudinary:
  * CLOUDINARY_URL = cloudinary://<api_key>:<api_secret>@<cloud_name>. */
 @Injectable()
-export class UploadsService {
+export class UploadsService implements OnModuleInit {
   private readonly logger = new Logger(UploadsService.name);
 
   constructor(@Optional() @Inject(REDIS) private readonly redis: Redis | null = null) {}
+
+  onModuleInit(): void {
+    const env = loadEnv();
+    // No boot-time signal otherwise: drawn signatures/ID docs would just 503 at runtime.
+    if (env.NODE_ENV === 'production' && isB2Configured(env) && !env.B2_PRIVATE_BUCKET) {
+      this.logger.warn('B2_PRIVATE_BUCKET is not set: document uploads will return 503 until it is configured');
+    }
+  }
 
   async sign(userId: string, { contentType, size, purpose }: SignUploadInput): Promise<UploadSignParams> {
     const env = loadEnv();
@@ -259,7 +268,13 @@ export class UploadsController {
   ) {}
 
   @Get('document-url')
-  documentUrl(@Req() req: AuthenticatedRequest, @Query() query: DocumentUrlQueryDto) {
+  documentUrl(
+    @Req() req: AuthenticatedRequest,
+    @Res({ passthrough: true }) res: Response,
+    @Query() query: DocumentUrlQueryDto,
+  ) {
+    // The body is a per-user bearer URL; never let a shared cache store it.
+    res.setHeader('Cache-Control', 'no-store');
     // No route-level role here, so resolve the staff role the way
     // PermissionsGuard does; rlsCtx drops it again when MFA is missing.
     req.effectiveRole = effectiveRoles(req.session.access.roles).find((role) => STAFF_ROLES.includes(role));

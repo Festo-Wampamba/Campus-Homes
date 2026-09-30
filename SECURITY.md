@@ -3,6 +3,30 @@
 Report suspected vulnerabilities privately to the repository owner. Never put
 credentials, session tokens, personal records, or exploit payloads in public issues.
 
+## Before deploying this branch
+
+Staging runs `NODE_ENV=production` too, so every item below applies to it. The CI
+deploy re-sends Dokploy's **stored** Environment, so put these in that stored copy
+(a `docker service update` alone is reverted by the next deploy) **before** merging
+to `main`, because the merge triggers the deploy.
+
+- [ ] `TRUSTED_PROXY_CIDRS` set (boot refuses without it): the Docker overlay
+  subnet(s) **plus** Cloudflare's published ranges on Cloudflare-proxied hosts. See
+  "Deployment requirements".
+- [ ] `WEB_ORIGIN`, `AUTH_APP_URL` and `LOGTO_ENDPOINT` are `https://` (boot refuses
+  otherwise). `AUTH_APP_URL` defaults to `http://localhost:3000`, so an environment
+  that never set it must set it now.
+- [ ] `B2_PRIVATE_BUCKET` set, and that bucket has the CORS rule below (`s3_put`
+  from the web origin, headers `content-type` and `content-length`). Without them,
+  ID-document and drawn-signature uploads fail with 503 at runtime with no boot
+  error; the API logs one startup warning when B2 is configured without
+  `B2_PRIVATE_BUCKET`.
+- [ ] `REDIS_URL` set: Redis is required in production for rate limiting and upload quotas.
+- [ ] Deploy web and API together. Browser tabs still running the previous web
+  build get 400 on uploads until reloaded (signing now requires `size`); this is
+  expected, users just refresh the page. Inspectors with long-lived offline tabs
+  should reload before syncing.
+
 ## Deployment requirements
 
 - Run the production containers, not `next dev` or Nest watch mode. Their runtime
@@ -21,14 +45,29 @@ credentials, session tokens, personal records, or exploit payloads in public iss
     from. Read them on the VPS with
     `docker network inspect dokploy-network --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`.
     Use `uniquelocal` if the API is only reachable over private networks.
-  - For Cloudflare-proxied hosts, Traefik must trust Cloudflare's published IP
-    ranges via the entryPoints `forwardedHeaders.trustedIPs`. Otherwise `req.ip`
-    becomes a Cloudflare edge IP.
+  - **For Cloudflare-proxied hosts** (the production web host is one) the value
+    must **also** include Cloudflare's published IPv4 and IPv6 ranges, alongside
+    the overlay subnet, and Traefik must trust the same ranges via the entryPoints
+    `forwardedHeaders.trustedIPs`. Fetch the current lists from
+    https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6 and
+    keep them in sync when Cloudflare changes them; do not copy a list into this
+    repository. With only the overlay trusted, the request arrives as
+    `X-Forwarded-For: <client>, <cloudflare-edge>` and `req.ip` becomes the
+    Cloudflare edge address, so unrelated users share rate-limit buckets.
+  - Entries must be at least a /8 (IPv4) or /7 (IPv6) and may not be IPv4-mapped
+    (`::ffff:...`); those are rejected at boot because they would trust
+    visitor-supplied forwarding headers.
+  - Rate limits are per client IP (IPv6 clients by /64), so campus NAT users share
+    a bucket: 300 writes/min, 300 analytics events/min (`/api/v1/events` has its
+    own bucket), 30 sign-in starts/min. Uploads are additionally capped at 300
+    signatures per user per hour.
   - The API uses Express `req.ip`, not client-supplied cookies or
     `CF-Connecting-IP`/`X-Real-IP`. Every trusted edge must overwrite/sanitize
     forwarding headers. Restrict direct origin access.
-  - Verify before rollout: two clients on different networks must appear as two
-    distinct `req.ip` values in the logs.
+  - Verify before rollout: sign in from a phone on mobile data, then confirm that
+    session's `sessions.ip_address` equals the phone's public IP (check
+    whatismyip) and is not a Cloudflare or Docker address. Two distinct values
+    are not enough: distinct Cloudflare edge IPs would also pass.
 - Redis is required in production. API writes return 503 when their rate-limit
   store is unavailable; sign-in starts fail open (logged at most once a minute) so
   a Redis outage cannot lock users out of authentication. Alert on sustained 429/503 rates. Add an
@@ -40,7 +79,9 @@ credentials, session tokens, personal records, or exploit payloads in public iss
 - Keep B2 uploads on a separate storage origin. The MIME allowlist is signed;
   it is not malware scanning or proof of actual file contents. Cloudinary binds
   `allowed_formats`. Configure provider-side file-size/storage quotas and scanning
-  before accepting untrusted documents at scale; the 15 MB UI cap is not a server cap.
+  before accepting untrusted documents at scale. The API enforces the size cap
+  (15 MB images, 10 MB PDFs) at signing, and on B2 the signature binds
+  `content-length`, so a PUT of any other length is rejected.
 - Identity and ownership documents (landlord ID scans, property documents,
   tenant-agreement signatures) upload with `purpose: 'document'` into a separate
   **private** B2 bucket named by `B2_PRIVATE_BUCKET` (same endpoint, region and

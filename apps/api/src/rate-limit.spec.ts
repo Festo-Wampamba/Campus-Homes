@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Redis } from 'ioredis';
 
-import { writeRateLimit } from './rate-limit';
+import { isEventsRequest, writeRateLimit } from './rate-limit';
 
 function fakeRedis(): Redis {
   const counts = new Map<string, number>();
@@ -119,5 +119,39 @@ describe('writeRateLimit', () => {
     const limiter = writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60, failOpen: true });
     await run(limiter, post('1.1.1.1'));
     expect(await run(limiter, post('1.1.1.1'))).toBe(429);
+  });
+
+  it('shares a bucket between IPv6 addresses in the same /64', async () => {
+    const limiter = writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60 });
+    await run(limiter, post('2001:db8:1:2:aaaa::1'));
+    expect(await run(limiter, post('2001:db8:1:2:bbbb::9'))).toBe(429);
+  });
+
+  it('keeps IPv6 addresses in different /64s in separate buckets', async () => {
+    const limiter = writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60 });
+    await run(limiter, post('2001:db8:1:2::1'));
+    expect(await run(limiter, post('2001:db8:1:3::1'))).toBe(200);
+  });
+
+  it('keys an IPv4-mapped IPv6 address the same as its IPv4 address', async () => {
+    const limiter = writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60 });
+    await run(limiter, post('1.2.3.4'));
+    expect(await run(limiter, post('::ffff:1.2.3.4'))).toBe(429);
+  });
+
+  it('does not count requests its skip predicate matches', async () => {
+    const limiter = writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60, skip: isEventsRequest });
+    const events = { ...post('1.1.1.1'), originalUrl: '/api/v1/events' } as unknown as Request;
+    await run(limiter, events);
+    await run(limiter, events);
+    expect(await run(limiter, { ...post('1.1.1.1'), originalUrl: '/api/v1/reservations' } as unknown as Request)).toBe(200);
+  });
+
+  it('recognises the events endpoint with or without a query string', () => {
+    expect([
+      isEventsRequest({ originalUrl: '/api/v1/events' } as Request),
+      isEventsRequest({ originalUrl: '/api/v1/events?x=1' } as Request),
+      isEventsRequest({ originalUrl: '/api/v1/eventsfoo' } as Request),
+    ]).toEqual([true, true, false]);
   });
 });

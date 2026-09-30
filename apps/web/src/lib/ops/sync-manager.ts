@@ -64,10 +64,11 @@ async function syncOne(draft: InspectionDraft): Promise<void> {
     await putDraft({ ...current, syncStatus: "synced" });
   } catch (err) {
     // Only network-shaped failures are worth retrying: fetch itself throws a
-    // TypeError on a network failure, and a 5xx means the server may recover.
-    // Everything else (local validation throws, unexpected errors, 4xx) is
-    // terminal — retrying it forever would just resend the same bad request.
-    const isRetryable = err instanceof TypeError || (err instanceof ApiError && err.status >= 500);
+    // TypeError on a network failure, a 5xx means the server may recover, and
+    // a 429 is a rate limit that clears on its own. Everything else (local
+    // validation throws, unexpected errors, other 4xx) is terminal — retrying
+    // it forever would just resend the same bad request.
+    const isRetryable = err instanceof TypeError || (err instanceof ApiError && (err.status >= 500 || err.status === 429));
     await putDraft({ ...current, syncStatus: isRetryable ? "queued" : "failed" });
   }
 }

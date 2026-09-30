@@ -69,6 +69,35 @@ describe("syncQueuedDrafts", () => {
     expect(updated?.syncStatus).toBe("failed");
   });
 
+  it("leaves a draft queued for retry when the sync POST is rate limited", async () => {
+    await putDraft(queuedDraft("visit-sync-429"));
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ message: "Too many requests" }),
+    }) as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    const updated = await getDraft("visit-sync-429");
+    expect(updated?.syncStatus).toBe("queued");
+  });
+
+  it("leaves a draft queued with its photo pending when upload signing is rate limited", async () => {
+    const photo = { type: "image/jpeg", size: 10 } as unknown as File;
+    await putDraft({ ...queuedDraft("visit-sign-429"), photos: [{ file: photo, category: "bedroom" as const }] });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ message: "Too many upload requests" }),
+    }) as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    const updated = await getDraft("visit-sign-429");
+    expect([updated?.syncStatus, updated?.photos.length]).toEqual(["queued", 1]);
+  });
+
   it("leaves a draft queued for retry after a network error", async () => {
     await putDraft(queuedDraft("visit-offline"));
     global.fetch = jest.fn().mockRejectedValue(new TypeError("Network request failed"));
