@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import type {
@@ -62,6 +62,8 @@ const SERVICE_CTX: RlsContext = {
 
 @Injectable()
 export class ListingsService {
+  private readonly logger = new Logger(ListingsService.name);
+
   constructor(
     private readonly rlsDb: RlsDb,
     @Optional() private readonly notifications?: NotificationsService,
@@ -136,25 +138,34 @@ export class ListingsService {
     // Do not rely on a client refresh or on a landlord's role assignment:
     // review is owned by active platform administrators.
     if (property.status === 'pending_kyc') {
-      const reviewers = await this.rlsDb.run(SERVICE_CTX, (serviceDb) =>
-        serviceDb
-          .selectDistinct({ userId: userRoleAssignments.userId })
-          .from(userRoleAssignments)
-          .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
-          .where(and(
-            inArray(roles.key, ['super_admin', 'platform_admin']),
-            eq(userRoleAssignments.scopeType, 'platform_wide'),
-            // Keep this predicate explicit rather than assuming an assignment
-            // remains usable after it has been revoked.
-            isNull(userRoleAssignments.revokedAt),
-          )),
-      );
-      await Promise.all(reviewers.map((reviewer) =>
-        this.notifications?.notify(reviewer.userId, 'landlord.application_submitted', 'in_app', {
-          message: `A landlord submitted ${property.name} for approval. Review the application before access is granted.`,
-          href: '/admin/landlord-accounts',
-        }),
-      ));
+      // Best-effort: the property is already committed, so a notification
+      // failure must not fail (and invite a duplicate retry of) the POST.
+      // Log the message only — an error object can carry connection strings.
+      try {
+        const reviewers = await this.rlsDb.run(SERVICE_CTX, (serviceDb) =>
+          serviceDb
+            .selectDistinct({ userId: userRoleAssignments.userId })
+            .from(userRoleAssignments)
+            .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
+            .where(and(
+              inArray(roles.key, ['super_admin', 'platform_admin']),
+              eq(userRoleAssignments.scopeType, 'platform_wide'),
+              // Keep this predicate explicit rather than assuming an assignment
+              // remains usable after it has been revoked.
+              isNull(userRoleAssignments.revokedAt),
+            )),
+        );
+        await Promise.all(reviewers.map((reviewer) =>
+          this.notifications?.notify(reviewer.userId, 'landlord.application_submitted', 'in_app', {
+            message: `A landlord submitted ${property.name} for approval. Review the application before access is granted.`,
+            href: '/admin/landlord-accounts',
+          }),
+        ));
+      } catch (err) {
+        this.logger.error(
+          `Reviewer notification failed for property ${property.id}: ${err instanceof Error ? err.message : 'unknown error'}`,
+        );
+      }
     }
     return property;
   }

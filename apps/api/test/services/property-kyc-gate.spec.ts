@@ -200,6 +200,28 @@ describe('submitProperty under concurrent pending-KYC submissions', () => {
   }, 15_000);
 });
 
+describe('submitProperty when reviewer notification fails', () => {
+  it('still resolves and leaves exactly one property row', async () => {
+    const reviewer = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000211', 'admin', 'active') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+       SELECT $1, r.id, 'platform_wide', NULL, $1, 'test fixture' FROM roles r WHERE r.key = 'super_admin'`,
+      [reviewer],
+    );
+    const failingNotifications = {
+      notify: () => Promise.reject(new Error('sms gateway down')),
+    } as unknown as NotificationsService;
+    const service = new ListingsService(rlsDb, failingNotifications);
+
+    const property = await service.submitProperty(ctxFor(landlordPending), submitInput('Notify Failure Hostel'));
+
+    const rows = await pool.query(`SELECT id FROM properties WHERE name = 'Notify Failure Hostel'`);
+    expect(rows.rows).toEqual([{ id: property.id }]);
+  });
+});
+
 describe('publishListing KYC/account-status defense in depth', () => {
   const leadCtx = (): RlsContext => ({ userId: opsLead, role: 'ops_lead', mfaVerified: true });
   const fullChecklist = JSON.stringify(
