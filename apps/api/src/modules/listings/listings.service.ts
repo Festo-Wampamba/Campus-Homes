@@ -73,8 +73,8 @@ export class ListingsService {
   // the review queue as `pending_kyc`, then decideKyc() releases it to
   // `active`. An explicitly rejected identity is still blocked, and
   // publishListing() independently re-checks KYC before anything goes live.
-  submitProperty(ctx: RlsContext, input: SubmitPropertyInput) {
-    return this.rlsDb.run(ctx, async (db) => {
+  async submitProperty(ctx: RlsContext, input: SubmitPropertyInput) {
+    const property = await this.rlsDb.run(ctx, async (db) => {
       const [landlord] = await db
         .select({ kycStatus: landlords.kycStatus })
         .from(landlords)
@@ -126,32 +126,37 @@ export class ListingsService {
       if (!property) {
         throw new NotFoundException('Property submission could not be created');
       }
-      // A self-service submission must surface in the reviewer workspace.
-      // Do not rely on a client refresh or on a landlord's role assignment:
-      // review is owned by active platform administrators.
-      if (property.status === 'pending_kyc') {
-        const reviewers = await this.rlsDb.run(SERVICE_CTX, (serviceDb) =>
-          serviceDb
-            .selectDistinct({ userId: userRoleAssignments.userId })
-            .from(userRoleAssignments)
-            .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
-            .where(and(
-              inArray(roles.key, ['super_admin', 'platform_admin']),
-              eq(userRoleAssignments.scopeType, 'platform_wide'),
-              // Keep this predicate explicit rather than assuming an assignment
-              // remains usable after it has been revoked.
-              isNull(userRoleAssignments.revokedAt),
-            )),
-        );
-        await Promise.all(reviewers.map((reviewer) =>
-          this.notifications?.notify(reviewer.userId, 'landlord.application_submitted', 'in_app', {
-            message: `A landlord submitted ${property.name} for approval. Review the application before access is granted.`,
-            href: '/admin/landlord-accounts',
-          }),
-        ));
-      }
       return property;
     });
+
+    // Runs after the submission transaction closes: the reviewer lookup and
+    // notify() each open their own rlsDb.run, and nesting them inside the
+    // submission's run would hold two pooled connections per request.
+    // A self-service submission must surface in the reviewer workspace.
+    // Do not rely on a client refresh or on a landlord's role assignment:
+    // review is owned by active platform administrators.
+    if (property.status === 'pending_kyc') {
+      const reviewers = await this.rlsDb.run(SERVICE_CTX, (serviceDb) =>
+        serviceDb
+          .selectDistinct({ userId: userRoleAssignments.userId })
+          .from(userRoleAssignments)
+          .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
+          .where(and(
+            inArray(roles.key, ['super_admin', 'platform_admin']),
+            eq(userRoleAssignments.scopeType, 'platform_wide'),
+            // Keep this predicate explicit rather than assuming an assignment
+            // remains usable after it has been revoked.
+            isNull(userRoleAssignments.revokedAt),
+          )),
+      );
+      await Promise.all(reviewers.map((reviewer) =>
+        this.notifications?.notify(reviewer.userId, 'landlord.application_submitted', 'in_app', {
+          message: `A landlord submitted ${property.name} for approval. Review the application before access is granted.`,
+          href: '/admin/landlord-accounts',
+        }),
+      ));
+    }
+    return property;
   }
 
   // RLS (`properties_landlord_update`) already scopes this to the caller's

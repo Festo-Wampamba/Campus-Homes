@@ -9,6 +9,7 @@ import {
 import { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
+import type { PoolClient } from 'pg';
 
 import type { BookReservationInput, ReleaseReservationInput, ReserveInput } from '@campushomes/shared';
 
@@ -55,33 +56,42 @@ export class ReservationsService {
    * roles allowed to Book/Release/confirm move-in on a bed. Ops/admin
    * must have an active staff assignment covering the target property.
    * Mirrors tenant-agreements.service.ts's assertCanManageProperty. */
-  private async assertCanManageProperty(ctx: RlsContext, propertyId: string): Promise<void> {
+  private async assertCanManageProperty(client: PoolClient, ctx: RlsContext, propertyId: string): Promise<void> {
     if (ctx.role === 'ops_lead' || ctx.role === 'admin') {
-      await this.rlsDb.run(SERVICE(ctx.userId), (_db, client) => assertStaffScope(client, ctx, propertyId));
+      await assertStaffScope(client, ctx, propertyId);
       return;
     }
-    const allowed = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
-      if (ctx.role === 'landlord') {
-        const res = await client.query('SELECT 1 FROM properties WHERE id = $1 AND landlord_id = $2', [
-          propertyId,
-          ctx.userId,
-        ]);
-        return res.rowCount! > 0;
-      }
-      if (ctx.role === 'custodian') {
-        const res = await client.query(
-          `SELECT 1 FROM property_memberships
-           WHERE property_id = $1 AND user_id = $2 AND role = 'custodian' AND revoked_at IS NULL
-             AND status = 'active' AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())`,
-          [propertyId, ctx.userId],
-        );
-        return res.rowCount! > 0;
-      }
-      return false;
-    });
+    let allowed = false;
+    if (ctx.role === 'landlord') {
+      const res = await client.query('SELECT 1 FROM properties WHERE id = $1 AND landlord_id = $2', [
+        propertyId,
+        ctx.userId,
+      ]);
+      allowed = res.rowCount! > 0;
+    } else if (ctx.role === 'custodian') {
+      const res = await client.query(
+        `SELECT 1 FROM property_memberships
+         WHERE property_id = $1 AND user_id = $2 AND role = 'custodian' AND revoked_at IS NULL
+           AND status = 'active' AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())`,
+        [propertyId, ctx.userId],
+      );
+      allowed = res.rowCount! > 0;
+    }
     if (!allowed) {
       throw new ForbiddenException("You don't have permission to manage this property's beds");
     }
+  }
+
+  /** Runs the property-management check on the caller's already-open client
+   * (never a second rlsDb.run — that would need a second pooled connection
+   * per call and deadlock the pool under load) against the property that owns
+   * `bedId`, before any student/status/limit lookup can leak to the caller. */
+  private async assertCanManageBed(client: PoolClient, ctx: RlsContext, bedId: string): Promise<void> {
+    const res = await client.query('SELECT u.property_id FROM beds b JOIN units u ON u.id = b.unit_id WHERE b.id = $1', [
+      bedId,
+    ]);
+    if (res.rowCount === 0) throw new NotFoundException('Bed not found');
+    await this.assertCanManageProperty(client, ctx, res.rows[0].property_id as string);
   }
 
   /** A student who has already moved into a bed (status 'occupied') can't
@@ -260,7 +270,6 @@ export class ReservationsService {
   async book(ctx: RlsContext, input: BookReservationInput) {
     const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
       let bedId: string;
-      let propertyId: string;
       let existingReservationId: string | null = null;
       let studentId: string;
       let listingVersionId: string;
@@ -271,21 +280,18 @@ export class ReservationsService {
           where: eq(reservations.id, input.reservationId),
         });
         if (!reservation) throw new NotFoundException('Reservation not found');
+        await this.assertCanManageBed(client, ctx, reservation.bedId);
         if (reservation.status !== 'reserved') {
           throw new ConflictException(`Cannot book a reservation that is ${reservation.status}`);
         }
-        const bedRes = await client.query(
-          `SELECT u.property_id FROM beds b
-           JOIN units u ON u.id = b.unit_id
-           WHERE b.id = $1`,
-          [reservation.bedId],
-        );
         bedId = reservation.bedId;
-        propertyId = bedRes.rows[0].property_id as string;
         existingReservationId = reservation.id;
         studentId = reservation.studentId;
         listingVersionId = reservation.listingVersionId;
       } else {
+        // The schema guarantees bedId here; this only narrows the type.
+        if (!input.bedId) throw new NotFoundException('Bed not found');
+        await this.assertCanManageBed(client, ctx, input.bedId);
         // Walk-in: book an Available bed directly, no prior Reserve. Rooms
         // are permanent/property-level (2026-09) — a unit can carry pricing
         // for more than one semester, so this picks whichever verified
@@ -294,7 +300,7 @@ export class ReservationsService {
         // propertyDetail, the landlord's own view this walk-in flow is
         // driven from).
         const bedRes = await client.query(
-          `SELECT b.id, u.property_id, l.id AS listing_id, l.current_version_id,
+          `SELECT b.id, l.id AS listing_id, l.current_version_id,
                   usp.price_per_term_ugx, usp.deposit_ugx
            FROM beds b
            JOIN units u ON u.id = b.unit_id
@@ -309,7 +315,6 @@ export class ReservationsService {
           throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
         }
         bedId = bedRes.rows[0].id as string;
-        propertyId = bedRes.rows[0].property_id as string;
         listingVersionId = bedRes.rows[0].current_version_id as string;
         walkInPrice = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
 
@@ -339,8 +344,6 @@ export class ReservationsService {
           );
         }
       }
-
-      await this.assertCanManageProperty(ctx, propertyId);
 
       const now = new Date();
       let reservationRow;
@@ -408,17 +411,10 @@ export class ReservationsService {
         where: eq(reservations.id, reservationId),
       });
       if (!reservation) throw new NotFoundException('Reservation not found');
+      await this.assertCanManageBed(client, ctx, reservation.bedId);
       if (!['reserved', 'booked'].includes(reservation.status)) {
         throw new ConflictException(`Cannot release a reservation that is ${reservation.status}`);
       }
-
-      const bedRes = await client.query(
-        `SELECT u.property_id FROM beds b
-         JOIN units u ON u.id = b.unit_id
-         WHERE b.id = $1`,
-        [reservation.bedId],
-      );
-      await this.assertCanManageProperty(ctx, bedRes.rows[0].property_id as string);
 
       await db
         .update(reservations)
@@ -479,22 +475,17 @@ export class ReservationsService {
       if (!reservation) {
         throw new NotFoundException('Reservation not found');
       }
-      if (reservation.status !== 'booked') {
-        throw new ConflictException('Only a booked reservation can be moved into');
-      }
-
+      // Authorize before the status check so a non-party can't probe
+      // reservation state by UUID.
       let confirmerRole: 'student' | 'landlord';
       if (reservation.studentId === ctx.userId) {
         confirmerRole = 'student';
       } else {
-        const bedRes = await client.query(
-          `SELECT u.property_id FROM beds b
-           JOIN units u ON u.id = b.unit_id
-           WHERE b.id = $1`,
-          [reservation.bedId],
-        );
-        await this.assertCanManageProperty(ctx, bedRes.rows[0].property_id as string);
+        await this.assertCanManageBed(client, ctx, reservation.bedId);
         confirmerRole = 'landlord';
+      }
+      if (reservation.status !== 'booked') {
+        throw new ConflictException('Only a booked reservation can be moved into');
       }
 
       const [moveIn] = await db
