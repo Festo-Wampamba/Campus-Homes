@@ -23,3 +23,7 @@ coverage
 
 OwnResourceFolder
 graphify-out
+db-backups
+CampusHomes_Demo_Hostels
+**/*.pem
+**/*.key

@@ -13,7 +13,7 @@ services:
     # Below the kernel's ephemeral range (32768-60999): a 5xxxx host port can
     # be taken at random by an outgoing connection and block `up`.
     ports:
-      - '25432:5432'
+      - '127.0.0.1:25432:5432'
     volumes:
       # PG18's image moved the data directory: the volume must mount the parent
       # /var/lib/postgresql, not .../data, or the container crash-loops on restart.
@@ -34,7 +34,7 @@ services:
       - --maxmemory-policy
       - noeviction
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -81,8 +81,8 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     ports:
-      - '3001:3001'
-      - '3002:3002'
+      - '127.0.0.1:3001:3001'
+      - '127.0.0.1:3002:3002'
 
 volumes:
   postgres_data:

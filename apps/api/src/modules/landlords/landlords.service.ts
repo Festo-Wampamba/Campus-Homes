@@ -13,6 +13,7 @@ import { landlords, properties, users } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assignRoleInTransaction } from '../staff/role-assignment.service';
+import { assertOwnedStorageKeys } from '../uploads/storage-key';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -160,6 +161,7 @@ export class LandlordsService {
       const [existing] = await db.select().from(landlords).where(eq(landlords.userId, ctx.userId));
 
       if (!existing) {
+        if (input.idDocStorageKey) assertOwnedStorageKeys(ctx.userId, [input.idDocStorageKey]);
         const [row] = await db
           .insert(landlords)
           .values({
@@ -176,6 +178,9 @@ export class LandlordsService {
 
       if (existing.kycStatus !== 'pending') {
         throw new ForbiddenException('Profile is under review and can no longer be edited');
+      }
+      if (input.idDocStorageKey && input.idDocStorageKey !== existing.idDocStorageKey) {
+        assertOwnedStorageKeys(ctx.userId, [input.idDocStorageKey]);
       }
 
       const [row] = await db

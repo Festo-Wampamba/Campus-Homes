@@ -11,6 +11,11 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
+overrides:
+  esbuild@0.18.20: 0.25.0
+  image-size@1.2.1: 2.0.3
+  uuid@8.3.2: 11.1.1
+
 catalog:
   zod: ^4.1.12
   typescript: ^5.9.3

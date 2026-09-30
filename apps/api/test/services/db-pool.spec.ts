@@ -18,3 +18,7 @@ it('app pool connections run with jit disabled', async () => {
 
   expect(rows[0]?.jit).toBe('off');
 });
+
+it('app pool errors on exhaustion instead of waiting forever for a connection', () => {
+  expect(pool.options.connectionTimeoutMillis).toBe(5000);
+});

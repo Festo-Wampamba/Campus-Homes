@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import type {
@@ -28,6 +28,7 @@ import {
   userRoleAssignments,
 } from '../../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assertOwnedStorageKeys } from '../uploads/storage-key';
 
 /** A bed still counts as "live" (not available) under these statuses —
  * cancelled/expired/released reservations free the bed back up. An occupied
@@ -62,6 +63,8 @@ const SERVICE_CTX: RlsContext = {
 
 @Injectable()
 export class ListingsService {
+  private readonly logger = new Logger(ListingsService.name);
+
   constructor(
     private readonly rlsDb: RlsDb,
     @Optional() private readonly notifications?: NotificationsService,
@@ -73,8 +76,9 @@ export class ListingsService {
   // the review queue as `pending_kyc`, then decideKyc() releases it to
   // `active`. An explicitly rejected identity is still blocked, and
   // publishListing() independently re-checks KYC before anything goes live.
-  submitProperty(ctx: RlsContext, input: SubmitPropertyInput) {
-    return this.rlsDb.run(ctx, async (db) => {
+  async submitProperty(ctx: RlsContext, input: SubmitPropertyInput) {
+    if (input.coverPhotoKey) assertOwnedStorageKeys(ctx.userId, [input.coverPhotoKey]);
+    const property = await this.rlsDb.run(ctx, async (db) => {
       const [landlord] = await db
         .select({ kycStatus: landlords.kycStatus })
         .from(landlords)
@@ -126,10 +130,20 @@ export class ListingsService {
       if (!property) {
         throw new NotFoundException('Property submission could not be created');
       }
-      // A self-service submission must surface in the reviewer workspace.
-      // Do not rely on a client refresh or on a landlord's role assignment:
-      // review is owned by active platform administrators.
-      if (property.status === 'pending_kyc') {
+      return property;
+    });
+
+    // Runs after the submission transaction closes: the reviewer lookup and
+    // notify() each open their own rlsDb.run, and nesting them inside the
+    // submission's run would hold two pooled connections per request.
+    // A self-service submission must surface in the reviewer workspace.
+    // Do not rely on a client refresh or on a landlord's role assignment:
+    // review is owned by active platform administrators.
+    if (property.status === 'pending_kyc') {
+      // Best-effort: the property is already committed, so a notification
+      // failure must not fail (and invite a duplicate retry of) the POST.
+      // Log the message only — an error object can carry connection strings.
+      try {
         const reviewers = await this.rlsDb.run(SERVICE_CTX, (serviceDb) =>
           serviceDb
             .selectDistinct({ userId: userRoleAssignments.userId })
@@ -149,9 +163,13 @@ export class ListingsService {
             href: '/admin/landlord-accounts',
           }),
         ));
+      } catch (err) {
+        this.logger.error(
+          `Reviewer notification failed for property ${property.id}: ${err instanceof Error ? err.message : 'unknown error'}`,
+        );
       }
-      return property;
-    });
+    }
+    return property;
   }
 
   // RLS (`properties_landlord_update`) already scopes this to the caller's
@@ -163,6 +181,17 @@ export class ListingsService {
       throw new BadRequestException('No fields to update');
     }
     return this.rlsDb.run(ctx, async (db) => {
+      // Only a NEW cover photo must be the caller's upload; the edit form
+      // resubmits the stored value (possibly a legacy Cloudinary URL) as-is.
+      if (input.coverPhotoKey) {
+        const [current] = await db
+          .select({ coverPhotoKey: properties.coverPhotoKey })
+          .from(properties)
+          .where(eq(properties.id, propertyId));
+        if (current?.coverPhotoKey !== input.coverPhotoKey) {
+          assertOwnedStorageKeys(ctx.userId, [input.coverPhotoKey]);
+        }
+      }
       const [property] = await db
         .update(properties)
         .set(input)
@@ -353,6 +382,7 @@ export class ListingsService {
     // updateProperty/removeUnitPhoto's UPDATE/DELETE, there's no silent
     // empty-result case here to turn into a clean 404.
     return this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, [storageKey]);
       const [photo] = await db
         .insert(unitPhotos)
         .values({ unitId, storageKey, uploadedBy: ctx.userId })
@@ -369,6 +399,7 @@ export class ListingsService {
    * just never wired to a landlord endpoint or the public gallery before. */
   addPropertyMedia(ctx: RlsContext, propertyId: string, storageKey: string) {
     return this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, [storageKey]);
       const [media] = await db
         .insert(propertyMedia)
         .values({ propertyId, storageKey, mediaType: 'image', uploadedBy: ctx.userId })
@@ -423,6 +454,7 @@ export class ListingsService {
 
   addDocument(ctx: RlsContext, propertyId: string, docType: string, storageKey: string) {
     return this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, [storageKey]);
       const [doc] = await db
         .insert(propertyDocuments)
         .values({

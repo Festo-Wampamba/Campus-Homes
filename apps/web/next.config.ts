@@ -23,12 +23,7 @@ function b2ImagePattern() {
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // Staging served no security headers and advertised `X-Powered-By: Next.js`
-  // — verified against the live response headers. The sign-in page starts a
-  // credential flow, so clickjacking and referrer leakage are real exposures
-  // here, not theoretical. CSP is deliberately omitted: this app runs inline
-  // Next bootstrap scripts, and a wrong CSP breaks the page silently, so it
-  // needs its own nonce-based pass rather than being guessed at here.
+  // The request-specific nonce CSP is supplied by src/proxy.ts.
   poweredByHeader: false,
   // Proxies every browser-facing API call through this app's own origin so
   // the session cookie the API sets can be host-only instead of scoped to
@@ -60,6 +55,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(self), geolocation=(self), microphone=(), payment=()" },
           // X-Robots-Tag is set in src/proxy.ts: headers() here is evaluated at
           // build time, so an env check here baked noindex into the prod image.
         ],

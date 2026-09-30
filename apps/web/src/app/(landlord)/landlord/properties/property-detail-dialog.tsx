@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PropertyQrCode } from "@/components/property-qr-code";
 import { StatusChip } from "@/components/status-chip";
 import { TenantAgreementBuilderDialog } from "@/components/tenant-agreement-builder-dialog";
+import { ViewDocumentButton } from "@/components/view-document-button";
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { formatUgx } from "@/lib/format";
@@ -111,7 +112,8 @@ function CoverPhoto({ property }: { property: Property }) {
 /** Read-only — self-serve submissions, nothing for the landlord to approve
  * here (see tenant-agreements.service.ts). Fetches on mount, same pattern
  * as PropertyDetailBody. Each row expands to show every answer plus the
- * signature (drawn image, or the typed name is already the header). */
+ * signature (drawn image opened on demand — it lives in private storage — or
+ * the typed name is already the header). */
 function TenantAgreementsList({ propertyId }: { propertyId: string }) {
   const [agreements, setAgreements] = useState<TenantAgreementForPropertyRow[] | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -140,10 +142,6 @@ function TenantAgreementsList({ propertyId }: { propertyId: string }) {
       <div className="divide-y divide-border rounded-md border border-border">
         {agreements.map((a) => {
           const expanded = expandedId === a.id;
-          const signatureUrl =
-            a.signature_type === "drawn" && a.signature_storage_key
-              ? listingPhotoUrl(a.signature_storage_key, 300)
-              : null;
           return (
             <div key={a.id}>
               <button
@@ -184,16 +182,8 @@ function TenantAgreementsList({ propertyId }: { propertyId: string }) {
                   <p className="text-xs text-muted-foreground">
                     {a.declaration_accepted ? "Declaration accepted" : "Declaration not recorded"}
                   </p>
-                  {signatureUrl && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground">Signature</p>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL */}
-                      <img
-                        src={signatureUrl}
-                        alt="Drawn signature"
-                        className="mt-1 h-16 rounded-md border border-border bg-white"
-                      />
-                    </div>
+                  {a.signature_type === "drawn" && a.signature_storage_key && (
+                    <ViewDocumentButton storageKey={a.signature_storage_key} label="View signature" />
                   )}
                 </div>
               )}
@@ -778,7 +768,7 @@ function PropertyMediaManager({
     setError(null);
     setUploading(true);
     try {
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
+      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type, size: file.size }) });
       const { publicId } = await uploadToCloudinary(file, sig);
       const created = await api<{ id: string; storageKey: string }>(
         `/listings/properties/${propertyId}/media`,
@@ -877,7 +867,7 @@ function RoomPhotoManager({
     setError(null);
     setUploading(true);
     try {
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
+      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type, size: file.size }) });
       const { publicId } = await uploadToCloudinary(file, sig);
       const created = await api<{ id: string; storageKey: string }>(
         `/listings/units/${room.id}/photos`,

@@ -8,7 +8,7 @@ import { loadEnv } from './config/env';
 import { RlsDb } from './db/db.module';
 import { REDIS } from './db/redis.module';
 import { cookieOriginGuard } from './modules/auth/csrf';
-import { writeRateLimit } from './rate-limit';
+import { isEventsRequest, writeRateLimit } from './rate-limit';
 
 // Routes that must NOT get the /api/v1 prefix — their exact paths are
 // already registered as Logto/Google redirect URIs and connector webhook
@@ -31,6 +31,7 @@ async function bootstrap() {
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   const rlsDb = app.get(RlsDb);
   const http = app.getHttpAdapter().getInstance();
+  http.set('trust proxy', env.TRUSTED_PROXY_CIDRS);
   http.use(cookieOriginGuard(env.WEB_ORIGIN));
   // This API had no security headers at all, while the Logto instance it
   // redirects into sets the full set — an audit of the live staging response
@@ -51,8 +52,18 @@ async function bootstrap() {
     res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     next();
   });
-  // ponytail: one global write budget; per-route limits if a single form needs tighter caps.
-  http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 60, windowSec: 60 }));
+  // Budget sign-in allocation separately; do not accidentally throttle the
+  // callback or provider webhooks with this GET quota.
+  http.use('/api/auth/logto/sign-in', writeRateLimit(app.get(REDIS), {
+    limit: 30, windowSec: 60, namespace: 'sign-in', includeReads: true,
+    // Sign-in start is idempotent and the OIDC provider has its own throttles,
+    // so a Redis outage must not lock every visitor out of authentication.
+    failOpen: true,
+  }));
+  // Campus NAT puts many students behind one IP; each navigation beacons /events,
+  // so it must not starve the same clients' real writes.
+  http.use('/api/v1/events', writeRateLimit(app.get(REDIS), { limit: 300, windowSec: 60, namespace: 'events' }));
+  http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 300, windowSec: 60, skip: isEventsRequest }));
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
     const isExempt = req.originalUrl.startsWith('/api/v1/admin') || req.originalUrl.startsWith('/api/v1/health');
     if (isExempt || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
