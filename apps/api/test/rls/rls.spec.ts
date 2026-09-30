@@ -1339,6 +1339,41 @@ describe('tenant_agreements (0020): QR-code tenant registration responses', () =
     expect(rows).toHaveLength(1);
   });
 
+  describe('custodian membership window (0057): RLS is no looser than the service layer', () => {
+    async function custodianSees(phone: string, column: string, valueSql: string): Promise<number> {
+      const user = await seedUser('custodian', phone);
+      await seed(
+        `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, ${column})
+         VALUES ($1, $2, 'custodian', $3, ${valueSql}) RETURNING id`,
+        [user, property1, landlord1],
+      );
+      const rows = await asIdentity({ userId: user, role: 'custodian' }, async (c) =>
+        c.query('SELECT id FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+      );
+      return rows.length;
+    }
+
+    it('a custodian whose membership was revoked reads nothing', async () => {
+      expect(await custodianSees('+256700000071', 'revoked_at', 'now()')).toBe(0);
+    });
+
+    it('a custodian whose membership has ended reads nothing', async () => {
+      expect(await custodianSees('+256700000072', 'ends_at', "now() - interval '1 day'")).toBe(0);
+    });
+
+    it('a custodian whose membership has not started yet reads nothing', async () => {
+      expect(await custodianSees('+256700000073', 'starts_at', "now() + interval '1 day'")).toBe(0);
+    });
+
+    it('a custodian whose membership is suspended reads nothing', async () => {
+      expect(await custodianSees('+256700000074', 'status', "'suspended'")).toBe(0);
+    });
+
+    it('a custodian with an open-ended active membership reads the agreement', async () => {
+      expect(await custodianSees('+256700000075', 'ends_at', "now() + interval '30 days'")).toBe(1);
+    });
+  });
+
   it('ops reads across every property', async () => {
     const rows = await asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
       c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
@@ -1356,5 +1391,17 @@ describe('tenant_agreements (0020): QR-code tenant registration responses', () =
         ),
       ),
     ).rejects.toThrow(/duplicate key|unique constraint/i);
+  });
+});
+
+describe('FORCE ROW LEVEL SECURITY (0057): the table owner cannot bypass any policy', () => {
+  it('every RLS-enabled public table is also forced', async () => {
+    const { rows } = await pool.query<{ relname: string }>(
+      `SELECT relname FROM pg_class
+       WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'
+         AND relrowsecurity AND NOT relforcerowsecurity
+       ORDER BY relname`,
+    );
+    expect(rows.map((r) => r.relname)).toEqual([]);
   });
 });
