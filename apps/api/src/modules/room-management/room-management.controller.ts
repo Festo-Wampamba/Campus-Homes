@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
+import { PermissionsGuard, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   BedBlockInputDto,
@@ -83,24 +84,27 @@ export class RoomManagementController {
 }
 
 @Controller('ops/room-change-requests')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, PermissionsGuard, RolesGuard)
 export class RoomManagementOpsController {
   constructor(private readonly rooms: RoomManagementService) {}
 
   @Get()
   @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
   queue(@Req() req: AuthenticatedRequest) {
     return this.rooms.reviewQueue(rlsCtx(req));
   }
 
   @Post(':changeSetId/approve')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
   approve(@Req() req: AuthenticatedRequest, @Param('changeSetId', ParseUUIDPipe) changeSetId: string, @Body() body: ReviewRoomChangeSetDto) {
     return this.rooms.approveChangeSet(rlsCtx(req), changeSetId, body.notes);
   }
 
   @Post(':changeSetId/reject')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
   reject(@Req() req: AuthenticatedRequest, @Param('changeSetId', ParseUUIDPipe) changeSetId: string, @Body() body: RejectRoomChangeSetDto) {
     return this.rooms.rejectChangeSet(rlsCtx(req), changeSetId, body.reason);
   }

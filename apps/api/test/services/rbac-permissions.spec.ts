@@ -120,3 +120,28 @@ describe('hasCoveringScope', () => {
     expect(hasCoveringScope([{ scopeType: 'property', scopeId: 'property-a' }], 'property', 'property-b')).toBe(false);
   });
 });
+
+describe('0058 ops route grants', () => {
+  const holds = async (role: string, permission: string) => (await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
+       JOIN permissions p ON p.id = rp.permission_id WHERE r.key = $1 AND p.key = $2) AS held`,
+    [role, permission],
+  )).rows[0].held as boolean;
+
+  it.each<[string, string, boolean]>([
+    ...['super_admin', 'platform_admin', 'ops_lead'].flatMap((role) =>
+      ['campus_photos.manage', 'onboarding_leads.manage', 'landlords.invite', 'room_changes.review']
+        .map((permission): [string, string, boolean] => [role, permission, true])),
+    ['ops_lead', 'visits.inspect', true],
+    ['ops_lead', 'units.update_operational_status', true],
+    ['ops_inspector', 'units.update_operational_status', true],
+    ['platform_admin', 'visits.inspect', false],
+    ['platform_admin', 'units.update_operational_status', false],
+    ['ops_inspector', 'room_changes.review', false],
+    ['finance_admin', 'onboarding_leads.manage', false],
+    ['support_admin', 'landlords.invite', false],
+    ['auditor', 'campus_photos.manage', false],
+  ])('%s holds %s: %s', async (role, permission, expected) => {
+    expect(await holds(role, permission)).toBe(expected);
+  });
+});

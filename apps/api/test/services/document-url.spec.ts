@@ -30,13 +30,14 @@ let custodian: string;
 let kycReviewer: string;
 let inspector: string;
 let scopedLead: string;
+let auditor: string;
 let idDocKey: string;
 let propertyDocKey: string;
 let signatureKey: string;
 const LEGACY_URL = 'https://s3.example.invalid/photos/uploads/legacy/id-doc';
 
 const user = (userId: string): RlsContext => ({ userId, role: 'student' });
-const staff = (userId: string, role: 'ops_lead' | 'ops_inspector'): RlsContext => ({ userId, role, mfaVerified: true });
+const staff = (userId: string, role: 'ops_lead' | 'ops_inspector' | 'admin'): RlsContext => ({ userId, role, mfaVerified: true });
 const read = (ctx: RlsContext, key: string) => documents.documentUrl(ctx, key);
 
 async function seed(sql: string, params: unknown[] = []): Promise<string> {
@@ -44,7 +45,8 @@ async function seed(sql: string, params: unknown[] = []): Promise<string> {
 }
 
 async function staffUser(phone: string, role: string, scopeType: string, scopeId: string | null): Promise<string> {
-  const id = await seed(`INSERT INTO users (phone, role, status) VALUES ($1, $2, 'active') RETURNING id`, [phone, role]);
+  const dbRole = role === 'auditor' ? 'admin' : role;
+  const id = await seed(`INSERT INTO users (phone, role, status) VALUES ($1, $2, 'active') RETURNING id`, [phone, dbRole]);
   await pool.query(
     `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
      SELECT $1, id, $3, $4, $1, 'document-url test' FROM roles WHERE key = $2`,
@@ -65,6 +67,7 @@ beforeAll(async () => {
   kycReviewer = await staffUser('+256710000704', 'ops_lead', 'platform_wide', null);
   inspector = await staffUser('+256710000705', 'ops_inspector', 'platform_wide', null);
   scopedLead = await staffUser('+256710000706', 'ops_lead', 'catchment', 'MUK');
+  auditor = await staffUser('+256710000707', 'auditor', 'platform_wide', null);
 
   idDocKey = `uploads/${landlord}/${crypto.randomUUID()}`;
   propertyDocKey = `uploads/${landlord}/${crypto.randomUUID()}`;
@@ -144,8 +147,16 @@ describe('property document', () => {
     await expect(read(user(landlord), propertyDocKey)).resolves.toHaveProperty('url');
   });
 
-  it('is readable by a lead whose scope covers the property', async () => {
-    await expect(read(staff(scopedLead, 'ops_lead'), propertyDocKey)).resolves.toHaveProperty('url');
+  it('is readable by a covering lead holding a platform-wide landlords.review_kyc', async () => {
+    await expect(read(staff(kycReviewer, 'ops_lead'), propertyDocKey)).resolves.toHaveProperty('url');
+  });
+
+  it('is forbidden to a covering lead without a platform-wide landlords.review_kyc', async () => {
+    await expect(read(staff(scopedLead, 'ops_lead'), propertyDocKey)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('is forbidden to a platform-wide auditor', async () => {
+    await expect(read(staff(auditor, 'admin'), propertyDocKey)).rejects.toMatchObject({ status: 403 });
   });
 
   it('is forbidden to another landlord', async () => {

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
+import { PermissionsGuard, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import type { University } from '@campushomes/shared';
 
@@ -21,19 +22,23 @@ import {
 } from './ops.dto';
 import { OpsService } from './ops.service';
 
+// PermissionsGuard (the matrix) decides access; RolesGuard runs last so the
+// portal role it picks is the RLS role the services act under.
 @Controller('ops')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, PermissionsGuard, RolesGuard)
 export class OpsController {
   constructor(private readonly ops: OpsService) {}
 
   @Get('queue')
   @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequirePermission('visits.read')
   queue(@Req() req: AuthenticatedRequest) {
     return this.ops.queue(rlsCtx(req));
   }
 
   @Get('inspectors')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('visits.assign')
   listInspectors(@Req() req: AuthenticatedRequest) {
     return this.ops.listInspectors(rlsCtx(req));
   }
@@ -43,6 +48,7 @@ export class OpsController {
   // so this only ever surfaces visits the caller assigned to themselves.
   @Get('visits/mine')
   @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequirePermission('visits.inspect')
   myVisits(@Req() req: AuthenticatedRequest) {
     return this.ops.myVisits(rlsCtx(req));
   }
@@ -51,6 +57,7 @@ export class OpsController {
   // already approved, so an approval doesn't just vanish from their world.
   @Get('visits/mine/history')
   @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequirePermission('visits.inspect')
   myVisitHistory(@Req() req: AuthenticatedRequest) {
     return this.ops.myVisitHistory(rlsCtx(req));
   }
@@ -61,18 +68,21 @@ export class OpsController {
   // visit they can no longer see in myVisits() once it's approved.
   @Get('visits/:id')
   @Roles('ops_lead', 'admin', 'ops_inspector')
+  @RequirePermission('visits.read')
   visitDetail(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.visitDetail(rlsCtx(req), id);
   }
 
   @Get('properties/:id/listings')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.read')
   propertyListings(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.propertyListings(rlsCtx(req), id);
   }
 
   @Get('listings/:id')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.read')
   listingForPublish(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.listingForPublish(rlsCtx(req), id);
   }
@@ -82,6 +92,7 @@ export class OpsController {
   // promotion of whatever the visit staged and never revisits it.
   @Post('listings/:id/photos')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.publish')
   addListingPhotos(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -92,6 +103,7 @@ export class OpsController {
 
   @Get('properties/:id/publishable-semesters')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.read')
   publishableSemesters(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.publishableSemesters(rlsCtx(req), id);
   }
@@ -102,6 +114,7 @@ export class OpsController {
   // can carry back whether each room already has a price for it.
   @Get('properties/:id/rooms')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.read')
   propertyRooms(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -114,12 +127,14 @@ export class OpsController {
   // lead can publish after approving a passed visit.
   @Post('listings/draft')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.publish')
   createDraftListing(@Req() req: AuthenticatedRequest, @Body() body: CreateOpsDraftListingDto) {
     return this.ops.createDraftListing(rlsCtx(req), body);
   }
 
   @Post('visits')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('visits.assign')
   scheduleVisit(@Req() req: AuthenticatedRequest, @Body() body: ScheduleVisitDto) {
     return this.ops.scheduleVisit(rlsCtx(req), body);
   }
@@ -129,6 +144,7 @@ export class OpsController {
   // checklist on a visit they self-assigned, with no inspector involved.
   @Post('visits/sync')
   @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequirePermission('visits.inspect')
   syncVisit(@Req() req: AuthenticatedRequest, @Body() body: SyncVisitDto) {
     return this.ops.syncVisit(rlsCtx(req), body);
   }
@@ -137,6 +153,7 @@ export class OpsController {
   // tenant gap the landlord endpoint covers (0024).
   @Patch('units/:id/operational-status')
   @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequirePermission('units.update_operational_status')
   updateUnitOperationalStatus(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -147,6 +164,7 @@ export class OpsController {
 
   @Post('visits/:id/approve')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('visits.review')
   approveVisit(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.approveVisit(rlsCtx(req), id);
   }
@@ -155,6 +173,7 @@ export class OpsController {
   // never the landlord, this data is inspector-captured.
   @Post('visits/:id/corrections')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('visits.review')
   raiseVisitCorrection(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -169,6 +188,7 @@ export class OpsController {
   // assigned inspector for a real correction to resolve.
   @Patch('visits/:id/checklist-item')
   @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequirePermission('visits.inspect')
   resolveVisitCorrection(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -179,12 +199,14 @@ export class OpsController {
 
   @Post('listings/publish')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('listings.publish')
   publishListing(@Req() req: AuthenticatedRequest, @Body() body: PublishListingDto) {
     return this.ops.publishListing(rlsCtx(req), body);
   }
 
   @Post('campuses/:university/photo')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('campus_photos.manage')
   setCampusPhoto(
     @Req() req: AuthenticatedRequest,
     @Param('university') university: string,
@@ -195,6 +217,7 @@ export class OpsController {
 
   @Post('strikes')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('strikes.issue')
   issueStrike(@Req() req: AuthenticatedRequest, @Body() body: IssueStrikeDto) {
     return this.ops.issueStrike(rlsCtx(req), body);
   }
@@ -202,12 +225,14 @@ export class OpsController {
   // Public "Request onboarding" queue (0027).
   @Get('leads')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('onboarding_leads.manage')
   leadsQueue(@Req() req: AuthenticatedRequest) {
     return this.ops.leadsQueue(rlsCtx(req));
   }
 
   @Patch('leads/:id')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('onboarding_leads.manage')
   updateLeadStatus(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -220,18 +245,21 @@ export class OpsController {
   // link instead of requiring an in-person concierge visit.
   @Post('landlords/invite')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('landlords.invite')
   inviteLandlord(@Req() req: AuthenticatedRequest, @Body() body: InviteLandlordDto) {
     return this.ops.inviteLandlord(rlsCtx(req), body);
   }
 
   @Get('landlords/kyc-queue')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('landlords.review_kyc')
   kycQueue(@Req() req: AuthenticatedRequest) {
     return this.ops.kycQueue(rlsCtx(req));
   }
 
   @Post('landlords/:userId/kyc')
   @Roles('ops_lead', 'admin')
+  @RequirePermission('landlords.review_kyc')
   decideKyc(
     @Req() req: AuthenticatedRequest,
     @Param('userId', ParseUUIDPipe) userId: string,
