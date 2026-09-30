@@ -25,9 +25,9 @@ export type CloudinarySignature =
 // object type (bound by the signature). `publicId` is
 // what gets stored as storage_key: a Cloudinary public_id, or the B2 object's
 // public URL (rendered as-is by listingPhotoUrl's http passthrough).
-// Best-effort client-side ceiling; the presigned URL is short-lived and
-// auth-gated. Server-enforced size caps need a POST-policy upload (a later
-// pass) — B2's S3 PUT presign has no size clause.
+// Client-side ceiling for a fast error; the API enforces the real cap when
+// signing and (for B2) binds the exact Content-Length, which fetch sets from
+// the File body — never override it here.
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 // A network-level failure (CORS rejection, offline) surfaces as a bare

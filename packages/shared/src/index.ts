@@ -24,3 +24,4 @@ export * from './ledger.js';
 export * from './tenant-agreement.js';
 export * from './room-management.js';
 export * from './analytics.js';
+export * from './uploads.js';

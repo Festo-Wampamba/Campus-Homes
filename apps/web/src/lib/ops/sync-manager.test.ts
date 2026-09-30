@@ -113,7 +113,9 @@ describe("syncQueuedDrafts", () => {
   });
 
   it("uploads pending photos to Cloudinary before syncing, and stages the resulting key", async () => {
-    const photo = new File(["fake-bytes"], "room.jpg", { type: "image/jpeg" });
+    // fake-indexeddb's structured clone drops a real File's type/size, so store
+    // a plain object carrying the fields the sign request reads.
+    const photo = { type: "image/jpeg", size: 10 } as unknown as File;
     await putDraft({ ...queuedDraft("visit-with-photo"), photos: [{ file: photo, category: "bedroom" as const }] });
 
     const fetchMock = jest.fn(async (url: string) => {
@@ -147,6 +149,8 @@ describe("syncQueuedDrafts", () => {
     expect(updated?.photoStorageKeys).toEqual([{ storageKey: "uploaded-photo-key", category: "bedroom" }]);
 
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const signCall = calls.find(([url]) => url.includes("/uploads/sign"));
+    expect(JSON.parse(signCall?.[1]?.body as string)).toEqual({ contentType: "image/jpeg", size: photo.size });
     const syncCall = calls.find(([url]) => url.includes("/ops/visits/sync"));
     const body = JSON.parse(syncCall?.[1]?.body as string);
     expect(body.photoStorageKeys).toEqual([{ storageKey: "uploaded-photo-key", category: "bedroom" }]);

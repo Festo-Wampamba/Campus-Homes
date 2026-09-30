@@ -13,7 +13,7 @@ async function uploadPendingPhotos(draft: InspectionDraft): Promise<InspectionDr
   let current = draft;
   while (current.photos.length > 0) {
     const [pending, ...rest] = current.photos;
-    const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: pending.file.type }) });
+    const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: pending.file.type, size: pending.file.size }) });
     const { publicId } = await uploadToCloudinary(pending.file, sig);
     current = {
       ...current,
