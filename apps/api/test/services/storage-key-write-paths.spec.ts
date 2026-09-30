@@ -12,6 +12,7 @@ import type { LogtoManagementClient } from '../../src/modules/auth/logto-managem
 import { LandlordsService } from '../../src/modules/landlords/landlords.service';
 import { ListingsService } from '../../src/modules/listings/listings.service';
 import { AuditService } from '../../src/modules/ops/audit.service';
+import { TenantAgreementsService } from '../../src/modules/tenant-agreements/tenant-agreements.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import { RoomManagementService } from '../../src/modules/room-management/room-management.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
@@ -36,6 +37,7 @@ const rooms = new RoomManagementService(rlsDb, audit, {} as NotificationsService
 const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as LogtoManagementClient);
 const landlordsService = new LandlordsService(rlsDb, audit);
 const adminProperties = new AdminPropertiesService(rlsDb, audit);
+const tenantAgreements = new TenantAgreementsService(rlsDb);
 
 let landlordCtx: RlsContext;
 let otherUserId: string;
@@ -282,5 +284,89 @@ describe('landlord ID document', () => {
     const key = `uploads/${pendingLandlordCtx.userId}/${crypto.randomUUID()}`;
     const row = await landlordsService.upsertProfile(pendingLandlordCtx, profile(key));
     expect(row?.idDocStorageKey).toBe(key);
+  });
+});
+
+describe('private document bucket', () => {
+  const PRIVATE_ONLY = 'Documents must be uploaded as private documents';
+  const bareKey = (userId: string) => `uploads/${userId}/${crypto.randomUUID()}`;
+  const fullUrl = (userId: string) => `${ENDPOINT}/${BUCKET}/uploads/${userId}/${crypto.randomUUID()}`;
+
+  beforeAll(() => {
+    process.env.B2_PRIVATE_BUCKET = 'campushomes-documents-production';
+  });
+  afterAll(() => {
+    delete process.env.B2_PRIVATE_BUCKET;
+  });
+
+  describe('landlord ID document', () => {
+    const profile = (idDocStorageKey: string) => ({
+      legalName: 'LL Pending Keys',
+      idDocStorageKey,
+      businessType: 'individual_landlord' as const,
+    });
+
+    beforeEach(async () => {
+      await pool.query(`UPDATE landlords SET id_doc_storage_key = $2 WHERE user_id = $1`, [
+        pendingLandlordCtx.userId,
+        LEGACY_ID_DOC,
+      ]);
+    });
+
+    it('rejects the caller\'s own full public URL as a new ID document', async () => {
+      await expect(
+        landlordsService.upsertProfile(pendingLandlordCtx, profile(fullUrl(pendingLandlordCtx.userId))),
+      ).rejects.toThrow(PRIVATE_ONLY);
+    });
+
+    it('accepts the caller\'s own bare key as a new ID document', async () => {
+      const key = bareKey(pendingLandlordCtx.userId);
+      const row = await landlordsService.upsertProfile(pendingLandlordCtx, profile(key));
+      expect(row?.idDocStorageKey).toBe(key);
+    });
+
+    it('accepts resubmitting the stored legacy URL unchanged', async () => {
+      const row = await landlordsService.upsertProfile(pendingLandlordCtx, profile(LEGACY_ID_DOC));
+      expect(row?.idDocStorageKey).toBe(LEGACY_ID_DOC);
+    });
+  });
+
+  // A submission inserts a new row, so there is no stored signature to retain.
+  describe('tenant agreement drawn signature', () => {
+    let phoneSuffix = 10;
+    const submitDrawn = async (signatureStorageKey: (studentId: string) => string) => {
+      const studentId = await seed(
+        `INSERT INTO users (phone, role, status) VALUES ($1, 'student', 'active') RETURNING id`,
+        [`+2567100007${phoneSuffix++}`],
+      );
+      await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [studentId]);
+      return tenantAgreements.submit(
+        { userId: studentId, role: 'student' },
+        {
+          propertyId,
+          responses: [],
+          declarationAccepted: true,
+          signature: { type: 'drawn', signatureStorageKey: signatureStorageKey(studentId) },
+        },
+      );
+    };
+
+    beforeAll(async () => {
+      await pool.query(
+        `INSERT INTO tenant_agreement_templates (property_id, created_by) VALUES ($1, $2)
+         ON CONFLICT (property_id) DO NOTHING`,
+        [propertyId, landlordCtx.userId],
+      );
+    });
+
+    it('rejects the caller\'s own full public URL as the signature', async () => {
+      await expect(submitDrawn(fullUrl)).rejects.toThrow(PRIVATE_ONLY);
+    });
+
+    it('accepts the caller\'s own bare key as the signature', async () => {
+      const key = crypto.randomUUID();
+      const agreement = await submitDrawn((studentId) => `uploads/${studentId}/${key}`);
+      expect(agreement.signatureStorageKey).toBe(`uploads/${agreement.studentId}/${key}`);
+    });
   });
 });
