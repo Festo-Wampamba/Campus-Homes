@@ -170,7 +170,7 @@ export const submitTenantAgreementSchema = z.object({
     z.object({ type: z.literal('typed'), signedName: z.string().trim().min(2).max(200) }),
     // Cloudinary public id — the drawn signature is uploaded the same way
     // every other image in the app is (direct-to-Cloudinary, signed upload).
-    z.object({ type: z.literal('drawn'), signatureStorageKey: z.string().trim().min(1) }),
+    z.object({ type: z.literal('drawn'), signatureStorageKey: z.string().trim().min(1).max(500) }),
   ]),
 });
 export type SubmitTenantAgreementInput = z.infer<typeof submitTenantAgreementSchema>;

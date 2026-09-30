@@ -20,6 +20,7 @@ import { RlsDb } from '../../db/db.module';
 import { assertStaffScope } from '../auth/staff-scope';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { isOwnedStorageKey } from '../uploads/storage-key';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -679,7 +680,7 @@ export class RoomManagementService {
   ) {
     const foreignKeys = photos
       .map((photo) => photo.storageKey)
-      .filter((key) => !key.startsWith(`uploads/${userId}/`));
+      .filter((key) => !isOwnedStorageKey(userId, key));
     if (foreignKeys.length === 0) return;
 
     if (!roomTypeId) {

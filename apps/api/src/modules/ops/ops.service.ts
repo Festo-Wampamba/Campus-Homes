@@ -57,6 +57,7 @@ import { pickPasswordEmailKind, sendAuthEmail } from '../auth/auth.email';
 import { LogtoManagementClient } from '../auth/logto-management.client';
 import { magicSignInUrl } from '../auth/logto.config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assertOwnedStorageKeys } from '../uploads/storage-key';
 import { AuditService } from './audit.service';
 
 /** Promoting a visit's staged photos into listing_photos at publish time is
@@ -256,6 +257,9 @@ export class OpsService {
         string,
         { passed: boolean; notes?: string }
       >;
+      if (input.component === 'photos' && input.newPhotoStorageKeys?.length) {
+        assertOwnedStorageKeys(ctx.userId, input.newPhotoStorageKeys);
+      }
       const photoStorageKeys =
         input.component === 'photos' && input.newPhotoStorageKeys?.length
           ? [...((current.photoStorageKeys as string[] | null) ?? []), ...input.newPhotoStorageKeys]
@@ -551,6 +555,15 @@ export class OpsService {
       if (current.approvedAt) {
         throw new ConflictException('This visit has already been approved and can no longer be resubmitted');
       }
+      // A resync resubmits the whole photo list; keys already staged on this
+      // visit are retained, anything else must be the inspector's own upload.
+      const staged = new Set(normalizeVisitPhotos(current.photoStorageKeys).map((photo) => photo.storageKey));
+      assertOwnedStorageKeys(
+        ctx.userId,
+        input.photoStorageKeys
+          .map((photo) => (typeof photo === 'string' ? photo : photo.storageKey))
+          .filter((key) => !staged.has(key)),
+      );
       const [row] = await db
         .update(verificationVisits)
         .set({
@@ -1056,6 +1069,7 @@ export class OpsService {
    * GPS (set once, at visit approval) rather than fabricating a value. */
   async addListingPhotos(ctx: RlsContext, listingId: string, storageKeys: string[]) {
     const result = await this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, storageKeys);
       const listing = await db.query.listings.findFirst({ where: eq(listings.id, listingId) });
       if (!listing) {
         throw new NotFoundException('Listing not found');
@@ -1158,8 +1172,9 @@ export class OpsService {
    * uuid key to point at (its PK is the university code itself) — this is
    * decorative content, not a §17 money/strike/verification mutation. */
   setCampusPhoto(ctx: RlsContext, university: University, storageKey: string) {
-    return this.rlsDb.run(ctx, async (db) =>
-      firstRow(
+    return this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, [storageKey]);
+      return firstRow(
         await db
           .insert(campusPhotos)
           .values({ university, storageKey, uploadedBy: ctx.userId })
@@ -1168,8 +1183,8 @@ export class OpsService {
             set: { storageKey, uploadedBy: ctx.userId, uploadedAt: new Date() },
           })
           .returning(),
-      ),
-    );
+      );
+    });
   }
 
   /** The public /landlords "Request onboarding" queue (0027) — leads run
