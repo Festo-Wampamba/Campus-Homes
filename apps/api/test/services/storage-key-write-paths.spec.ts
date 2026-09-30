@@ -12,8 +12,8 @@ import type { LogtoManagementClient } from '../../src/modules/auth/logto-managem
 import { LandlordsService } from '../../src/modules/landlords/landlords.service';
 import { ListingsService } from '../../src/modules/listings/listings.service';
 import { AuditService } from '../../src/modules/ops/audit.service';
-import { TenantAgreementsService } from '../../src/modules/tenant-agreements/tenant-agreements.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
+import { TenantAgreementsService } from '../../src/modules/tenant-agreements/tenant-agreements.service';
 import { RoomManagementService } from '../../src/modules/room-management/room-management.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { AdminPropertiesService } from '../../src/modules/staff/admin-properties.service';

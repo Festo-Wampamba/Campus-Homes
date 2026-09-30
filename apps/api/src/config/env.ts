@@ -21,13 +21,18 @@ function isTrustedProxyEntry(entry: string): boolean {
 }
 
 // Textual `::ffff:` checks miss equivalent spellings (`0:0:0:0:0:ffff:0:0/96`)
-// and short prefixes (`::/8`, `::1/80`) that still cover IPv4-mapped peers, so
-// ask the network stack what the entry would actually match.
+// and short prefixes (`::/8`, `::1/80`), and proxy-addr applies any entry that
+// overlaps the IPv4-mapped block ::ffff:0:0/96 to IPv4 peers. The block is
+// /96-aligned, so an entry overlaps it iff it contains the block (prefix <= 96)
+// or its address lies inside it (prefix >= 96) - an exact test, not a probe.
+const MAPPED_BLOCK = new BlockList();
+MAPPED_BLOCK.addSubnet('::ffff:0:0', 96, 'ipv6');
+
 function matchesMappedPeer(address: string, prefix?: number): boolean {
-  const list = new BlockList();
-  if (prefix === undefined) list.addAddress(address, 'ipv6');
-  else list.addSubnet(address, prefix, 'ipv6');
-  return list.check('::ffff:1.2.3.4', 'ipv6') || list.check('::ffff:10.0.0.1', 'ipv6');
+  const entry = new BlockList();
+  if (prefix === undefined) entry.addAddress(address, 'ipv6');
+  else entry.addSubnet(address, prefix, 'ipv6');
+  return entry.check('::ffff:0:0', 'ipv6') || MAPPED_BLOCK.check(address, 'ipv6');
 }
 
 const trustedProxyList = z.string().optional().transform((value) => (value ?? '').split(',').map((entry) => entry.trim()).filter(Boolean))
