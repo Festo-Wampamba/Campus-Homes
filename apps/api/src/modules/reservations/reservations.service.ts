@@ -17,6 +17,7 @@ import type { RlsContext } from '../../db/rls-context';
 import { firstRow, type Db } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
+import { assertStaffScope } from '../auth/staff-scope';
 import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
 import { RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
@@ -52,10 +53,13 @@ export class ReservationsService {
 
   /** Landlord (own property) or an actively-assigned custodian — the two
    * roles allowed to Book/Release/confirm move-in on a bed. Ops/admin
-   * always allowed too (oversight parity with everything else ops touches).
+   * must have an active staff assignment covering the target property.
    * Mirrors tenant-agreements.service.ts's assertCanManageProperty. */
   private async assertCanManageProperty(ctx: RlsContext, propertyId: string): Promise<void> {
-    if (ctx.role === 'ops_lead' || ctx.role === 'admin') return;
+    if (ctx.role === 'ops_lead' || ctx.role === 'admin') {
+      await this.rlsDb.run(SERVICE(ctx.userId), (_db, client) => assertStaffScope(client, ctx, propertyId));
+      return;
+    }
     const allowed = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
       if (ctx.role === 'landlord') {
         const res = await client.query('SELECT 1 FROM properties WHERE id = $1 AND landlord_id = $2', [
@@ -67,7 +71,8 @@ export class ReservationsService {
       if (ctx.role === 'custodian') {
         const res = await client.query(
           `SELECT 1 FROM property_memberships
-           WHERE property_id = $1 AND user_id = $2 AND role = 'custodian' AND revoked_at IS NULL`,
+           WHERE property_id = $1 AND user_id = $2 AND role = 'custodian' AND revoked_at IS NULL
+             AND status = 'active' AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())`,
           [propertyId, ctx.userId],
         );
         return res.rowCount! > 0;

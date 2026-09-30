@@ -71,13 +71,13 @@ export class AdminDashboardController {
   role(@Param('key') key: string) { return this.dashboard.role(key); }
 
   @Patch('roles/:key/permissions')
-  @RequirePermission('settings.manage')
+  @RequirePermission('roles.manage_super_admin')
   updateRolePermissions(
     @Req() req: PermissionedRequest,
     @Param('key') key: string,
     @Body() body: UpdateRolePermissionsDto,
   ) {
-    return this.dashboard.updateRolePermissions(rlsCtx(req), key, body);
+    return this.dashboard.updateRolePermissions(rlsCtx(req), req.permissions, key, body);
   }
 
   @Get('audit')

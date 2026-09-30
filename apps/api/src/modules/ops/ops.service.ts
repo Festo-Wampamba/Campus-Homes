@@ -30,6 +30,7 @@ import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
+import { assertStaffScope } from '../auth/staff-scope';
 import {
   beds,
   campusPhotos,
@@ -377,7 +378,8 @@ export class OpsService {
    * Idempotent against the (property_id, semester_id) unique index: an existing
    * non-verified listing is returned rather than conflicting. */
   async createDraftListing(ctx: RlsContext, input: CreateOpsDraftListingInput) {
-    const listing = await this.rlsDb.run(SERVICE_CTX, async (db) => {
+    const listing = await this.rlsDb.run(SERVICE_CTX, async (db, client) => {
+      await assertStaffScope(client, ctx, input.propertyId);
       const property = await db.query.properties.findFirst({
         where: eq(properties.id, input.propertyId),
       });
@@ -637,12 +639,14 @@ export class OpsService {
    * unit's beds/pricing/photos; unit_blocks and room_unit_changes (both
    * RESTRICT) are cleared first. First publish has no existing units, so this
    * is a no-op there. */
-  private async deleteRemovedUnits(input: PublishListingInput) {
-    await this.rlsDb.run(SERVICE_CTX, async (db) => {
+  private async deleteRemovedUnits(ctx: RlsContext, input: PublishListingInput) {
+    await this.rlsDb.run(SERVICE_CTX, async (db, client) => {
       const listing = await db.query.listings.findFirst({
         where: eq(listings.id, input.listingId),
       });
-      if (!listing || listing.status !== 'verified') return;
+      if (!listing) throw new NotFoundException('Listing not found');
+      await assertStaffScope(client, ctx, listing.propertyId);
+      if (listing.status !== 'verified') return;
 
       const keptUnitIds = new Set(
         input.units.filter((u) => u.unitId).map((u) => u.unitId!),
@@ -693,7 +697,7 @@ export class OpsService {
     // Handle any rooms the lead removed in this edit before re-publishing the
     // rest — refuses early (nothing else written yet) if a removed room is
     // unsafe to delete.
-    await this.deleteRemovedUnits(input);
+    await this.deleteRemovedUnits(ctx, input);
     const startingPriceUgx = Math.min(...input.units.map((u) => u.pricePerTermUgx));
     const published = await this.rlsDb.run(ctx, async (db) => {
       const listing = await db.query.listings.findFirst({
@@ -1114,7 +1118,10 @@ export class OpsService {
    * (only the owner's own "while pending" edit and svc_all) so this runs as
    * service_role, same as the audit trail it writes to. */
   async decideKyc(ctx: RlsContext, landlordUserId: string, input: OpsKycDecisionInput) {
-    const landlord = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+    const landlord = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db, client) => {
+      // KYC changes a global identity and all their properties, not just one
+      // property in the reviewer's assigned catchment.
+      await assertStaffScope(client, ctx);
       const [row] = await db
         .update(landlords)
         .set({
@@ -1211,6 +1218,7 @@ export class OpsService {
    * emailed link works before the landlord ever visits the app. */
   async inviteLandlord(ctx: RlsContext, input: InviteLandlordInput) {
     const user = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await assertStaffScope(client, ctx);
       await client.query('BEGIN');
       try {
         const existing = await client.query('SELECT id FROM users WHERE email = $1', [input.email]);

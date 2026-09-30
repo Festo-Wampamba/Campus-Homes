@@ -16,13 +16,13 @@ export function listingPhotoUrl(storageKey: string, width = 800): string | null 
 // Discriminated by `provider` — the API returns Cloudinary params or a
 // Backblaze B2 presigned PUT depending on which storage is configured.
 export type CloudinarySignature =
-  | { provider: "cloudinary"; cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string }
+  | { provider: "cloudinary"; cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string; allowedFormats?: string }
   | { provider: "b2"; uploadUrl: string; publicUrl: string };
 
 // Direct browser→storage upload (§10). Cloudinary: multipart POST carrying the
 // signed params (any extra field invalidates the signature). B2: PUT the raw
 // bytes to the presigned URL — the Content-Type header is stored by B2 as the
-// object type (it is intentionally not part of the signature). `publicId` is
+// object type (bound by the signature). `publicId` is
 // what gets stored as storage_key: a Cloudinary public_id, or the B2 object's
 // public URL (rendered as-is by listingPhotoUrl's http passthrough).
 // Best-effort client-side ceiling; the presigned URL is short-lived and
@@ -66,6 +66,9 @@ export async function uploadToCloudinary(
   body.set("timestamp", String(sig.timestamp));
   body.set("folder", sig.folder);
   body.set("signature", sig.signature);
+  // Optional only for rolling deployment with an older API response. New
+  // signatures always bind the provider-enforced format allowlist.
+  if (sig.allowedFormats) body.set("allowed_formats", sig.allowedFormats);
 
   const res = await storageFetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, {
     method: "POST",

@@ -4,7 +4,7 @@ import { assertStubAllowed } from './integration-guard';
 // Exercises the real schema rather than a hand-built Env, so the
 // ALLOW_STUB_INTEGRATIONS parsing and the guard are covered as one unit.
 function env(overrides: Record<string, string>) {
-  return loadEnv({ DATABASE_URL: 'postgresql://localhost/test', ...overrides });
+  return loadEnv({ DATABASE_URL: 'postgresql://localhost/test', WEB_ORIGIN: 'https://example.test', AUTH_APP_URL: 'https://example.test', ...overrides });
 }
 
 const guard = (overrides: Record<string, string>) => () =>

@@ -17,6 +17,7 @@ import type {
 
 import type { RlsContext } from '../../db/rls-context';
 import { RlsDb } from '../../db/db.module';
+import { assertStaffScope } from '../auth/staff-scope';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -409,7 +410,10 @@ export class RoomManagementService {
           (SELECT count(*)::int FROM room_type_versions v WHERE v.change_set_id=cs.id) type_changes
          FROM room_inventory_change_sets cs JOIN properties p ON p.id=cs.property_id
          JOIN users u ON u.id=p.landlord_id
-         WHERE cs.status IN ('pending_review','visit_required') ORDER BY cs.submitted_at`,
+         WHERE cs.status IN ('pending_review','visit_required')
+           AND public.app_staff_scope_for($1::uuid, $2::text, $3::boolean, cs.property_id, true)
+         ORDER BY cs.submitted_at`,
+        [ctx.userId, ctx.role, ctx.mfaVerified === true],
       );
       const items = [];
       for (const row of result.rows) {
@@ -473,6 +477,7 @@ export class RoomManagementService {
       );
       const row = set.rows[0];
       if (!row) throw new ConflictException('Change set is no longer awaiting review');
+      await assertStaffScope(client, ctx, row.property_id);
       if (row.status === 'visit_required') {
         const verified = await client.query(
           `SELECT 1 FROM verification_visits
@@ -514,6 +519,11 @@ export class RoomManagementService {
 
   async rejectChangeSet(ctx: RlsContext, changeSetId: string, reason: string) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      const target = await client.query<{ property_id: string }>(
+        'SELECT property_id FROM room_inventory_change_sets WHERE id=$1 FOR UPDATE', [changeSetId],
+      );
+      if (!target.rows[0]) throw new ConflictException('Change set is no longer awaiting review');
+      await assertStaffScope(client, ctx, target.rows[0].property_id);
       const updated = await client.query<{ landlord_id: string; property_id: string }>(
         `UPDATE room_inventory_change_sets cs SET status='rejected', reviewed_by=$2, reviewed_at=now(),
            rejection_reason=$3, updated_at=now()

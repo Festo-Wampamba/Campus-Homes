@@ -13,6 +13,7 @@ import {
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
+import { assertStaffScope } from '../auth/staff-scope';
 import {
   properties,
   propertyMemberships,
@@ -40,10 +41,13 @@ export class TenantAgreementsService {
 
   // Landlord (own property) or an actively-assigned custodian — the two
   // roles allowed to design a property's tenant agreement (and, reused
-  // below, to view its submissions), per the QR flow. Ops/admin always
-  // allowed too (oversight parity with everything else ops touches here).
+  // below, to view its submissions), per the QR flow. Ops/admin need an active
+  // staff assignment covering the property, just like the underlying RLS.
   private async assertCanManageProperty(ctx: RlsContext, propertyId: string): Promise<void> {
-    if (ctx.role === 'ops_lead' || ctx.role === 'admin') return;
+    if (ctx.role === 'ops_lead' || ctx.role === 'admin') {
+      await this.rlsDb.run(SERVICE_CTX, (_db, client) => assertStaffScope(client, ctx, propertyId));
+      return;
+    }
     const allowed = await this.rlsDb.run(SERVICE_CTX, async (db) => {
       if (ctx.role === 'landlord') {
         const [property] = await db.select().from(properties).where(eq(properties.id, propertyId));
@@ -60,7 +64,9 @@ export class TenantAgreementsService {
               eq(propertyMemberships.role, 'custodian'),
             ),
           );
-        return membership != null && membership.revokedAt === null;
+        return membership != null && membership.revokedAt === null && membership.status === 'active'
+          && membership.startsAt.getTime() <= Date.now()
+          && (membership.endsAt === null || membership.endsAt.getTime() > Date.now());
       }
       return false;
     });

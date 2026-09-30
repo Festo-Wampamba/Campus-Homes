@@ -31,6 +31,7 @@ async function bootstrap() {
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   const rlsDb = app.get(RlsDb);
   const http = app.getHttpAdapter().getInstance();
+  http.set('trust proxy', env.TRUSTED_PROXY_CIDRS?.split(',').map((value) => value.trim()).filter(Boolean) ?? []);
   http.use(cookieOriginGuard(env.WEB_ORIGIN));
   // This API had no security headers at all, while the Logto instance it
   // redirects into sets the full set — an audit of the live staging response
@@ -51,7 +52,11 @@ async function bootstrap() {
     res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     next();
   });
-  // ponytail: one global write budget; per-route limits if a single form needs tighter caps.
+  // Budget sign-in allocation separately; do not accidentally throttle the
+  // callback or provider webhooks with this GET quota.
+  http.use('/api/auth/logto/sign-in', writeRateLimit(app.get(REDIS), {
+    limit: 30, windowSec: 60, namespace: 'sign-in', includeReads: true,
+  }));
   http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 60, windowSec: 60 }));
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
     const isExempt = req.originalUrl.startsWith('/api/v1/admin') || req.originalUrl.startsWith('/api/v1/health');

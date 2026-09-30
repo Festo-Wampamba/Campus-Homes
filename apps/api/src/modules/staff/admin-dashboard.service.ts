@@ -535,7 +535,15 @@ export class AdminDashboardService {
     });
   }
 
-  async updateRolePermissions(actor: RlsContext, key: string, input: UpdateRolePermissionsInput) {
+  async updateRolePermissions(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    key: string,
+    input: UpdateRolePermissionsInput,
+  ) {
+    if (!actorPermissions.has('roles.manage_super_admin')) {
+      throw new ForbiddenException('Only a Super Admin can update role permissions');
+    }
     if (key === 'super_admin') {
       throw new ForbiddenException('The Super Admin permission set is locked');
     }

@@ -5,6 +5,9 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
+  // Comma-separated trusted proxy IPs/CIDRs only. Empty means trust no proxy.
+  // Never accept arbitrary visitor-supplied forwarding headers directly.
+  TRUSTED_PROXY_CIDRS: z.string().optional(),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).optional(),
   // Local development uses an isolated Redis with BullMQ's required
@@ -95,7 +98,15 @@ const envSchema = z.object({
   PAYMENT_REDIRECT_URL: z.string().min(1).default('http://localhost:3000/reservations'),
   // The web app's origin — CORS allowlist. Set to the public frontend URL
   // for the current deployment environment.
-  WEB_ORIGIN: z.string().min(1).default('http://localhost:3000'),
+  WEB_ORIGIN: z.string().url().refine((value) => {
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+        && url.pathname === '/' && !url.search && !url.hash;
+    } catch {
+      return false;
+    }
+  }, 'Expected a single HTTP(S) origin').transform((value) => new URL(value).origin).default('http://localhost:3000'),
   SOKETI_HOST: z.string().min(1).optional(),
   SOKETI_PORT: z.coerce.number().int().default(443),
   SOKETI_APP_ID: z.string().min(1).optional(),
@@ -115,8 +126,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = envSchema.safeParse(withoutBlanks);
   if (!parsed.success) {
     // List missing keys only — never echo values, they may be secrets.
-    const issues = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
+    const issues = [...new Set(parsed.error.issues.map((i) => i.path.join('.')))].join(', ');
     throw new Error(`Invalid environment configuration: ${issues}`);
+  }
+  if (parsed.data.NODE_ENV === 'production') {
+    const insecure: string[] = (['WEB_ORIGIN', 'AUTH_APP_URL'] as const)
+      .filter((key) => new URL(parsed.data[key]).protocol !== 'https:');
+    if (parsed.data.LOGTO_ENDPOINT && new URL(parsed.data.LOGTO_ENDPOINT).protocol !== 'https:') insecure.push('LOGTO_ENDPOINT');
+    if (insecure.length) throw new Error(`Production requires HTTPS: ${insecure.join(', ')}`);
   }
   if (parsed.data.PHONE_OTP_CHANNEL === 'whatsapp') {
     const required = ['WHATSAPP_GRAPH_API_VERSION', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_AUTH_TEMPLATE_NAME', 'LOGTO_SMS_WEBHOOK_SECRET'] as const;

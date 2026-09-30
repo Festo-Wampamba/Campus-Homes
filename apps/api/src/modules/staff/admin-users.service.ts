@@ -44,6 +44,19 @@ function nullable(value: string | null | undefined): string | null | undefined {
   return value === '' ? null : value;
 }
 
+// Keep this category mapping aligned with AdminDashboardService.users(). The
+// list endpoint uses the same three permissions to decide which account rows
+// are visible; detail must not turn a UUID from another category into a PII
+// oracle.
+const STAFF_ACCOUNT_TYPES = new Set(['admin', 'ops_lead', 'ops_inspector', 'custodian', 'property_worker']);
+
+function readPermissionForAccountType(accountType: string): string | null {
+  if (accountType === 'student') return 'students.read';
+  if (accountType === 'landlord') return 'landlords.read';
+  if (STAFF_ACCOUNT_TYPES.has(accountType)) return 'staff.read';
+  return null;
+}
+
 @Injectable()
 export class AdminUsersService {
   constructor(
@@ -158,8 +171,19 @@ export class AdminUsersService {
     return result;
   }
 
-  detail(userId: string) {
+  detail(userId: string, granted: Set<string>) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const category = (await client.query<{ accountType: string }>(`
+        SELECT u.role::text AS "accountType"
+        FROM users u
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `, [userId])).rows[0];
+      if (!category) throw new NotFoundException('User not found');
+      const requiredPermission = readPermissionForAccountType(category.accountType);
+      if (!requiredPermission || !granted.has(requiredPermission)) {
+        throw new ForbiddenException('You do not have permission to view this user');
+      }
+
       const user = (await client.query(`
         SELECT u.id, u.name, u.email, u.phone, u.role::text AS "accountType",
                u.status::text, u.image, u.email_verified AS "emailVerified",
@@ -183,6 +207,31 @@ export class AdminUsersService {
         WHERE u.id = $1 AND u.deleted_at IS NULL
       `, [userId])).rows[0];
       if (!user) throw new NotFoundException('User not found');
+
+      // A user may retain both consumer profile rows while the legacy
+      // `users.role` column selects the dashboard category. Do not let a
+      // reader of one category receive the other category's particulars just
+      // because both LEFT JOINs matched.
+      const visibleUser: Record<string, unknown> = { ...user };
+      if (!granted.has('students.read')) {
+        delete visibleUser.university;
+        delete visibleUser.yearOfStudy;
+      }
+      if (!granted.has('landlords.read')) {
+        delete visibleUser.legalName;
+        delete visibleUser.kycStatus;
+        delete visibleUser.whatsappNumber;
+        delete visibleUser.businessType;
+        delete visibleUser.businessTypeOther;
+      }
+
+      // Fine-grained access data is a separate sensitivity tier from the
+      // identity/profile record. A support/operations read permission should
+      // not disclose role assignments or direct permission grants; those are
+      // visible only to callers explicitly allowed to inspect RBAC state.
+      if (!granted.has('roles.read') && !granted.has('users.permissions_manage')) {
+        return { user: visibleUser, assignments: [], directPermissions: [], memberships: [] };
+      }
 
       const assignments = await client.query(`
           SELECT ura.id, r.key AS "roleKey", r.name AS "roleName",
@@ -209,7 +258,7 @@ export class AdminUsersService {
           WHERE pm.user_id = $1 AND pm.revoked_at IS NULL
           ORDER BY p.name, pm.role
         `, [userId]);
-      return { user, assignments: assignments.rows, directPermissions: directPermissions.rows, memberships: memberships.rows };
+      return { user: visibleUser, assignments: assignments.rows, directPermissions: directPermissions.rows, memberships: memberships.rows };
     });
   }
 

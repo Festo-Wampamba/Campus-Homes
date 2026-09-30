@@ -21,6 +21,7 @@ export interface CloudinarySignParams {
   apiKey: string;
   timestamp: number;
   folder: string;
+  allowedFormats: string;
   signature: string;
 }
 
@@ -43,10 +44,10 @@ export type UploadSignParams = CloudinarySignParams | B2SignParams;
 export class UploadsService {
   async sign(userId: string, contentType?: string): Promise<UploadSignParams> {
     const env = loadEnv();
+    if (!contentType || !ALLOWED_UPLOAD_TYPES.has(contentType)) {
+      throw new BadRequestException('Unsupported file type');
+    }
     if (env.B2_S3_ENDPOINT && env.B2_S3_REGION && env.B2_BUCKET && env.B2_ACCESS_KEY_ID && env.B2_SECRET_ACCESS_KEY) {
-      if (!contentType || !ALLOWED_UPLOAD_TYPES.has(contentType)) {
-        throw new BadRequestException('Unsupported file type');
-      }
       const key = `uploads/${userId}/${crypto.randomUUID()}`;
       const client = new S3Client({
         endpoint: env.B2_S3_ENDPOINT,
@@ -61,7 +62,9 @@ export class UploadsService {
       const uploadUrl = await getSignedUrl(
         client,
         new PutObjectCommand({ Bucket: env.B2_BUCKET, Key: key, ContentType: contentType }),
-        { expiresIn: 600 },
+        // The AWS presigner excludes content-type by default even when it is
+        // present on the command. Explicitly opt it into the signed headers.
+        { expiresIn: 600, signableHeaders: new Set(['content-type']) },
       );
       const base = env.B2_S3_ENDPOINT.replace(/\/+$/, '');
       return { provider: 'b2', uploadUrl, publicUrl: `${base}/${env.B2_BUCKET}/${key}` };
@@ -74,11 +77,12 @@ export class UploadsService {
     const apiSecret = parsed.password;
     const timestamp = Math.floor(Date.now() / 1000);
     const folder = `uploads/${userId}`;
+    const allowedFormats = 'jpg,jpeg,png,webp,gif,avif,pdf';
     const signature = crypto
       .createHash('sha1')
-      .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
+      .update(`allowed_formats=${allowedFormats}&folder=${folder}&timestamp=${timestamp}${apiSecret}`)
       .digest('hex');
-    return { provider: 'cloudinary', cloudName: parsed.hostname, apiKey: parsed.username, timestamp, folder, signature };
+    return { provider: 'cloudinary', cloudName: parsed.hostname, apiKey: parsed.username, timestamp, folder, allowedFormats, signature };
   }
 }
 
