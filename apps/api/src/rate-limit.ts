@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { Logger } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import type { Redis } from 'ioredis';
 
@@ -11,9 +12,14 @@ return count
 `;
 
 /** Use Express's verified proxy chain, never unverified cookies or IP headers. */
+const logger = new Logger('RateLimit');
+const OUTAGE_LOG_INTERVAL_MS = 60_000;
+
+/** `failOpen` is only for endpoints where an outage must not block users; writes stay fail-closed. */
 export function writeRateLimit(redis: Redis | null, {
-  limit, windowSec, namespace = 'write', includeReads = false,
-}: { limit: number; windowSec: number; namespace?: string; includeReads?: boolean }) {
+  limit, windowSec, namespace = 'write', includeReads = false, failOpen = false,
+}: { limit: number; windowSec: number; namespace?: string; includeReads?: boolean; failOpen?: boolean }) {
+  let lastOutageLog = 0;
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!redis || (!includeReads && ['GET', 'HEAD', 'OPTIONS'].includes(req.method))) return next();
     const who = createHash('sha256').update(req.ip ?? req.socket?.remoteAddress ?? 'unknown').digest('hex');
@@ -37,8 +43,15 @@ export function writeRateLimit(redis: Redis | null, {
         return res.status(429).json({ statusCode: 429, message: 'Too many requests. Please try again later.' });
       }
     } catch {
-      // Connection errors may contain credentials. Never echo them or turn
-      // an unavailable abuse-control dependency into unlimited public writes.
+      // Connection errors may contain credentials. Never echo or log them.
+      if (failOpen) {
+        if (Date.now() - lastOutageLog >= OUTAGE_LOG_INTERVAL_MS) {
+          lastOutageLog = Date.now();
+          logger.warn(`Rate limiter "${namespace}" unavailable; allowing requests`);
+        }
+        return next();
+      }
+      // Never turn an unavailable abuse-control dependency into unlimited public writes.
       res.setHeader('Retry-After', '5');
       return res.status(503).json({ statusCode: 503, message: 'Please try again shortly.' });
     } finally {

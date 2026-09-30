@@ -12,14 +12,26 @@ credentials, session tokens, personal records, or exploit payloads in public iss
   only public identifiers belong there, never database URLs, private API keys or tokens.
 - Use HTTPS for `WEB_ORIGIN`, `AUTH_APP_URL` and the browser-facing `LOGTO_ENDPOINT`.
   `WEB_ORIGIN` is one exact origin; do not use wildcards or a comma-separated list.
-- Configure `TRUSTED_PROXY_CIDRS` to the **actual** trusted Next/ingress/CDN proxy
-  addresses/subnets. The API uses Express `req.ip`, not client-supplied cookies or
-  `CF-Connecting-IP`/`X-Real-IP`. Every trusted edge must overwrite/sanitize forwarding
-  headers. Restrict direct origin access. Never set trust to all addresses or use an
-  unverified hop count. Empty config is spoof-resistant but visitors sharing a proxy
-  share a quota; verify two distinct visitors before rollout.
-- Redis is required in production. API writes and sign-in starts return 503 when
-  their rate-limit store is unavailable. Alert on sustained 429/503 rates. Add an
+- `TRUSTED_PROXY_CIDRS` is **required in production**; the API refuses to boot
+  without it. Entries are IPs, CIDRs or the Express presets `loopback`,
+  `linklocal`, `uniquelocal`; `0.0.0.0/0`, `::/0`, `*`, `true` and any `/0`
+  prefix are rejected at boot. Without it every visitor shares the proxy's
+  `req.ip` and one rate-limit bucket, so a single client could lock everyone out.
+  - Set it to the Docker overlay subnet(s) the web container and Traefik connect
+    from. Read them on the VPS with
+    `docker network inspect dokploy-network --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`.
+    Use `uniquelocal` if the API is only reachable over private networks.
+  - For Cloudflare-proxied hosts, Traefik must trust Cloudflare's published IP
+    ranges via the entryPoints `forwardedHeaders.trustedIPs`. Otherwise `req.ip`
+    becomes a Cloudflare edge IP.
+  - The API uses Express `req.ip`, not client-supplied cookies or
+    `CF-Connecting-IP`/`X-Real-IP`. Every trusted edge must overwrite/sanitize
+    forwarding headers. Restrict direct origin access.
+  - Verify before rollout: two clients on different networks must appear as two
+    distinct `req.ip` values in the logs.
+- Redis is required in production. API writes return 503 when their rate-limit
+  store is unavailable; sign-in starts fail open (logged at most once a minute) so
+  a Redis outage cannot lock users out of authentication. Alert on sustained 429/503 rates. Add an
   edge/WAF quota for reads, distributed abuse and denial-of-service volume.
 - The nonce Content Security Policy requires request-time HTML. Do not configure
   a CDN to cache HTML across visitors. Test login, theme, map workers, chat and

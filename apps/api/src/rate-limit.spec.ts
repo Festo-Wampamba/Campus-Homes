@@ -1,4 +1,6 @@
-import type { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { Redis } from 'ioredis';
 
 import { writeRateLimit } from './rate-limit';
@@ -18,6 +20,25 @@ function run(limiter: ReturnType<typeof writeRateLimit>, req: Request) {
   let status = 200;
   const res = { setHeader: () => res, status: (code: number) => ((status = code), res), json: () => res } as unknown as Response;
   return limiter(req, res, () => undefined).then(() => status);
+}
+
+// Real Express so `trust proxy` semantics (not a hand-built req.ip) decide the bucket.
+async function viaProxy(trustProxy: string[], limiter: ReturnType<typeof writeRateLimit>, forwardedFor: string[]) {
+  const app = express();
+  app.set('trust proxy', trustProxy);
+  app.use(limiter);
+  app.post('/', (_req, res) => res.sendStatus(200));
+  const server: Server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+  try {
+    const { port } = server.address() as AddressInfo;
+    const statuses: number[] = [];
+    for (const ip of forwardedFor) {
+      statuses.push((await fetch(`http://127.0.0.1:${port}/`, { method: 'POST', headers: { 'x-forwarded-for': ip } })).status);
+    }
+    return statuses;
+  } finally {
+    server.close();
+  }
 }
 
 describe('writeRateLimit', () => {
@@ -72,5 +93,31 @@ describe('writeRateLimit', () => {
     const limiter = writeRateLimit(redis, { limit: 1, windowSec: 60, namespace: 'sign-in', includeReads: true });
     expect(await run(limiter, req)).toBe(200);
     expect(await run(limiter, req)).toBe(429);
+  });
+
+  it('gives clients behind a trusted proxy separate buckets by forwarded address', async () => {
+    const statuses = await viaProxy(['127.0.0.1'], writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60 }), ['1.1.1.1', '1.1.1.1', '2.2.2.2']);
+    expect(statuses).toEqual([200, 429, 200]);
+  });
+
+  it('ignores forwarded addresses when no proxy is trusted', async () => {
+    const statuses = await viaProxy([], writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60 }), ['1.1.1.1', '2.2.2.2']);
+    expect(statuses).toEqual([200, 429]);
+  });
+
+  it('lets a failOpen limiter pass requests while Redis is unavailable', async () => {
+    const redis = { eval: jest.fn().mockRejectedValue(new Error('secret connection URL')) } as unknown as Redis;
+    expect(await run(writeRateLimit(redis, { limit: 1, windowSec: 60, failOpen: true }), post('1.1.1.1'))).toBe(200);
+  });
+
+  it('lets a failOpen limiter pass requests while Redis is disconnected', async () => {
+    const offline = { status: 'reconnecting', eval: jest.fn() } as unknown as Redis;
+    expect(await run(writeRateLimit(offline, { limit: 1, windowSec: 60, failOpen: true }), post('1.1.1.1'))).toBe(200);
+  });
+
+  it('still enforces the quota on a failOpen limiter while Redis is healthy', async () => {
+    const limiter = writeRateLimit(fakeRedis(), { limit: 1, windowSec: 60, failOpen: true });
+    await run(limiter, post('1.1.1.1'));
+    expect(await run(limiter, post('1.1.1.1'))).toBe(429);
   });
 });

@@ -31,7 +31,7 @@ async function bootstrap() {
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   const rlsDb = app.get(RlsDb);
   const http = app.getHttpAdapter().getInstance();
-  http.set('trust proxy', env.TRUSTED_PROXY_CIDRS?.split(',').map((value) => value.trim()).filter(Boolean) ?? []);
+  http.set('trust proxy', env.TRUSTED_PROXY_CIDRS);
   http.use(cookieOriginGuard(env.WEB_ORIGIN));
   // This API had no security headers at all, while the Logto instance it
   // redirects into sets the full set — an audit of the live staging response
@@ -56,6 +56,9 @@ async function bootstrap() {
   // callback or provider webhooks with this GET quota.
   http.use('/api/auth/logto/sign-in', writeRateLimit(app.get(REDIS), {
     limit: 30, windowSec: 60, namespace: 'sign-in', includeReads: true,
+    // Sign-in start is idempotent and the OIDC provider has its own throttles,
+    // so a Redis outage must not lock every visitor out of authentication.
+    failOpen: true,
   }));
   http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 60, windowSec: 60 }));
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {

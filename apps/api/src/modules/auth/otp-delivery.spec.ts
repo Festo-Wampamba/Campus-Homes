@@ -85,6 +85,7 @@ describe('OTP connector delivery', () => {
   });
   it('does not silently accept email without production credentials', async () => {
     process.env.NODE_ENV = 'production';
+    process.env.TRUSTED_PROXY_CIDRS = 'uniquelocal';
     delete process.env.RESEND_API_KEY;
     await expect(new LogtoEmailWebhookController().handle('Bearer email-secret', { to: 'a@example.com', type: 'SignIn', payload: { code: '123456' } })).rejects.toThrow('temporarily unavailable');
     expect(fetchMock).not.toHaveBeenCalled();

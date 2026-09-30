@@ -1,13 +1,32 @@
+import { isIP } from 'node:net';
+
 import { z } from 'zod';
+
+const PROXY_PRESETS = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+// Prefix 0 and the bare wildcard tokens would trust every visitor-supplied
+// X-Forwarded-For, so they are config errors rather than "convenient" values.
+function isTrustedProxyEntry(entry: string): boolean {
+  if (PROXY_PRESETS.has(entry)) return true;
+  const [address = '', prefix, ...rest] = entry.split('/');
+  const version = isIP(address);
+  if (!version || rest.length) return false;
+  if (prefix === undefined) return true;
+  return /^[1-9]\d*$/.test(prefix) && Number(prefix) <= (version === 4 ? 32 : 128);
+}
+
+const trustedProxyList = z.string().optional().transform((value) => (value ?? '').split(',').map((entry) => entry.trim()).filter(Boolean))
+  .refine((entries) => entries.every(isTrustedProxyEntry));
 
 // Every secret comes from the environment. Fail fast at boot if anything
 // required is missing — never limp along with a partial config.
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
-  // Comma-separated trusted proxy IPs/CIDRs only. Empty means trust no proxy.
-  // Never accept arbitrary visitor-supplied forwarding headers directly.
-  TRUSTED_PROXY_CIDRS: z.string().optional(),
+  // Comma-separated trusted proxy IPs, CIDRs (prefix >= 1) or Express presets
+  // (loopback, linklocal, uniquelocal). Required in production: without it
+  // every visitor shares the proxy's req.ip and one rate-limit bucket.
+  TRUSTED_PROXY_CIDRS: trustedProxyList,
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).optional(),
   // Local development uses an isolated Redis with BullMQ's required
@@ -134,6 +153,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       .filter((key) => new URL(parsed.data[key]).protocol !== 'https:');
     if (parsed.data.LOGTO_ENDPOINT && new URL(parsed.data.LOGTO_ENDPOINT).protocol !== 'https:') insecure.push('LOGTO_ENDPOINT');
     if (insecure.length) throw new Error(`Production requires HTTPS: ${insecure.join(', ')}`);
+    if (!parsed.data.TRUSTED_PROXY_CIDRS.length) throw new Error('Production requires TRUSTED_PROXY_CIDRS');
   }
   if (parsed.data.PHONE_OTP_CHANNEL === 'whatsapp') {
     const required = ['WHATSAPP_GRAPH_API_VERSION', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_AUTH_TEMPLATE_NAME', 'LOGTO_SMS_WEBHOOK_SECRET'] as const;
