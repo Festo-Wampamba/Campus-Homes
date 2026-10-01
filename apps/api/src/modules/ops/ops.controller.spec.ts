@@ -7,15 +7,16 @@ import { RoomManagementOpsController } from '../room-management/room-management.
 import { OpsController } from './ops.controller';
 
 type Controller = typeof OpsController | typeof RoomManagementOpsController;
+const VISIT_READERS = ['visits.read', 'visits.inspect', 'visits.review'];
 
 // The permission matrix, not @Roles, decides who may use each ops route. A new
 // route must be added here, which forces a deliberate choice of key.
-const ROUTE_PERMISSIONS: [Controller, string, string][] = [
-  [OpsController, 'queue', 'visits.read'],
+const ROUTE_PERMISSIONS: [Controller, string, string | string[]][] = [
+  [OpsController, 'queue', VISIT_READERS],
   [OpsController, 'listInspectors', 'visits.assign'],
   [OpsController, 'myVisits', 'visits.inspect'],
   [OpsController, 'myVisitHistory', 'visits.inspect'],
-  [OpsController, 'visitDetail', 'visits.read'],
+  [OpsController, 'visitDetail', VISIT_READERS],
   [OpsController, 'propertyListings', 'listings.read'],
   [OpsController, 'listingForPublish', 'listings.read'],
   [OpsController, 'addListingPhotos', 'listings.publish'],
@@ -60,5 +61,5 @@ describe.each([OpsController, RoomManagementOpsController])('%p', (controller) =
 
 it.each(ROUTE_PERMISSIONS)('%p.%s requires %s', (controller, handler, permission) => {
   const prototype = controller.prototype as unknown as Record<string, object>;
-  expect(Reflect.getMetadata(PERMISSION_KEY, prototype[handler]!)).toBe(permission);
+  expect(Reflect.getMetadata(PERMISSION_KEY, prototype[handler]!)).toEqual(permission);
 });

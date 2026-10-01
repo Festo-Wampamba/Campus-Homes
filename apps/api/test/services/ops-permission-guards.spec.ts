@@ -35,7 +35,10 @@ let lead: string;
 let inspector: string;
 let scopedLead: string;
 let scopedPlatformAdmin: string;
+let scopedInspector: string;
 let kiuProperty: string;
+let mukVisit: string;
+let kiuVisit: string;
 let semester: string;
 
 type GuardClass = new (reflector: Reflector, rlsDb: RlsDb) => CanActivate;
@@ -95,6 +98,18 @@ beforeAll(async () => {
     `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
      VALUES ('Guard term', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
   );
+  scopedInspector = await staffUser('guard-scoped-inspector@example.test', 'ops_inspector', 'catchment', 'MUK');
+  await pool.query(`INSERT INTO ops_staff (user_id, team) VALUES ($1, 'inspector')`, [scopedInspector]);
+  const mukProperty = await seed(
+    `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+     VALUES ($1, 'MUK Hostel', 'Kikoni', 'active', 'MUK') RETURNING id`,
+    [landlord],
+  );
+  // Both visits are assigned to the scoped inspector, so only catchment scope separates them.
+  const visit = `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
+    VALUES ($1, $2, $3) RETURNING id`;
+  mukVisit = await seed(visit, [mukProperty, scopedInspector, 'guard-visit-muk']);
+  kiuVisit = await seed(visit, [kiuProperty, scopedInspector, 'guard-visit-kiu']);
 });
 
 afterAll(async () => {
@@ -162,5 +177,31 @@ describe('ops workflows kept by 0058', () => {
 
   it('lets an ops_lead review landlord onboarding leads', async () => {
     expect((await guard('leadsQueue', lead)).allowed).toBe(true);
+  });
+});
+
+describe('catchment-scoped ops_inspector reading visits', () => {
+  it('is admitted to the verification queue', async () => {
+    expect((await guard('queue', scopedInspector)).allowed).toBe(true);
+  });
+
+  it('sees no property outside its catchment in the verification queue', async () => {
+    const { req } = await guard('queue', scopedInspector);
+    const rows = (await ops.queue(rlsCtx(req))) as { id: string }[];
+    expect(rows.map((row) => row.id)).not.toContain(kiuProperty);
+  });
+
+  it('is admitted to visit detail', async () => {
+    expect((await guard('visitDetail', scopedInspector)).allowed).toBe(true);
+  });
+
+  it('reads the detail of a visit inside its catchment', async () => {
+    const { req } = await guard('visitDetail', scopedInspector);
+    await expect(ops.visitDetail(rlsCtx(req), mukVisit)).resolves.toHaveProperty('id', mukVisit);
+  });
+
+  it('gets not found for a visit outside its catchment', async () => {
+    const { req } = await guard('visitDetail', scopedInspector);
+    await expect(ops.visitDetail(rlsCtx(req), kiuVisit)).rejects.toMatchObject({ status: 404 });
   });
 });

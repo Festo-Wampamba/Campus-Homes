@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
-import { PermissionsGuard, RequirePermission } from '../auth/permissions';
+import { PermissionsGuard, RequireAnyPermission, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import type { University } from '@campushomes/shared';
 
@@ -23,7 +23,10 @@ import {
 import { OpsService } from './ops.service';
 
 // PermissionsGuard (the matrix) decides access; RolesGuard runs last so the
-// portal role it picks is the RLS role the services act under.
+// portal role it picks is the RLS role the services act under. The queue and
+// visit detail also admit inspect/review holders: those keys are scope-aware,
+// visits.read is not, and both handlers read only under the caller's RLS
+// context, so scoped staff see just their own properties' visits.
 @Controller('ops')
 @UseGuards(AuthGuard, PermissionsGuard, RolesGuard)
 export class OpsController {
@@ -31,7 +34,7 @@ export class OpsController {
 
   @Get('queue')
   @Roles('ops_inspector', 'ops_lead', 'admin')
-  @RequirePermission('visits.read')
+  @RequireAnyPermission('visits.read', 'visits.inspect', 'visits.review')
   queue(@Req() req: AuthenticatedRequest) {
     return this.ops.queue(rlsCtx(req));
   }
@@ -68,7 +71,7 @@ export class OpsController {
   // visit they can no longer see in myVisits() once it's approved.
   @Get('visits/:id')
   @Roles('ops_lead', 'admin', 'ops_inspector')
-  @RequirePermission('visits.read')
+  @RequireAnyPermission('visits.read', 'visits.inspect', 'visits.review')
   visitDetail(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ops.visitDetail(rlsCtx(req), id);
   }

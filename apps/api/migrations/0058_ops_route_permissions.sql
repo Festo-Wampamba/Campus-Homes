@@ -6,7 +6,7 @@ INSERT INTO permissions (key, description, requires_step_up) VALUES
   ('onboarding_leads.manage', 'View and update landlord onboarding requests', false),
   ('landlords.invite', 'Invite a landlord to register and onboard themselves', false),
   ('room_changes.review', 'Review landlord room inventory change requests', false)
-ON CONFLICT (key) DO UPDATE SET description = EXCLUDED.description, requires_step_up = EXCLUDED.requires_step_up;
+ON CONFLICT (key) DO NOTHING;
 --> statement-breakpoint
 
 -- Two existing keys were never granted to the ops roles whose documented
