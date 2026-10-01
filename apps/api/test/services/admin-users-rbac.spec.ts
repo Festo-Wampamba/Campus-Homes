@@ -520,13 +520,54 @@ describe('AdminUsersService.update — staff contact changes', () => {
     expect(updated?.name).toBe('Same');
   });
 
-  it('leaves a student email change unaffected', async () => {
+  async function unclaimedLandlord(phone: string, email: string) {
+    return seed(
+      `INSERT INTO users (phone, email, role, status, name) VALUES ($1, $2, 'landlord', 'active', 'Admin Made') RETURNING id`,
+      [phone, email],
+    );
+  }
+
+  it('refuses an unclaimed landlord email change without a fresh sign-in', async () => {
+    const target = await unclaimedLandlord('+256700001426', 'made@example.com');
+    await expect(
+      adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'moved@example.org' }, stale()),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('applies an unclaimed landlord email change after a fresh sign-in and audits it redacted', async () => {
+    const target = await unclaimedLandlord('+256700001427', 'made2@example.com');
+    await pool.query(`INSERT INTO landlords (user_id, legal_name) VALUES ($1, 'Admin Made')`, [target]);
+    await adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'landlord-moved@example.org' }, fresh());
+    const { rows } = await pool.query(
+      `SELECT payload FROM audit_log WHERE action = 'users.contact_change' AND target_id = $1`, [target]);
+    expect(rows.map((r) => r.payload)).toEqual([{ email: { from: 'example.com', to: 'example.org' } }]);
+  });
+
+  it('refuses an email change on a never-claimed former staff row whose assignment was revoked', async () => {
+    const target = await staff('+256700001428', false, 'former@example.com');
+    await pool.query(`UPDATE user_role_assignments SET revoked_at = now() WHERE user_id = $1`, [target]);
+    await expect(
+      adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'former-hijack@example.org' }, fresh()),
+    ).rejects.toThrow('Change a staff contact by re-issuing their invitation');
+  });
+
+  it('refuses an email change on an unclaimed row with a staff users.role and no assignments', async () => {
+    const target = await seed(
+      `INSERT INTO users (phone, email, role, status, name) VALUES ($1, 'legacy@example.com', 'ops_lead', 'active', 'Legacy') RETURNING id`,
+      ['+256700001429'],
+    );
+    await expect(
+      adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'legacy-hijack@example.org' }, fresh()),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('allows an unclaimed student email change after a fresh sign-in', async () => {
     const target = await seed(
       `INSERT INTO users (phone, email, role, status, name) VALUES ($1, 'stu@example.com', 'student', 'active', 'Stu') RETURNING id`,
       ['+256700001425'],
     );
     await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [target]);
-    const updated = await adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'stu2@example.com' });
+    const updated = await adminUsers.update(superAdminCtx(), perms, platformWide, target, { email: 'stu2@example.com' }, fresh());
     expect(updated?.email).toBe('stu2@example.com');
   });
 });

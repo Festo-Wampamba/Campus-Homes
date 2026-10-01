@@ -26,6 +26,9 @@ import {
 import { AuditService } from '../ops/audit.service';
 import { RoleAssignmentService, STAFF_ROLE_KEYS } from './role-assignment.service';
 
+// users.role values that predate RBAC assignments but still denote staff.
+const STAFF_LEGACY_ROLES = new Set(['admin', 'ops_lead', 'ops_inspector']);
+
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
   role: 'service_role',
@@ -324,19 +327,21 @@ export class AdminUsersService {
           throw new ForbiddenException('You cannot change your own status');
         }
 
-        // An unclaimed staff row is claimed by whichever verified identity
-        // matches its email/phone at next sign-in, so rewriting it here would
-        // hand the account to the editor. Claimed rows are bound by
-        // logto_user_id, but a contact rewrite is still sensitive.
+        // An unclaimed row (staff or not) is claimed by whichever verified
+        // identity matches its email/phone at next sign-in, so rewriting it
+        // would hand the account to the editor. Staff rows go through
+        // invitations; any other unclaimed row (admin-created student/landlord)
+        // may be fixed, but only with step-up. Claimed rows are bound by
+        // logto_user_id, but a staff contact rewrite is still sensitive.
         const changed = (Object.entries({ email: current.email, phone: current.phone }) as [
           'email' | 'phone', string | null][])
           .filter(([key, old]) => input[key] !== undefined &&
             (nullable(input[key]) ?? null)?.toLowerCase() !== old?.toLowerCase());
-        if (isStaff && changed.length) {
-          if (!current.isClaimed) {
+        if (changed.length && (isStaff || !current.isClaimed)) {
+          if (!current.isClaimed && await this.isFormerOrLegacyStaff(client, userId, current.accountType)) {
             throw new BadRequestException('Change a staff contact by re-issuing their invitation');
           }
-          assertFreshSignIn(authenticatedAt, 'Changing a staff contact');
+          assertFreshSignIn(authenticatedAt, isStaff ? 'Changing a staff contact' : 'Changing an unclaimed account contact');
           contactChange = Object.fromEntries(changed.map(([key, old]) => {
             const redact = key === 'email' ? redactEmail : redactPhone;
             return [key, { from: redact(old), to: redact(nullable(input[key]) ?? null) }];
@@ -467,6 +472,18 @@ export class AdminUsersService {
       FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
       WHERE a.user_id = $1 AND r.key = ANY($2::text[]) AND a.revoked_at IS NULL
     `, [userId, STAFF_ROLE_KEYS])).rows;
+  }
+
+  /** Revoked/expired staff assignments and legacy staff users.role values still
+   * mark a row as staff: a deactivated never-claimed staffer must not become
+   * claimable (or re-staffable) by whoever the editor retypes the email to. */
+  private async isFormerOrLegacyStaff(client: PoolClient, userId: string, legacyRole: string): Promise<boolean> {
+    if (STAFF_LEGACY_ROLES.has(legacyRole)) return true;
+    return ((await client.query(
+      `SELECT 1 FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+       WHERE a.user_id = $1 AND r.key = ANY($2::text[]) LIMIT 1`,
+      [userId, STAFF_ROLE_KEYS],
+    )).rowCount ?? 0) > 0;
   }
 
   /** Same tier + scope rules as staff deactivation, applied to edits that can
