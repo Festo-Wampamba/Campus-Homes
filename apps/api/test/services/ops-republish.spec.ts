@@ -12,10 +12,9 @@ import type { LogtoManagementClient } from '../../src/modules/auth/logto-managem
 import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { RlsDb } from '../../src/db/db.module';
+import { testDatabaseUrl } from '../test-database-url';
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);

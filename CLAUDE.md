@@ -78,7 +78,9 @@ system node is 22 — always run pnpm under Node 24).
 `apps/api/test/rls/rls.spec.ts` — 16 tests run as the real `app_user` role.
 To run: `docker compose -f apps/api/docker-compose.test.yml up -d --wait`,
 then `DATABASE_URL=postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test pnpm --filter @campushomes/api db:migrate`,
-then `pnpm --filter @campushomes/api test`.
+then `TEST_DATABASE_URL=<same disposable URL> pnpm --filter @campushomes/api test`
+(DB specs refuse to run without `TEST_DATABASE_URL` and they wipe tables, so only ever
+point it at a disposable database; use `--runInBand`).
 Any new table ⇒ new policies in a new migration ⇒ new tests in this suite. No exceptions.
 
 ## Decisions made mid-build (flagged per autonomy ladder)

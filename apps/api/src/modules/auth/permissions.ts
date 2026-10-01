@@ -13,6 +13,7 @@ import type { RlsContext } from '../../db/rls-context';
 import {
   permissions,
   rolePermissions,
+  roles,
   userPermissionGrants,
   userRoleAssignments,
 } from '../../db/schema';
@@ -28,6 +29,14 @@ export const PERMISSION_KEY = 'permission';
 // step-up is kept ON for every sensitive action rather than removed.
 export const STEP_UP_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
+/** Throws 401 unless the session's original sign-in is inside the step-up window. */
+export function assertFreshSignIn(authenticatedAt: string | null | undefined, action: string): void {
+  const signedInAt = Date.parse(authenticatedAt ?? '');
+  if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > STEP_UP_MAX_AGE_MS) {
+    throw new UnauthorizedException(`${action} requires a fresh sign-in`);
+  }
+}
+
 /** Restricts a route to callers holding the given permission. Must be paired
  * with AuthGuard (AuthGuard attaches the session PermissionsGuard reads). */
 export const RequirePermission = (permission: string) => SetMetadata(PERMISSION_KEY, permission);
@@ -41,6 +50,8 @@ export interface RoleAssignment {
 export interface PermissionGrant extends RoleAssignment {
   permissionKey: string;
   requiresStepUp: boolean;
+  /** The granting role; absent for direct user grants. */
+  roleKey?: string;
 }
 
 export interface LoadedPermissions {
@@ -84,8 +95,10 @@ export async function loadPermissions(
           requiresStepUp: permissions.requiresStepUp,
           scopeType: userRoleAssignments.scopeType,
           scopeId: userRoleAssignments.scopeId,
+          roleKey: roles.key,
         })
         .from(userRoleAssignments)
+        .innerJoin(roles, eq(roles.id, userRoleAssignments.roleId))
         .innerJoin(rolePermissions, eq(rolePermissions.roleId, userRoleAssignments.roleId))
         .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
         .where(
@@ -184,21 +197,23 @@ export class PermissionsGuard implements CanActivate {
       req.session.user.id,
     );
     const alternatives = Array.isArray(required) ? required : [required];
-    // These existing service methods enforce req.assignments against each
-    // mutation target. Other staff endpoints perform unrestricted service-role
-    // queries, so scoped grants must fail closed until those callers are scoped.
+    // Every route using these keys confines a scoped caller to its own
+    // properties: the staff services check req.assignments per target, and the
+    // ops/room-change services run under the caller's RLS context or
+    // assertStaffScope. Other keys reach unrestricted service-role queries
+    // somewhere (visits.read feeds the admin verifications dashboard), so their
+    // scoped grants must fail closed until those callers are scoped.
     const scopeAware = new Set(['roles.assign', 'roles.revoke', 'staff.invite',
-      'staff.deactivate', 'users.permissions_manage']);
+      'staff.deactivate', 'users.permissions_manage', 'visits.assign', 'visits.inspect',
+      'visits.review', 'listings.read', 'listings.publish', 'units.update_operational_status',
+      'room_changes.review']);
     const matched = alternatives.find((permission) => granted.has(permission) ||
       (scopeAware.has(permission) && grants.some((grant) => grant.permissionKey === permission)));
     if (!matched) {
       return false;
     }
     if (grants.some((grant) => grant.permissionKey === matched && grant.requiresStepUp)) {
-      const signedInAt = Date.parse(req.session.access.assurance.authenticatedAt ?? '');
-      if (!Number.isFinite(signedInAt) || signedInAt > Date.now() || Date.now() - signedInAt > STEP_UP_MAX_AGE_MS) {
-        throw new UnauthorizedException(`${matched} requires a fresh sign-in`);
-      }
+      assertFreshSignIn(req.session.access.assurance.authenticatedAt, matched);
     }
     req.effectiveRole = staffRole;
     req.permissions = new Set([...granted, matched]);

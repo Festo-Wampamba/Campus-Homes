@@ -22,6 +22,23 @@ to `main`, because the merge triggers the deploy.
   error; the API logs one startup warning when B2 is configured without
   `B2_PRIVATE_BUCKET`.
 - [ ] `REDIS_URL` set: Redis is required in production for rate limiting and upload quotas.
+- [ ] On **prod**, before deploying, run this read-only query and compare it with the
+  seed (migrations 0013/0058). Until now `role_permissions` edits had no effect on
+  `/ops` routes; after this deploy they are live, so any matrix customisation (a key
+  removed from `ops_lead`/`ops_inspector`) would silently remove those staff's routes.
+
+  ```sql
+  SELECT r.key AS role_key, array_agg(p.key ORDER BY p.key) AS ops_permissions
+  FROM roles r
+  JOIN role_permissions rp ON rp.role_id = r.id
+  JOIN permissions p ON p.id = rp.permission_id
+  WHERE p.key IN (
+    'visits.read', 'visits.assign', 'visits.inspect', 'visits.review',
+    'listings.read', 'listings.publish', 'landlords.review_kyc', 'landlords.invite',
+    'strikes.issue', 'units.update_operational_status', 'room_changes.review',
+    'campus_photos.manage', 'onboarding_leads.manage')
+  GROUP BY r.key ORDER BY r.key;
+  ```
 - [ ] Deploy web and API together. Browser tabs still running the previous web
   build get 400 on uploads until reloaded (signing now requires `size`); this is
   expected, users just refresh the page. Inspectors with long-lived offline tabs
