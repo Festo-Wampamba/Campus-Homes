@@ -1,13 +1,14 @@
 import { Pool } from 'pg';
 
+import { testDatabaseUrl } from '../test-database-url';
+
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { bootstrapSuperAdmin, readBootstrapConfig } = require('../../scripts/bootstrap-logto-super-admin.cjs') as {
   bootstrapSuperAdmin: (pool: Pool, config: Record<string, string | null>) => Promise<Record<string, unknown>>;
   readBootstrapConfig: (env: Record<string, string>) => Record<string, string | null>;
 };
 
-const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 3 });
 
 beforeAll(async () => {

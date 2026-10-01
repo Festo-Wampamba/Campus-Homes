@@ -4,10 +4,9 @@
  * empty tables (admin Overview took 5-47s on production before this).
  */
 import { createDbPool } from '../../src/db/client';
+import { testDatabaseUrl } from '../test-database-url';
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 const pool = createDbPool(TEST_DATABASE_URL);
 
