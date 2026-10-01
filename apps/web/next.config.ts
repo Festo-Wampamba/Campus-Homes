@@ -2,24 +2,10 @@ import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import path from "node:path";
 
+import { imageRemotePatterns } from "./src/lib/image-remote-patterns";
+
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
-// Pin the B2 image host to this environment's exact bucket + uploads/ prefix
-// when its endpoint/bucket are known at build, so /_next/image can't be used
-// to proxy other tenants' or non-upload B2 objects. Falls back to a broad
-// pattern only when the build has no B2 config.
-function b2ImagePattern() {
-  const endpoint = process.env.B2_S3_ENDPOINT;
-  const bucket = process.env.B2_BUCKET;
-  if (endpoint && bucket) {
-    try {
-      return { protocol: "https" as const, hostname: new URL(endpoint).hostname, pathname: `/${bucket}/**` };
-    } catch {
-      /* fall through to the broad pattern below */
-    }
-  }
-  return { protocol: "https" as const, hostname: "**.backblazeb2.com" };
-}
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -76,15 +62,7 @@ const nextConfig: NextConfig = {
   // every runtime file those packages need.
   outputFileTracingRoot: path.join(__dirname, "../.."),
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "res.cloudinary.com" },
-      // Local dev/demo seed data hotlinks sample photos here instead of
-      // requiring a Cloudinary account (scripts/seed-dev.cjs) — real listing
-      // photos always come from res.cloudinary.com above.
-      { protocol: "https", hostname: "images.unsplash.com" },
-      // Backblaze B2 upload storage — pinned to this env's bucket when known.
-      b2ImagePattern(),
-    ],
+    remotePatterns: imageRemotePatterns(),
   },
 };
 
