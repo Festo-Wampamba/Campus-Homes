@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { DM_Serif_Display, Montez, Open_Sans, Poppins } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 
+import { Analytics } from "@/components/analytics";
+import { CookieNotice } from "@/components/cookie-notice";
+import { getSiteUrl } from "@/lib/site-url";
+
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -36,14 +40,26 @@ const montez = Montez({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "CampusHomes — Verified student housing in Uganda",
-    template: "%s · CampusHomes",
-  },
-  description:
-    "Find hostels near your campus that our team has physically verified, and reserve your room with a 72-hour hold.",
-};
+const DESCRIPTION =
+  "Compare student hostels near Makerere University that a CampusHomes inspector has visited in person. See rooms, prices and amenities, and reserve for free.";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    metadataBase: new URL(await getSiteUrl()),
+    title: {
+      default: "CampusHomes | Inspected student hostels in Uganda",
+      template: "%s · CampusHomes",
+    },
+    description: DESCRIPTION,
+    openGraph: {
+      type: "website",
+      siteName: "CampusHomes",
+      locale: "en_UG",
+      description: DESCRIPTION,
+    },
+    twitter: { card: "summary_large_image" },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#008080",
@@ -78,6 +94,8 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col" suppressHydrationWarning>
         <NextIntlClientProvider>
           <Providers>{children}</Providers>
+          <CookieNotice />
+          <Analytics />
         </NextIntlClientProvider>
       </body>
     </html>

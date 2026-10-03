@@ -165,7 +165,7 @@ export function ActivitiesManager({
       }
       close();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't save this activity — try again."));
+      setError(apiErrorMessage(err, "Couldn't save this activity. Try again."));
     } finally {
       setPending(false);
     }

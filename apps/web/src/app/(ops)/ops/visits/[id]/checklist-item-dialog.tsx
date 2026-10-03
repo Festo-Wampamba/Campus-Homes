@@ -58,7 +58,7 @@ export function ChecklistItemDialog({
       setOpen(false);
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't send this back — try again."));
+      setError(errorMessage(err, "Couldn't send this back. Try again."));
     } finally {
       setPending(false);
     }

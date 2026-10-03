@@ -10,7 +10,7 @@ import { getDraft, type SyncStatus } from "@/lib/ops/inspection-db";
 
 const STATUS_LABEL: Record<SyncStatus, string> = {
   draft: "In progress",
-  queued: "Queued — will sync",
+  queued: "Queued, will sync",
   syncing: "Syncing…",
   synced: "Synced",
   failed: "Sync failed",

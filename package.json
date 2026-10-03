@@ -12,6 +12,7 @@
     "local:setup": "node ./scripts/dev.mjs --setup",
     "local:up": "docker compose -f apps/api/docker-compose.local.yml up -d --wait",
     "local:down": "docker compose -f apps/api/docker-compose.local.yml stop",
+    "local:logto": "pnpm --filter @campushomes/api local:logto",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"

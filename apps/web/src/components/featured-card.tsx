@@ -23,7 +23,7 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
             <img
               src={photoUrl}
               alt={row.name}
-              className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.045]"
+              className="size-full object-cover"
               loading="lazy"
             />
           ) : (

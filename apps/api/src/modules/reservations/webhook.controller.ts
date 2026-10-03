@@ -12,7 +12,7 @@ export class WebhookController {
   @HttpCode(200)
   flutterwave() {
     throw new NotImplementedException(
-      'Online payment webhooks are dormant — booking is landlord-confirmed offline in the current model',
+      'Online payment webhooks are dormant. Booking is landlord-confirmed offline in the current model',
     );
   }
 
@@ -20,7 +20,7 @@ export class WebhookController {
   @HttpCode(200)
   devSimulate() {
     throw new NotImplementedException(
-      'Online payment webhooks are dormant — booking is landlord-confirmed offline in the current model',
+      'Online payment webhooks are dormant. Booking is landlord-confirmed offline in the current model',
     );
   }
 }

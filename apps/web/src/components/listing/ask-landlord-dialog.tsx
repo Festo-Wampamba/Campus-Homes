@@ -49,14 +49,14 @@ export function AskLandlordDialog({
         method: "POST",
         body: JSON.stringify({
           category: "listing",
-          subject: `${wantsViewing ? "Viewing request" : "Question"} — ${propertyName}`,
+          subject: `${wantsViewing ? "Viewing request" : "Question"}: ${propertyName}`,
           message: message.trim(),
           listingId,
         }),
       });
       setSent(true);
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't send your message — try again."));
+      setError(apiErrorMessage(err, "Couldn't send your message. Try again."));
     } finally {
       setPending(false);
     }
@@ -71,7 +71,7 @@ export function AskLandlordDialog({
       <Dialog open={open} onOpenChange={close}>
         <DialogHeader
           title={sent ? "Sent" : "Ask the landlord"}
-          description={sent ? undefined : `Goes directly to ${propertyName}'s landlord — no reservation needed.`}
+          description={sent ? undefined : `Goes directly to ${propertyName}'s landlord. No reservation needed.`}
           onClose={() => close(false)}
         />
         <DialogBody>
@@ -79,7 +79,7 @@ export function AskLandlordDialog({
             <div className="flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950 dark:text-teal-100">
               <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0" />
               <p>
-                Sent — the landlord has been notified. You&apos;ll see their reply under
+                Sent. The landlord has been notified. You&apos;ll see their reply under
                 &ldquo;Your inquiries&rdquo; on the <a href="/support" className="underline">Support page</a>.
               </p>
             </div>
@@ -114,7 +114,7 @@ export function AskLandlordDialog({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                For your safety, keep phone numbers and links out of your message — reply and
+                For your safety, keep phone numbers and links out of your message. Reply and
                 follow-up all happen right here on CampusHomes.
               </p>
               {error && <p className="text-sm font-semibold text-destructive">{error}</p>}

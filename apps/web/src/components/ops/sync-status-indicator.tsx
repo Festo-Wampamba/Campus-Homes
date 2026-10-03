@@ -43,7 +43,7 @@ function SyncStatusIndicator() {
       ) : (
         <WifiOff aria-hidden className="size-3.5" />
       )}
-      {online ? "Online" : "Offline — will sync"}
+      {online ? "Online" : "Offline, will sync"}
     </span>
   );
 }

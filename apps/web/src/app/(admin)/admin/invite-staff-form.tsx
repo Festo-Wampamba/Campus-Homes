@@ -86,7 +86,7 @@ export function InviteStaffForm({ invitation }: { invitation?: EditableInvitatio
       setError(
         err instanceof ApiError && err.status === 403
           ? "You don't have permission to grant this role at this scope."
-          : apiErrorMessage(err, invitation ? "Saving the invitation failed." : "Invite failed — check the details and try again."),
+          : apiErrorMessage(err, invitation ? "Saving the invitation failed." : "Invite failed. Check the details and try again."),
       );
     } finally {
       setPending(false);

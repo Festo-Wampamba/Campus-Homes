@@ -61,7 +61,7 @@ function EnquiryRow({
         setResponse(updated.landlordResponse ?? response.trim());
       }
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't send your reply — try again."));
+      setError(apiErrorMessage(err, "Couldn't send your reply. Try again."));
     } finally {
       setPending(false);
     }
@@ -104,18 +104,18 @@ function EnquiryRow({
       </p>
 
       <form onSubmit={submit} className="mt-3 space-y-2">
-        {inquiry.landlordResponse && <p className="text-sm font-semibold">Your reply <span className="font-normal text-muted-foreground">— edit and save to update it</span></p>}
+        {inquiry.landlordResponse && <p className="text-sm font-semibold">Your reply <span className="font-normal text-muted-foreground">(edit and save to update it)</span></p>}
           <textarea
             rows={3}
             maxLength={2000}
             value={response}
             onChange={(e) => setResponse(e.target.value)}
-            placeholder="Write a reply — e.g. availability, viewing times, or an answer to their question."
+            placeholder="Write a reply, e.g. availability, viewing times, or an answer to their question."
             className="w-full rounded-lg border border-input bg-background p-3 text-sm"
             required
           />
           <p className="text-xs text-muted-foreground">
-            For everyone&apos;s safety, keep phone numbers and links out of your reply — students
+            For everyone&apos;s safety, keep phone numbers and links out of your reply. Students
             reach you right here on CampusHomes.
           </p>
           {error && <p className="text-sm font-semibold text-destructive">{error}</p>}

@@ -30,7 +30,7 @@ export default async function LandlordApprovalPendingPage() {
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {rejected
                 ? "CampusHomes has not granted landlord access for this application. Your dashboard, bookings, messages, and property tools will stay unavailable until the decision is reviewed. Please contact support if you need help."
-                : "Thank you — your profile and property submission have been received. A CampusHomes administrator is reviewing them now. You will receive landlord dashboard access only after approval; until then, your listing is not visible to students."}
+                : "Thank you. Your profile and property submission have been received. A CampusHomes administrator is reviewing them now. You will receive landlord dashboard access only after approval; until then, your listing is not visible to students."}
             </p>
           </div>
           {!rejected && <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Status: pending review</p>}

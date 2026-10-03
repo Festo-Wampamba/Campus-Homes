@@ -26,7 +26,6 @@ import { HomeSearch } from "@/components/home-search";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { api } from "@/lib/api";
 import { UGANDA_BOUNDS } from "@/lib/campuses";
-import { cn } from "@/lib/utils";
 
 type MarketingIcon = ComponentType<{ className?: string }>;
 
@@ -163,15 +162,15 @@ export default async function HomePage() {
         </div>
 
         <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <div className="marketing-reveal max-w-[46rem]">
+          <div className="max-w-[46rem]">
             <p className="mb-5 text-xs font-bold tracking-[0.13em] text-white/85 uppercase sm:text-sm">
-              Student housing, checked in person
+              Student hostels in Kampala
             </p>
             <h1 className="max-w-[19ch] font-display text-4xl font-bold leading-[1.12] tracking-[-0.035em] text-white sm:text-5xl">
-              Find a room near campus you can trust.
+              Hostels near Makerere, inspected before they are listed.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-white/90 sm:text-lg sm:leading-8">
-              Compare inspected hostels, room details and prices. Reserve for free.
+              Compare rooms, prices and amenities at hostels a CampusHomes inspector has visited. Reserving a room is free.
             </p>
 
             <HomeSearch />
@@ -183,12 +182,11 @@ export default async function HomePage() {
       <section aria-labelledby="featured-heading" className="bg-background">
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <div className="max-w-2xl">
-            <p className="eyebrow">Available now</p>
-            <h2 id="featured-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
+            <h2 id="featured-heading" className="text-3xl tracking-[-0.035em] sm:text-4xl">
               Verified hostels near campus
             </h2>
             <p className="mt-4 text-md leading-7 text-muted-foreground">
-              Explore inspected places with clear room details and current availability.
+              Rooms available this semester, cheapest first.
             </p>
           </div>
           <div className="mt-9">
@@ -202,9 +200,8 @@ export default async function HomePage() {
           <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="eyebrow">See where you would live</p>
-                <h2 id="map-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
-                  See where each hostel is located
+                <h2 id="map-heading" className="max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
+                  Hostels on the map
                 </h2>
               </div>
               <Link href="/search" className="text-link group">
@@ -223,9 +220,8 @@ export default async function HomePage() {
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="eyebrow">Start with your campus</p>
-              <h2 id="campus-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
-                Find a place near your campus
+              <h2 id="campus-heading" className="max-w-xl text-3xl tracking-[-0.035em] sm:text-4xl">
+                Browse by university
               </h2>
             </div>
             <Link href="/search" className="text-link group">
@@ -239,18 +235,18 @@ export default async function HomePage() {
               <Link
                 key={campus.code}
                 href={`/search?campus=${campus.code}`}
-                className="image-card group relative isolate min-h-72 overflow-hidden rounded-[1.25rem] bg-teal-900 sm:min-h-96"
+                className="group relative isolate min-h-72 overflow-hidden rounded-[1.25rem] bg-teal-900 sm:min-h-96"
               >
                 <Image
                   src={campus.image}
                   alt={`Student housing near ${campus.name}`}
                   fill
                   sizes="100vw"
-                  className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.045]"
+                  className="object-cover"
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-teal-900/85 via-teal-900/10 to-transparent transition-opacity duration-300 group-hover:from-teal-900/70" />
                 <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
-                  <span className="inline-flex rounded-full border border-white/20 bg-white/12 px-2.5 py-1 text-[0.68rem] font-bold tracking-[0.14em] uppercase backdrop-blur-md">
+                  <span className="inline-flex rounded-md border border-white/20 bg-white/12 px-2.5 py-1 text-[0.68rem] font-bold tracking-[0.14em] uppercase backdrop-blur-md">
                     {campus.code}
                   </span>
                   <h3 className="mt-3 text-xl font-semibold text-white sm:text-2xl">{campus.name}</h3>
@@ -273,23 +269,19 @@ export default async function HomePage() {
               className="object-cover"
             />
             <div className="absolute inset-0 bg-linear-to-t from-teal-900/55 via-transparent to-transparent" />
-            <p className="absolute bottom-5 left-5 rounded-full border border-white/18 bg-teal-900/78 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
-              Built around student life
-            </p>
           </div>
           <div className="max-w-xl lg:pl-8">
-            <p className="eyebrow">More than four walls</p>
-            <h2 className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              Find a place that fits student life
+            <h2 className="text-3xl tracking-[-0.035em] sm:text-4xl">
+              Check the details before you visit
             </h2>
             <p className="mt-5 text-md leading-7 text-muted-foreground">
-              Compare room capacity, Wi-Fi, water, power, security and shared
-              spaces before travelling across Kampala for a viewing. Each published
-              listing has been checked on site.
+              Each listing shows room capacity, Wi-Fi, water, power, security and
+              shared spaces as recorded on the inspection visit, so you can compare
+              hostels before travelling across Kampala for a viewing.
             </p>
-            <Link href="/search" className="mt-7 inline-flex h-12 items-center gap-2 rounded-lg bg-teal-900 px-6 font-bold text-white transition duration-300 hover:bg-teal-700 active:scale-[0.98]">
-              Explore verified rooms
-              <ArrowRightIcon className="size-4" />
+            <Link href="/search" className="text-link group mt-6">
+              Compare hostels
+              <ArrowRightIcon className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
             </Link>
           </div>
         </div>
@@ -298,17 +290,16 @@ export default async function HomePage() {
       <section id="verified" aria-labelledby="verified-heading" className="overflow-hidden bg-teal-900 text-white">
         <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
           <div className="lg:sticky lg:top-28 lg:self-start">
-            <p className="eyebrow text-coral-500">The CampusHomes badge</p>
+            <p className="text-xs font-bold tracking-[0.16em] text-coral-500 uppercase">The CampusHomes badge</p>
             <h2 id="verified-heading" className="mt-4 max-w-lg text-3xl tracking-[-0.035em] text-white sm:text-4xl">
               We check every hostel in person
             </h2>
             <p className="mt-5 max-w-md text-base leading-7 text-white/80">
-              A listing earns the badge only after all six checks pass on site.
-              The rule is enforced by the platform, not left to marketing language.
+              A listing gets the badge only after all six checks below pass on site.
             </p>
             <div className="mt-8 inline-flex items-center gap-3 rounded-xl border border-white/12 bg-white/6 p-3 pr-5">
               <VerifiedBadge />
-              <span className="text-xs font-semibold text-white/85">One badge. One clear standard.</span>
+              <span className="text-xs font-semibold text-white/85">Shown only on inspected listings</span>
             </div>
           </div>
 
@@ -318,7 +309,7 @@ export default async function HomePage() {
               const Icon = item.icon;
               return (
                 <li key={component} className="group grid grid-cols-[2.5rem_1fr] items-start gap-4 py-5 sm:grid-cols-[3rem_1fr_1.2fr] sm:gap-6 sm:py-7">
-                  <span className="tabular pt-1 font-display text-sm font-semibold text-white/32">
+                  <span className="tabular pt-1 font-display text-sm font-semibold text-white/70">
                     0{index + 1}
                   </span>
                   <div className="flex items-center gap-3">
@@ -349,9 +340,8 @@ export default async function HomePage() {
 
       <section id="how-it-works" aria-labelledby="how-heading" className="bg-background">
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-          <p className="eyebrow">Three clear steps</p>
-          <h2 id="how-heading" className="mt-3 max-w-2xl text-3xl tracking-[-0.035em] sm:text-4xl">
-            From search to move-in
+          <h2 id="how-heading" className="max-w-2xl text-3xl tracking-[-0.035em] sm:text-4xl">
+            How reserving works
           </h2>
 
           <ol className="mt-10 grid gap-6 sm:grid-cols-3">
@@ -401,19 +391,12 @@ export default async function HomePage() {
       {testimonials.length > 0 && (
         <section aria-labelledby="reviews-heading" className="bg-teal-50">
           <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-            <p className="eyebrow">After move-in</p>
-            <h2 id="reviews-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              What students say.
+            <h2 id="reviews-heading" className="text-3xl tracking-[-0.035em] sm:text-4xl">
+              Reviews from students who moved in
             </h2>
             <ul className="mt-10 grid gap-5 lg:grid-cols-2">
-              {testimonials.slice(0, 4).map((testimonial, index) => (
-                <li
-                  key={testimonial.id}
-                  className={cn(
-                    "border-t border-teal-900/15 pt-6",
-                    index % 2 === 1 && "lg:translate-y-8",
-                  )}
-                >
+              {testimonials.slice(0, 4).map((testimonial) => (
+                <li key={testimonial.id} className="border-t border-teal-900/15 pt-6">
                   <div className="flex gap-1 text-coral-600" aria-label={`${testimonial.overall_rating} out of 5 stars`}>
                     {Array.from({ length: testimonial.overall_rating }, (_, star) => (
                       <StarFilledIcon key={star} className="size-4" />
@@ -433,13 +416,9 @@ export default async function HomePage() {
       <section aria-labelledby="faq-heading" className="bg-background">
         <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.75fr_1.25fr] lg:px-8">
           <div>
-            <p className="eyebrow">Answers before you book</p>
-            <h2 id="faq-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              Questions students ask us.
+            <h2 id="faq-heading" className="text-3xl tracking-[-0.035em] sm:text-4xl">
+              Common questions
             </h2>
-            <p className="mt-4 max-w-sm text-md leading-7 text-muted-foreground">
-              Clear terms matter when you are choosing where to live. Here are the essentials.
-            </p>
           </div>
           <div className="divide-y divide-border border-y border-border">
             {FAQS.map((faq) => (
@@ -463,16 +442,17 @@ export default async function HomePage() {
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <div className="grid overflow-hidden rounded-[1.75rem] bg-teal-700 text-white lg:grid-cols-[1.05fr_0.95fr]">
             <div className="flex flex-col justify-center p-7 sm:p-12 lg:p-14">
-              <p className="text-xs font-bold tracking-[0.16em] text-coral-500 uppercase">For hostel owners</p>
+              <p className="text-xs font-bold tracking-[0.16em] text-white/85 uppercase">For hostel owners</p>
               <h2 className="mt-4 max-w-xl text-3xl tracking-[-0.035em] text-white sm:text-4xl">
-                Fill rooms with students who know what to expect.
+                Own a hostel near campus?
               </h2>
               <p className="mt-5 max-w-lg text-base leading-7 text-white/80">
-                Get inspected once, publish honest room details and reach students searching near your campus catchment.
+                An inspector visits once to verify the property. After that, students searching near your campus can see and reserve your rooms.
               </p>
               <Link
                 href="/landlords"
-                className="mt-8 inline-flex h-12 w-fit items-center gap-2 rounded-lg bg-white px-6 font-bold text-teal-900 transition duration-300 hover:bg-coral-500 active:scale-[0.98]"
+                data-cta="home-list-property"
+                className="mt-8 inline-flex h-12 w-fit items-center gap-2 rounded-lg border border-white/40 px-6 font-bold text-white transition-colors duration-300 hover:bg-white hover:text-teal-900"
               >
                 List your property
                 <ArrowRightIcon className="size-4" />
@@ -495,16 +475,16 @@ export default async function HomePage() {
       <section className="bg-coral-500 text-teal-900">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-8 px-4 py-14 sm:px-6 md:flex-row md:items-center lg:px-8 lg:py-16">
           <div>
-            <p className="text-xs font-bold tracking-[0.16em] uppercase">Your next room could be here</p>
-            <h2 className="mt-3 max-w-2xl text-3xl tracking-[-0.035em] text-teal-900 sm:text-4xl">
-              Ready to live closer to campus?
+            <h2 className="max-w-2xl text-3xl tracking-[-0.035em] text-teal-900 sm:text-4xl">
+              Looking for a room near Makerere?
             </h2>
           </div>
           <Link
             href="/search"
+            data-cta="footer-search"
             className="inline-flex h-12 shrink-0 items-center gap-2 rounded-lg bg-teal-900 px-6 font-bold text-white transition duration-300 hover:bg-teal-700 active:scale-[0.98]"
           >
-            Start your search
+            Search hostels
             <ArrowRightIcon className="size-4" />
           </Link>
         </div>

@@ -36,7 +36,7 @@ async function storageFetch(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch {
-    throw new Error("Couldn't upload the photo — the storage service didn't accept it. Try again, or continue without the photo.");
+    throw new Error("Couldn't upload the photo. The storage service didn't accept it. Try again, or continue without the photo.");
   }
 }
 
@@ -45,7 +45,7 @@ export async function uploadToCloudinary(
   sig: CloudinarySignature,
 ): Promise<{ publicId: string }> {
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error("File is too large — the limit is 15 MB.");
+    throw new Error("File is too large. The limit is 15 MB.");
   }
   if (sig.provider === "b2") {
     // Content-Type must match exactly what was signed (see uploads.module.ts).
@@ -55,7 +55,7 @@ export async function uploadToCloudinary(
       headers: { "Content-Type": file.type },
     });
     if (!res.ok) {
-      throw new Error("Upload failed — check the file and try again.");
+      throw new Error("Upload failed. Check the file and try again.");
     }
     return { publicId: sig.publicUrl };
   }
@@ -72,7 +72,7 @@ export async function uploadToCloudinary(
     body,
   });
   if (!res.ok) {
-    throw new Error("Upload failed — check the file and try again.");
+    throw new Error("Upload failed. Check the file and try again.");
   }
   const data = (await res.json()) as { public_id: string };
   return { publicId: data.public_id };

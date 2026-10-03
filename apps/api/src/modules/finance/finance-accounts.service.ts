@@ -54,7 +54,7 @@ export class FinanceAccountsService {
       const [account] = await db.select().from(ledgerAccounts).where(eq(ledgerAccounts.id, id));
       if (!account) throw new NotFoundException('Account not found');
       if (input.isActive === false && account.isSystem) {
-        throw new ForbiddenException('A system account cannot be deactivated — it is required by auto-posting');
+        throw new ForbiddenException('A system account cannot be deactivated. It is required by auto-posting');
       }
       const [row] = await db
         .update(ledgerAccounts)

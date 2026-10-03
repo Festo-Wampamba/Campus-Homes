@@ -35,7 +35,7 @@ export function OnboardingForm({ initialName, initialUsername }: { initialName: 
       router.replace("/choose-workspace");
       router.refresh();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't save your profile — try again."));
+      setError(apiErrorMessage(err, "Couldn't save your profile. Try again."));
     } finally {
       setPending(false);
     }

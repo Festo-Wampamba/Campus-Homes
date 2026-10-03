@@ -5,7 +5,7 @@ export function KycBanner({ status }: { status: "pending" | "verified" | "reject
     return (
       <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-accent px-4 py-3 text-sm font-semibold text-teal-700">
         <ShieldCheck aria-hidden className="size-5 shrink-0" />
-        Your account is verified — students can now reserve units in your listings.
+        Your account is verified. Students can now reserve units in your listings.
       </div>
     );
   }

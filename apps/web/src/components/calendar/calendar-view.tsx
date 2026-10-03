@@ -21,7 +21,7 @@ const TYPE_DOT: Record<CalendarEventType, string> = {
   task: "bg-teal-600",
   event: "bg-sky-600",
   reminder: "bg-amber-500",
-  activity: "bg-violet-600",
+  activity: "bg-coral-500",
 };
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const selectClass = cn(
@@ -139,7 +139,7 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
       if (created) setEvents((current) => [...current, created]);
       setFormDate(null);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save this event — try again."));
+      setError(errorMessage(err, "Couldn't save this event. Try again."));
     } finally {
       setPending(false);
     }

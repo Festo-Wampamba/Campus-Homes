@@ -69,6 +69,25 @@ export class LogtoManagementClient {
     return res.json() as Promise<T>;
   }
 
+  /** Logto verifies an enrolled factor at every sign-in, so an enrolled
+   * factor is the server-side evidence that a staff sign-in passed MFA.
+   * Backup codes alone are recovery, not a second factor. */
+  async hasMfaFactor(logtoUserId: string): Promise<boolean> {
+    const factors = await this.request<Array<{ type: string }>>(
+      `/api/users/${encodeURIComponent(logtoUserId)}/mfa-verifications`,
+    );
+    return factors.some((factor) => factor.type !== 'BackupCode');
+  }
+
+  /** Logto stops offering MFA setup after a user presses "Skip". Clearing
+   * the flag makes the next sign-in offer it again. */
+  async resetMfaSkip(logtoUserId: string): Promise<void> {
+    await this.request(`/api/users/${encodeURIComponent(logtoUserId)}/logto-configs`, {
+      method: 'PATCH',
+      body: JSON.stringify({ mfa: { skipped: false } }),
+    });
+  }
+
   async createUser(input: {
     primaryEmail?: string;
     primaryPhone?: string;

@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import { getSiteUrl } from "@/lib/site-url";
+
 // Read at request time, not build time: the same image is promoted between
 // environments, so a value baked at build would follow the image around.
 export const dynamic = "force-dynamic";
@@ -20,7 +22,7 @@ export const dynamic = "force-dynamic";
  *
  * PRODUCTION MUST SET ALLOW_INDEXING=true or the public site will not rank.
  */
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
   if (process.env.ALLOW_INDEXING !== "true") {
     // Deliberately ALLOW crawling here, with de-indexing carried entirely by
     // the `X-Robots-Tag: noindex, nofollow` header in next.config.ts.
@@ -41,8 +43,12 @@ export default function robots(): MetadataRoute.Robots {
         // Authenticated portals and the auth handshake carry no public value
         // and are exactly the pages that read as credential harvesting to an
         // automated classifier.
-        disallow: ["/api/", "/auth/", "/admin", "/ops", "/landlord", "/student", "/messages", "/calendar", "/profile"],
+        disallow: [
+          "/api/", "/auth/", "/admin", "/ops", "/landlord/", "/student", "/messages", "/calendar", "/profile",
+          "/reservations", "/saved", "/recently-viewed", "/onboarding", "/agreement", "/dev",
+        ],
       },
     ],
+    sitemap: `${await getSiteUrl()}/sitemap.xml`,
   };
 }

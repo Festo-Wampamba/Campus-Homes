@@ -57,7 +57,7 @@ export default async function LandlordReportsPage() {
         <StatCard label="Total beds" value={String(totalRooms)} icon={BedDouble} tone="teal" />
         <StatCard
           label="Occupancy rate"
-          value={occupancyRate === null ? "—" : `${occupancyRate}%`}
+          value={occupancyRate === null ? "N/A" : `${occupancyRate}%`}
           detail={totalRooms > 0 ? `${occupiedRooms} of ${totalRooms} occupied` : undefined}
           icon={Percent}
           tone="coral"
@@ -69,7 +69,7 @@ export default async function LandlordReportsPage() {
         <StatCard
           label="Rent value, last 12 months"
           value={formatUgx(totalRentValueUgx)}
-          detail="Collected by you directly — not a CampusHomes payment"
+          detail="Collected by you directly. Not a CampusHomes payment"
           icon={Wallet}
           tone="coral"
         />

@@ -6,6 +6,7 @@ import type {
   SubmitPropertyInput,
   UnitOperationalStatus,
   UpdatePropertyInput,
+  TrackEvent,
 } from '@campushomes/shared';
 
 import type { RlsContext } from '../../db/rls-context';
@@ -83,7 +84,7 @@ export class ListingsService {
       }
       if (landlord.kycStatus === 'rejected') {
         throw new ForbiddenException(
-          'Your identity verification was not approved — contact support before listing a property',
+          'Your identity verification was not approved. Contact support before listing a property',
         );
       }
       const [property] = await db
@@ -629,6 +630,15 @@ export class ListingsService {
     });
   }
 
+  recordEvent(event: TrackEvent) {
+    return this.rlsDb.run(SERVICE_CTX, (_db, client) =>
+      client.query(`INSERT INTO product_events (event_type, payload) VALUES ($1, $2::jsonb)`, [
+        event.type,
+        JSON.stringify({ path: event.path, cta: event.cta ?? null }),
+      ]),
+    );
+  }
+
   detail(listingId: string) {
     return this.rlsDb.run(PUBLIC_CTX, async (db) => {
       const listing = await db.query.listings.findFirst({
@@ -915,7 +925,7 @@ export class ListingsService {
       const res = await client.query<{ value: { email: string; phone: string } }>(
         `SELECT value FROM platform_settings WHERE key = 'support_contact'`,
       );
-      return res.rows[0]?.value ?? { email: 'support@campushomes.com', phone: '' };
+      return res.rows[0]?.value ?? { email: 'hello@campushomes.co.ug', phone: '' };
     });
   }
 }

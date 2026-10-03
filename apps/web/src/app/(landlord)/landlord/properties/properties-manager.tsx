@@ -33,7 +33,7 @@ function PropertyThumbnail({ property, className }: { property: Property; classN
   if (url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-      <img src={url} alt="" className={cn("shrink-0 rounded-md object-cover", className)} />
+      <img src={url} alt={`${property.name} cover photo`} className={cn("shrink-0 rounded-md object-cover", className)} />
     );
   }
   return (
@@ -101,7 +101,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
           className="mt-6"
           icon={Building2}
           title="No properties yet"
-          body="Add your first hostel to get started — our Ops team schedules a verification visit once it's submitted."
+          body="Add your first hostel to get started. Our Ops team schedules a verification visit once it's submitted."
           action={
             <Button type="button" onClick={openAdd}>
               <Plus aria-hidden className="size-4" />

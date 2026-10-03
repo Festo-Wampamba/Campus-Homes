@@ -41,9 +41,9 @@ export function LandlordAccountsManager({
       const approved = rows.find((r) => r.userId === userId);
       setRows((current) => current.filter((r) => r.userId !== userId));
       if (approved) setApprovedRows((current) => [approved, ...current]);
-      setNotice(`${name} approved — they can now sign in and access the landlord portal.`);
+      setNotice(`${name} approved. They can now sign in and access the landlord portal.`);
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't approve this account — try again."));
+      setError(apiErrorMessage(err, "Couldn't approve this account. Try again."));
     } finally {
       setPendingId(null);
     }
@@ -63,7 +63,7 @@ export function LandlordAccountsManager({
       setRejectingId(null);
       setReason("");
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't reject this account — try again."));
+      setError(apiErrorMessage(err, "Couldn't reject this account. Try again."));
     } finally {
       setPendingId(null);
     }

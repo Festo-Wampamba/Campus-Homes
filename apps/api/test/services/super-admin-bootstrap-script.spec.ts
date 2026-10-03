@@ -73,4 +73,40 @@ describe('guarded Super Admin bootstrap', () => {
       { action: 'roles.bootstrap_super_admin' },
     ]);
   });
+
+  it('turns the self-provisioned student account into staff-only access', async () => {
+    const user = (await pool.query(
+      `INSERT INTO users (email, role, status, name, email_verified, logto_user_id)
+       VALUES ('founder@example.test', 'student', 'active', 'Founder', true, 'logto-founder') RETURNING id`,
+    )).rows[0];
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+       SELECT $1, id, 'own', $1, 'self-provisioned' FROM roles WHERE key = 'student'`,
+      [user.id],
+    );
+    await bootstrapSuperAdmin(pool, readBootstrapConfig({ SUPER_ADMIN_EMAIL: 'founder@example.test' }));
+    const state = await pool.query(
+      `SELECT u.role::text AS role,
+         ARRAY(SELECT r.key FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+               WHERE a.user_id = u.id AND a.revoked_at IS NULL ORDER BY r.key) AS active
+       FROM users u WHERE u.id = $1`,
+      [user.id],
+    );
+    expect(state.rows[0]).toEqual({ role: 'admin', active: ['super_admin'] });
+  });
+
+  it('refuses to strip landlord access from an account', async () => {
+    const user = (await pool.query(
+      `INSERT INTO users (email, role, status, name, email_verified, logto_user_id)
+       VALUES ('landlord-owner@example.test', 'landlord', 'active', 'Landlord', true, 'logto-landlord-owner') RETURNING id`,
+    )).rows[0];
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, assigned_by, reason)
+       SELECT $1, id, 'own', $1, 'self-provisioned' FROM roles WHERE key = 'landlord'`,
+      [user.id],
+    );
+    await expect(bootstrapSuperAdmin(pool, readBootstrapConfig({ SUPER_ADMIN_EMAIL: 'landlord-owner@example.test' })))
+      .rejects.toThrow('This account has landlord access');
+  });
 });
+

@@ -99,7 +99,7 @@ async function assertContactAvailable(
     const role = user.roles ?? user.accountType.replaceAll('_', ' ');
     throw new ConflictException(user.deletedAt
       ? `This ${contact} belongs to a deleted ${role} account. Permanently delete that account before inviting it again.`
-      : `This ${contact} is already registered as ${role}. One account can hold only one role — change that user's access from Users instead.`);
+      : `This ${contact} is already registered as ${role}. One account can hold only one role. Change that user's access from Users instead.`);
   }
   const expired = (await client.query<{ id: string }>(`UPDATE auth_invitations
     SET status = 'cancelled', cancelled_at = now(), cancelled_by = $3, updated_at = now()

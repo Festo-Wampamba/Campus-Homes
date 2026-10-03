@@ -1,7 +1,7 @@
 # CampusHomes — MVP Moderated-Test Readiness
 
 Companion to the MVP build & test-readiness checklist. Everything here reflects
-the local docker test DB (`campushomes-local-db-1`, port 54328, db `campushomes_dev`)
+the local docker test DB (`campushomes-local-db-1`, port 25432, db `campushomes_dev`)
 and the current `main` build. Keep it updated as accounts/data change.
 
 ## 1. Prepared test accounts (local dev DB)

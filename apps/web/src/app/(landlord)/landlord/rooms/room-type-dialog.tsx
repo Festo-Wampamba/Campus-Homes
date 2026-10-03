@@ -365,7 +365,7 @@ export function RoomTypeDialog({
                     key={item}
                     type="button"
                     onClick={() => toggleAmenity(item)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                       checked
                         ? "bg-teal-600 text-white"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"

@@ -71,7 +71,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
       setNotice(`Added ${storageKeys.length} photo${storageKeys.length === 1 ? "" : "s"}.`);
       await load();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't add photos — try again."));
+      setError(errorMessage(err, "Couldn't add photos. Try again."));
     } finally {
       setPending(false);
     }
@@ -93,7 +93,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
 
       {data.listingStatus !== "verified" && data.photos.length === 0 && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          This listing hasn&apos;t been published yet — publish it first, then come back here to add photos.
+          This listing hasn&apos;t been published yet. Publish it first, then come back here to add photos.
         </p>
       )}
 
@@ -109,7 +109,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
                 <div key={photo.id} className="overflow-hidden rounded-md border border-border">
                   {url ? (
                     // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                    <img src={url} alt="" className="aspect-square w-full object-cover" />
+                    <img src={url} alt="Listing photo" className="aspect-square w-full object-cover" />
                   ) : (
                     <div className="grid aspect-square place-items-center bg-muted text-xs text-muted-foreground">
                       No preview

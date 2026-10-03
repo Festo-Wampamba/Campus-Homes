@@ -45,14 +45,14 @@ export function InviteLandlordAction({
       setSent(true);
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't send the invite — try again."));
+      setError(errorMessage(err, "Couldn't send the invite. Try again."));
     } finally {
       setPending(false);
     }
   }
 
   if (!email) {
-    return <p className="text-xs text-muted-foreground">No email on this lead — can&apos;t send an invite.</p>;
+    return <p className="text-xs text-muted-foreground">No email on this lead. Can&apos;t send an invite.</p>;
   }
 
   if (sent) {

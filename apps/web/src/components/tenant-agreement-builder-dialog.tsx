@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
 const API_BASE = "";
 
 const FIELD_TYPE_LABEL: Record<TenantAgreementFieldType, string> = {
-  heading: "Heading (section title — not fillable)",
-  paragraph: "Paragraph (instructions, terms — not fillable)",
+  heading: "Heading (section title, not fillable)",
+  paragraph: "Paragraph (instructions or terms, not fillable)",
   fill_in: "Fill in the blank",
   multiple_choice: "Multiple choice (pick one)",
   checkboxes: "Checkboxes (pick any)",
@@ -251,7 +251,7 @@ function FieldsPreview({ title, fields }: { title: string; fields: FieldRow[] })
   return (
     <div className="space-y-5 rounded-md border border-border bg-muted/20 p-4">
       <p className="text-xs font-semibold text-muted-foreground uppercase">
-        Preview — this is what the student sees
+        Preview: this is what the student sees
       </p>
       <h1 className="font-display text-lg font-bold text-foreground">{title || "Tenant Agreement"}</h1>
       {fields.map((row) => {
@@ -354,7 +354,7 @@ function TenantAgreementBuilderBody({
     }
     for (const field of fields) {
       if (!field.label.trim()) {
-        setError("Every field needs text — fill in any empty ones.");
+        setError("Every field needs text. Fill in any empty ones.");
         return;
       }
       if (CHOICE_TYPES.has(field.fieldType) && field.options.filter((o) => o.trim()).length < 2) {
@@ -378,7 +378,7 @@ function TenantAgreementBuilderBody({
       });
       onOpenChange(false);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save the template — try again."));
+      setError(errorMessage(err, "Couldn't save the template. Try again."));
     } finally {
       setPending(false);
     }
@@ -404,7 +404,7 @@ function TenantAgreementBuilderBody({
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setError("Couldn't download the PDF — try again.");
+      setError("Couldn't download the PDF. Try again.");
     } finally {
       setDownloading(false);
     }
@@ -473,7 +473,7 @@ function TenantAgreementBuilderBody({
               ))}
               {fields.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No fields yet — start with a heading or a paragraph of terms, then add fill-in fields,
+                  No fields yet. Start with a heading or a paragraph of terms, then add fill-in fields,
                   multiple choice, or checkboxes for whatever you need the tenant to answer or agree to.
                 </p>
               )}
@@ -485,7 +485,7 @@ function TenantAgreementBuilderBody({
 
             <p className="text-xs text-muted-foreground">
               Every submission always includes a declaration of consent and ends with a signature (drawn or
-              typed name) automatically — you don&apos;t need to add either of those here.
+              typed name) automatically. You don&apos;t need to add either of those here.
             </p>
           </>
         )}

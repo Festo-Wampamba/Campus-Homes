@@ -160,7 +160,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
     const totalRooms = validRows.reduce((sum, row) => sum + Number(row.roomCount), 0);
     if (totalRooms > MAX_PUBLISH_UNITS) {
       setError(
-        `This publish has ${totalRooms} rooms — the maximum per listing is ${MAX_PUBLISH_UNITS}. Reduce the room counts or publish the remaining rooms separately.`,
+        `This publish has ${totalRooms} rooms. The maximum per listing is ${MAX_PUBLISH_UNITS}. Reduce the room counts or publish the remaining rooms separately.`,
       );
       return;
     }
@@ -199,7 +199,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       router.push("/ops");
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't publish the listing — try again."));
+      setError(errorMessage(err, "Couldn't publish the listing. Try again."));
       setPending(false);
     }
   }
@@ -209,21 +209,21 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       {published && (
         <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
           <p className="font-semibold">
-            Editing a live listing — version {published.version.versionNumber} (verified{" "}
+            Editing a live listing. Version {published.version.versionNumber} (verified{" "}
             {new Date(published.version.verifiedAt).toLocaleDateString()})
           </p>
           <p className="mt-1 text-muted-foreground">
             Saving creates a new version and the listing stays verified and visible to students.
             The {published.photos.length} verification photo
             {published.photos.length === 1 ? "" : "s"} already on it are carried over automatically.
-            Removing a room row (or lowering its count) deletes those rooms — only allowed if they
+            Removing a room row (or lowering its count) deletes those rooms. Only allowed if they
             have no reservations.
           </p>
         </div>
       )}
       {published === null && visitPhotoCount === 0 && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          The inspector didn&apos;t stage any photos on this visit — publishing now
+          The inspector didn&apos;t stage any photos on this visit. Publishing now
           will go live with no verification photos. You can still publish, but
           consider getting photos from the inspector first.
         </p>
@@ -232,7 +232,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         <Label>Room types & pricing</Label>
         <p className="text-xs text-muted-foreground">
           Each room type is published as that many individual units at that
-          price — confirm these against what you saw on the inspection visit.
+          price. Confirm these against what you saw on the inspection visit.
         </p>
         <RoomCategoryRows
           rows={roomCategoryRows}

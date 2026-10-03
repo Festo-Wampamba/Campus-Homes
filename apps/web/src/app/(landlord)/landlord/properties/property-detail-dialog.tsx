@@ -104,7 +104,7 @@ function CoverPhoto({ property }: { property: Property }) {
   if (!url) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-    <img src={url} alt="" className="h-48 w-full rounded-md object-cover" />
+    <img src={url} alt={`${property.name} cover photo`} className="h-48 w-full rounded-md object-cover" />
   );
 }
 
@@ -285,7 +285,7 @@ function RoomOccupancyControl({
       });
       onChange(value);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't update this room's status — try again."));
+      setError(errorMessage(err, "Couldn't update this room's status. Try again."));
     } finally {
       setSaving(false);
     }
@@ -368,7 +368,7 @@ function WalkInBookDialog({
       setPaymentMethod("");
       onBooked();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't book this bed — try again."));
+      setError(errorMessage(err, "Couldn't book this bed. Try again."));
     } finally {
       setPending(false);
     }
@@ -385,7 +385,7 @@ function WalkInBookDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader
         title={`Book ${bedLabel}`}
-        description="For a tenant who showed up in person — no prior Reserve needed. The student must already have a CampusHomes account with their university set."
+        description="For a tenant who showed up in person. No prior Reserve needed. The student must already have a CampusHomes account with their university set."
         onClose={() => onOpenChange(false)}
       />
       <DialogBody>
@@ -504,7 +504,7 @@ function ConfirmBookingDialog({
       setPaymentMethod("");
       onBooked();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't confirm this booking — try again."));
+      setError(errorMessage(err, "Couldn't confirm this booking. Try again."));
     } finally {
       setPending(false);
     }
@@ -516,7 +516,7 @@ function ConfirmBookingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader
         title={`Book ${bedLabel}`}
-        description="Confirm this reservation into a booking — record whatever you collected from the student in person or by mobile money."
+        description="Confirm this reservation into a booking. Record whatever you collected from the student in person or by mobile money."
         onClose={() => onOpenChange(false)}
       />
       <DialogBody>
@@ -612,7 +612,7 @@ function ReleaseBedDialog({
       setRefundRequired(false);
       onReleased();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't release this bed — try again."));
+      setError(errorMessage(err, "Couldn't release this bed. Try again."));
     } finally {
       setPending(false);
     }
@@ -786,7 +786,7 @@ function PropertyMediaManager({
       );
       onMediaChange([...media, { id: created.id, storageKey: created.storageKey }]);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't upload this photo — try again."));
+      setError(errorMessage(err, "Couldn't upload this photo. Try again."));
     } finally {
       setUploading(false);
     }
@@ -799,7 +799,7 @@ function PropertyMediaManager({
       await api(`/listings/properties/media/${mediaId}`, { method: "DELETE" });
       onMediaChange(media.filter((m) => m.id !== mediaId));
     } catch (err) {
-      setError(errorMessage(err, "Couldn't remove this photo — try again."));
+      setError(errorMessage(err, "Couldn't remove this photo. Try again."));
     } finally {
       setRemovingId(null);
     }
@@ -811,7 +811,7 @@ function PropertyMediaManager({
         Property photos ({media.length})
       </p>
       <p className="mb-2 text-xs text-muted-foreground">
-        Shown publicly on this property&apos;s listing page — separate from each room&apos;s own photos.
+        Shown publicly on this property&apos;s listing page. Separate from each room&apos;s own photos.
       </p>
       {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
       {media.length > 0 && (
@@ -822,7 +822,7 @@ function PropertyMediaManager({
               <div key={item.id} className="group relative">
                 {url && (
                   // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                  <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+                  <img src={url} alt="Property photo" className="aspect-square w-full rounded-md object-cover" />
                 )}
                 <button
                   type="button"
@@ -885,7 +885,7 @@ function RoomPhotoManager({
       );
       onPhotosChange([...room.photos, { id: created.id, storageKey: created.storageKey }]);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't upload this photo — try again."));
+      setError(errorMessage(err, "Couldn't upload this photo. Try again."));
     } finally {
       setUploading(false);
     }
@@ -898,7 +898,7 @@ function RoomPhotoManager({
       await api(`/listings/units/photos/${photoId}`, { method: "DELETE" });
       onPhotosChange(room.photos.filter((p) => p.id !== photoId));
     } catch (err) {
-      setError(errorMessage(err, "Couldn't remove this photo — try again."));
+      setError(errorMessage(err, "Couldn't remove this photo. Try again."));
     } finally {
       setRemovingId(null);
     }
@@ -915,7 +915,7 @@ function RoomPhotoManager({
               <div key={photo.id} className="group relative">
                 {url && (
                   // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                  <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+                  <img src={url} alt="Room photo" className="aspect-square w-full rounded-md object-cover" />
                 )}
                 <button
                   type="button"
@@ -969,7 +969,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
         if (!cancelled) setDetail(d);
       })
       .catch(() => {
-        if (!cancelled) setError("Couldn't load this property's rooms — try again.");
+        if (!cancelled) setError("Couldn't load this property's rooms. Try again.");
       });
     return () => {
       cancelled = true;
@@ -1018,7 +1018,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
       const refreshed = await api<PropertyDetail>(`/listings/properties/${propertyId}/detail`);
       setDetail(refreshed);
     } catch (err) {
-      setRequestError(errorMessage(err, "Couldn't request a listing — try again."));
+      setRequestError(errorMessage(err, "Couldn't request a listing. Try again."));
     } finally {
       setRequesting(false);
     }
@@ -1078,8 +1078,8 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
       {detail.listing && detail.listing.status !== "verified" && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           {detail.listing.status === "draft"
-            ? "This listing is a draft — it won't appear in student search until Ops schedules and completes a verification visit and publishes it."
-            : `Listing status: ${detail.listing.status.replaceAll("_", " ")} — not yet visible in student search.`}
+            ? "This listing is a draft. It won't appear in student search until Ops schedules and completes a verification visit and publishes it."
+            : `Listing status: ${detail.listing.status.replaceAll("_", " ")}. Not yet visible in student search.`}
         </div>
       )}
       {!detail.listing ? (
@@ -1124,7 +1124,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                     <img
                       key={storageKey}
                       src={url}
-                      alt=""
+                      alt="Room photo"
                       className="aspect-square w-full rounded-md object-cover"
                     />
                   ) : null;
@@ -1182,7 +1182,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                         {formatUgx(room.pricePerTermUgx)}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
-                        {room.depositUgx != null ? formatUgx(room.depositUgx) : "—"}
+                        {room.depositUgx != null ? formatUgx(room.depositUgx) : "N/A"}
                       </td>
                       <td className="px-3 py-2">
                         {/* Compact by default — a quad's 4 beds shouldn't force

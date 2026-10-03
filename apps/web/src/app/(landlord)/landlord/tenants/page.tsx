@@ -40,7 +40,7 @@ export default async function LandlordTenantsPage() {
       <div className="mt-4 flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
         <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
         <p>
-          Student names aren&apos;t shared here — a room&apos;s reservation only tells you it&apos;s
+          Student names aren&apos;t shared here. A room&apos;s reservation only tells you it&apos;s
           occupied. Use Messages to talk to the tenant in a room once they reach out.
         </p>
       </div>

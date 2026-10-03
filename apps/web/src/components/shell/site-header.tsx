@@ -51,7 +51,8 @@ async function SiteHeader() {
           ) : (
             <Link
               href="/sign-in"
-              className="inline-flex h-10 items-center whitespace-nowrap rounded-lg bg-coral-500 px-4 text-sm font-bold text-teal-900 transition duration-300 hover:bg-coral-600 hover:text-white active:scale-[0.98] sm:px-5"
+              data-cta="header-sign-in"
+              className="inline-flex h-10 items-center whitespace-nowrap rounded-lg border border-teal-900/25 px-4 text-sm font-bold text-teal-900 transition-colors duration-300 hover:border-teal-900 hover:bg-teal-900 hover:text-white sm:px-5 dark:border-border dark:text-foreground"
             >
               Sign in
             </Link>

@@ -42,7 +42,7 @@ export function StudentProfileInlineStep() {
       });
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save your university — try again."));
+      setError(errorMessage(err, "Couldn't save your university. Try again."));
       setPending(false);
     }
   }
@@ -51,7 +51,7 @@ export function StudentProfileInlineStep() {
     <>
       <h1 className="font-display text-lg font-bold text-foreground">Just one thing first</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Which university are you at? This finishes setting up your student account — you only need to do
+        Which university are you at? This finishes setting up your student account. You only need to do
         it once, then you&apos;ll go straight into the agreement for this property.
       </p>
       <form onSubmit={submit} className="mt-4 space-y-3">

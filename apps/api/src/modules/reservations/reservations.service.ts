@@ -107,7 +107,7 @@ export class ReservationsService {
     const blocking = res.rows[0];
     if (blocking) {
       throw new ConflictException(
-        `You're already moved into a bed through ${blocking.endsOn} — you can reserve a new one once that term is within ${REBOOK_WINDOW_DAYS} days of ending.`,
+        `You're already moved into a bed through ${blocking.endsOn}. You can reserve a new one once that term is within ${REBOOK_WINDOW_DAYS} days of ending.`,
       );
     }
   }
@@ -120,7 +120,7 @@ export class ReservationsService {
       ? await this.redis.set(lockKey, ctx.userId, 'PX', 10_000, 'NX')
       : 'OK';
     if (!locked) {
-      throw new ConflictException('Bed is being reserved by someone else — try again');
+      throw new ConflictException('Bed is being reserved by someone else. Try again');
     }
 
     try {
@@ -165,7 +165,7 @@ export class ReservationsService {
         );
         if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
           throw new ConflictException(
-            `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations — cancel or complete one before reserving another.`,
+            `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations. Cancel or complete one before reserving another.`,
           );
         }
 
@@ -330,7 +330,7 @@ export class ReservationsService {
         );
         if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
           throw new ConflictException(
-            `This student already has ${MAX_ACTIVE_RESERVATIONS} active reservations — release or complete one before booking another.`,
+            `This student already has ${MAX_ACTIVE_RESERVATIONS} active reservations. Release or complete one before booking another.`,
           );
         }
       }

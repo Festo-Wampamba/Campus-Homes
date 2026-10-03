@@ -47,4 +47,45 @@ describe('self-hosted Logto Management API', () => {
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify(patch) }),
     ]);
   });
+
+  describe('hasMfaFactor', () => {
+    function factors(list: Array<{ type: string }>) {
+      jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+        .mockResolvedValueOnce(new Response(JSON.stringify(list)));
+    }
+
+    it('is true when an authenticator factor is enrolled', async () => {
+      factors([{ type: 'Totp' }, { type: 'BackupCode' }]);
+      await expect(client().hasMfaFactor('user-1')).resolves.toBe(true);
+    });
+
+    it('is false for a user who skipped enrolment', async () => {
+      factors([]);
+      await expect(client().hasMfaFactor('user-1')).resolves.toBe(false);
+    });
+
+    it('does not count backup codes alone as a second factor', async () => {
+      factors([{ type: 'BackupCode' }]);
+      await expect(client().hasMfaFactor('user-1')).resolves.toBe(false);
+    });
+
+    it('throws when Logto cannot answer, so the staff callback fails closed', async () => {
+      jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+        .mockResolvedValueOnce(new Response('nope', { status: 500 }));
+      await expect(client().hasMfaFactor('user-1')).rejects.toThrow('HTTP 500');
+    });
+  });
+
+  it('clears the MFA skip flag so the next sign-in offers setup again', async () => {
+    const fetcher = jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ mfa: { skipped: false } })));
+    await client().resetMfaSkip('user-1');
+    expect(fetcher.mock.calls[1]).toEqual([
+      'https://auth.example.test/api/users/user-1/logto-configs',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ mfa: { skipped: false } }) }),
+    ]);
+  });
 });

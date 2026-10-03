@@ -19,7 +19,7 @@ async function SiteFooter() {
   // falls back to the same default the backend itself uses if the fetch
   // fails, so the footer never renders with no contact route at all.
   const support = await api<{ email: string; phone: string }>("/listings/support-contact").catch(
-    () => ({ email: "hello@campushomes.ug", phone: "" }),
+    () => ({ email: "hello@campushomes.co.ug", phone: "" }),
   );
   return (
     <footer className="mt-auto bg-teal-900 text-white">
@@ -28,12 +28,8 @@ async function SiteFooter() {
           <div className="max-w-sm">
             <Wordmark onDark className="text-2xl sm:text-3xl" />
             <p className="mt-5 text-sm leading-6 text-white/62">
-              Physically verified student housing near Uganda&apos;s universities.
-              Search clearly, reserve a room for free, and move in knowing what
-              is actually there.
-            </p>
-            <p className="mt-6 inline-flex rounded-full border border-white/12 bg-white/6 px-3 py-1.5 text-xs font-semibold text-white/70">
-              Built in Kampala for Ugandan students
+              Student hostels near Uganda&apos;s universities, each inspected in
+              person before it is listed. Reserving a room is free.
             </p>
           </div>
 
@@ -97,9 +93,12 @@ async function SiteFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 pt-6 text-xs text-white/42 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 pt-6 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} CampusHomes Uganda. All rights reserved.</p>
-          <p>Live, Learn, Succeed.</p>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link href="/privacy" className="transition-colors duration-300 hover:text-white">Privacy policy</Link>
+            <Link href="/terms" className="transition-colors duration-300 hover:text-white">Terms and conditions</Link>
+          </nav>
         </div>
       </div>
     </footer>

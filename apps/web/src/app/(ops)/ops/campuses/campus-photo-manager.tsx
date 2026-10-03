@@ -66,7 +66,7 @@ function CampusRow({
       });
       onUploaded(publicId);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't upload that photo — try again."));
+      setError(errorMessage(err, "Couldn't upload that photo. Try again."));
     } finally {
       setPending(false);
     }
