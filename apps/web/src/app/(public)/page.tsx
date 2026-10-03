@@ -279,9 +279,9 @@ export default async function HomePage() {
               shared spaces as recorded on the inspection visit, so you can compare
               hostels before travelling across Kampala for a viewing.
             </p>
-            <Link href="/search" className="mt-7 inline-flex h-12 items-center gap-2 rounded-lg bg-teal-900 px-6 font-bold text-white transition duration-300 hover:bg-teal-700 active:scale-[0.98]">
-              Explore verified rooms
-              <ArrowRightIcon className="size-4" />
+            <Link href="/search" className="text-link group mt-6">
+              Compare hostels
+              <ArrowRightIcon className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
             </Link>
           </div>
         </div>
@@ -290,7 +290,7 @@ export default async function HomePage() {
       <section id="verified" aria-labelledby="verified-heading" className="overflow-hidden bg-teal-900 text-white">
         <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
           <div className="lg:sticky lg:top-28 lg:self-start">
-            <p className="eyebrow text-coral-500">The CampusHomes badge</p>
+            <p className="text-xs font-bold tracking-[0.16em] text-coral-500 uppercase">The CampusHomes badge</p>
             <h2 id="verified-heading" className="mt-4 max-w-lg text-3xl tracking-[-0.035em] text-white sm:text-4xl">
               We check every hostel in person
             </h2>
@@ -309,7 +309,7 @@ export default async function HomePage() {
               const Icon = item.icon;
               return (
                 <li key={component} className="group grid grid-cols-[2.5rem_1fr] items-start gap-4 py-5 sm:grid-cols-[3rem_1fr_1.2fr] sm:gap-6 sm:py-7">
-                  <span className="tabular pt-1 font-display text-sm font-semibold text-white/32">
+                  <span className="tabular pt-1 font-display text-sm font-semibold text-white/70">
                     0{index + 1}
                   </span>
                   <div className="flex items-center gap-3">
@@ -442,7 +442,7 @@ export default async function HomePage() {
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <div className="grid overflow-hidden rounded-[1.75rem] bg-teal-700 text-white lg:grid-cols-[1.05fr_0.95fr]">
             <div className="flex flex-col justify-center p-7 sm:p-12 lg:p-14">
-              <p className="text-xs font-bold tracking-[0.16em] text-coral-500 uppercase">For hostel owners</p>
+              <p className="text-xs font-bold tracking-[0.16em] text-white/85 uppercase">For hostel owners</p>
               <h2 className="mt-4 max-w-xl text-3xl tracking-[-0.035em] text-white sm:text-4xl">
                 Own a hostel near campus?
               </h2>
@@ -451,7 +451,8 @@ export default async function HomePage() {
               </p>
               <Link
                 href="/landlords"
-                className="mt-8 inline-flex h-12 w-fit items-center gap-2 rounded-lg bg-white px-6 font-bold text-teal-900 transition duration-300 hover:bg-coral-500 active:scale-[0.98]"
+                data-cta="home-list-property"
+                className="mt-8 inline-flex h-12 w-fit items-center gap-2 rounded-lg border border-white/40 px-6 font-bold text-white transition-colors duration-300 hover:bg-white hover:text-teal-900"
               >
                 List your property
                 <ArrowRightIcon className="size-4" />
@@ -480,6 +481,7 @@ export default async function HomePage() {
           </div>
           <Link
             href="/search"
+            data-cta="footer-search"
             className="inline-flex h-12 shrink-0 items-center gap-2 rounded-lg bg-teal-900 px-6 font-bold text-white transition duration-300 hover:bg-teal-700 active:scale-[0.98]"
           >
             Search hostels

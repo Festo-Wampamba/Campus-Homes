@@ -104,7 +104,7 @@ function CoverPhoto({ property }: { property: Property }) {
   if (!url) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-    <img src={url} alt="" className="h-48 w-full rounded-md object-cover" />
+    <img src={url} alt={`${property.name} cover photo`} className="h-48 w-full rounded-md object-cover" />
   );
 }
 
@@ -822,7 +822,7 @@ function PropertyMediaManager({
               <div key={item.id} className="group relative">
                 {url && (
                   // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                  <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+                  <img src={url} alt="Property photo" className="aspect-square w-full rounded-md object-cover" />
                 )}
                 <button
                   type="button"
@@ -915,7 +915,7 @@ function RoomPhotoManager({
               <div key={photo.id} className="group relative">
                 {url && (
                   // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                  <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+                  <img src={url} alt="Room photo" className="aspect-square w-full rounded-md object-cover" />
                 )}
                 <button
                   type="button"
@@ -1124,7 +1124,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                     <img
                       key={storageKey}
                       src={url}
-                      alt=""
+                      alt="Room photo"
                       className="aspect-square w-full rounded-md object-cover"
                     />
                   ) : null;

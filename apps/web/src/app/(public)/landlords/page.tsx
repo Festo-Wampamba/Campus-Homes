@@ -17,7 +17,11 @@ import { api } from "@/lib/api";
 import { CreateAccountDialog } from "./create-account-dialog";
 import { OnboardingLeadForm } from "./onboarding-lead-form";
 
-export const metadata: Metadata = { title: "List your property" };
+export const metadata: Metadata = {
+  title: "List your hostel",
+  description: "List your hostel on CampusHomes. Our team inspects and verifies the property, then students near campus can find and reserve your rooms.",
+  alternates: { canonical: "/landlords" },
+};
 
 const VALUE_PROPS = [
   {
@@ -79,7 +83,7 @@ const DASHBOARD_CAPABILITIES = [
 
 async function getSupportContact() {
   return api<{ email: string; phone: string }>("/listings/support-contact").catch(() => ({
-    email: "hello@campushomes.ug",
+    email: "hello@campushomes.co.ug",
     phone: "",
   }));
 }
@@ -166,7 +170,7 @@ export default async function LandlordsPage() {
 
       <section aria-labelledby="how-heading" className="bg-teal-900 text-white">
         <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-          <p className="eyebrow text-coral-500">How onboarding works</p>
+          <p className="text-xs font-bold tracking-[0.16em] text-coral-500 uppercase">How onboarding works</p>
           <h2 id="how-heading" className="mt-3 max-w-xl text-3xl tracking-[-0.035em] text-white sm:text-4xl">
             Create your account, then our team helps you get listed.
           </h2>

@@ -33,7 +33,7 @@ function PropertyThumbnail({ property, className }: { property: Property; classN
   if (url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-      <img src={url} alt="" className={cn("shrink-0 rounded-md object-cover", className)} />
+      <img src={url} alt={`${property.name} cover photo`} className={cn("shrink-0 rounded-md object-cover", className)} />
     );
   }
   return (

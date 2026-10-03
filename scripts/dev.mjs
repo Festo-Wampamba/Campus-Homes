@@ -42,8 +42,8 @@ run('docker', ['compose', '-f', 'apps/api/docker-compose.local.yml', 'up', '-d',
 run('pnpm', ['--filter', '@campushomes/api', 'db:migrate']);
 
 if (setupOnly) {
-  run('pnpm', ['--filter', '@campushomes/api', 'admin:reset']);
-  process.stdout.write('\nLocal services, migrations, and the super-admin account are ready.\n');
+  run('pnpm', ['--filter', '@campushomes/api', 'local:logto']);
+  process.stdout.write('\nLocal services, migrations, and Logto sign-in are ready.\n');
   process.exit(0);
 }
 

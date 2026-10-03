@@ -47,8 +47,17 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const detail = await getDetail((await params).id);
-  return { title: detail ? detail.property.name : "Listing" };
+  const id = (await params).id;
+  const detail = await getDetail(id);
+  if (!detail) return { title: "Listing" };
+  const photo = detail.photos[0] ? listingPhotoUrl(detail.photos[0].storageKey, 1200) : null;
+  const description = `Inspected student hostel${detail.property.street_address ? ` at ${detail.property.street_address}` : ""}. See rooms, prices and amenities, and reserve for free on CampusHomes.`;
+  return {
+    title: detail.property.name,
+    description,
+    alternates: { canonical: `/listings/${id}` },
+    openGraph: { title: detail.property.name, description, ...(photo ? { images: [{ url: photo, alt: detail.property.name }] } : {}) },
+  };
 }
 
 export default async function ListingDetailPage({

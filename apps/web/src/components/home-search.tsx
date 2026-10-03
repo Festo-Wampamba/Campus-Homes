@@ -65,10 +65,11 @@ export function HomeSearch() {
         </label>
         <button
           type="submit"
+          data-cta="hero-search"
           className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-coral-500 px-4 text-sm font-bold text-teal-900 transition-colors hover:bg-coral-600 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-900 active:scale-[0.98] sm:h-14 sm:px-7"
         >
           <MagnifyingGlassIcon aria-hidden className="size-4" />
-          <span className="hidden sm:inline">Find a room</span>
+          <span className="hidden sm:inline">Search hostels</span>
           <span className="sm:hidden">Search</span>
         </button>
       </form>

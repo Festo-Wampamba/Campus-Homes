@@ -287,7 +287,7 @@ function PropertyForm({
                 // eslint-disable-next-line @next/next/no-img-element -- local blob preview or arbitrary-origin storage URL
                 <img
                   src={coverPhotoPreview}
-                  alt=""
+                  alt="Cover photo preview"
                   className="size-11 shrink-0 rounded-md object-cover"
                 />
               )}

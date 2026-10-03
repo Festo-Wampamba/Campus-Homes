@@ -367,7 +367,7 @@ export function OnboardingWizard({
                 <div className="flex items-center gap-3">
                   {coverPhotoPreview && (
                     // eslint-disable-next-line @next/next/no-img-element -- local blob preview
-                    <img src={coverPhotoPreview} alt="" className="size-11 shrink-0 rounded-md object-cover" />
+                    <img src={coverPhotoPreview} alt="Cover photo preview" className="size-11 shrink-0 rounded-md object-cover" />
                   )}
                   <Input
                     id="propertyPhoto"

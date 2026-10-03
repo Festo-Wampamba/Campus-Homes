@@ -92,7 +92,7 @@ student places 72h hold  →  Flutterwave payment  →  fulfilled
 | Database | Drizzle ORM 0.44 + NeonDB (Postgres 17 + PostGIS) |
 | Authorization | Native Postgres **Row-Level Security** (not app-layer checks) + a data-driven RBAC layer for staff |
 | Validation | `nestjs-zod` against one shared Zod schema package — single source of truth for frontend and backend, `zod` catalog-pinned to `^4.1.12` |
-| Auth | Better Auth 1.6 — phone OTP (students/landlords) + email/password (staff) |
+| Auth | Logto (self-hosted OIDC): email code/password and Google for students and landlords, TOTP-required staff sign-in |
 | Background jobs | BullMQ 5, in-process inside the Nest app, backed by Upstash Redis (`ioredis` pinned to `5.10.1` — BullMQ requires exact match) |
 | Media | Cloudinary, direct-to-cloud signed uploads |
 | Payments | Flutterwave foundation is built but inactive for the Phase 1 MVP; production activation, checkout, refunds, and reconciliation are Phase 2. `StubPayments` is development-only |
@@ -176,23 +176,27 @@ packages/config           Shared tsconfig / eslint / prettier.
    pnpm install
    ```
 
-2. Bring up local infrastructure — persistent Postgres+PostGIS on `54328`
-   and Redis (no-eviction, AOF-persisted) on `6379`:
+2. Bring up local infrastructure: persistent Postgres+PostGIS on `25432`,
+   Redis (no-eviction, AOF-persisted) on `6379`, and a local Logto identity
+   provider on `3001` (sign-in) / `3002` (admin console):
 
    ```bash
    pnpm local:up
    ```
 
 3. Create `apps/api/.env` from `apps/api/.env.example` (see
-   [Environment variables](#environment-variables) below) and
-   `apps/web/.env.local` per [FRONTEND.md](./FRONTEND.md) §3. Then apply
-   migrations and seed data:
+   [Environment variables](#environment-variables) below). The web app runs
+   without `apps/web/.env.local`; add one per [FRONTEND.md](./FRONTEND.md) §3
+   only to override defaults.
+
+4. Set up local sign-in once (see [Local sign-in (Logto)](#local-sign-in-logto)),
+   then apply migrations and provision Logto:
 
    ```bash
    pnpm local:setup
    ```
 
-4. Run both apps together, or independently:
+5. Run both apps together, or independently:
 
    ```bash
    pnpm dev            # api + web together, via scripts/dev.mjs
@@ -200,18 +204,45 @@ packages/config           Shared tsconfig / eslint / prettier.
    pnpm dev:web         # web only
    ```
 
-   API serves `/api/v1/*` plus `/api/auth` (Better Auth, mounted
-   express-level with Nest body-parsing disabled and re-added after it) on
-   `PORT` (default `4000`). Web runs on Next's default port and calls the
-   API through `apps/web/src/lib/api.ts`. `WEB_ORIGIN` on the API drives CORS
-   and Better Auth `trustedOrigins` — set it to your web app's origin
-   (`localhost:3000` is cross-origin from `localhost:4000` by default).
+   API serves `/api/v1/*` plus `/api/auth/logto/*` on `PORT` (default
+   `4000`). The browser only talks to the web app on `3000`, which proxies
+   `/api/*` to the API so the session cookie stays host-only.
 
-5. Tear down local infra when done:
+6. Tear down local infra when done:
 
    ```bash
    pnpm local:down
    ```
+
+## Local sign-in (Logto)
+
+Local sign-in uses the Logto container from step 2, configured the same way
+as staging and production: an HTTP Email connector posts codes to the API,
+and staff accounts must use TOTP. You do two things by hand, once; everything
+else is `pnpm local:logto`.
+
+1. Open http://localhost:3002 and create the local Logto admin account.
+   It exists only in your local Docker volume.
+2. In the console: **Applications → Create application → Machine-to-machine**,
+   name it `CampusHomes Local M2M`, and on the roles step assign
+   **Logto Management API access**. Copy its App ID and App secret into
+   `apps/api/.env` as `LOGTO_M2M_APP_ID` and `LOGTO_M2M_APP_SECRET`.
+3. Run `pnpm local:logto` (also run by `pnpm local:setup`). It is idempotent
+   and only works against localhost. It creates the Consumer and Staff apps,
+   the email connector, the sign-in rules, and a non-superuser
+   `campushomes_app` database role so RLS is enforced locally exactly as in
+   production. It writes the results into `apps/api/.env`, keeping a
+   timestamped backup; it never prints secrets.
+
+With no `RESEND_API_KEY`, verification codes and invite links print in the
+API console (`[email:dev] To …`) instead of being emailed. This only happens
+when `NODE_ENV=development`; production refuses to start email flows without
+Resend.
+
+To make yourself a local super admin: sign in once at
+http://localhost:3000/sign-in with your email, then run
+`SUPER_ADMIN_EMAIL=you@example.com pnpm --filter @campushomes/api admin:bootstrap`,
+sign out, and use the staff sign-in (you will be asked to set up TOTP).
 
 ## Environment variables
 
@@ -219,12 +250,16 @@ packages/config           Shared tsconfig / eslint / prettier.
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | Postgres connection string — API must connect as a role inheriting `app_user` (never the DB owner) so RLS actually applies |
+| `DATABASE_URL` | Postgres connection string. The API must connect as a role inheriting `app_user` (never the DB owner) so RLS actually applies |
+| `DATABASE_MIGRATIONS_URL` | Owner connection used only for migrations |
 | `REDIS_URL` | Upstash Redis, used in non-local environments |
 | `DEV_REDIS_URL` | Local no-eviction Redis — preferred automatically in development over `REDIS_URL` |
-| `BETTER_AUTH_SECRET` | Better Auth session/token signing secret |
-| `BETTER_AUTH_API_KEY` | Better Auth dashboard API key |
-| `BETTER_AUTH_URL` | Base URL Better Auth issues callbacks against (`http://localhost:4000` locally) |
+| `LOGTO_ENDPOINT` | Logto issuer (`http://localhost:3001` locally) |
+| `LOGTO_CONSUMER_APP_ID` / `_SECRET`, `LOGTO_STAFF_APP_ID` / `_SECRET` | The two sign-in applications |
+| `LOGTO_M2M_APP_ID` / `_SECRET` | Management API client (profile, invitations, local provisioning) |
+| `LOGTO_COOKIE_SECRET` | Encrypts single-use sign-in transaction cookies (32+ chars) |
+| `LOGTO_EMAIL_WEBHOOK_SECRET` / `LOGTO_SMS_WEBHOOK_SECRET` | Bearer secrets Logto's HTTP connectors send to the API |
+| `LOGTO_MFA_POLICY_VERIFIED` | Release gate: staff access fails closed unless `true` and Logto supplied MFA evidence |
 | `AUTH_COOKIE_DOMAIN` | Optional shared parent domain for sibling web/API hosts; set `.campushomes.co.ug` in deployed environments and omit locally |
 | `SUPER_ADMIN_EMAIL` | Verified, Logto-linked identity promoted by the one-time `admin:bootstrap` command |
 | `ALLOW_SUPER_ADMIN_BOOTSTRAP` | Production safety latch; set to `true` only while running the one-time bootstrap, then remove it |
@@ -236,7 +271,7 @@ packages/config           Shared tsconfig / eslint / prettier.
 | `CLOUDINARY_URL` | Image storage — powers `POST /uploads/sign` |
 | `SENTRY_DSN` | Error tracking |
 | `POWER_BI_PUSH_URL` / `POWER_BI_API_TOKEN` | Reporting export destination |
-| `WEB_ORIGIN` | Frontend origin for CORS + Better Auth trusted origins |
+| `WEB_ORIGIN` | Frontend origin: CORS, CSRF origin check, and Logto callback base |
 | `PAYMENT_REDIRECT_URL` | Frontend reservation return URL; retained for Phase 2 even while payments are disabled |
 | `SOKETI_HOST` / `SOKETI_PORT` / `SOKETI_APP_ID` / `SOKETI_KEY` / `SOKETI_SECRET` | Optional realtime provider; REST polling remains available when staging explicitly permits stubs |
 | `PORT` | API listen port (default `4000`) |
@@ -275,7 +310,7 @@ Run from the repo root unless noted.
 | `db:check` | Verify schema and migrations are in sync (must read "Everything's fine") |
 | `db:seed` | Seed local dev data (`scripts/seed-dev.cjs` — five user roles with credential accounts) |
 | `admin:bootstrap` | Idempotently grant `super_admin` to an existing active, email-verified Logto identity (maximum two) |
-| `admin:reset` | Reset/bootstrap the local super-admin account |
+| `local:logto` | Provision local Logto and write its values into `apps/api/.env` (localhost only) |
 | `test:rls` | Run only the RLS proof suite |
 
 **Nothing is considered done until `pnpm lint && pnpm typecheck && pnpm test`
@@ -628,7 +663,7 @@ production applications.
   (`pnpm local:up`) before `pnpm dev`.
 - **Reservation/RLS tests failing locally?** Confirm you're pointed at the
   *test* database (`54329`, `docker-compose.test.yml`), not the dev one
-  (`54328`, `docker-compose.local.yml`) — they're separate, and test
+  (`25432`, `docker-compose.local.yml`) — they're separate, and test
   helpers truncate tables.
 - **Redis eviction policy matters.** Local Redis runs
   `--maxmemory-policy noeviction` deliberately — BullMQ job data must never

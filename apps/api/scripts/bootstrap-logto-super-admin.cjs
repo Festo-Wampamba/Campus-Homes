@@ -77,6 +77,27 @@ async function bootstrapSuperAdmin(pool, config) {
 
     const superAdminRole = (await client.query(`SELECT id FROM roles WHERE key = 'super_admin'`)).rows[0];
     if (!superAdminRole) throw new Error('RBAC migration is not applied: super_admin role missing');
+    // Bootstrap needs one consumer sign-in first, which provisions a student
+    // account. Staff never keep consumer access (assignRoleInTransaction's
+    // rule), so finish in the same state an invited staff account starts in:
+    // role=admin and no consumer grant. A real landlord is refused, never stripped.
+    const consumerGrants = (
+      await client.query(
+        `SELECT a.id, r.key FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+         WHERE a.user_id = $1 AND a.revoked_at IS NULL
+           AND r.key IN ('student', 'landlord', 'custodian', 'property_worker')`,
+        [user.id],
+      )
+    ).rows;
+    const hasLandlordProfile = (await client.query('SELECT 1 FROM landlords WHERE user_id = $1', [user.id])).rowCount > 0;
+    if (hasLandlordProfile || consumerGrants.some((grant) => grant.key !== 'student')) {
+      throw new Error('This account has landlord access. Bootstrap a separate staff email instead of removing it.');
+    }
+    for (const grant of consumerGrants) {
+      await client.query('UPDATE user_role_assignments SET revoked_at = now(), revoked_by = $2 WHERE id = $1', [grant.id, user.id]);
+      await insertAudit(client, user.id, 'roles.bootstrap_revoke_consumer', grant.id, { targetUserId: user.id, roleKey: grant.key });
+    }
+    await client.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [user.id]);
     const existingSuperAdmin = (
       await client.query(
         `SELECT id FROM user_role_assignments

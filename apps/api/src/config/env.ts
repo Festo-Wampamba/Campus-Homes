@@ -43,7 +43,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
-  AUTH_EMAIL_FROM: z.string().min(1).default('CampusHomes <hello@campushomes.ug>'),
+  AUTH_EMAIL_FROM: z.string().min(1).default('CampusHomes <hello@campushomes.co.ug>'),
   // Comma-separated inbox(es) that receive new student inquiries. Unset =
   // inquiries are stored only (dev/staging posture); set + RESEND_API_KEY in
   // production for the email leg of the support desk.

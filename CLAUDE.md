@@ -1130,3 +1130,65 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
   - Staff accounts page reuses `UsersManager` (`staffOnly`) for Edit / Manage
     access / Delete, and now filters by staff role keys — "has any assignment"
     had let landlords (Henry K) in, since every account gets an 'own' role.
+
+- **Launch-readiness pass (2026-09-29):** privacy/terms pages, cookie notice,
+  first-party analytics, rate limiting, SEO files, contrast, 404.
+  - **Prod was sending `X-Robots-Tag: noindex, nofollow`** despite robots.txt
+    allowing crawl: `next.config.ts` `headers()` is evaluated at **build**
+    time, so the `ALLOW_INDEXING` check was baked into the image. Moved to
+    `src/proxy.ts` (runtime). Prod robots.txt was also serving the
+    indexing-OFF branch, meaning `ALLOW_INDEXING=true` is **not** set on the
+    prod web service's runtime env. Set it (plus `SITE_URL=https://campushomes.co.ug`)
+    as Dokploy **Environment** vars, not build args.
+  - Analytics = `POST /api/v1/events` (public, `page_view`/`cta_click`,
+    pathname only, no user id) into existing `product_events` (svc_all, no
+    migration). CTA buttons carry `data-cta`. Shown in admin Reports pilot
+    funnel. No cookies, so the cookie notice is informational only; adding
+    any tracking tool means turning it into a real opt-in gate.
+  - Rate limit: `src/rate-limit.ts`, Redis fixed window, 60 writes/min per
+    session cookie or client IP (`cf-connecting-ip` → `x-real-ip`), mounted
+    on `/api/v1` in main.ts, fails open when Redis is down.
+  - `--coral-600` light theme darkened to `oklch(0.55 0.13 22)` for 4.5:1
+    small-text contrast. Coral eyebrows on dark teal use coral-500.
+  - **Staff MFA bypass found and closed (2026-09-29).** Released Logto
+    (≤1.43) stamps no MFA claim, so staff assurance fell back to
+    `LOGTO_MFA_POLICY_VERIFIED=true`. But prod's Logto policy is
+    `PromptAtSignInAndSignUp` (skippable, confirmed via the public
+    `/api/.well-known/sign-in-exp`), so a staff member who pressed "Skip" got
+    admin/ops with only an email code or password. Fix in the staff callback
+    (`auth.controller.ts`): the policy flag counts only when
+    `LogtoManagementClient.hasMfaFactor()` confirms an enrolled TOTP/passkey
+    (backup codes alone don't count). Logto always verifies an enrolled
+    factor at sign-in; a failed lookup fails closed. On denial the API calls
+    `resetMfaSkip()` (Logto stops re-offering setup after "Skip" via
+    `logto_config.mfa.skipped`), so the next sign-in offers setup instead of
+    locking the user out. Verified live: skip → denied, enroll → allowed,
+    re-sign-in → TOTP demanded. Existing prod staff sessions issued before the
+    deploy stay valid up to 7 days; revoke them if any staff never enrolled.
+  - **Local dev is Logto-based now** (`pnpm local:logto`, README "Local
+    sign-in (Logto)"). Local compose: dev DB moved **54328 → 25432** (5xxxx
+    is inside the kernel ephemeral range, an outgoing connection grabbed it
+    and blocked `up`), Logto pinned `svhd/logto:1.43.0` and self-seeds on
+    first boot, logto-db has no host port. The setup script creates a
+    non-superuser `campushomes_app` role so local RLS matches prod;
+    migrations use `DATABASE_MIGRATIONS_URL` (drizzle.config prefers it).
+    With no `RESEND_API_KEY`, `NODE_ENV=development` prints codes/links to the
+    API console. `.claude/launch.json` forces `RESEND_API_KEY=""` for the
+    `api` preview so local runs never email real inboxes.
+  - Support email: `platform_settings.support_contact` was seeded (0013) as
+    `support@campushomes.com` (a .com) and served publicly on prod/staging.
+    `0056_support_contact_email.sql` replaces it with
+    `hello@campushomes.co.ug` only while it still equals the placeholder.
+  - `bootstrap-logto-super-admin.cjs` used to leave the self-provisioned
+    `student` grant and `users.role='student'` on the new super admin
+    (bypassing the staff↔consumer rule in `assignRoleInTransaction`): the
+    admin landed on student onboarding + "Choose workspace", kept a student
+    workspace (could reserve/review/enquire as a student), and showed as
+    "Student" in Users/reports. Not a privilege escalation (admin routes
+    still need the assignment + MFA). Fixed: bootstrap revokes the student
+    grant (audited `roles.bootstrap_revoke_consumer`), sets role=admin, and
+    refuses accounts with landlord access. Prod's super admin was set up
+    manually as role=admin, so it was not affected.
+  - Local compose services use `restart: unless-stopped` (they stayed down
+    after a reboot before, and the setup script only said `fetch failed`;
+    it now names the port and says to run `pnpm local:up`).

@@ -8,6 +8,7 @@ import { loadEnv } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
 import { AuthTransactions, AUTH_TRANSACTION_TTL_SECONDS, transactionCookie } from './auth-transactions';
 import { digest, matchesSecret, providerAssurance, providerAssuranceFailure, redactSecrets } from './auth-security';
+import { LogtoManagementClient } from './logto-management.client';
 import { LogtoClientFactory } from './logto-client.factory';
 import { webOrigin, type Portal } from './logto.config';
 import { ProvisioningService } from './provisioning.service';
@@ -40,6 +41,7 @@ export class AuthController {
     private readonly sessionStore: SessionStore,
     private readonly transactions: AuthTransactions,
     private readonly clients: LogtoClientFactory,
+    private readonly management: LogtoManagementClient,
   ) {}
 
   @Get('sign-in')
@@ -132,13 +134,29 @@ export class AuthController {
       if (!provisioned) return fail('not_invited');
       if (transaction.expectedUserId && provisioned.id !== transaction.expectedUserId) return fail('account_mismatch');
       if (provisioned.status !== 'active') return res.redirect(`${webOrigin(env)}/account-pending`);
-      const assurance = providerAssurance(claims, transaction.startedAt, transaction.portal === 'staff', env.LOGTO_MFA_POLICY_VERIFIED);
-      if (transaction.portal === 'staff' && !assurance.mfaVerified) {
+      // LOGTO_MFA_POLICY_VERIFIED alone is not proof: released Logto stamps no
+      // MFA claim and its prompt policy lets a user skip enrolment. Trust the
+      // policy only for a user who has a factor enrolled, which Logto always
+      // verifies at sign-in. A failed lookup throws and fails closed below.
+      const staffFlow = transaction.portal === 'staff';
+      const mfaEnrolled = staffFlow && env.LOGTO_MFA_POLICY_VERIFIED ? await this.management.hasMfaFactor(claims.sub) : false;
+      const mfaPolicyHolds = env.LOGTO_MFA_POLICY_VERIFIED && mfaEnrolled;
+      const assurance = providerAssurance(claims, transaction.startedAt, staffFlow, mfaPolicyHolds);
+      if (staffFlow && !assurance.mfaVerified) {
         this.logger.warn(JSON.stringify({
           event: 'auth.callback.mfa_denied',
           requestId,
-          reason: providerAssuranceFailure(claims, transaction.startedAt, true, env.LOGTO_MFA_POLICY_VERIFIED),
+          reason: providerAssuranceFailure(claims, transaction.startedAt, true, mfaPolicyHolds),
+          mfaEnrolled,
         }));
+        // Otherwise a staff member who once pressed "Skip" is never offered
+        // setup again and stays locked out. Best-effort: access is denied either way.
+        if (env.LOGTO_MFA_POLICY_VERIFIED && !mfaEnrolled) {
+          await this.management.resetMfaSkip(claims.sub).catch((error: unknown) => this.logger.warn(JSON.stringify({
+            event: 'auth.callback.mfa_skip_reset_failed', requestId,
+            error: redactSecrets(error instanceof Error ? error.message : String(error)),
+          })));
+        }
         return fail('mfa_required');
       }
       const { token } = await this.sessionStore.create(provisioned.id, req.ip, req.headers['user-agent'], assurance);

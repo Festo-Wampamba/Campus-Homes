@@ -2,6 +2,8 @@
 
 import { ActivityLogIcon, ArrowRightIcon, DashboardIcon } from "@radix-ui/react-icons";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Wordmark } from "@/components/shell/wordmark";
@@ -14,7 +16,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   auth_unavailable: "Authentication is temporarily unavailable. Please try again shortly.",
   account_mismatch: "Verification used a different account. Sign out, then continue with the same account.",
   identity_conflict: "Your verified contact matches conflicting CampusHomes records. Contact support and quote the request ID in the address bar.",
-  mfa_required: "Staff access requires a completed multi-factor verification.",
+  mfa_required: "Staff accounts need 2-step verification. Sign in again and set up an authenticator app when asked, instead of skipping.",
   sso_logout_failed: "Your CampusHomes session ended, but provider sign-out could not be confirmed.",
 };
 
@@ -70,7 +72,9 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
         </div>
 
         <p className="mt-4 text-center text-[10px] leading-relaxed text-muted-foreground">
-          By continuing you agree to our Terms & Data Handling under the Uganda Data Protection Act 2019
+          By continuing you agree to our{" "}
+          <Link href="/terms" className="font-semibold underline underline-offset-2">Terms</Link> and{" "}
+          <Link href="/privacy" className="font-semibold underline underline-offset-2">Privacy policy</Link>.
         </p>
       </CardContent>
     </Card>

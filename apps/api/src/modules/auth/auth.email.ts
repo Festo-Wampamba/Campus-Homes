@@ -69,7 +69,10 @@ type EmailMessage = { subject: string; html: string; text: string };
 async function deliver(env: Env, to: string, message: EmailMessage): Promise<void> {
   if (!env.RESEND_API_KEY) {
     if (env.NODE_ENV === 'production') throw new Error('Email delivery unavailable');
-    console.info('[email:dev] Delivery skipped: provider is not configured');
+    // Local development only (the Docker image pins NODE_ENV=production):
+    // print the message so sign-in codes and invite links work without Resend.
+    if (env.NODE_ENV === 'development') console.info(`[email:dev] To ${to}: ${message.text}`);
+    else console.info('[email:dev] Delivery skipped: provider is not configured');
     return;
   }
   const response = await fetch('https://api.resend.com/emails', {
