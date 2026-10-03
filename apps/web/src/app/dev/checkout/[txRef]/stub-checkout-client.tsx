@@ -32,7 +32,7 @@ export function StubCheckoutClient({ txRef }: { txRef: string }) {
       });
       window.location.href = redirect;
     } catch {
-      setError("Couldn't simulate that outcome — try again.");
+      setError("Couldn't simulate that outcome. Try again.");
       setPending(null);
     }
   }
@@ -43,7 +43,7 @@ export function StubCheckoutClient({ txRef }: { txRef: string }) {
         <CardContent className="p-6 sm:p-8">
           <div className="mb-5 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
             <ShieldAlert aria-hidden className="size-4 shrink-0" />
-            Stub checkout — dev only, no real payment gateway is configured yet.
+            Stub checkout. Dev only, no real payment gateway is configured yet.
           </div>
           <p className="text-sm text-muted-foreground">Amount due</p>
           <p className="tabular font-display text-3xl font-bold text-foreground">

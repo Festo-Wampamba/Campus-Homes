@@ -37,7 +37,7 @@ export function CreateListingToPublish({
   if (semesters.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No semester is configured for this property&apos;s catchment yet — add one in admin
+        No semester is configured for this property&apos;s catchment yet. Add one in admin
         settings before this property can be published.
       </p>
     );
@@ -54,7 +54,7 @@ export function CreateListingToPublish({
       });
       router.push(`/ops/publish/${listing.id}`);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't create the listing — try again."));
+      setError(errorMessage(err, "Couldn't create the listing. Try again."));
       setPending(false);
     }
   }

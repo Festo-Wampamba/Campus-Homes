@@ -60,7 +60,7 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
       ) : (
         <SectionCard
           title={`As of ${asOf}`}
-          description="Assets on the left invariant; liabilities plus equity on the right — they always match"
+          description="Assets on the left invariant; liabilities plus equity on the right. They always match"
           action={!sheet.meta.balanced && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
               <AlertTriangle aria-hidden className="size-3.5" />Out of balance

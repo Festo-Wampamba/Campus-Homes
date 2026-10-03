@@ -31,7 +31,7 @@ export function BookingsTrendChart({ data }: { data: BookingsTrendPoint[] }) {
   if (data.every((d) => d.bookings === 0)) {
     return (
       <p className="px-5 py-14 text-center text-sm text-muted-foreground">
-        No bookings on your units yet — this fills in as students reserve.
+        No bookings on your units yet. This fills in as students reserve.
       </p>
     );
   }

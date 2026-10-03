@@ -164,7 +164,7 @@ export function OnboardingWizard({
       });
       setStep("property");
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save your legal name — try again."));
+      setError(errorMessage(err, "Couldn't save your legal name. Try again."));
     } finally {
       setPending(false);
     }
@@ -227,7 +227,7 @@ export function OnboardingWizard({
       setSubmitted(true);
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't submit your property — try again."));
+      setError(errorMessage(err, "Couldn't submit your property. Try again."));
       setPending(false);
     }
   }
@@ -244,7 +244,7 @@ export function OnboardingWizard({
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Your property and profile are saved and now with our Ops team for a physical
               verification visit and review. You&apos;ll get full landlord dashboard access once your
-              account is approved — until then your listing isn&apos;t visible to students.
+              account is approved. Until then your listing isn&apos;t visible to students.
             </p>
           </div>
           <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -380,7 +380,7 @@ export function OnboardingWizard({
               <div className="space-y-1.5">
                 <Label>Room types & pricing (optional)</Label>
                 <p className="text-xs text-muted-foreground">
-                  Tell us what you have in mind — e.g. 30 singles at UGX
+                  Tell us what you have in mind, e.g. 30 singles at UGX
                   300,000, 40 doubles at UGX 700,000. Our team confirms exact
                   pricing and room counts during the verification visit.
                 </p>
@@ -395,7 +395,7 @@ export function OnboardingWizard({
               <div className="space-y-1.5">
                 <Label>Amenities (optional)</Label>
                 <p className="text-xs text-muted-foreground">
-                  What the property offers — Ops confirms these during verification.
+                  What the property offers. Ops confirms these during verification.
                 </p>
                 <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
                   {AMENITY_OPTIONS.map((option) => (

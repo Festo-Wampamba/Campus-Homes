@@ -10,7 +10,6 @@ import {
   HomeIcon,
   MixIcon,
   PersonIcon,
-  StarFilledIcon,
 } from "@radix-ui/react-icons";
 
 import { VerifiedBadge } from "@/components/verified-badge";
@@ -23,7 +22,7 @@ export const metadata: Metadata = { title: "List your property" };
 const VALUE_PROPS = [
   {
     icon: EyeOpenIcon,
-    title: "Improved visibility",
+    title: "Seen by students near campus",
     body: "Your rooms appear when students search near their campus. A verified badge helps them choose with confidence.",
   },
   {
@@ -37,9 +36,9 @@ const VALUE_PROPS = [
     body: "Respond to booking requests and message tenants directly in the platform. Every conversation stays in one place.",
   },
   {
-    icon: StarFilledIcon,
-    title: "Trusted, with support on hand",
-    body: "CampusHomes helps students find inspected housing, and our team is available when you need help.",
+    icon: PersonIcon,
+    title: "Support from our team",
+    body: "Our operations team is available by phone and email when you need help with a listing.",
   },
 ] as const;
 
@@ -113,12 +112,11 @@ export default async function LandlordsPage() {
               </span>
             </div>
             <h1 className="font-display text-4xl font-bold leading-[1.12] tracking-[-0.035em] text-white sm:text-5xl">
-              Fill rooms with students who know what to expect.
+              List your hostel on CampusHomes
             </h1>
             <p className="mt-6 text-base leading-7 text-white/78 sm:text-lg">
-              List your property with CampusHomes and let a verified badge do the
-              trust-building for you. Our team handles onboarding and verification
-              so you don&apos;t have to figure out a new platform alone.
+              Our team visits your property, verifies it, and helps you publish
+              rooms, photos and prices for students searching near campus.
             </p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <CreateAccountDialog />
@@ -146,7 +144,7 @@ export default async function LandlordsPage() {
           <div className="max-w-2xl">
             <p className="eyebrow">Why CampusHomes</p>
             <h2 id="why-heading" className="mt-3 text-3xl tracking-[-0.035em] sm:text-4xl">
-              Built to get your rooms filled, not just listed.
+              What you get as a landlord
             </h2>
           </div>
           <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -222,8 +220,7 @@ export default async function LandlordsPage() {
 
       <section id="request-onboarding" aria-labelledby="request-onboarding-heading" className="bg-background">
         <div className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-          <p className="eyebrow text-center">Ready when you are</p>
-          <h2 id="request-onboarding-heading" className="mt-3 text-center text-3xl tracking-[-0.035em] sm:text-4xl">
+          <h2 id="request-onboarding-heading" className="text-center text-3xl tracking-[-0.035em] sm:text-4xl">
             Request onboarding
           </h2>
           <p className="mt-3 text-center text-sm text-muted-foreground">

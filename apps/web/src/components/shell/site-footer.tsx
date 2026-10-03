@@ -28,12 +28,8 @@ async function SiteFooter() {
           <div className="max-w-sm">
             <Wordmark onDark className="text-2xl sm:text-3xl" />
             <p className="mt-5 text-sm leading-6 text-white/62">
-              Physically verified student housing near Uganda&apos;s universities.
-              Search clearly, reserve a room for free, and move in knowing what
-              is actually there.
-            </p>
-            <p className="mt-6 inline-flex rounded-full border border-white/12 bg-white/6 px-3 py-1.5 text-xs font-semibold text-white/70">
-              Built in Kampala for Ugandan students
+              Student hostels near Uganda&apos;s universities, each inspected in
+              person before it is listed. Reserving a room is free.
             </p>
           </div>
 

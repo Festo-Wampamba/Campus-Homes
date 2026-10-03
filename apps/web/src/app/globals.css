@@ -215,10 +215,6 @@
   .text-link {
     @apply inline-flex items-center gap-2 text-sm font-bold text-teal-700 transition-colors duration-300 hover:text-teal-900;
   }
-
-  .marketing-reveal {
-    animation: marketing-reveal 700ms var(--ease-out-quart) both;
-  }
 }
 
 @layer components {
@@ -243,17 +239,6 @@
     max-width: 100%;
     white-space: normal;
     font-size: 11px;
-  }
-}
-
-@keyframes marketing-reveal {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 14px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
   }
 }
 

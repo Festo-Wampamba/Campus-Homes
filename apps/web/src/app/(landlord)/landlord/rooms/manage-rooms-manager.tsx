@@ -343,11 +343,11 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {([
           { label: "Total Rooms", value: metrics.totalRooms, caption: "Physical units", Icon: DoorClosed, tone: "muted", title: "Every physical room on this property for the selected semester. Click to see the full list." },
-          { label: "Total Beds", value: metrics.totalBeds, caption: "Total capacity", Icon: Bed, tone: "muted", title: "Total bedspaces across all rooms — the maximum students you can house. Click to see the list." },
-          { label: "Available Beds", value: metrics.availableBeds, caption: "Ready to reserve", Icon: CheckCircle2, tone: "teal", title: "Bedspaces that are free and not blocked — students can reserve these now. Click to see the list." },
+          { label: "Total Beds", value: metrics.totalBeds, caption: "Total capacity", Icon: Bed, tone: "muted", title: "Total bedspaces across all rooms. The maximum students you can house. Click to see the list." },
+          { label: "Available Beds", value: metrics.availableBeds, caption: "Ready to reserve", Icon: CheckCircle2, tone: "teal", title: "Bedspaces that are free and not blocked. Students can reserve these now. Click to see the list." },
           { label: "Partially Full", value: metrics.partiallyOccupiedRooms, caption: "Has free beds", Icon: Clock, tone: "amber", title: "Rooms with some beds taken and some still free. Click to see the list." },
           { label: "Fully Booked", value: metrics.fullyOccupiedRooms, caption: "100% occupied", Icon: Layers, tone: "muted", title: "Rooms where every bed is occupied. Click to see the list." },
-          { label: "Maintenance", value: metrics.blockedRooms, caption: "Offline blocks", Icon: Wrench, tone: "destructive", title: "Rooms taken offline by a maintenance block — not reservable until cleared. Click to see the list." },
+          { label: "Maintenance", value: metrics.blockedRooms, caption: "Offline blocks", Icon: Wrench, tone: "destructive", title: "Rooms taken offline by a maintenance block. Not reservable until cleared. Click to see the list." },
         ] as const).map((card) => {
           const tone = {
             muted: { box: "border-border bg-card", head: "text-muted-foreground", value: "text-foreground", caption: "text-muted-foreground" },

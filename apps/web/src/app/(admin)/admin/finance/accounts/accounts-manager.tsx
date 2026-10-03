@@ -132,7 +132,7 @@ export function AccountsManager({ accounts, canManage }: { accounts: LedgerAccou
                 <td className="px-4 py-3.5 font-bold dark:text-foreground">{account.code}</td>
                 <td className="px-4 py-3.5 dark:text-foreground">{account.name}{account.isSystem && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500 dark:bg-muted dark:text-muted-foreground">system</span>}</td>
                 <td className="px-4 py-3.5 capitalize text-slate-500 dark:text-muted-foreground">{account.accountType}</td>
-                <td className="px-4 py-3.5 text-slate-500 dark:text-muted-foreground">{account.parentId ? (byId.get(account.parentId)?.name ?? "—") : "—"}</td>
+                <td className="px-4 py-3.5 text-slate-500 dark:text-muted-foreground">{account.parentId ? (byId.get(account.parentId)?.name ?? "N/A") : "N/A"}</td>
                 <td className="px-4 py-3.5"><StatusBadge value={account.isActive ? "active" : "suspended"} /></td>
                 <td className="px-4 py-3.5">
                   {canManage && !account.isSystem && (
@@ -154,7 +154,7 @@ export function AccountsManager({ accounts, canManage }: { accounts: LedgerAccou
             <AdminField label="Code" required><input required className={adminFieldClass} placeholder="5010" value={accountForm.code} onChange={(e) => setAccountForm((f) => ({ ...f, code: e.target.value }))} /></AdminField>
             <AdminField label="Name" required><input required className={adminFieldClass} placeholder="Cloud hosting" value={accountForm.name} onChange={(e) => setAccountForm((f) => ({ ...f, name: e.target.value }))} /></AdminField>
             <AdminField label="Type"><select className={adminFieldClass} value={accountForm.accountType} onChange={(e) => setAccountForm((f) => ({ ...f, accountType: e.target.value as LedgerAccountType }))}>{ACCOUNT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></AdminField>
-            <AdminField label="Parent account" hint="Optional — must match the type above">
+            <AdminField label="Parent account" hint="Optional. Must match the type above">
               <select className={adminFieldClass} value={accountForm.parentId} onChange={(e) => setAccountForm((f) => ({ ...f, parentId: e.target.value }))}>
                 <option value="">No parent</option>
                 {accounts.filter((a) => a.accountType === accountForm.accountType).map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
@@ -186,7 +186,7 @@ export function AccountsManager({ accounts, canManage }: { accounts: LedgerAccou
               </select>
             </AdminField>
           </div>
-          <AdminField label="Memo" required><input required className={adminFieldClass} placeholder="Office rent — August" value={entryForm.memo} onChange={(e) => setEntryForm((f) => ({ ...f, memo: e.target.value }))} /></AdminField>
+          <AdminField label="Memo" required><input required className={adminFieldClass} placeholder="Office rent, August" value={entryForm.memo} onChange={(e) => setEntryForm((f) => ({ ...f, memo: e.target.value }))} /></AdminField>
           {error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">{notice}</p>}
           <div className="flex justify-end gap-2"><button type="button" className={buttonClass()} onClick={close}>Cancel</button><button disabled={pending} className={buttonClass("primary")}>{pending ? "Recording…" : "Record entry"}</button></div>

@@ -27,7 +27,7 @@ export function RecentlyViewedClient() {
         <EmptyState
           icon={Clock}
           title="Nothing viewed yet"
-          body="Listings you open show up here — this list lives in your browser, not your account."
+          body="Listings you open show up here. This list lives in your browser, not your account."
         />
       </div>
     );

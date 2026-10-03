@@ -21,7 +21,7 @@ export default async function FinanceAccountsPage() {
       <FinanceTabs />
       <SectionCard
         title="Accounts"
-        description={canManage ? "Add sub-accounts and record manual journal entries." : "Read-only — you don't hold finance.manage."}
+        description={canManage ? "Add sub-accounts and record manual journal entries." : "Read-only. You don't hold finance.manage."}
       >
         <AccountsManager accounts={accounts ?? []} canManage={canManage} />
       </SectionCard>

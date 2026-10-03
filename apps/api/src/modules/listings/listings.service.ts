@@ -83,7 +83,7 @@ export class ListingsService {
       }
       if (landlord.kycStatus === 'rejected') {
         throw new ForbiddenException(
-          'Your identity verification was not approved — contact support before listing a property',
+          'Your identity verification was not approved. Contact support before listing a property',
         );
       }
       const [property] = await db

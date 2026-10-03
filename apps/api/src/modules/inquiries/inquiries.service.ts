@@ -120,7 +120,7 @@ export class InquiriesService {
       this.notifications
         .notify(landlordId, 'inquiry.received', 'sms', {
           inquiryId: created.id,
-          message: `New enquiry about your listing: "${created.subject}" — ${created.message}`,
+          message: `New enquiry about your listing: "${created.subject}": ${created.message}`,
         })
         .catch((err: unknown) => {
           console.error('[inquiries] landlord notify failed:', err);
@@ -258,13 +258,13 @@ export class InquiriesService {
         id: s.id,
         name: s.name,
         role: s.role,
-        label: `${s.name ?? 'Unnamed'} — ${s.role}`,
+        label: `${s.name ?? 'Unnamed'}: ${s.role}`,
       })),
       ...landlordRows.map((l) => ({
         id: l.user_id,
         name: l.legal_name,
         role: 'landlord',
-        label: `${l.legal_name} — Landlord`,
+        label: `${l.legal_name}: Landlord`,
       })),
     ];
   }
@@ -288,7 +288,7 @@ export class InquiriesService {
     const payload = {
       inquiryId: id,
       subject: inquiry.subject,
-      message: `Inquiry forwarded: "${inquiry.subject}" — ${inquiry.message}${
+      message: `Inquiry forwarded: "${inquiry.subject}": ${inquiry.message}${
         input.note ? ` (Note: ${input.note})` : ''
       }`,
       note: input.note ?? null,

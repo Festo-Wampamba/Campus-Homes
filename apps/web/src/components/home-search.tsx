@@ -81,7 +81,7 @@ export function HomeSearch() {
             type="button"
             onClick={() => router.push(`/search?campus=${campus.code}`)}
             className={cn(
-              "rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm",
+              "rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm",
               "transition-colors hover:border-white/60 hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]",
             )}
           >

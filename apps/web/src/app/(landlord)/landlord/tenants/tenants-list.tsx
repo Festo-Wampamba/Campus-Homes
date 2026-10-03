@@ -33,7 +33,7 @@ export function TenantsList({ occupants, roomsByBedId }: { occupants: Occupant[]
                 const room = roomsByBedId.get(occupant.bedId);
                 return (
                   <tr key={occupant.id}>
-                    <td className="px-3 py-2 text-muted-foreground">{room?.propertyName ?? "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{room?.propertyName ?? "N/A"}</td>
                     <td className="px-3 py-2 font-semibold text-foreground">{room?.label ?? occupant.bedId.slice(0, 8)}</td>
                   </tr>
                 );
@@ -50,7 +50,7 @@ export function TenantsList({ occupants, roomsByBedId }: { occupants: Occupant[]
             return (
               <div key={occupant.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
                 <span className="font-semibold text-foreground">{room?.label ?? occupant.bedId.slice(0, 8)}</span>
-                <span className="text-xs text-muted-foreground">{room?.propertyName ?? "—"}</span>
+                <span className="text-xs text-muted-foreground">{room?.propertyName ?? "N/A"}</span>
               </div>
             );
           })}
@@ -64,7 +64,7 @@ export function TenantsList({ occupants, roomsByBedId }: { occupants: Occupant[]
             return (
               <div key={occupant.id} className="rounded-md border border-border p-3.5">
                 <p className="font-semibold text-foreground">{room?.label ?? occupant.bedId.slice(0, 8)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{room?.propertyName ?? "—"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{room?.propertyName ?? "N/A"}</p>
               </div>
             );
           })}

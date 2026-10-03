@@ -24,7 +24,7 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string | null 
       await api("/me/email/code", { method: "POST", body: JSON.stringify({ email: email.trim() }) });
       setStep("confirm");
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't send a code to that address — try again."));
+      setError(apiErrorMessage(err, "Couldn't send a code to that address. Try again."));
     } finally {
       setPending(false);
     }
@@ -42,7 +42,7 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string | null 
       setCode("");
       router.refresh();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't verify that code — check it and try again."));
+      setError(apiErrorMessage(err, "Couldn't verify that code. Check it and try again."));
     } finally {
       setPending(false);
     }
@@ -75,7 +75,7 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string | null 
   return (
     <form onSubmit={requestCode} className="space-y-4">
       <p className="text-xs text-slate-500 dark:text-muted-foreground">
-        Signed in as <span className="font-bold text-slate-700 dark:text-foreground">{currentEmail ?? "—"}</span>. This changes the email you sign in with — we&apos;ll send a code to the new address to confirm you own it. Requires a recent sign-in.
+        Signed in as <span className="font-bold text-slate-700 dark:text-foreground">{currentEmail ?? "N/A"}</span>. This changes the email you sign in with. We&apos;ll send a code to the new address to confirm you own it. Requires a recent sign-in.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <AdminField label="New email" required>
@@ -87,7 +87,7 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string | null 
         <button type="submit" disabled={pending || !email.trim()} className="inline-flex h-10 items-center rounded-lg bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-50">
           {pending ? "Sending…" : "Send verification code"}
         </button>
-        {saved && <p className="text-sm font-semibold text-emerald-700">Email updated — use it next sign-in.</p>}
+        {saved && <p className="text-sm font-semibold text-emerald-700">Email updated. Use it next sign-in.</p>}
       </div>
     </form>
   );
@@ -119,7 +119,7 @@ export function ChangePasswordForm() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't change your password — try signing in again first."));
+      setError(apiErrorMessage(err, "Couldn't change your password. Try signing in again first."));
     } finally {
       setPending(false);
     }

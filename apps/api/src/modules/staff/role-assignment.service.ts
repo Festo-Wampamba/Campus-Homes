@@ -104,7 +104,7 @@ export async function assignRoleInTransaction(
         AND r.key = ANY($2::text[]) LIMIT 1`, [userId, conflictingKeys])).rows[0];
     if (held) {
       throw new BadRequestException(
-        `This account already holds the "${held.key}" role. Revoke it before assigning "${input.roleKey}" — an account holds one staff role, and is never both staff and a student/landlord.`,
+        `This account already holds the "${held.key}" role. Revoke it before assigning "${input.roleKey}". An account holds one staff role, and is never both staff and a student/landlord.`,
       );
     }
   }

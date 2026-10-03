@@ -608,7 +608,7 @@ export class OpsService {
           lon > UGANDA_GPS_BOUNDS.maxLon
         ) {
           throw new BadRequestException(
-            'This visit\'s captured GPS falls outside Uganda — it cannot be approved until the inspector recaptures location on-site (not from a desktop browser or VPN).',
+            'This visit\'s captured GPS falls outside Uganda. It cannot be approved until the inspector recaptures location on-site (not from a desktop browser or VPN).',
           );
         }
         await db
@@ -671,12 +671,12 @@ export class OpsService {
         ).rows as [{ hasRes: boolean; otherSem: boolean }];
         if (hasRes) {
           throw new ConflictException(
-            `Room "${room.label}" has reservations and can't be deleted — cancel or relocate them first.`,
+            `Room "${room.label}" has reservations and can't be deleted. Cancel or relocate them first.`,
           );
         }
         if (otherSem) {
           throw new ConflictException(
-            `Room "${room.label}" is part of another semester's listing — remove it there first.`,
+            `Room "${room.label}" is part of another semester's listing. Remove it there first.`,
           );
         }
       }
@@ -728,12 +728,12 @@ export class OpsService {
         .where(eq(landlords.userId, property.landlordId));
       if (!landlordAccount || landlordAccount.kycStatus !== 'verified') {
         throw new ConflictException(
-          "This property's landlord is not KYC-verified — publishing is blocked until ops approves their identity",
+          "This property's landlord is not KYC-verified. Publishing is blocked until ops approves their identity",
         );
       }
       if (landlordAccount.userStatus !== 'active') {
         throw new ConflictException(
-          "This property's landlord account is not active — publishing is blocked",
+          "This property's landlord account is not active. Publishing is blocked",
         );
       }
       // Publish gate: a listing only goes public behind an ops-lead-approved
@@ -751,7 +751,7 @@ export class OpsService {
       });
       if (!approvedVisit) {
         throw new ConflictException(
-          'This property has no ops-lead-approved inspection — approve the passed visit before publishing',
+          'This property has no ops-lead-approved inspection. Approve the passed visit before publishing',
         );
       }
 
@@ -769,7 +769,7 @@ export class OpsService {
       ).rows as [{ pending: number }];
       if (pending > 0) {
         throw new ConflictException(
-          'A room inventory change for this semester is still under review — resolve it before publishing',
+          'A room inventory change for this semester is still under review. Resolve it before publishing',
         );
       }
       const [{ next }] = (
@@ -1064,7 +1064,7 @@ export class OpsService {
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
       if (!property?.gpsLat || !property.gpsLon) {
-        throw new BadRequestException('This property has no verified GPS yet — approve a visit first');
+        throw new BadRequestException('This property has no verified GPS yet. Approve a visit first');
       }
       const { gpsLat, gpsLon } = property;
       const existing = await db

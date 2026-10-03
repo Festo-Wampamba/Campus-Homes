@@ -38,7 +38,7 @@ const montez = Montez({
 
 export const metadata: Metadata = {
   title: {
-    default: "CampusHomes — Verified student housing in Uganda",
+    default: "CampusHomes | Inspected student hostels in Uganda",
     template: "%s · CampusHomes",
   },
   description:

@@ -95,7 +95,7 @@ function ReleaseButton({
       setOpen(false);
       onReleased();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't release this bed — try again."));
+      setError(errorMessage(err, "Couldn't release this bed. Try again."));
     } finally {
       setPending(false);
     }
@@ -205,7 +205,7 @@ export function LandlordReservationsList({
             type="button"
             onClick={() => setFilter(key)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+              "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
               filter === key
                 ? "border-teal-600 bg-teal-50 text-teal-700 dark:bg-teal-100"
                 : "border-border text-muted-foreground hover:bg-muted",
@@ -252,7 +252,7 @@ export function LandlordReservationsList({
                     <td className="px-3 py-2.5">
                       <p className="font-semibold text-foreground">{room?.label ?? reservation.bedId.slice(0, 8)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {room?.propertyName ?? "—"}
+                        {room?.propertyName ?? "N/A"}
                         {room && ` · ${roomCategoryLabel(room.roomCategory)}`}
                       </p>
                     </td>
@@ -268,7 +268,7 @@ export function LandlordReservationsList({
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">{formatDate(reservation.createdAt)}</td>
                     <td className="tabular px-3 py-2.5 text-muted-foreground">
-                      {room ? formatUgx(room.pricePerTermUgx) : "—"}
+                      {room ? formatUgx(room.pricePerTermUgx) : "N/A"}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-2">

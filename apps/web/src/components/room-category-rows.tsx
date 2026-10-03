@@ -93,7 +93,7 @@ export function RoomCategoryRows({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Price is per bed, not per room — for a Double or Triple, enter what one bed costs, the same
+        Price is per bed, not per room. For a Double or Triple, enter what one bed costs, the same
         number you&apos;d quote a student moving into just one space in that room.
       </p>
       {rows.map((row, i) => (

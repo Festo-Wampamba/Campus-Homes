@@ -71,7 +71,7 @@ function CorrectionItem({
       });
       onResolved();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't resubmit — try again."));
+      setError(errorMessage(err, "Couldn't resubmit. Try again."));
     } finally {
       setPending(false);
     }

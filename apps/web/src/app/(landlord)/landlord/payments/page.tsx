@@ -15,19 +15,19 @@ export default function LandlordPaymentsPage() {
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="p-4">
-            <p className="text-2xl font-bold text-muted-foreground">—</p>
+            <p className="text-2xl font-bold text-muted-foreground">N/A</p>
             <p className="text-xs text-muted-foreground">Total earnings</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-2xl font-bold text-muted-foreground">—</p>
+            <p className="text-2xl font-bold text-muted-foreground">N/A</p>
             <p className="text-xs text-muted-foreground">Pending payouts</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-2xl font-bold text-muted-foreground">—</p>
+            <p className="text-2xl font-bold text-muted-foreground">N/A</p>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
         </Card>
@@ -37,7 +37,7 @@ export default function LandlordPaymentsPage() {
         <EmptyState
           icon={Wallet}
           title="Payments launch in a later phase"
-          body="CampusHomes verifies listings, bookings, and messaging first. Real-money payouts to landlords go live in Phase 2 — this page will fill in once that's active."
+          body="CampusHomes verifies listings, bookings, and messaging first. Real-money payouts to landlords go live in Phase 2. This page will fill in once that's active."
         />
       </div>
     </>

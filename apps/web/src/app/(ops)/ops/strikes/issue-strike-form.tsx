@@ -47,7 +47,7 @@ export function IssueStrikeForm() {
       });
       setDone(true);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't issue the strike — try again."));
+      setError(errorMessage(err, "Couldn't issue the strike. Try again."));
       setPending(false);
     }
   }

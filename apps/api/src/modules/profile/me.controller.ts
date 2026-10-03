@@ -188,9 +188,9 @@ export class MeController {
          ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
         [ctx.userId, email])).rows;
       if (!row) throw new BadRequestException('Request a verification code first');
-      if (row.expired) throw new BadRequestException('That code has expired — request a new one');
+      if (row.expired) throw new BadRequestException('That code has expired. Request a new one');
       if (row.attempts >= EMAIL_CODE_MAX_ATTEMPTS) {
-        throw new BadRequestException('Too many attempts — request a new code');
+        throw new BadRequestException('Too many attempts. Request a new code');
       }
       if (row.codeHash !== hashCode(body.code)) {
         await client.query('UPDATE email_change_requests SET attempts = attempts + 1 WHERE id = $1', [row.id]);

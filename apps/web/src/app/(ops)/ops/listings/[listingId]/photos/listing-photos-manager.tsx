@@ -71,7 +71,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
       setNotice(`Added ${storageKeys.length} photo${storageKeys.length === 1 ? "" : "s"}.`);
       await load();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't add photos — try again."));
+      setError(errorMessage(err, "Couldn't add photos. Try again."));
     } finally {
       setPending(false);
     }
@@ -93,7 +93,7 @@ export function ListingPhotosManager({ listingId }: { listingId: string }) {
 
       {data.listingStatus !== "verified" && data.photos.length === 0 && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          This listing hasn&apos;t been published yet — publish it first, then come back here to add photos.
+          This listing hasn&apos;t been published yet. Publish it first, then come back here to add photos.
         </p>
       )}
 

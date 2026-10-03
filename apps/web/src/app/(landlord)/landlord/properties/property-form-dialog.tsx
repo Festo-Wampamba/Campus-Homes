@@ -201,7 +201,7 @@ function PropertyForm({
       setTimeout(() => onOpenChange(false), 800);
       return;
     } catch (err) {
-      setError(errorMessage(err, `Couldn't save this property — try again.`));
+      setError(errorMessage(err, `Couldn't save this property. Try again.`));
     } finally {
       setPending(false);
     }
@@ -213,7 +213,7 @@ function PropertyForm({
         title={isEdit ? "Edit property" : "Add a property"}
         description={
           isEdit
-            ? "Changes apply immediately — Ops sees the latest details at your next visit."
+            ? "Changes apply immediately. Ops sees the latest details at your next visit."
             : "Our Ops team schedules a physical verification visit once this is submitted."
         }
         onClose={() => onOpenChange(false)}
@@ -318,7 +318,7 @@ function PropertyForm({
           <div className="space-y-1.5">
             <Label>Amenities (optional)</Label>
             <p className="text-xs text-muted-foreground">
-              What the property offers — Ops confirms these during
+              What the property offers. Ops confirms these during
               verification.
             </p>
             <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3">

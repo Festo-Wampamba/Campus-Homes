@@ -87,10 +87,10 @@ export const syncVisitSchema = z.object({
   visitId: uuid,
   checklist: verificationChecklistSchema,
   visitGpsLat: z.number().min(UGANDA_GPS_BOUNDS.minLat).max(UGANDA_GPS_BOUNDS.maxLat, {
-    message: 'GPS latitude is outside Uganda — retry on-site with location services enabled (not a desktop browser or VPN).',
+    message: 'GPS latitude is outside Uganda. Retry on-site with location services enabled (not a desktop browser or VPN).',
   }),
   visitGpsLon: z.number().min(UGANDA_GPS_BOUNDS.minLon).max(UGANDA_GPS_BOUNDS.maxLon, {
-    message: 'GPS longitude is outside Uganda — retry on-site with location services enabled (not a desktop browser or VPN).',
+    message: 'GPS longitude is outside Uganda. Retry on-site with location services enabled (not a desktop browser or VPN).',
   }),
   startedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),

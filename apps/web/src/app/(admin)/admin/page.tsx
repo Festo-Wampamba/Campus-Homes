@@ -43,7 +43,7 @@ export default async function AdminOverviewPage() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label="Total users" value={s.totalUsers.toLocaleString()} detail={`${s.activeUsers.toLocaleString()} active accounts`} trend={change(s.newUsers30d, s.priorUsers30d)} icon={Users} tone="teal" />
       <StatCard label="Properties" value={s.properties.toLocaleString()} detail={`${s.verifiedListings.toLocaleString()} verified listings`} icon={Building2} tone="blue" />
-      <StatCard label="Reservations" value={s.reservations.toLocaleString()} detail={`${s.reservations30d.toLocaleString()} in the last 30 days`} trend={change(s.reservations30d, s.priorReservations30d)} icon={CalendarCheck2} tone="violet" />
+      <StatCard label="Reservations" value={s.reservations.toLocaleString()} detail={`${s.reservations30d.toLocaleString()} in the last 30 days`} trend={change(s.reservations30d, s.priorReservations30d)} icon={CalendarCheck2} tone="slate" />
       <StatCard label="Verified revenue" value={ugx(s.revenueUgx)} detail={`${ugx(s.revenue30dUgx)} in the last 30 days`} trend={change(s.revenue30dUgx, s.priorRevenue30dUgx)} icon={CircleDollarSign} tone="amber" />
     </div>
 

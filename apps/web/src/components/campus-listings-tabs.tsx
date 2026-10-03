@@ -118,7 +118,7 @@ function FilterButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-sm font-bold transition duration-300 active:scale-[0.98]",
+        "inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md border px-4 text-sm font-bold transition duration-300 active:scale-[0.98]",
         active
           ? "border-teal-900 bg-teal-900 text-white"
           : "border-border bg-background text-muted-foreground hover:border-teal-700 hover:text-teal-700",

@@ -111,7 +111,7 @@ function ReservationCard({ reservation }: { reservation: StudentReservationView 
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {reservation.status === "reserved" && countdown
-              ? `Reserved for you — ${countdown}`
+              ? `Reserved for you: ${countdown}`
               : null}
             {(reservation.bookingFeeCollectedUgx || reservation.depositCollectedUgx) &&
               [

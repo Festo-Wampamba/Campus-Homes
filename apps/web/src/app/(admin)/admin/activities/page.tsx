@@ -38,7 +38,7 @@ export default async function ActivitiesPage() {
       />
       <SectionCard
         title="Activity calendar"
-        description={canManage ? "Create activities and assign them to any staff member." : "Read-only — you don't hold activities.manage."}
+        description={canManage ? "Create activities and assign them to any staff member." : "Read-only. You don't hold activities.manage."}
       >
         <div className="p-4 sm:p-5">
           <ActivitiesManager initialActivities={rows ?? []} assignees={assignees ?? []} canManage={canManage} />

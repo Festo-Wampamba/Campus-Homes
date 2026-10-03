@@ -69,7 +69,7 @@ export function InquiriesManager({
       setForwardTo("");
       setForwardNote("");
     } catch (err) {
-      setForwardError(apiErrorMessage(err, "Couldn't forward this inquiry — try again."));
+      setForwardError(apiErrorMessage(err, "Couldn't forward this inquiry. Try again."));
     } finally {
       setForwarding(false);
     }
@@ -99,7 +99,7 @@ export function InquiriesManager({
       });
       if (updated) setRows((current) => current.map((r) => (r.id === updated.id ? updated : r)));
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update this inquiry — try again."));
+      setError(apiErrorMessage(err, "Couldn't update this inquiry. Try again."));
     } finally {
       setPending(false);
     }

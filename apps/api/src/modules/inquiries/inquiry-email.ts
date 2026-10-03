@@ -34,8 +34,8 @@ export async function sendInquiryEmail(env: Env, inquiry: InquiryEmailPayload): 
     <hr/>
     <p>
       From: ${escapeHtml(inquiry.studentName ?? 'Unknown student')}<br/>
-      Email: ${inquiry.studentEmail ?? '—'}<br/>
-      Phone: ${inquiry.studentPhone ?? '—'}<br/>
+      Email: ${inquiry.studentEmail ?? 'N/A'}<br/>
+      Phone: ${inquiry.studentPhone ?? 'N/A'}<br/>
       Submitted: ${inquiry.createdAt}
     </p>
     <p><a href="${env.AUTH_APP_URL}/admin/inquiries">Open the inquiries desk</a></p>

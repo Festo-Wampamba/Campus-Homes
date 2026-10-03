@@ -25,7 +25,7 @@ type Invitation = {
 type Action = "retry" | "cancel" | "delete";
 
 const REQUESTS: Record<Action, { path: string; method: string; done: string }> = {
-  retry: { path: "/retry", method: "POST", done: "Invitation sent again — the link is valid for 24 hours." },
+  retry: { path: "/retry", method: "POST", done: "Invitation sent again. The link is valid for 24 hours." },
   cancel: { path: "", method: "DELETE", done: "Invitation cancelled." },
   delete: { path: "/permanent", method: "DELETE", done: "Invitation deleted." },
 };

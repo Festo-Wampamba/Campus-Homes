@@ -75,7 +75,7 @@ export default async function LandlordDashboardPage({
         <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" />
         <StatCard label="Active bookings" value={String(activeBookings.length)} icon={CalendarCheck} tone="teal" />
         <StatCard label="Occupied rooms" value={String(occupied.length)} icon={Clock} tone="coral" />
-        <StatCard label="Earnings" value="—" detail="Arrives with Phase 2" icon={Wallet} tone="neutral" />
+        <StatCard label="Earnings" value="N/A" detail="Arrives with Phase 2" icon={Wallet} tone="neutral" />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
