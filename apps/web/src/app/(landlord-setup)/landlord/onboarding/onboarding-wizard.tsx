@@ -230,8 +230,15 @@ export function OnboardingWizard({
   }
 
   return (
-    <Card className={cn("w-full shadow-md", step === "property" ? "max-w-3xl" : "max-w-md")}>
-      <CardContent className="p-6 sm:p-8">
+    <Card
+      className={cn(
+        "w-full shadow-md",
+        step === "property"
+          ? "max-w-5xl sm:min-w-[36rem] sm:min-h-[32rem] sm:resize sm:overflow-auto sm:max-w-[min(100%,72rem)]"
+          : "max-w-md",
+      )}
+    >
+      <CardContent className="p-6 sm:p-10">
         {step === "legal" && (
           <>
             <StepHeader
@@ -270,8 +277,8 @@ export function OnboardingWizard({
               title="Submit your property"
               description="Our Ops team schedules a physical verification visit once this is submitted."
             />
-            <form onSubmit={submitProperty} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+            <form onSubmit={submitProperty} className="space-y-7">
+              <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="propertyName" required>Property name</Label>
                   <Input
@@ -295,7 +302,7 @@ export function OnboardingWizard({
                   />
                 </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="propertyType">Property type</Label>
                   <select
