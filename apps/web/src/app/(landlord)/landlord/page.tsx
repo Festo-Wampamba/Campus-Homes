@@ -51,7 +51,7 @@ export default async function LandlordDashboardPage() {
       <p className="mt-1 text-sm text-muted-foreground">Here&apos;s what&apos;s happening across your properties.</p>
 
       <div className="mt-6">
-        <KycBanner status={profile.kycStatus} />
+        <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
