@@ -1,10 +1,52 @@
+import { BlockList, isIP } from 'node:net';
+
 import { z } from 'zod';
+
+const PROXY_PRESETS = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+// Wide prefixes and the bare wildcard tokens would trust visitor-supplied
+// X-Forwarded-For, so they are config errors rather than "convenient" values.
+// `::ffff:` CIDRs are applied by Express to every IPv4 peer, so /96 there would
+// trust the whole IPv4 internet.
+
+function isTrustedProxyEntry(entry: string): boolean {
+  if (PROXY_PRESETS.has(entry)) return true;
+  const [address = '', prefix, ...rest] = entry.split('/');
+  const version = isIP(address);
+  if (!version || rest.length || address.toLowerCase().includes('::ffff:')) return false;
+  if (prefix === undefined) return version === 4 || !matchesMappedPeer(address);
+  const [min, max] = version === 4 ? [8, 32] : [7, 128];
+  if (!/^[1-9]\d*$/.test(prefix) || Number(prefix) < min || Number(prefix) > max) return false;
+  return version === 4 || !matchesMappedPeer(address, Number(prefix));
+}
+
+// Textual `::ffff:` checks miss equivalent spellings (`0:0:0:0:0:ffff:0:0/96`)
+// and short prefixes (`::/8`, `::1/80`), and proxy-addr applies any entry that
+// overlaps the IPv4-mapped block ::ffff:0:0/96 to IPv4 peers. The block is
+// /96-aligned, so an entry overlaps it iff it contains the block (prefix <= 96)
+// or its address lies inside it (prefix >= 96) - an exact test, not a probe.
+const MAPPED_BLOCK = new BlockList();
+MAPPED_BLOCK.addSubnet('::ffff:0:0', 96, 'ipv6');
+
+function matchesMappedPeer(address: string, prefix?: number): boolean {
+  const entry = new BlockList();
+  if (prefix === undefined) entry.addAddress(address, 'ipv6');
+  else entry.addSubnet(address, prefix, 'ipv6');
+  return entry.check('::ffff:0:0', 'ipv6') || MAPPED_BLOCK.check(address, 'ipv6');
+}
+
+const trustedProxyList = z.string().optional().transform((value) => (value ?? '').split(',').map((entry) => entry.trim()).filter(Boolean))
+  .refine((entries) => entries.every(isTrustedProxyEntry));
 
 // Every secret comes from the environment. Fail fast at boot if anything
 // required is missing — never limp along with a partial config.
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
+  // Comma-separated trusted proxy IPs, CIDRs (prefix >= /8 IPv4, /7 IPv6) or Express presets
+  // (loopback, linklocal, uniquelocal). Required in production: without it
+  // every visitor shares the proxy's req.ip and one rate-limit bucket.
+  TRUSTED_PROXY_CIDRS: trustedProxyList,
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).optional(),
   // Local development uses an isolated Redis with BullMQ's required
@@ -88,6 +130,10 @@ const envSchema = z.object({
   B2_BUCKET: z.string().min(1).optional(),
   B2_ACCESS_KEY_ID: z.string().min(1).optional(),
   B2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  // PRIVATE bucket (same endpoint/credentials) for identity and ownership
+  // documents; reads go through presigned GETs from /uploads/document-url.
+  // Production refuses document uploads while it is unset.
+  B2_PRIVATE_BUCKET: z.string().min(1).optional(),
   SENTRY_DSN: z.string().optional(),
   POWER_BI_PUSH_URL: z.string().url().optional(),
   POWER_BI_API_TOKEN: z.string().min(1).optional(),
@@ -95,7 +141,15 @@ const envSchema = z.object({
   PAYMENT_REDIRECT_URL: z.string().min(1).default('http://localhost:3000/reservations'),
   // The web app's origin — CORS allowlist. Set to the public frontend URL
   // for the current deployment environment.
-  WEB_ORIGIN: z.string().min(1).default('http://localhost:3000'),
+  WEB_ORIGIN: z.string().url().refine((value) => {
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+        && url.pathname === '/' && !url.search && !url.hash;
+    } catch {
+      return false;
+    }
+  }, 'Expected a single HTTP(S) origin').transform((value) => new URL(value).origin).default('http://localhost:3000'),
   SOKETI_HOST: z.string().min(1).optional(),
   SOKETI_PORT: z.coerce.number().int().default(443),
   SOKETI_APP_ID: z.string().min(1).optional(),
@@ -115,8 +169,15 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = envSchema.safeParse(withoutBlanks);
   if (!parsed.success) {
     // List missing keys only — never echo values, they may be secrets.
-    const issues = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
+    const issues = [...new Set(parsed.error.issues.map((i) => i.path.join('.')))].join(', ');
     throw new Error(`Invalid environment configuration: ${issues}`);
+  }
+  if (parsed.data.NODE_ENV === 'production') {
+    const insecure: string[] = (['WEB_ORIGIN', 'AUTH_APP_URL'] as const)
+      .filter((key) => new URL(parsed.data[key]).protocol !== 'https:');
+    if (parsed.data.LOGTO_ENDPOINT && new URL(parsed.data.LOGTO_ENDPOINT).protocol !== 'https:') insecure.push('LOGTO_ENDPOINT');
+    if (insecure.length) throw new Error(`Production requires HTTPS: ${insecure.join(', ')}`);
+    if (!parsed.data.TRUSTED_PROXY_CIDRS.length) throw new Error('Production requires TRUSTED_PROXY_CIDRS');
   }
   if (parsed.data.PHONE_OTP_CHANNEL === 'whatsapp') {
     const required = ['WHATSAPP_GRAPH_API_VERSION', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_AUTH_TEMPLATE_NAME', 'LOGTO_SMS_WEBHOOK_SECRET'] as const;

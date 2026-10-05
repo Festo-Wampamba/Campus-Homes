@@ -12,6 +12,12 @@ describe('authentication security boundaries', () => {
   it.each(['https://evil.invalid', '//evil.invalid', '/\\evil.invalid', '/%5cevil.invalid', '/%2fevil.invalid', '/\n/evil.invalid', '/%00', '/%zz'])('rejects ambiguous destination %s', (value) => {
     expect(safeAuthDestination(value)).toBeNull();
   });
+  it.each(['/\\evil.com', '/%5Cevil.com', '/%09/evil.com', '/..//evil.com', '/.//evil.com', '/a/..//evil.com', '/%2e%2e//evil.com', '//evil.com', 'https://evil.com', 'javascript:alert(1)'])('rejects off-site or protocol-relative destination %s', (value) => {
+    expect(safeAuthDestination(value)).toBeNull();
+  });
+  it.each(['/reservations', '/reservations?x=1', '/landlord/properties/123'])('keeps in-app destination %s', (value) => {
+    expect(safeAuthDestination(value)).toBe(value);
+  });
   it('normalizes a same-origin destination', () => {
     expect(safeAuthDestination('/landlord/../ops?view=mine')).toBe('/ops?view=mine');
   });

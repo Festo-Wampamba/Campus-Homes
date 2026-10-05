@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Serif_Display, Montez, Open_Sans, Poppins } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
+import { headers } from "next/headers";
 
 import { Analytics } from "@/components/analytics";
 import { CookieNotice } from "@/components/cookie-notice";
@@ -65,11 +66,14 @@ export const viewport: Viewport = {
   themeColor: "#008080",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Request-time rendering is required: a cached HTML nonce would not match
+  // the fresh response CSP. Reading headers opts this layout into that mode.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -85,6 +89,7 @@ export default function RootLayout({
             choice is applied before first paint, avoiding a light-then-dark
             flash without letting OS preference override the product default. */}
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html:
               "(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark')}}catch(e){}})()",

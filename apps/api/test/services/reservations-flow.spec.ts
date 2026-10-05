@@ -4,9 +4,11 @@
  * the 3-active-reservations-platform-wide cap, walk-in booking, release, and
  * expiry. Runs against the docker test DB through the real services.
  */
+import { ForbiddenException } from '@nestjs/common';
 import { Pool } from 'pg';
 import { eq } from 'drizzle-orm';
 
+import { createDbPool } from '../../src/db/client';
 import { RlsDb } from '../../src/db/db.module';
 import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { reservations } from '../../src/db/schema';
@@ -15,10 +17,9 @@ import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
 import type { RlsContext } from '../../src/db/rls-context';
+import { testDatabaseUrl } from '../test-database-url';
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 // ReservationsService reads DATABASE_URL once via loadEnv() at construction
 // time; bare `pnpm test` doesn't export one, so fall back to the docker test DB.
@@ -857,4 +858,93 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
       lat: '0.3300000',
     });
   });
+});
+
+describe('unauthorized landlord is refused before any reservation data is consulted', () => {
+  const OUTSIDER_ID = () => landlord2;
+  let outsiderBed: string;
+  const reservationByStatus: Record<string, string> = {};
+
+  beforeAll(async () => {
+    const versionId = (
+      await pool.query(`SELECT current_version_id AS id FROM listings WHERE id = $1`, [listingId])
+    ).rows[0].id as string;
+    for (const status of ['reserved', 'booked', 'released', 'occupied']) {
+      const seeded = await seedUnitWithBed(`Authz ${status}`);
+      reservationByStatus[status]! = await seed(
+        `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+         VALUES ($1, $2, $3, $4, $5, 800000) RETURNING id`,
+        [student1, seeded.bedId, versionId, status, `authz-oracle-${status}`],
+      );
+    }
+    outsiderBed = (await seedUnitWithBed('Authz walk-in')).bedId;
+    // No active reservations, so pre-fix code got past its cap check and
+    // reached the nested authorization run.
+    const freshStudent = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000008', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
+  });
+
+  it('twelve parallel unauthorized Book calls all settle Forbidden without exhausting the pool', async () => {
+    // Same pool size as production (max 10): a nested rlsDb.run would need a
+    // second connection per call and deadlock once 10 calls hold one each.
+    const widePool = createDbPool(TEST_DATABASE_URL);
+    const wideService = new ReservationsService(new RlsDb(widePool), audit, null, null);
+    try {
+      const results = await Promise.allSettled(
+        Array.from({ length: 12 }, () =>
+          wideService.book(landlordCtx(OUTSIDER_ID()), { bedId: outsiderBed, studentPhone: '+256710000008' }),
+        ),
+      );
+
+      expect(results.map((r) => r.status === 'rejected' && r.reason instanceof ForbiddenException)).toEqual(
+        Array(12).fill(true),
+      );
+    } finally {
+      await widePool.end();
+    }
+  }, 15_000);
+
+  it('Book gives the same refusal whether or not the phone has a student profile', async () => {
+    const attempt = (studentPhone: string) =>
+      reservationsService
+        .book(landlordCtx(OUTSIDER_ID()), { bedId: outsiderBed, studentPhone })
+        .catch((e: Error) => ({ name: e.constructor.name, message: e.message }));
+
+    const withProfile = await attempt('+256710000001');
+    const withoutProfile = await attempt('+256799999999');
+
+    expect(withProfile).toEqual({ ...withoutProfile, name: 'ForbiddenException' });
+  });
+
+  it.each(['reserved', 'booked', 'released', 'occupied'])(
+    'Release of another property\'s %s reservation is Forbidden',
+    async (status) => {
+      await expect(
+        reservationsService.release(landlordCtx(OUTSIDER_ID()), reservationByStatus[status]!, {
+          reason: 'attack',
+          refundRequired: false,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
+
+  it.each(['reserved', 'booked', 'released', 'occupied'])(
+    'Confirm move-in of another property\'s %s reservation is Forbidden',
+    async (status) => {
+      await expect(
+        reservationsService.confirmMoveIn(landlordCtx(OUTSIDER_ID()), reservationByStatus[status]!),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
+
+  it.each(['reserved', 'booked', 'released', 'occupied'])(
+    'Book of another property\'s %s reservation is Forbidden',
+    async (status) => {
+      await expect(
+        reservationsService.book(landlordCtx(OUTSIDER_ID()), { reservationId: reservationByStatus[status]! }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
 });

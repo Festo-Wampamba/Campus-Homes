@@ -30,6 +30,7 @@ import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
+import { assertStaffScope } from '../auth/staff-scope';
 import {
   beds,
   campusPhotos,
@@ -56,6 +57,7 @@ import { pickPasswordEmailKind, sendAuthEmail } from '../auth/auth.email';
 import { LogtoManagementClient } from '../auth/logto-management.client';
 import { magicSignInUrl } from '../auth/logto.config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assertOwnedStorageKeys } from '../uploads/storage-key';
 import { AuditService } from './audit.service';
 
 /** Promoting a visit's staged photos into listing_photos at publish time is
@@ -255,6 +257,9 @@ export class OpsService {
         string,
         { passed: boolean; notes?: string }
       >;
+      if (input.component === 'photos' && input.newPhotoStorageKeys?.length) {
+        assertOwnedStorageKeys(ctx.userId, input.newPhotoStorageKeys);
+      }
       const photoStorageKeys =
         input.component === 'photos' && input.newPhotoStorageKeys?.length
           ? [...((current.photoStorageKeys as string[] | null) ?? []), ...input.newPhotoStorageKeys]
@@ -377,7 +382,8 @@ export class OpsService {
    * Idempotent against the (property_id, semester_id) unique index: an existing
    * non-verified listing is returned rather than conflicting. */
   async createDraftListing(ctx: RlsContext, input: CreateOpsDraftListingInput) {
-    const listing = await this.rlsDb.run(SERVICE_CTX, async (db) => {
+    const listing = await this.rlsDb.run(SERVICE_CTX, async (db, client) => {
+      await assertStaffScope(client, ctx, input.propertyId);
       const property = await db.query.properties.findFirst({
         where: eq(properties.id, input.propertyId),
       });
@@ -549,6 +555,15 @@ export class OpsService {
       if (current.approvedAt) {
         throw new ConflictException('This visit has already been approved and can no longer be resubmitted');
       }
+      // A resync resubmits the whole photo list; keys already staged on this
+      // visit are retained, anything else must be the inspector's own upload.
+      const staged = new Set(normalizeVisitPhotos(current.photoStorageKeys).map((photo) => photo.storageKey));
+      assertOwnedStorageKeys(
+        ctx.userId,
+        input.photoStorageKeys
+          .map((photo) => (typeof photo === 'string' ? photo : photo.storageKey))
+          .filter((key) => !staged.has(key)),
+      );
       const [row] = await db
         .update(verificationVisits)
         .set({
@@ -637,12 +652,14 @@ export class OpsService {
    * unit's beds/pricing/photos; unit_blocks and room_unit_changes (both
    * RESTRICT) are cleared first. First publish has no existing units, so this
    * is a no-op there. */
-  private async deleteRemovedUnits(input: PublishListingInput) {
-    await this.rlsDb.run(SERVICE_CTX, async (db) => {
+  private async deleteRemovedUnits(ctx: RlsContext, input: PublishListingInput) {
+    await this.rlsDb.run(SERVICE_CTX, async (db, client) => {
       const listing = await db.query.listings.findFirst({
         where: eq(listings.id, input.listingId),
       });
-      if (!listing || listing.status !== 'verified') return;
+      if (!listing) throw new NotFoundException('Listing not found');
+      await assertStaffScope(client, ctx, listing.propertyId);
+      if (listing.status !== 'verified') return;
 
       const keptUnitIds = new Set(
         input.units.filter((u) => u.unitId).map((u) => u.unitId!),
@@ -693,7 +710,7 @@ export class OpsService {
     // Handle any rooms the lead removed in this edit before re-publishing the
     // rest — refuses early (nothing else written yet) if a removed room is
     // unsafe to delete.
-    await this.deleteRemovedUnits(input);
+    await this.deleteRemovedUnits(ctx, input);
     const startingPriceUgx = Math.min(...input.units.map((u) => u.pricePerTermUgx));
     const published = await this.rlsDb.run(ctx, async (db) => {
       const listing = await db.query.listings.findFirst({
@@ -1052,6 +1069,7 @@ export class OpsService {
    * GPS (set once, at visit approval) rather than fabricating a value. */
   async addListingPhotos(ctx: RlsContext, listingId: string, storageKeys: string[]) {
     const result = await this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, storageKeys);
       const listing = await db.query.listings.findFirst({ where: eq(listings.id, listingId) });
       if (!listing) {
         throw new NotFoundException('Listing not found');
@@ -1114,7 +1132,10 @@ export class OpsService {
    * (only the owner's own "while pending" edit and svc_all) so this runs as
    * service_role, same as the audit trail it writes to. */
   async decideKyc(ctx: RlsContext, landlordUserId: string, input: OpsKycDecisionInput) {
-    const landlord = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+    const landlord = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db, client) => {
+      // KYC changes a global identity and all their properties, not just one
+      // property in the reviewer's assigned catchment.
+      await assertStaffScope(client, ctx);
       const [row] = await db
         .update(landlords)
         .set({
@@ -1151,8 +1172,9 @@ export class OpsService {
    * uuid key to point at (its PK is the university code itself) — this is
    * decorative content, not a §17 money/strike/verification mutation. */
   setCampusPhoto(ctx: RlsContext, university: University, storageKey: string) {
-    return this.rlsDb.run(ctx, async (db) =>
-      firstRow(
+    return this.rlsDb.run(ctx, async (db) => {
+      assertOwnedStorageKeys(ctx.userId, [storageKey]);
+      return firstRow(
         await db
           .insert(campusPhotos)
           .values({ university, storageKey, uploadedBy: ctx.userId })
@@ -1161,8 +1183,8 @@ export class OpsService {
             set: { storageKey, uploadedBy: ctx.userId, uploadedAt: new Date() },
           })
           .returning(),
-      ),
-    );
+      );
+    });
   }
 
   /** The public /landlords "Request onboarding" queue (0027) — leads run
@@ -1211,6 +1233,7 @@ export class OpsService {
    * emailed link works before the landlord ever visits the app. */
   async inviteLandlord(ctx: RlsContext, input: InviteLandlordInput) {
     const user = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await assertStaffScope(client, ctx);
       await client.query('BEGIN');
       try {
         const existing = await client.query('SELECT id FROM users WHERE email = $1', [input.email]);

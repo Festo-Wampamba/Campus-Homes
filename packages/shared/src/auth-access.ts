@@ -36,6 +36,9 @@ export function safeAuthDestination(value: unknown): string | null {
     if (/[\\\u0000-\u0020\u007f]/.test(decoded) || decoded.startsWith('//')) return null;
     const url = new URL(value, 'https://campushomes.invalid');
     if (url.origin !== 'https://campushomes.invalid') return null;
+    // Dot-segments can collapse to a leading `//` (`/..//evil.com`), which a
+    // browser treats as a protocol-relative URL once it is used as a redirect.
+    if (url.pathname.startsWith('//')) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;

@@ -146,7 +146,7 @@ function PropertyForm({
     try {
       let newCoverPhotoKey: string | undefined;
       if (coverPhotoFile) {
-        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: coverPhotoFile.type }) });
+        const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: coverPhotoFile.type, size: coverPhotoFile.size }) });
         const { publicId } = await uploadToCloudinary(coverPhotoFile, sig);
         newCoverPhotoKey = publicId;
       }

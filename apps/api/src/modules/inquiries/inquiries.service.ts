@@ -242,13 +242,21 @@ export class InquiriesService {
   // have no console access to inquiries at all, so they only ever reach
   // this via the notification forward() sends — never a real read grant.
   async forwardTargets(): Promise<InquiryForwardTarget[]> {
-    const staffRows = await this.staff.list();
+    // StaffService.list() returns the assignment roster (and excludes
+    // soft-deleted users), but it also serves a few older callers that need
+    // to display suspended staff. Forwarding is a notify action, so keep only
+    // active staff and defend against a consumer row ever reaching this
+    // roster through bad legacy data.
+    const staffRows = (await this.staff.list()).filter((staff) =>
+      staff.status === 'active' && !['student', 'landlord'].includes(staff.role),
+    );
     const landlordRows = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const res = await client.query<{ user_id: string; legal_name: string }>(
         `SELECT l.user_id, l.legal_name
          FROM landlords l
          JOIN users u ON u.id = l.user_id
          WHERE u.status = 'active'
+           AND u.deleted_at IS NULL
          ORDER BY l.legal_name ASC`,
       );
       return res.rows;
@@ -277,11 +285,13 @@ export class InquiriesService {
   async forward(ctx: RlsContext, id: string, input: ForwardInquiryInput) {
     const inquiry = await this.rlsDb.run(SERVICE_CTX, (db) => this.selectById(db, id));
     if (!inquiry) throw new NotFoundException('Inquiry not found');
-    const [recipient] = await this.rlsDb.run(SERVICE_CTX, (db) =>
-      db
-        .select({ id: users.id, role: users.role, phone: users.phone })
-        .from(users)
-        .where(eq(users.id, input.recipientUserId)),
+    // Do not treat an arbitrary users.id as a forwarding destination. The
+    // picker roster is the product policy: active, non-deleted staff with a
+    // live staff assignment, or active, non-deleted landlords. Re-use that
+    // policy on the server because the client-provided recipient id is not
+    // trustworthy and the inquiry itself contains private student details.
+    const recipient = (await this.forwardTargets()).find(
+      (target) => target.id === input.recipientUserId,
     );
     if (!recipient) throw new NotFoundException('Recipient not found');
 

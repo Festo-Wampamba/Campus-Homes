@@ -1,6 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
+import type { RlsDb } from '../../db/db.module';
 import type { AuthenticatedRequest } from './auth.guard';
 import { RolesGuard, rlsCtx } from './roles';
 
@@ -13,11 +14,19 @@ function request(roles: string[], mfaVerified = false): AuthenticatedRequest {
   } } as unknown as AuthenticatedRequest;
 }
 
-function check(req: AuthenticatedRequest, required?: string[]) {
+/** Stands in for loadPermissions' two queries: role-derived rows, then direct grants. */
+function assignedRoles(roleKey: string, scopeType = 'platform_wide', scopeId: string | null = null) {
+  const rows = [{ permissionKey: 'audit.read', requiresStepUp: false, roleKey, scopeType, scopeId }];
+  const query = { select: () => query, from: () => query, innerJoin: () => query,
+    where: jest.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce([]) };
+  return { run: (_ctx: unknown, fn: (db: unknown) => unknown) => fn(query) } as unknown as RlsDb;
+}
+
+function check(req: AuthenticatedRequest, required?: string[], rlsDb?: RlsDb) {
   const reflector = { getAllAndOverride: () => required } as unknown as Reflector;
   const ctx = { getHandler: () => ({}), getClass: () => ({}),
     switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
-  return new RolesGuard(reflector).canActivate(ctx);
+  return new RolesGuard(reflector, rlsDb).canActivate(ctx);
 }
 
 describe('effective route role', () => {
@@ -35,10 +44,19 @@ describe('effective route role', () => {
   );
   it.each(['super_admin', 'platform_admin'])(
     'allows %s to use broad legacy admin routes after MFA',
-    (role) => {
-      expect(check(request([role], true), ['admin'])).toBe(true);
+    async (role) => {
+      expect(await check(request([role], true), ['admin'], assignedRoles(role))).toBe(true);
     },
   );
+  it.each(['super_admin', 'platform_admin'])(
+    'does not let a catchment-scoped %s use full-platform admin routes',
+    async (role) => {
+      expect(await check(request([role], true), ['admin'], assignedRoles(role, 'catchment', 'MUK'))).toBe(false);
+    },
+  );
+  it('fails closed on admin routes when assignment scope cannot be loaded', async () => {
+    expect(await check(request(['super_admin'], true), ['admin'])).toBe(false);
+  });
   it('selects the consumer role required by a route for a multi-role user', () => {
     const req = request(['student', 'landlord', 'super_admin']);
     expect(check(req, ['landlord'])).toBe(true);

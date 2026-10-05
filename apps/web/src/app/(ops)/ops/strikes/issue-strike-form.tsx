@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
+import { signInUrl } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const REASON_LABEL: Record<StrikeReason, string> = {
@@ -27,18 +28,26 @@ function errorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+// The API gates strikes behind step-up: a session older than its freshness
+// window gets this 401 and must re-authenticate rather than retry.
+function isFreshSignInRequired(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401 && errorMessage(err, "").includes("requires a fresh sign-in");
+}
+
 export function IssueStrikeForm() {
   const [landlordId, setLandlordId] = useState("");
   const [reason, setReason] = useState<StrikeReason | "">("");
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [done, setDone] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!landlordId || !reason) return;
     setError(null);
+    setNeedsSignIn(false);
     setPending(true);
     try {
       await api("/ops/strikes", {
@@ -47,7 +56,8 @@ export function IssueStrikeForm() {
       });
       setDone(true);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't issue the strike. Try again."));
+      if (isFreshSignInRequired(err)) setNeedsSignIn(true);
+      else setError(errorMessage(err, "Couldn't issue the strike. Try again."));
       setPending(false);
     }
   }
@@ -99,6 +109,15 @@ export function IssueStrikeForm() {
       <p role="status" className="min-h-5 text-sm text-destructive">
         {error}
       </p>
+      {needsSignIn && (
+        <p role="alert" className="text-sm text-destructive">
+          Issuing a strike needs a recent sign-in, and yours is too old.{" "}
+          <a href={signInUrl("staff", "/ops/strikes")} className="font-medium underline">
+            Sign in again
+          </a>{" "}
+          to continue.
+        </p>
+      )}
     </form>
   );
 }

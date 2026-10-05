@@ -40,7 +40,7 @@ export function InquiriesManager({
   const [forwardNotice, setForwardNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!canResolve) return; // forward-targets requires the same permission as this whole console
+    if (!canResolve) return; // Read-only viewers must not fetch the forwarding roster.
     let cancelled = false;
     api<InquiryForwardTarget[]>("/admin/inquiries/forward-targets")
       .then((rows) => {
@@ -54,6 +54,10 @@ export function InquiriesManager({
     };
   }, [canResolve]);
 
+  // If access is downgraded while this component remains mounted, stale
+  // target state is never rendered or used for a forwarding request.
+  const visibleForwardTargets = canResolve ? forwardTargets : null;
+
   async function forwardInquiry(row: Inquiry) {
     if (!forwardTo) return;
     setForwarding(true);
@@ -64,7 +68,7 @@ export function InquiriesManager({
         method: "POST",
         body: JSON.stringify({ recipientUserId: forwardTo, note: forwardNote.trim() || undefined }),
       });
-      const target = forwardTargets?.find((t) => t.id === forwardTo);
+      const target = visibleForwardTargets?.find((t) => t.id === forwardTo);
       setForwardNotice(`Forwarded to ${target?.name ?? "recipient"}.`);
       setForwardTo("");
       setForwardNote("");
@@ -226,13 +230,13 @@ export function InquiriesManager({
                   id={`forward-${selected.id}`}
                   value={forwardTo}
                   onChange={(e) => setForwardTo(e.target.value)}
-                  disabled={!forwardTargets}
+                  disabled={!visibleForwardTargets}
                   className="w-full rounded-lg border border-input bg-background p-2.5 text-sm"
                 >
                   <option value="">
-                    {forwardTargets ? "Choose a person…" : "Loading…"}
+                    {visibleForwardTargets ? "Choose a person…" : "Loading…"}
                   </option>
-                  {forwardTargets?.map((target) => (
+                  {visibleForwardTargets?.map((target) => (
                     <option key={target.id} value={target.id}>
                       {target.label}
                     </option>

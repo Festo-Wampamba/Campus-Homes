@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { authorizedNext } from "@/lib/auth-routing";
+import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
 import { Card, CardContent } from "@/components/ui/card";
 import { StudentProfileForm } from "./student-profile-form";
@@ -13,9 +15,11 @@ export default async function StudentProfilePage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const rawNext = (await searchParams).next;
-  // Only ever redirect within the app — reject absolute/protocol-relative
-  // URLs so `next` can't be used as an open redirect.
-  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  // authorizedNext is the same allowlist the sign-in flow uses: it rejects
+  // absolute, protocol-relative and backslash/dot-segment tricks, and only
+  // admits destinations this account may actually open.
+  const session = await getServerSession();
+  const next = session ? authorizedNext(session.access, rawNext) : null;
   const profile = await getStudentProfile();
   // `next` only ever arrives from the reserve-flow gate redirecting here for
   // a missing profile — once one exists there's nothing left to complete, so

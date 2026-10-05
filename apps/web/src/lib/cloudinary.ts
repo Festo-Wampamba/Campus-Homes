@@ -16,18 +16,21 @@ export function listingPhotoUrl(storageKey: string, width = 800): string | null 
 // Discriminated by `provider` — the API returns Cloudinary params or a
 // Backblaze B2 presigned PUT depending on which storage is configured.
 export type CloudinarySignature =
-  | { provider: "cloudinary"; cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string }
-  | { provider: "b2"; uploadUrl: string; publicUrl: string };
+  | { provider: "cloudinary"; cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string; allowedFormats?: string }
+  | { provider: "b2"; uploadUrl: string; publicUrl: string }
+  // purpose: "document" — private bucket; the key is shown via lib/documents.
+  | { provider: "b2"; uploadUrl: string; storageKey: string };
 
 // Direct browser→storage upload (§10). Cloudinary: multipart POST carrying the
 // signed params (any extra field invalidates the signature). B2: PUT the raw
 // bytes to the presigned URL — the Content-Type header is stored by B2 as the
-// object type (it is intentionally not part of the signature). `publicId` is
-// what gets stored as storage_key: a Cloudinary public_id, or the B2 object's
-// public URL (rendered as-is by listingPhotoUrl's http passthrough).
-// Best-effort client-side ceiling; the presigned URL is short-lived and
-// auth-gated. Server-enforced size caps need a POST-policy upload (a later
-// pass) — B2's S3 PUT presign has no size clause.
+// object type (bound by the signature). `publicId` is
+// what gets stored as storage_key: a Cloudinary public_id, the B2 object's
+// public URL (rendered as-is by listingPhotoUrl's http passthrough), or a
+// private document's bare key.
+// Client-side ceiling for a fast error; the API enforces the real cap when
+// signing and (for B2) binds the exact Content-Length, which fetch sets from
+// the File body — never override it here.
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 // A network-level failure (CORS rejection, offline) surfaces as a bare
@@ -57,7 +60,7 @@ export async function uploadToCloudinary(
     if (!res.ok) {
       throw new Error("Upload failed. Check the file and try again.");
     }
-    return { publicId: sig.publicUrl };
+    return { publicId: "storageKey" in sig ? sig.storageKey : sig.publicUrl };
   }
 
   const body = new FormData();
@@ -66,6 +69,9 @@ export async function uploadToCloudinary(
   body.set("timestamp", String(sig.timestamp));
   body.set("folder", sig.folder);
   body.set("signature", sig.signature);
+  // Optional only for rolling deployment with an older API response. New
+  // signatures always bind the provider-enforced format allowlist.
+  if (sig.allowedFormats) body.set("allowed_formats", sig.allowedFormats);
 
   const res = await storageFetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, {
     method: "POST",

@@ -10,6 +10,7 @@ describe('OTP connector delivery', () => {
   let fetchMock: jest.SpyInstance;
   beforeEach(() => {
     process.env = { ...originalEnv, DATABASE_URL: 'postgresql://localhost/test', PHONE_OTP_CHANNEL: 'whatsapp',
+      WEB_ORIGIN: 'https://example.test', AUTH_APP_URL: 'https://example.test',
       LOGTO_SMS_WEBHOOK_SECRET: 'sms-secret', LOGTO_EMAIL_WEBHOOK_SECRET: 'email-secret',
       WHATSAPP_GRAPH_API_VERSION: 'v23.0', WHATSAPP_PHONE_NUMBER_ID: '12345', WHATSAPP_ACCESS_TOKEN: 'token',
       WHATSAPP_AUTH_TEMPLATE_NAME: 'campushomes_code', RESEND_API_KEY: 're_test' };
@@ -84,6 +85,7 @@ describe('OTP connector delivery', () => {
   });
   it('does not silently accept email without production credentials', async () => {
     process.env.NODE_ENV = 'production';
+    process.env.TRUSTED_PROXY_CIDRS = 'uniquelocal';
     delete process.env.RESEND_API_KEY;
     await expect(new LogtoEmailWebhookController().handle('Bearer email-secret', { to: 'a@example.com', type: 'SignIn', payload: { code: '123456' } })).rejects.toThrow('temporarily unavailable');
     expect(fetchMock).not.toHaveBeenCalled();

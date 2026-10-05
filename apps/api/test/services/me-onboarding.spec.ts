@@ -9,9 +9,9 @@ import { RlsDb } from '../../src/db/db.module';
 import { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { MeController } from '../../src/modules/profile/me.controller';
 import type { AuthenticatedRequest } from '../../src/modules/auth/auth.guard';
+import { testDatabaseUrl } from '../test-database-url';
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? 'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);

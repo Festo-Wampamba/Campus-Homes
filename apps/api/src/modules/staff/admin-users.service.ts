@@ -16,9 +16,18 @@ import type {
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { LogtoManagementClient } from '../auth/logto-management.client';
-import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
+import {
+  assertFreshSignIn,
+  assignmentsForPermission,
+  hasCoveringScope,
+  loadPermissions,
+  type RoleAssignment,
+} from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
-import { RoleAssignmentService } from './role-assignment.service';
+import { RoleAssignmentService, STAFF_ROLE_KEYS } from './role-assignment.service';
+
+// users.role values that predate RBAC assignments but still denote staff.
+const STAFF_LEGACY_ROLES = new Set(['admin', 'ops_lead', 'ops_inspector']);
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -42,6 +51,22 @@ function conflict(error: unknown): never {
 function nullable(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   return value === '' ? null : value;
+}
+
+const redactEmail = (email: string | null) => email?.split('@')[1] ?? null;
+const redactPhone = (phone: string | null) => phone?.slice(-3) ?? null;
+
+// Keep this category mapping aligned with AdminDashboardService.users(). The
+// list endpoint uses the same three permissions to decide which account rows
+// are visible; detail must not turn a UUID from another category into a PII
+// oracle.
+const STAFF_ACCOUNT_TYPES = new Set(['admin', 'ops_lead', 'ops_inspector', 'custodian', 'property_worker']);
+
+function readPermissionForAccountType(accountType: string): string | null {
+  if (accountType === 'student') return 'students.read';
+  if (accountType === 'landlord') return 'landlords.read';
+  if (STAFF_ACCOUNT_TYPES.has(accountType)) return 'staff.read';
+  return null;
 }
 
 @Injectable()
@@ -158,8 +183,19 @@ export class AdminUsersService {
     return result;
   }
 
-  detail(userId: string) {
+  detail(userId: string, granted: Set<string>) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const category = (await client.query<{ accountType: string }>(`
+        SELECT u.role::text AS "accountType"
+        FROM users u
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `, [userId])).rows[0];
+      if (!category) throw new NotFoundException('User not found');
+      const requiredPermission = readPermissionForAccountType(category.accountType);
+      if (!requiredPermission || !granted.has(requiredPermission)) {
+        throw new ForbiddenException('You do not have permission to view this user');
+      }
+
       const user = (await client.query(`
         SELECT u.id, u.name, u.email, u.phone, u.role::text AS "accountType",
                u.status::text, u.image, u.email_verified AS "emailVerified",
@@ -183,6 +219,31 @@ export class AdminUsersService {
         WHERE u.id = $1 AND u.deleted_at IS NULL
       `, [userId])).rows[0];
       if (!user) throw new NotFoundException('User not found');
+
+      // A user may retain both consumer profile rows while the legacy
+      // `users.role` column selects the dashboard category. Do not let a
+      // reader of one category receive the other category's particulars just
+      // because both LEFT JOINs matched.
+      const visibleUser: Record<string, unknown> = { ...user };
+      if (!granted.has('students.read')) {
+        delete visibleUser.university;
+        delete visibleUser.yearOfStudy;
+      }
+      if (!granted.has('landlords.read')) {
+        delete visibleUser.legalName;
+        delete visibleUser.kycStatus;
+        delete visibleUser.whatsappNumber;
+        delete visibleUser.businessType;
+        delete visibleUser.businessTypeOther;
+      }
+
+      // Fine-grained access data is a separate sensitivity tier from the
+      // identity/profile record. A support/operations read permission should
+      // not disclose role assignments or direct permission grants; those are
+      // visible only to callers explicitly allowed to inspect RBAC state.
+      if (!granted.has('roles.read') && !granted.has('users.permissions_manage')) {
+        return { user: visibleUser, assignments: [], directPermissions: [], memberships: [] };
+      }
 
       const assignments = await client.query(`
           SELECT ura.id, r.key AS "roleKey", r.name AS "roleName",
@@ -209,12 +270,21 @@ export class AdminUsersService {
           WHERE pm.user_id = $1 AND pm.revoked_at IS NULL
           ORDER BY p.name, pm.role
         `, [userId]);
-      return { user, assignments: assignments.rows, directPermissions: directPermissions.rows, memberships: memberships.rows };
+      return { user: visibleUser, assignments: assignments.rows, directPermissions: directPermissions.rows, memberships: memberships.rows };
     });
   }
 
-  async revokeSessions(actor: RlsContext, userId: string) {
+  async revokeSessions(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+  ) {
     const revoked = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      // Revoking your own sessions is sign-out everywhere, not an escalation.
+      if (actor.userId !== userId) {
+        await this.assertMayActOnStaffTarget(client, actorPermissions, actorAssignments, userId);
+      }
       const result = await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
       return result.rowCount ?? 0;
     });
@@ -222,23 +292,60 @@ export class AdminUsersService {
     return { revoked };
   }
 
-  async update(actor: RlsContext, userId: string, input: UpdateAdminUserInput) {
+  async update(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+    input: UpdateAdminUserInput,
+    authenticatedAt?: string | null,
+  ) {
     if (input.accountType !== undefined) {
       throw new BadRequestException('Use role assignments to change access; account type is compatibility data');
     }
+    let contactChange: Record<string, { from: string | null; to: string | null }> | null = null;
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       try {
-        const current = (await client.query<{ id: string; accountType: string; status: string }>(
-          `SELECT id, role::text AS "accountType", status::text AS status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        const current = (await client.query<{
+          id: string; accountType: string; status: string; email: string | null; phone: string | null;
+          isClaimed: boolean;
+        }>(
+          `SELECT id, role::text AS "accountType", status::text AS status, email, phone,
+                  logto_user_id IS NOT NULL AS "isClaimed"
+           FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
           [userId],
         )).rows[0];
         if (!current) throw new NotFoundException('User not found');
+        const isStaff = actor.userId === userId
+          ? (await this.staffAssignments(client, userId)).length > 0
+          : await this.assertMayActOnStaffTarget(client, actorPermissions, actorAssignments, userId);
         // Editing your own identity/particulars is fine; only a real change to
         // your own status is blocked (self-lockout guard). The edit form
         // re-submits the unchanged status field, so compare rather than reject
         // its mere presence.
         if (actor.userId === userId && input.status !== undefined && input.status !== current.status) {
           throw new ForbiddenException('You cannot change your own status');
+        }
+
+        // An unclaimed row (staff or not) is claimed by whichever verified
+        // identity matches its email/phone at next sign-in, so rewriting it
+        // would hand the account to the editor. Staff rows go through
+        // invitations; any other unclaimed row (admin-created student/landlord)
+        // may be fixed, but only with step-up. Claimed rows are bound by
+        // logto_user_id, but a staff contact rewrite is still sensitive.
+        const changed = (Object.entries({ email: current.email, phone: current.phone }) as [
+          'email' | 'phone', string | null][])
+          .filter(([key, old]) => input[key] !== undefined &&
+            (nullable(input[key]) ?? null)?.toLowerCase() !== old?.toLowerCase());
+        if (changed.length && (isStaff || !current.isClaimed)) {
+          if (!current.isClaimed && await this.isFormerOrLegacyStaff(client, userId, current.accountType)) {
+            throw new BadRequestException('Change a staff contact by re-issuing their invitation');
+          }
+          assertFreshSignIn(authenticatedAt, isStaff ? 'Changing a staff contact' : 'Changing an unclaimed account contact');
+          contactChange = Object.fromEntries(changed.map(([key, old]) => {
+            const redact = key === 'email' ? redactEmail : redactPhone;
+            return [key, { from: redact(old), to: redact(nullable(input[key]) ?? null) }];
+          }));
         }
 
         const columnMap: Record<string, string> = {
@@ -355,7 +462,46 @@ export class AdminUsersService {
     await this.audit.record(actor, 'users.update', 'user', userId, {
       fields: Object.keys(input),
     });
+    if (contactChange) await this.audit.record(actor, 'users.contact_change', 'user', userId, contactChange);
     return result;
+  }
+
+  private async staffAssignments(client: PoolClient, userId: string) {
+    return (await client.query<{ roleKey: string; scopeType: string; scopeId: string | null }>(`
+      SELECT r.key AS "roleKey", a.scope_type AS "scopeType", a.scope_id AS "scopeId"
+      FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+      WHERE a.user_id = $1 AND r.key = ANY($2::text[]) AND a.revoked_at IS NULL
+    `, [userId, STAFF_ROLE_KEYS])).rows;
+  }
+
+  /** Revoked/expired staff assignments and legacy staff users.role values still
+   * mark a row as staff: a deactivated never-claimed staffer must not become
+   * claimable (or re-staffable) by whoever the editor retypes the email to. */
+  private async isFormerOrLegacyStaff(client: PoolClient, userId: string, legacyRole: string): Promise<boolean> {
+    if (STAFF_LEGACY_ROLES.has(legacyRole)) return true;
+    return ((await client.query(
+      `SELECT 1 FROM user_role_assignments a JOIN roles r ON r.id = a.role_id
+       WHERE a.user_id = $1 AND r.key = ANY($2::text[]) LIMIT 1`,
+      [userId, STAFF_ROLE_KEYS],
+    )).rowCount ?? 0) > 0;
+  }
+
+  /** Same tier + scope rules as staff deactivation, applied to edits that can
+   * lock out or take over another account. Returns whether the target is staff. */
+  private async assertMayActOnStaffTarget(
+    client: PoolClient,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+  ): Promise<boolean> {
+    const assignments = await this.staffAssignments(client, userId);
+    if (assignments.some((a) => a.roleKey === 'super_admin') && !actorPermissions.has('roles.manage_super_admin')) {
+      throw new ForbiddenException('Only a Super Admin can modify a Super Admin');
+    }
+    if (!assignments.every((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId))) {
+      throw new ForbiddenException('Cannot modify a staff member outside your own scope');
+    }
+    return assignments.length > 0;
   }
 
   /** Hard-deletes an active user and everything they own in one step — no
@@ -560,6 +706,14 @@ export class AdminUsersService {
     }
     if (!hasCoveringScope(actorAssignments, input.scopeType, input.scopeId ?? null)) {
       throw new ForbiddenException('Cannot grant a permission outside your own scope');
+    }
+    // Loaded before the transaction: loadPermissions opens its own, and
+    // nesting rlsDb.run would deadlock on a second pooled client.
+    const { grants: held } = await loadPermissions(this.rlsDb, actor.userId);
+    for (const key of new Set(input.permissionKeys)) {
+      if (!hasCoveringScope(assignmentsForPermission(held, key), input.scopeType, input.scopeId ?? null)) {
+        throw new ForbiddenException(`Cannot grant ${key}: you do not hold it at that scope`);
+      }
     }
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       try {
