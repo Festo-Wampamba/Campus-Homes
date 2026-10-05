@@ -4,48 +4,53 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { LandlordProfileWithParticulars } from "@campushomes/shared";
 
+import { ChangeEmailForm, ChangePasswordForm } from "@/components/account/security-settings";
+import { KycBanner } from "@/components/kyc-banner";
+import { PhoneField } from "@/components/phone-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PhoneField } from "@/components/phone-field";
-import { api, ApiError } from "@/lib/api";
+import { ViewDocumentButton } from "@/components/view-document-button";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AccountSettingsNav } from "./account-settings-nav";
+import { errorMessage, useParticulars, type Particulars } from "./use-particulars";
 
-function errorMessage(err: unknown, fallback: string): string {
-  if (err instanceof ApiError) {
-    const body = err.body as { message?: string | string[] } | null;
-    if (typeof body?.message === "string") return body.message;
-    if (Array.isArray(body?.message)) return body.message.join(", ");
-  }
-  return fallback;
-}
-
-/** RLS (`landlords_self_update`) only allows edits while kyc_status is
- * 'pending' — once verified/rejected this renders as a read-only summary
- * instead of a form nobody could actually submit. */
 const inputClass = cn(
   "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors duration-150",
   "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
 );
 const selectClass = inputClass;
 
-export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithParticulars }) {
+function SaveRow({ pending, saved, label }: { pending: boolean; saved: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Button type="submit" disabled={pending}>
+        {pending ? "Saving…" : label}
+      </Button>
+      {saved && <p className="text-sm text-success">Saved.</p>}
+    </div>
+  );
+}
+
+function ErrorLine({ error }: { error: string | null }) {
+  return (
+    <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
+      {error}
+    </p>
+  );
+}
+
+/** RLS (`landlords_self_update`) only allows edits while kyc_status is
+ * 'pending' — once verified/rejected the legal name renders as a read-only
+ * summary instead of a form nobody could actually submit. */
+export function IdentityForm({ profile }: { profile: LandlordProfileWithParticulars }) {
   const router = useRouter();
   const editable = profile.kycStatus === "pending";
   const [legalName, setLegalName] = useState(profile.legalName);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-
-  const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth ?? "");
-  const [gender, setGender] = useState(profile.gender ?? "");
-  const [nationality, setNationality] = useState(profile.nationality ?? "");
-  const [address, setAddress] = useState(profile.address ?? "");
-  const [emergencyContactName, setEmergencyContactName] = useState(profile.emergencyContactName ?? "");
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState(profile.emergencyContactPhone ?? "");
-  const [particularsPending, setParticularsPending] = useState(false);
-  const [particularsError, setParticularsError] = useState<string | null>(null);
-  const [particularsSaved, setParticularsSaved] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,34 +71,8 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
     }
   }
 
-  async function submitParticulars(e: React.FormEvent) {
-    e.preventDefault();
-    setParticularsError(null);
-    setParticularsSaved(false);
-    setParticularsPending(true);
-    try {
-      await api("/landlords/particulars", {
-        method: "PATCH",
-        body: JSON.stringify({
-          dateOfBirth: dateOfBirth || null,
-          gender: gender || null,
-          nationality: nationality || null,
-          address: address || null,
-          emergencyContactName: emergencyContactName || null,
-          emergencyContactPhone: emergencyContactPhone || null,
-        }),
-      });
-      setParticularsSaved(true);
-      router.refresh();
-    } catch (err) {
-      setParticularsError(errorMessage(err, "Couldn't save your details. Try again."));
-    } finally {
-      setParticularsPending(false);
-    }
-  }
-
   return (
-    <div className="max-w-md space-y-8">
+    <div className="space-y-4">
       {editable ? (
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
@@ -106,15 +85,8 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
               onChange={(e) => setLegalName(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : "Save changes"}
-            </Button>
-            {saved && <p className="text-sm text-success">Saved.</p>}
-          </div>
-          <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
-            {error}
-          </p>
+          <SaveRow pending={pending} saved={saved} label="Save changes" />
+          <ErrorLine error={error} />
         </form>
       ) : (
         <div className="space-y-4 rounded-lg border border-border bg-card p-5">
@@ -124,53 +96,98 @@ export function LandlordProfileForm({ profile }: { profile: LandlordProfileWithP
           </div>
         </div>
       )}
+      {profile.idDocStorageKey && (
+        <ViewDocumentButton storageKey={profile.idDocStorageKey} label="View ID document" />
+      )}
+    </div>
+  );
+}
 
-      <form onSubmit={submitParticulars} className="space-y-4 border-t border-border pt-6">
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-          Personal details (optional)
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-dob">Date of birth</Label>
-            <input id="profile-dob" type="date" className={inputClass} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-gender">Gender</Label>
-            <select id="profile-gender" className={selectClass} value={gender} onChange={(e) => setGender(e.target.value)}>
-              <option value="">Prefer not to say</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
-          </div>
+export function PersonalDetailsForm({ particulars }: { particulars: Particulars }) {
+  const { fields, setField } = particulars;
+  return (
+    <form onSubmit={particulars.save} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="profile-dob">Date of birth</Label>
+          <input id="profile-dob" type="date" className={inputClass} value={fields.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="profile-nationality">Nationality</Label>
-          <input id="profile-nationality" className={inputClass} placeholder="Ugandan" value={nationality} onChange={(e) => setNationality(e.target.value)} />
+          <Label htmlFor="profile-gender">Gender</Label>
+          <select id="profile-gender" className={selectClass} value={fields.gender} onChange={(e) => setField("gender", e.target.value)}>
+            <option value="">Prefer not to say</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="profile-address">Address</Label>
-          <input id="profile-address" className={inputClass} placeholder="Plot 12, Makerere Hill Road" value={address} onChange={(e) => setAddress(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="profile-emergency-name">Emergency contact name</Label>
-          <input id="profile-emergency-name" className={inputClass} placeholder="Jane Doe" value={emergencyContactName} onChange={(e) => setEmergencyContactName(e.target.value)} />
-        </div>
-        <PhoneField
-          id="profile-emergency-phone"
-          label="Emergency contact phone"
-          value={emergencyContactPhone}
-          onChange={setEmergencyContactPhone}
-        />
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={particularsPending}>
-            {particularsPending ? "Saving…" : "Save details"}
-          </Button>
-          {particularsSaved && <p className="text-sm text-success">Saved.</p>}
-        </div>
-        <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
-          {particularsError}
-        </p>
-      </form>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="profile-nationality">Nationality</Label>
+        <input id="profile-nationality" className={inputClass} placeholder="Ugandan" value={fields.nationality} onChange={(e) => setField("nationality", e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="profile-address">Address</Label>
+        <input id="profile-address" className={inputClass} placeholder="Plot 12, Makerere Hill Road" value={fields.address} onChange={(e) => setField("address", e.target.value)} />
+      </div>
+      <SaveRow pending={particulars.pending} saved={particulars.saved} label="Save details" />
+      <ErrorLine error={particulars.error} />
+    </form>
+  );
+}
+
+export function ContactDetailsForm({ particulars }: { particulars: Particulars }) {
+  const { fields, setField } = particulars;
+  return (
+    <form onSubmit={particulars.save} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="profile-emergency-name">Emergency contact name</Label>
+        <input id="profile-emergency-name" className={inputClass} placeholder="Jane Doe" value={fields.emergencyContactName} onChange={(e) => setField("emergencyContactName", e.target.value)} />
+      </div>
+      <PhoneField
+        id="profile-emergency-phone"
+        label="Emergency contact phone"
+        value={fields.emergencyContactPhone}
+        onChange={(value) => setField("emergencyContactPhone", value)}
+      />
+      <SaveRow pending={particulars.pending} saved={particulars.saved} label="Save details" />
+      <ErrorLine error={particulars.error} />
+    </form>
+  );
+}
+
+export function LandlordAccountSettings({
+  profile,
+  hasLiveListing,
+  email,
+}: {
+  profile: LandlordProfileWithParticulars;
+  hasLiveListing: boolean;
+  email: string | null;
+}) {
+  const particulars = useParticulars(profile);
+  return (
+    <div className="grid gap-10 lg:grid-cols-[12rem_minmax(0,1fr)]">
+      <AccountSettingsNav />
+      <div className="max-w-2xl space-y-12">
+        <section id="personal" aria-labelledby="personal-h" className="scroll-mt-6 space-y-4">
+          <h2 id="personal-h" className="font-display text-lg font-bold">Personal details</h2>
+          <PersonalDetailsForm particulars={particulars} />
+        </section>
+        <section id="identity" aria-labelledby="identity-h" className="scroll-mt-6 space-y-4">
+          <h2 id="identity-h" className="font-display text-lg font-bold">Identity &amp; verification</h2>
+          <KycBanner status={profile.kycStatus} hasLiveListing={hasLiveListing} />
+          <IdentityForm profile={profile} />
+        </section>
+        <section id="contact" aria-labelledby="contact-h" className="scroll-mt-6 space-y-4">
+          <h2 id="contact-h" className="font-display text-lg font-bold">Contact &amp; emergency</h2>
+          <ContactDetailsForm particulars={particulars} />
+        </section>
+        <section id="security" aria-labelledby="security-h" className="scroll-mt-6 space-y-6">
+          <h2 id="security-h" className="font-display text-lg font-bold">Sign-in &amp; security</h2>
+          <ChangeEmailForm currentEmail={email} />
+          <ChangePasswordForm />
+        </section>
+      </div>
     </div>
   );
 }

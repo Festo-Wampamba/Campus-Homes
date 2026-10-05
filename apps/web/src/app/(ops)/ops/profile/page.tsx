@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { PageHeader, SectionCard } from "@/components/admin/admin-ui";
 import { AdminProfileForm, type MyParticulars } from "@/app/(admin)/admin/profile/admin-profile-form";
-import { ChangeEmailForm, ChangePasswordForm } from "@/app/(admin)/admin/profile/security-settings";
+import { ChangeEmailForm, ChangePasswordForm } from "@/components/account/security-settings";
 import { apiServer } from "@/lib/server-api";
 
 export const metadata: Metadata = { title: "Profile settings" };
