@@ -40,7 +40,7 @@ export class AdminInquiriesController {
   // Static path, must be declared before the ":id" routes below or Nest
   // would try to parse "forward-targets" as a uuid param instead.
   @Get('forward-targets')
-  @RequireAnyPermission('inquiries.resolve', 'inquiries.read')
+  @RequirePermission('inquiries.resolve')
   forwardTargets() {
     return this.inquiries.forwardTargets();
   }
@@ -58,7 +58,7 @@ export class AdminInquiriesController {
   }
 
   @Post(':id/forward')
-  @RequireAnyPermission('inquiries.resolve', 'inquiries.read')
+  @RequirePermission('inquiries.resolve')
   forward(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: PermissionedRequest,

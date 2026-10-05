@@ -9,11 +9,13 @@
  */
 import { Pool } from 'pg';
 
+import type { MessagingAdapter } from '../../src/adapters/messaging.adapter';
+import { createDbPool } from '../../src/db/client';
 import { RlsDb } from '../../src/db/db.module';
 import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
-import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
+import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ListingsService } from '../../src/modules/listings/listings.service';
 import type { RlsContext } from '../../src/db/rls-context';
 
@@ -162,6 +164,61 @@ describe('submitProperty KYC gate', () => {
   it('allows a KYC-verified landlord to submit a property', async () => {
     const property = await listings.submitProperty(ctxFor(landlordVerified), submitInput('Verified Hostel'));
     expect(property!.status).toBe('active');
+  });
+});
+
+describe('submitProperty under concurrent pending-KYC submissions', () => {
+  it('twelve parallel submissions with reviewer notifications all complete on a max-10 pool', async () => {
+    // A reviewer lookup or notify() issued from inside the submission's own
+    // rlsDb.run needs a second pooled connection per call, deadlocking once
+    // 10 submissions each hold one.
+    const reviewer = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000210', 'admin', 'active') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+       SELECT $1, r.id, 'platform_wide', NULL, $1, 'test fixture' FROM roles r WHERE r.key = 'super_admin'`,
+      [reviewer],
+    );
+    const widePool = createDbPool(TEST_DATABASE_URL);
+    const wideRlsDb = new RlsDb(widePool);
+    const wideListings = new ListingsService(
+      wideRlsDb,
+      new NotificationsService(wideRlsDb, {} as MessagingAdapter),
+    );
+    try {
+      const results = await Promise.allSettled(
+        Array.from({ length: 12 }, (_, i) =>
+          wideListings.submitProperty(ctxFor(landlordPending), submitInput(`Concurrent Hostel ${i}`)),
+        ),
+      );
+
+      expect(results.map((r) => r.status)).toEqual(Array(12).fill('fulfilled'));
+    } finally {
+      await widePool.end();
+    }
+  }, 15_000);
+});
+
+describe('submitProperty when reviewer notification fails', () => {
+  it('still resolves and leaves exactly one property row', async () => {
+    const reviewer = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000211', 'admin', 'active') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+       SELECT $1, r.id, 'platform_wide', NULL, $1, 'test fixture' FROM roles r WHERE r.key = 'super_admin'`,
+      [reviewer],
+    );
+    const failingNotifications = {
+      notify: () => Promise.reject(new Error('sms gateway down')),
+    } as unknown as NotificationsService;
+    const service = new ListingsService(rlsDb, failingNotifications);
+
+    const property = await service.submitProperty(ctxFor(landlordPending), submitInput('Notify Failure Hostel'));
+
+    const rows = await pool.query(`SELECT id FROM properties WHERE name = 'Notify Failure Hostel'`);
+    expect(rows.rows).toEqual([{ id: property.id }]);
   });
 });
 

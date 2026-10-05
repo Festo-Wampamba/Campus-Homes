@@ -11,6 +11,7 @@ import type {
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { AuditService } from '../ops/audit.service';
+import { assertOwnedStorageKeys } from '../uploads/storage-key';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -25,6 +26,7 @@ export class AdminPropertiesService {
   ) {}
 
   async create(actor: RlsContext, input: CreateAdminPropertyInput) {
+    assertOwnedStorageKeys(actor.userId, [...(input.coverPhotoKey ? [input.coverPhotoKey] : []), ...input.imageKeys]);
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await client.query('BEGIN');
       try {
@@ -263,10 +265,14 @@ export class AdminPropertiesService {
       await client.query('BEGIN');
       try {
         const existing = (await client.query(
-          'SELECT landlord_id AS "landlordId" FROM properties WHERE id = $1 FOR UPDATE',
+          'SELECT landlord_id AS "landlordId", cover_photo_key AS "coverPhotoKey" FROM properties WHERE id = $1 FOR UPDATE',
           [propertyId],
         )).rows[0];
         if (!existing) throw new NotFoundException('Property not found');
+        // The edit form resubmits the stored cover photo; only a new one must be the caller's upload.
+        if (input.coverPhotoKey && input.coverPhotoKey !== existing.coverPhotoKey) {
+          assertOwnedStorageKeys(actor.userId, [input.coverPhotoKey]);
+        }
 
         if (input.landlordId) {
           const landlord = (await client.query(`
@@ -325,6 +331,7 @@ export class AdminPropertiesService {
   }
 
   async addMedia(actor: RlsContext, propertyId: string, input: AddAdminPropertyMediaInput) {
+    assertOwnedStorageKeys(actor.userId, input.items.map((item) => item.storageKey));
     const rows = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const exists = (await client.query('SELECT id FROM properties WHERE id = $1', [propertyId])).rows[0];
       if (!exists) throw new NotFoundException('Property not found');

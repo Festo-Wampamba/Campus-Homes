@@ -38,8 +38,8 @@ export class AdminUsersController {
 
   @Get(':id')
   @RequireAnyPermission('students.read', 'landlords.read', 'staff.read')
-  detail(@Param('id', ParseUUIDPipe) id: string) {
-    return this.users.detail(id);
+  detail(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.users.detail(id, req.permissions);
   }
 
   @Patch(':id')

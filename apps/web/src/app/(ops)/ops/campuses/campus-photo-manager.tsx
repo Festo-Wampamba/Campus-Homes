@@ -58,7 +58,7 @@ function CampusRow({
     setError(null);
     setPending(true);
     try {
-      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type }) });
+      const sig = await api<CloudinarySignature>("/uploads/sign", { method: "POST", body: JSON.stringify({ contentType: file.type, size: file.size }) });
       const { publicId } = await uploadToCloudinary(file, sig);
       await api(`/ops/campuses/${code}/photo`, {
         method: "POST",

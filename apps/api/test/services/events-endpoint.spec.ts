@@ -18,11 +18,13 @@ const recorded: unknown[] = [];
 })
 class EventsTestModule {}
 
+const counts = new Map<string, number>();
+
 function fakeRedis(): Redis {
-  const counts = new Map<string, number>();
   return {
-    incr: async (key: string) => counts.set(key, (counts.get(key) ?? 0) + 1).get(key),
-    expire: async () => 1,
+    status: 'ready',
+    eval: async (_script: string, _keyCount: number, key: string) =>
+      counts.set(key, (counts.get(key) ?? 0) + 1).get(key),
   } as unknown as Redis;
 }
 
@@ -38,6 +40,11 @@ beforeAll(async () => {
 });
 
 afterAll(() => app.close());
+
+beforeEach(() => {
+  counts.clear();
+  recorded.length = 0;
+});
 
 function post(body: unknown, ip: string) {
   return fetch(base, {
@@ -58,7 +65,8 @@ describe('POST /api/v1/events', () => {
 
   it('rate-limits a client past the write budget', async () => {
     const statuses = [];
-    for (let i = 0; i < 3; i += 1) statuses.push(await post({ type: 'page_view', path: '/' }, '10.0.0.3'));
+    // Forged forwarding headers cannot give the same socket a fresh quota.
+    for (let i = 0; i < 3; i += 1) statuses.push(await post({ type: 'page_view', path: '/' }, `10.0.0.${i + 3}`));
     expect(statuses).toEqual([204, 204, 429]);
   });
 });
