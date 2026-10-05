@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { ApiError, api } from "@/lib/api";
 import { isFinal, pollDelay, type ApprovalStatus } from "./approval-status";
@@ -11,6 +12,7 @@ export function useApprovalStatus(initial: ApprovalStatus) {
   const [status, setStatus] = useState(initial);
   const [hasTrouble, setHasTrouble] = useState(false);
   const failures = useRef(0);
+  const router = useRouter();
 
   useEffect(() => {
     if (isFinal(status)) return;
@@ -34,7 +36,7 @@ export function useApprovalStatus(initial: ApprovalStatus) {
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 401) {
-          window.location.assign("/sign-in?next=%2Flandlord%2Fapproval-pending");
+          router.replace("/sign-in?next=%2Flandlord%2Fapproval-pending");
           return;
         }
         failures.current += 1;
@@ -58,7 +60,7 @@ export function useApprovalStatus(initial: ApprovalStatus) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [status]);
+  }, [status, router]);
 
   return { status, hasTrouble };
 }
