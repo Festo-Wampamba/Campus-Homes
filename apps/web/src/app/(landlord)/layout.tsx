@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { getLandlordProfile, getMyProperties } from "@/lib/landlord";
+import type { Property } from "@campushomes/shared";
+
+import { getLandlordProfile } from "@/lib/landlord";
+import { apiServer } from "@/lib/server-api";
 import { dashboardGate } from "@/lib/landlord-gate";
 import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
@@ -25,10 +28,15 @@ export default async function LandlordLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const session = await requireWorkspace("landlord");
-  const [profile, properties] = await Promise.all([getLandlordProfile(), getMyProperties()]);
+  // apiServer, not getMyProperties(): a failed load must stay "unknown", not
+  // look like "no property" and reopen the wizard.
+  const [profile, properties] = await Promise.all([
+    getLandlordProfile(),
+    apiServer<Property[]>("/listings/properties/mine"),
+  ]);
   // Onboarding and approval-pending render under (landlord-setup), so every
   // path here is a dashboard surface. The API enforces the same boundary.
-  const destination = dashboardGate(profile, properties.length > 0);
+  const destination = dashboardGate(profile, properties === null ? null : properties.length > 0);
   if (destination) redirect(destination);
   return (
     <AppShell

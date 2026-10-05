@@ -24,6 +24,28 @@ describe("dashboardGate", () => {
   it("verified landlord on the dashboard is not redirected", () => {
     expect(dashboardGate(verified, false)).toBeNull();
   });
+
+  it("sends a rejected landlord without a property to the review page", () => {
+    expect(dashboardGate(rejected, false)).toBe(APPROVAL_PATH);
+  });
+
+  it("sends a pending landlord to the review page when properties could not be loaded", () => {
+    expect(dashboardGate(pending, null)).toBe(APPROVAL_PATH);
+  });
+});
+
+describe("setupGate failure and rejection cases", () => {
+  it("sends a rejected landlord on onboarding to the review page", () => {
+    expect(setupGate(rejected, false, ONBOARDING_PATH)).toBe(APPROVAL_PATH);
+  });
+
+  it("keeps a rejected landlord without a property on the review page", () => {
+    expect(setupGate(rejected, false, APPROVAL_PATH)).toBeNull();
+  });
+
+  it("sends a pending landlord off onboarding when properties could not be loaded", () => {
+    expect(setupGate(pending, null, ONBOARDING_PATH)).toBe(APPROVAL_PATH);
+  });
 });
 
 describe("setupGate", () => {
