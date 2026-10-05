@@ -14,7 +14,7 @@ import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { assertStaffScope } from '../auth/staff-scope';
-import { assertOwnedStorageKeys } from '../uploads/storage-key';
+import { assertOwnedDocumentKey } from '../uploads/storage-key';
 import {
   properties,
   propertyMemberships,
@@ -180,7 +180,7 @@ export class TenantAgreementsService {
 
     return this.rlsDb.run(ctx, async (db) => {
       if (input.signature.type === 'drawn') {
-        assertOwnedStorageKeys(ctx.userId, [input.signature.signatureStorageKey]);
+        assertOwnedDocumentKey(ctx.userId, input.signature.signatureStorageKey);
       }
       // tenant_agreements.student_id FKs to students.user_id — same gap as
       // reservations.createHold: a signed-up student who never completed

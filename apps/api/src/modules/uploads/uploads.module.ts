@@ -247,10 +247,12 @@ export class DocumentsService {
       || signatures.some((row) => row.student_id === ctx.userId || row.landlord_id === ctx.userId || row.is_custodian)) {
       return true;
     }
+    // Ownership documents are KYC evidence: covering the property is not
+    // enough, the staff reader must also hold landlords.review_kyc.
     for (const row of propertyDocs) {
       try {
         await assertStaffScope(client, ctx, row.property_id);
-        return true;
+        return 'needs_kyc_permission';
       } catch (error) {
         if (!(error instanceof ForbiddenException)) throw error;
       }

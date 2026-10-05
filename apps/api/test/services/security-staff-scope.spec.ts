@@ -10,9 +10,9 @@ import type { LogtoManagementClient } from '../../src/modules/auth/logto-managem
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { RoomManagementService } from '../../src/modules/room-management/room-management.service';
 import { TenantAgreementsService } from '../../src/modules/tenant-agreements/tenant-agreements.service';
+import { testDatabaseUrl } from '../test-database-url';
 
-const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test', max: 5 });
+const pool = new Pool({ connectionString: testDatabaseUrl(), max: 5 });
 const db = new RlsDb(pool);
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const audit = new AuditService(db);

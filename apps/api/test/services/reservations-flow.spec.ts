@@ -17,10 +17,9 @@ import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
 import type { RlsContext } from '../../src/db/rls-context';
+import { testDatabaseUrl } from '../test-database-url';
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 // ReservationsService reads DATABASE_URL once via loadEnv() at construction
 // time; bare `pnpm test` doesn't export one, so fall back to the docker test DB.

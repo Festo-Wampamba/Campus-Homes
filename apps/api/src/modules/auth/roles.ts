@@ -15,9 +15,11 @@ import { landlords } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import type { AuthenticatedRequest } from './auth.guard';
 import { effectiveRoles } from './access-resolver';
+import { loadPermissions } from './permissions';
 
 export const ROLES_KEY = 'roles';
 export const ALLOW_PENDING_LANDLORD_KEY = 'allow-pending-landlord';
+const PLATFORM_ADMIN_ROLES = ['super_admin', 'platform_admin'];
 
 /** Restricts a route to the given roles. Must be paired with AuthGuard
  * (AuthGuard attaches the session RolesGuard reads). */
@@ -63,10 +65,20 @@ export class RolesGuard implements CanActivate {
       // persona. Broad @Roles('admin') routes are full-platform routes, so
       // only the two platform-administrator assignments may satisfy them.
       // Finance, support, and audit use PermissionsGuard endpoints instead.
-      (role !== 'admin' || req.session.access.roles.some((key) =>
-        key === 'super_admin' || key === 'platform_admin')) &&
+      (role !== 'admin' || req.session.access.roles.some((key) => PLATFORM_ADMIN_ROLES.includes(key))) &&
       (!['ops_inspector', 'ops_lead', 'admin'].includes(role) || req.session.access.assurance.mfaVerified));
     if (!matched) return false;
+    if (matched === 'admin') {
+      // Session role keys carry no scope, so confirm the assignment itself is
+      // platform-wide: a catchment-scoped platform_admin is not a platform admin.
+      if (!this.rlsDb) return false;
+      return loadPermissions(this.rlsDb, req.session.user.id).then(({ grants }) => {
+        const platformWide = grants.some((grant) => PLATFORM_ADMIN_ROLES.includes(grant.roleKey ?? '') &&
+          grant.scopeType === 'platform_wide' && grant.scopeId === null);
+        if (platformWide) req.effectiveRole = matched;
+        return platformWide;
+      });
+    }
     const allowPendingLandlord = this.reflector.getAllAndOverride<boolean | undefined>(ALLOW_PENDING_LANDLORD_KEY, [
       context.getHandler(),
       context.getClass(),

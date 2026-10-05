@@ -14,6 +14,7 @@ import { AuditService } from '../../src/modules/ops/audit.service';
 import { InquiriesService } from '../../src/modules/inquiries/inquiries.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { StaffService } from '../../src/modules/staff/staff.service';
+import { testDatabaseUrl } from '../test-database-url';
 
 jest.mock('../../src/modules/inquiries/inquiry-email', () => ({
   sendInquiryEmail: jest.fn().mockResolvedValue(undefined),
@@ -24,9 +25,7 @@ const { sendInquiryEmail } = require('../../src/modules/inquiries/inquiry-email'
   sendInquiryEmail: jest.Mock;
 };
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://campushomes:campushomes_test@localhost:54329/campushomes_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 // InquiriesService reads env once via loadEnv() at construction. `||` not
 // ?? — a blank-shell DATABASE_URL="" must fall through to the docker URL.

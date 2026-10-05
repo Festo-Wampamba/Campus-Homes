@@ -49,7 +49,8 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdateAdminUserDto,
   ) {
-    return this.users.update(rlsCtx(req), id, body);
+    return this.users.update(
+      rlsCtx(req), req.permissions, req.assignments, id, body, req.session.access.assurance.authenticatedAt);
   }
 
   @Delete(':id')
@@ -71,7 +72,7 @@ export class AdminUsersController {
   @Post(':id/sessions/revoke')
   @RequirePermission('users.update')
   revokeSessions(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.users.revokeSessions(rlsCtx(req), id);
+    return this.users.revokeSessions(rlsCtx(req), req.permissions, req.assignments, id);
   }
 
   @Post(':id/roles')

@@ -36,6 +36,12 @@ describe('security configuration', () => {
     it.each(['0.0.0.0/1', '128.0.0.0/1', '10.0.0.0/7', '::/1', 'fc00::/6', '::ffff:0:0/96', '::ffff:10.0.0.0/104', '::FFFF:1.2.3.4', '::ffff:1.2.3.4/128'])('rejects over-broad or IPv4-mapped entry %s', (value) => {
       expect(() => loadEnv({ ...base, TRUSTED_PROXY_CIDRS: value })).toThrow(/^Invalid environment configuration: TRUSTED_PROXY_CIDRS$/);
     });
+    it.each(['::/7', '::/8', '::1/80', '0:0:0:0:0:ffff:0:0/96', '::ffff:0:0/96', '0:0:0:0:0:ffff:8000:0/97', '0:0:0:0:0:ffff:505:505', '0:0:0:0:0:ffff:a00:1'])('rejects IPv6 range %s that matches IPv4-mapped peers', (value) => {
+      expect(() => loadEnv({ ...base, TRUSTED_PROXY_CIDRS: value })).toThrow(/^Invalid environment configuration: TRUSTED_PROXY_CIDRS$/);
+    });
+    it.each(['fc00::/7', '2400:cb00::/32', '2606:4700::/32', 'fe80::/10', '64:ff9b::/96', '10.0.0.0/8', 'uniquelocal'])('still accepts %s', (value) => {
+      expect(loadEnv({ ...base, TRUSTED_PROXY_CIDRS: value }).TRUSTED_PROXY_CIDRS).toEqual([value]);
+    });
     it('trusts no proxy in development when unset', () => {
       expect(loadEnv(base).TRUSTED_PROXY_CIDRS).toEqual([]);
     });
