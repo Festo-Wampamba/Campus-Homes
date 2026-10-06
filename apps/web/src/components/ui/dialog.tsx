@@ -32,11 +32,14 @@ function Dialog({
   onOpenChange,
   size = "md",
   dismissible = true,
+  resizable = false,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   size?: "sm" | "md" | "lg" | "xl";
+  // Corner-drag resize on sm+ screens, bounded to the viewport.
+  resizable?: boolean;
   // false = a backdrop click or Escape can't close this — only an explicit
   // Cancel/X click can. For a long form (the tenant-agreement builder, the
   // property form) a stray click just outside the card used to silently
@@ -95,6 +98,10 @@ function Dialog({
         // with several (e.g. one ReserveButton per room row).
         "hidden open:flex m-auto max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
         DIALOG_WIDTH[size],
+        // Native corner resize (CSS `resize` works with overflow-hidden),
+        // bounded so the dialog never outgrows the viewport. Phones keep the
+        // fixed full-width layout.
+        resizable && "sm:resize sm:min-w-[36rem] sm:min-h-[min(24rem,90vh)] max-w-[95vw] sm:max-h-[90vh]",
         "z-(--z-modal) backdrop:bg-black/50",
         "open:animate-in open:fade-in open:zoom-in-95 open:duration-150",
       )}

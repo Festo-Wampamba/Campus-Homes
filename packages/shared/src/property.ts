@@ -169,6 +169,9 @@ export type UpdatePropertyInput = z.infer<typeof updatePropertySchema>;
 export const propertySchema = z.object({
   id: uuid,
   landlordId: uuid,
+  // From GET /listings/properties/mine: true once a listing for this property
+  // passed inspection and was published (status 'verified').
+  hasLiveListing: z.boolean().optional(),
   name: z.string(),
   alternativeName: z.string().nullable(),
   streetAddress: z.string(),

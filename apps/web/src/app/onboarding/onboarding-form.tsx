@@ -50,7 +50,6 @@ export function OnboardingForm({ initialName, initialUsername }: { initialName: 
       <div className="space-y-1.5">
         <Label htmlFor="onboarding-username">Username</Label>
         <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-teal-600">
-          <span aria-hidden className="text-sm text-muted-foreground">@</span>
           <input
             id="onboarding-username"
             required

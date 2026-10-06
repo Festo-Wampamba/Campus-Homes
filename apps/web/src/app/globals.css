@@ -253,3 +253,23 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Landlord review-page stamp (approval-pending/review-stamp.tsx). */
+@theme {
+  --animate-stamp-press: stamp-press 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  --animate-ink-ring: ink-ring 2.4s ease-out infinite;
+
+  @keyframes stamp-press {
+    0%, 100% { transform: translateY(-18px) rotate(-4deg); }
+    40% { transform: translateY(-26px) rotate(-6deg); }
+    55% { transform: translateY(2px) rotate(0deg); }
+    62% { transform: translateY(0) rotate(0deg); }
+    80% { transform: translateY(-14px) rotate(-3deg); }
+  }
+
+  @keyframes ink-ring {
+    0%, 54% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 0.9; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.5); }
+  }
+}

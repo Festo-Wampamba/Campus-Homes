@@ -16,7 +16,7 @@ export default async function LandlordPropertiesPage() {
 
   return (
     <>
-      <KycBanner status={profile.kycStatus} />
+      <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       <div className="mt-6">
         <PropertiesManager properties={properties} />
       </div>

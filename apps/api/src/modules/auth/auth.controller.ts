@@ -53,11 +53,15 @@ export class AuthController {
     @Req() req: Request,
     @Res() res: Response,
     @Query('intent') intentParam?: string,
+    @Query('screen') screen?: string,
   ) {
     const requestId = correlationId(res);
     const env = loadEnv();
     if (intentParam !== undefined && !['student', 'landlord', 'staff'].includes(intentParam)) {
       return res.status(400).json({ code: 'INVALID_AUTH_INTENT', requestId });
+    }
+    if (screen !== undefined && screen !== 'register') {
+      return res.status(400).json({ code: 'INVALID_AUTH_SCREEN', requestId });
     }
     const intent = authIntent(intentParam, portalParam, next);
     const portal: Portal = intent === 'staff' ? 'staff' : 'consumer';
@@ -94,6 +98,8 @@ export class AuthController {
           ...(token ? { one_time_token: token } : {}),
         },
         ...(token && email ? { loginHint: email } : {}),
+        // Staff accounts are invite-only; only consumer sign-up may open on the register screen.
+        ...(screen === 'register' && portal === 'consumer' ? { firstScreen: 'register' as const } : {}),
       });
     } catch {
       this.logger.warn(JSON.stringify({ event: 'auth.start.unavailable', requestId }));

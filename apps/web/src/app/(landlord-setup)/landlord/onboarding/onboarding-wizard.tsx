@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, X } from "lucide-react";
+import { X } from "lucide-react";
 import {
   PROPERTY_TYPES,
   UNIVERSITIES,
@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { AMENITY_OPTIONS, humanizeKey } from "@/lib/format";
+import { APPROVAL_PATH } from "@/lib/landlord-gate";
 import { cn } from "@/lib/utils";
 
 type Step = "legal" | "property";
@@ -111,7 +112,6 @@ export function OnboardingWizard({
     emptyPropertyDeclarationFields(),
   );
   const [pending, setPending] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const knownAmenityKeys = useMemo(() => new Set(AMENITY_OPTIONS.map((o) => o.key)), []);
@@ -220,47 +220,25 @@ export function OnboardingWizard({
           ...(coverPhotoKey ? { coverPhotoKey } : {}),
         }),
       });
-      // Show an in-place confirmation immediately instead of pushing straight
-      // into the dashboard's server render — on a slow connection that RSC
-      // fetch left the landlord staring at a blank screen until they reloaded.
-      // refresh() warms the dashboard data in the background for when they go.
-      setSubmitted(true);
-      router.refresh();
+      // The review page is small and lives in the same bare layout, so this
+      // stays fast; it opens the dashboard by itself once approved.
+      router.replace(APPROVAL_PATH);
     } catch (err) {
       setError(errorMessage(err, "Couldn't submit your property. Try again."));
       setPending(false);
     }
   }
 
-  if (submitted) {
-    return (
-      <Card className="w-full max-w-lg shadow-md" aria-live="polite">
-        <CardContent className="flex flex-col items-center gap-5 p-8 text-center sm:p-10">
-          <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <CheckCircle2 aria-hidden className="size-7" />
-          </span>
-          <div>
-            <h1 className="font-display text-xl font-bold text-foreground">Property submitted</h1>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Your property and profile are saved and now with our Ops team for a physical
-              verification visit and review. You&apos;ll get full landlord dashboard access once your
-              account is approved. Until then your listing isn&apos;t visible to students.
-            </p>
-          </div>
-          <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-            Status: pending review
-          </p>
-          <Button className="w-full" onClick={() => router.push("/landlord?submitted=property")}>
-            Go to your dashboard
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card className={cn("w-full shadow-md", step === "property" ? "max-w-3xl" : "max-w-md")}>
-      <CardContent className="p-6 sm:p-8">
+    <Card
+      className={cn(
+        "w-full shadow-md",
+        step === "property"
+          ? "max-w-5xl sm:min-w-[36rem] sm:min-h-[32rem] sm:resize sm:overflow-auto sm:max-w-[min(100%,72rem)]"
+          : "max-w-md",
+      )}
+    >
+      <CardContent className="p-6 sm:p-10">
         {step === "legal" && (
           <>
             <StepHeader
@@ -299,8 +277,8 @@ export function OnboardingWizard({
               title="Submit your property"
               description="Our Ops team schedules a physical verification visit once this is submitted."
             />
-            <form onSubmit={submitProperty} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+            <form onSubmit={submitProperty} className="space-y-7">
+              <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="propertyName" required>Property name</Label>
                   <Input
@@ -324,7 +302,7 @@ export function OnboardingWizard({
                   />
                 </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="propertyType">Property type</Label>
                   <select
