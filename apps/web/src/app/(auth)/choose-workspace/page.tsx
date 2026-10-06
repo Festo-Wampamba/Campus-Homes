@@ -2,14 +2,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth-card";
 import { SignOutButton } from "@/components/shell/sign-out-button";
-import { WORKSPACE_LABEL, workspaceDestination } from "@/lib/auth-routing";
+import { WORKSPACE_LABEL, authDestination, workspaceDestination } from "@/lib/auth-routing";
 import { requireSession } from "@/lib/session";
 
 export const metadata = { title: "Choose workspace" };
 
 export default async function ChooseWorkspacePage() {
   const session = await requireSession();
-  if (!session.access.workspaces.length) redirect("/access-required");
+  // Only show the chooser when there's an actual choice; zero or one workspace
+  // goes straight to its destination (e.g. a new landlord to onboarding).
+  const destination = authDestination(session);
+  if (destination !== "/choose-workspace") redirect(destination);
   return (
     <AuthCard title="Choose your workspace">
       <p className="text-sm text-muted-foreground">Open a workspace available to your account. You can switch at any time.</p>

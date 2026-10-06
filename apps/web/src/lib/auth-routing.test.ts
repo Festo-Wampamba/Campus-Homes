@@ -65,6 +65,11 @@ describe("workspace routing", () => {
     expect(workspaceGuardDestination(session(grants), "landlord", "/landlord/onboarding")).toBeNull();
   });
 
+  it("sends a new landlord with no other workspace straight to onboarding", () => {
+    const grants = access(["landlord"], { onboarding: { student: false, landlord: true } });
+    expect(authDestination(session(grants))).toBe("/landlord/onboarding");
+  });
+
   it.each(["ops", "admin"] as const)("requires verified MFA for %s, preserving next", (workspace) => {
     const grants = access([workspace]);
     expect(authDestination(session(grants), `/${workspace}?tab=one`)).toBe(`/mfa-required?next=${encodeURIComponent(`/${workspace}?tab=one`)}`);

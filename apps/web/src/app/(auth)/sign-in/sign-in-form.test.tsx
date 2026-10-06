@@ -43,6 +43,14 @@ describe("SignInForm landlord mode", () => {
     expect(renderToStaticMarkup(<SignInForm next="/landlords/enroll" />)).toContain('href="/sign-in?next=%2Flandlord"');
   });
 
+  it("opens Logto on the register screen for a new landlord", () => {
+    expect(renderToStaticMarkup(<SignInForm next="/landlords/enroll" />)).toContain("screen=register");
+  });
+
+  it("opens Logto on the sign-in screen for a returning landlord", () => {
+    expect(renderToStaticMarkup(<SignInForm next="/landlord" />)).not.toContain("screen=register");
+  });
+
   it("keeps the full chooser without a landlord destination", () => {
     expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain("Find student housing");
   });
