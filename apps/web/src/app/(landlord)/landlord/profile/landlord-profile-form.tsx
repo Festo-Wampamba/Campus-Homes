@@ -161,7 +161,7 @@ export function LandlordAccountSettings({
   email,
 }: {
   profile: LandlordProfileWithParticulars;
-  hasLiveListing: boolean;
+  hasLiveListing: boolean | null;
   email: string | null;
 }) {
   const particulars = useParticulars(profile);

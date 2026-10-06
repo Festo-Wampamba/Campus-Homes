@@ -5,15 +5,18 @@ export function KycBanner({
   hasLiveListing = false,
 }: {
   status: "pending" | "verified" | "rejected";
-  hasLiveListing?: boolean;
+  /** null = listings couldn't be loaded; don't claim either state. */
+  hasLiveListing?: boolean | null;
 }) {
   if (status === "verified") {
     return (
       <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-accent px-4 py-3 text-sm font-semibold text-teal-700">
         <ShieldCheck aria-hidden className="size-5 shrink-0" />
-        {hasLiveListing
-          ? "Your account is verified and your listings are live. Students can now reserve your rooms."
-          : "Your account is verified. Our Ops team will contact you to schedule an inspection of your property — your listings go live once it passes."}
+        {hasLiveListing === null
+          ? "Your account is verified."
+          : hasLiveListing
+            ? "Your account is verified and your listings are live. Students can now reserve your rooms."
+            : "Your account is verified. Our Ops team will contact you to schedule an inspection of your property — your listings go live once it passes."}
       </div>
     );
   }

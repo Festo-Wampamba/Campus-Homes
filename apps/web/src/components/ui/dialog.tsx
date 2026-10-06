@@ -101,7 +101,7 @@ function Dialog({
         // Native corner resize (CSS `resize` works with overflow-hidden),
         // bounded so the dialog never outgrows the viewport. Phones keep the
         // fixed full-width layout.
-        resizable && "sm:resize sm:min-w-[36rem] sm:min-h-[24rem] max-w-[95vw] sm:max-h-[90vh]",
+        resizable && "sm:resize sm:min-w-[36rem] sm:min-h-[min(24rem,90vh)] max-w-[95vw] sm:max-h-[90vh]",
         "z-(--z-modal) backdrop:bg-black/50",
         "open:animate-in open:fade-in open:zoom-in-95 open:duration-150",
       )}

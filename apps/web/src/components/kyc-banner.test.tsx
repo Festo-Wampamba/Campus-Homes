@@ -16,4 +16,8 @@ describe("KycBanner", () => {
       "Students can now reserve your rooms",
     );
   });
+
+  it("makes no listing claim when listings couldn't be loaded", () => {
+    expect(renderToStaticMarkup(<KycBanner status="verified" hasLiveListing={null} />)).not.toContain("inspection");
+  });
 });
