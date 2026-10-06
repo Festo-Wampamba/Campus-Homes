@@ -417,7 +417,7 @@ export function PropertyFormDialog({
   onSaved: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="lg" dismissible={false}>
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" resizable dismissible={false}>
       <PropertyForm property={property} onOpenChange={onOpenChange} onSaved={onSaved} />
     </Dialog>
   );

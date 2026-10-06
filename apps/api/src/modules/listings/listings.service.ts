@@ -205,10 +205,19 @@ export class ListingsService {
   }
 
   myProperties(ctx: RlsContext) {
-    // RLS filters to the landlord's own rows.
-    return this.rlsDb.run(ctx, (db) =>
-      db.select().from(properties).orderBy(desc(properties.createdAt)),
-    );
+    // RLS filters both statements to the landlord's own rows. Two statements,
+    // one policied table each: never join/correlate RLS-heavy tables in one
+    // statement (2026-09-23 incident).
+    return this.rlsDb.run(ctx, async (db) => {
+      const rows = await db.select().from(properties).orderBy(desc(properties.createdAt));
+      if (rows.length === 0) return [];
+      const live = await db
+        .selectDistinct({ propertyId: listings.propertyId })
+        .from(listings)
+        .where(and(eq(listings.status, 'verified'), inArray(listings.propertyId, rows.map((p) => p.id))));
+      const liveIds = new Set(live.map((l) => l.propertyId));
+      return rows.map((p) => ({ ...p, hasLiveListing: liveIds.has(p.id) }));
+    });
   }
 
   // Rooms + read-only reservation status + Ops-captured photos for one

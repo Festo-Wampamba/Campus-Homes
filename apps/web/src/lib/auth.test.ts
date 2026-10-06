@@ -13,6 +13,11 @@ describe("signInUrl", () => {
       .toBe("/api/auth/logto/sign-in?portal=staff&intent=staff&next=%2Fadmin");
   });
 
+  it("asks Logto to open on the register screen when requested", () => {
+    expect(signInUrl("consumer", "/landlords/enroll", "landlord", "register"))
+      .toBe("/api/auth/logto/sign-in?portal=consumer&intent=landlord&next=%2Flandlords%2Fenroll&screen=register");
+  });
+
   it("keeps legacy landlord enrollment links working", () => {
     expect(signInUrl("consumer", "/landlords/enroll"))
       .toContain("portal=consumer&intent=landlord");

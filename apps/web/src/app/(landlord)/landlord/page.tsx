@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Building2, CalendarCheck, CheckCircle2, Clock, Plus, Wallet } from "lucide-react";
+import { ArrowRight, Building2, CalendarCheck, Clock, Plus, Wallet } from "lucide-react";
 
 import { getLandlordProfile, getLandlordReservations, getMyProperties } from "@/lib/landlord";
 import { bookingsTrend } from "@/lib/landlord-analytics";
@@ -29,12 +29,7 @@ function reservationTone(status: string): "success" | "warning" | "neutral" {
   return "success";
 }
 
-export default async function LandlordDashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ submitted?: string }>;
-}) {
-  const submitted = (await searchParams).submitted === "property";
+export default async function LandlordDashboardPage() {
   const [profile, properties, reservations] = await Promise.all([
     getLandlordProfile(),
     getMyProperties(),
@@ -55,20 +50,8 @@ export default async function LandlordDashboardPage({
       <h1 className="text-2xl">Welcome back{profile.legalName ? `, ${profile.legalName.split(" ")[0]}` : ""}</h1>
       <p className="mt-1 text-sm text-muted-foreground">Here&apos;s what&apos;s happening across your properties.</p>
 
-      {submitted && (
-        <div
-          role="status"
-          className="mt-6 flex items-start gap-3 rounded-lg border border-primary/30 bg-accent px-4 py-3 text-sm font-semibold text-teal-700"
-        >
-          <CheckCircle2 aria-hidden className="mt-0.5 size-5 shrink-0" />
-          <span>
-            Property submitted. It is awaiting CampusHomes review and will not be published until verification is complete.
-          </span>
-        </div>
-      )}
-
       <div className="mt-6">
-        <KycBanner status={profile.kycStatus} />
+        <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">

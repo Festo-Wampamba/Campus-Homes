@@ -14,6 +14,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   ACCESSIBILITY_FEATURE_OPTIONS,
@@ -171,11 +172,13 @@ export function PropertyExtendedFields({
 
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-locationDetails`}>Country, district, village/zone, nearest landmark</Label>
-        <Input
+        <Textarea
           id={`${idPrefix}-locationDetails`}
           value={value.locationDetails}
           onChange={(e) => onChange({ locationDetails: e.target.value })}
           placeholder="e.g. Uganda, Kampala, Wandegeya, opposite Total fuel station"
+          rows={2}
+          className="min-h-16 max-h-60 resize-y"
         />
       </div>
 
