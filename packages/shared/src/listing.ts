@@ -186,9 +186,9 @@ export const listingDetailResponseSchema = z.object({
     street_address: z.string(),
     gps_lat: z.coerce.number().nullable(),
     gps_lon: z.coerce.number().nullable(),
-    // The landlord's own contact details — "Rent and tenancy terms are agreed
-    // directly with the landlord" (MoneyCard copy) implies contact is expected.
-    custodian_name: z.string(),
+    // The property's assigned custodian, when one is active; null otherwise.
+    // Never the landlord: owners are not shown publicly by name or phone.
+    custodian_name: z.string().nullable(),
     custodian_phone: z.string().nullable(),
     // Other charges captured at submission (PropertyExtendedFields) — null
     // booking_fee_percent = the landlord didn't state one.

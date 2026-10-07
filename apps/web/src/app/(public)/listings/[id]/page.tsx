@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { Camera, Check, Phone, User } from "lucide-react";
+import { Phone, User } from "lucide-react";
 import {
   listingDetailResponseSchema,
   type ListingDetailResponse,
@@ -11,12 +10,14 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatPriceRange, GENDER_ARRANGEMENT_LABELS, humanizeKey } from "@/lib/format";
+import { formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
 import { cn } from "@/lib/utils";
+import { AmenityList } from "@/components/listing/amenity-list";
 import { AskLandlordDialog } from "@/components/listing/ask-landlord-dialog";
+import { ListingGallery } from "@/components/listing/listing-gallery";
 import { BackButton } from "@/components/back-button";
 import { RoomCategoryList } from "@/components/room-category-list";
 import { SaveButton } from "@/components/save-button";
@@ -85,9 +86,9 @@ export default async function ListingDetailPage({
   const unitPrices = units.map((u) => u.pricePerTermUgx);
   const minPriceUgx = unitPrices.length > 0 ? Math.min(...unitPrices) : version.pricePerTermUgx;
   const maxPriceUgx = unitPrices.length > 0 ? Math.max(...unitPrices) : version.pricePerTermUgx;
-  const amenities = Object.entries(version.amenities)
+  const amenityKeys = Object.entries(version.amenities)
     .filter(([, has]) => has)
-    .map(([key]) => humanizeKey(key));
+    .map(([key]) => key);
   const orderedPhotos = [...photos].sort(
     (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder,
   );
@@ -161,45 +162,7 @@ export default async function ListingDetailPage({
           {/* Photos — inspector-captured (EXIF-verified) plus the
               landlord's own whole-property shots (property_media, 0026) */}
           <div className="mb-10">
-            {galleryPhotos.length === 0 ? (
-              <div className="flex aspect-[4/3] items-center justify-center rounded-2xl bg-teal-50 text-muted-foreground sm:aspect-auto sm:h-[31rem]">
-                <span className="inline-flex items-center gap-2 text-sm">
-                  <Camera aria-hidden className="size-4" />
-                  Photos coming soon
-                </span>
-              </div>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-3 sm:grid-rows-2">
-                {galleryPhotos.slice(0, 5).map((photo, i) => {
-                  const url = listingPhotoUrl(photo.storageKey, i === 0 ? 1200 : 600);
-                  return (
-                    <div
-                      key={photo.id}
-                      className={
-                        i === 0
-                          ? "relative aspect-[4/3] overflow-hidden rounded-2xl bg-muted sm:aspect-auto sm:col-span-2 sm:row-span-2 sm:h-full sm:min-h-[31rem]"
-                          : "relative hidden min-h-36 overflow-hidden rounded-xl bg-muted sm:block"
-                      }
-                    >
-                      {url ? (
-                        <Image
-                          src={url}
-                          alt={`${property.name}, photo ${i + 1}`}
-                          fill
-                          sizes={i === 0 ? "(min-width: 640px) 66vw, 100vw" : "33vw"}
-                          className="object-cover"
-                          priority={i === 0}
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center bg-muted text-muted-foreground">
-                          <Camera aria-hidden className="size-5" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <ListingGallery photos={galleryPhotos} propertyName={property.name} />
           </div>
 
           {version.description && (
@@ -213,19 +176,12 @@ export default async function ListingDetailPage({
             </section>
           )}
 
-          {amenities.length > 0 && (
+          {amenityKeys.length > 0 && (
             <section aria-labelledby="amenities-heading" className="mt-10">
               <h2 id="amenities-heading" className="text-xl">
                 Amenities we confirmed
               </h2>
-              <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
-                {amenities.map((amenity) => (
-                  <li key={amenity} className="flex items-center gap-2 text-base">
-                    <Check aria-hidden className="size-4 shrink-0 text-success" />
-                    {amenity}
-                  </li>
-                ))}
-              </ul>
+              <AmenityList keys={amenityKeys} />
             </section>
           )}
 
@@ -319,7 +275,7 @@ function MoneyCard({
   maxPriceUgx: number;
   bookingFeePercent?: number | null;
   advanceRentRequired?: boolean;
-  custodianName?: string;
+  custodianName?: string | null;
   custodianPhone?: string | null;
   compact?: boolean;
 }) {
@@ -332,21 +288,20 @@ function MoneyCard({
       )}
     >
       <div className={cn("min-w-0", compact && "flex-1")}>
-        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {minPriceUgx !== maxPriceUgx && (
-            <span className="text-sm font-normal text-muted-foreground">From</span>
+        {minPriceUgx !== maxPriceUgx && (
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">From</p>
+        )}
+        <p
+          className={cn(
+            "tabular font-display font-semibold leading-tight text-foreground",
+            compact ? "text-lg" : "mt-0.5 text-[1.75rem]",
           )}
-          <span
-            className={cn(
-              "tabular whitespace-nowrap font-display font-semibold leading-tight",
-              compact ? "text-lg" : "text-2xl",
-            )}
-          >
-            {formatPriceRange(minPriceUgx, maxPriceUgx)}
-          </span>
-          <span className="whitespace-nowrap text-sm font-normal text-muted-foreground">
-            per bed / semester
-          </span>
+        >
+          {formatUgx(minPriceUgx)}
+        </p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {minPriceUgx !== maxPriceUgx && !compact && <>Up to {formatUgx(maxPriceUgx)} · </>}
+          per bed / semester
         </p>
         {!compact && (
           <p className="mt-2 text-sm text-muted-foreground">

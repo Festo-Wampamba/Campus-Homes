@@ -765,16 +765,28 @@ export class ListingsService {
                )`,
             [detail.listing.propertyId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES, detail.listing.semesterId],
           );
-          // Custodian contact rides along here too — landlords has no public
-          // SELECT policy either, and a student deciding whether to reserve
-          // needs a name/phone to actually reach, not just an address.
+          // Custodian contact rides along only when a custodian is actually
+          // assigned (an active, in-window property_memberships row, the same
+          // test 0057's RLS uses). Never fall back to the landlord: that showed
+          // the owner's name and phone publicly under a "Custodian" label.
           const propRes = await client.query(
             `SELECT p.id, p.name, p.street_address, p.gps_lat, p.gps_lon,
                     p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
-                    u.name AS custodian_name, u.phone AS custodian_phone
+                    cu.name AS custodian_name, cu.phone AS custodian_phone
              FROM properties p
-             JOIN landlords l ON l.user_id = p.landlord_id
-             JOIN users u ON u.id = l.user_id
+             LEFT JOIN LATERAL (
+               SELECT u.name, u.phone
+               FROM property_memberships pm
+               JOIN users u ON u.id = pm.user_id
+               WHERE pm.property_id = p.id
+                 AND pm.role = 'custodian'
+                 AND pm.status = 'active'
+                 AND pm.revoked_at IS NULL
+                 AND pm.starts_at <= now()
+                 AND (pm.ends_at IS NULL OR pm.ends_at > now())
+               ORDER BY pm.starts_at DESC
+               LIMIT 1
+             ) cu ON true
              WHERE p.id = $1`,
             [detail.listing.propertyId],
           );
@@ -812,7 +824,7 @@ export class ListingsService {
               booking_fee_percent: string | number | null;
               advance_rent_required: boolean;
               gender_arrangement: string | null;
-              custodian_name: string;
+              custodian_name: string | null;
               custodian_phone: string | null;
             },
             propertyMedia: mediaRes.rows as { id: string; storage_key: string; caption: string | null }[],
