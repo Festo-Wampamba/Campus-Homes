@@ -10,9 +10,9 @@ const TONES = {
 } as const;
 
 /**
- * Landlord-portal stat card — icon badge + big tabular number + label, with
- * an optional one-line detail underneath (e.g. a real count breakdown, never
- * a fabricated trend — this portal has no historical baseline to diff
+ * Landlord-portal stat card: icon tile on the left, label above a big tabular
+ * number, and an optional one-line detail underneath (a real count breakdown,
+ * never a fabricated trend; this portal has no historical baseline to diff
  * against yet, unlike the admin console's StatCard).
  */
 export function StatCard({
@@ -29,16 +29,18 @@ export function StatCard({
   tone?: keyof typeof TONES;
 }) {
   return (
-    <Card>
-      <CardContent className="flex items-start justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-          <p className="tabular mt-1.5 text-2xl font-bold text-foreground">{value}</p>
-          {detail && <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>}
+    <Card className="h-full">
+      <CardContent className="flex h-full flex-col gap-3 p-4 sm:p-5">
+        <div className="flex items-center gap-3">
+          <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", TONES[tone])}>
+            <Icon aria-hidden className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-muted-foreground">{label}</p>
+            <p className="tabular text-2xl font-bold leading-tight text-foreground">{value}</p>
+          </div>
         </div>
-        <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", TONES[tone])}>
-          <Icon aria-hidden className="size-4.5" />
-        </span>
+        {detail && <p className="truncate text-xs text-muted-foreground">{detail}</p>}
       </CardContent>
     </Card>
   );

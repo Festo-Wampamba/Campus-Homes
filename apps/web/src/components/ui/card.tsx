@@ -14,7 +14,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
 
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("flex flex-col gap-1 p-4 sm:p-5", className)} {...props} />
+    <div data-slot="card-header" className={cn("flex flex-col gap-1 p-4 sm:p-5", className)} {...props} />
   );
 }
 
@@ -28,8 +28,12 @@ function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
   );
 }
 
+// Content directly under a CardHeader drops its top padding (the header
+// already provides it); standalone content keeps padding on every side. The
+// old unconditional `sm:pt-0` survived a caller's `p-4`, so every standalone
+// card lost its top padding on desktop.
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("p-4 pt-0 sm:p-5 sm:pt-0", className)} {...props} />;
+  return <div className={cn("p-4 sm:p-5 [[data-slot=card-header]+&]:pt-0", className)} {...props} />;
 }
 
 export { Card, CardHeader, CardTitle, CardDescription, CardContent };
