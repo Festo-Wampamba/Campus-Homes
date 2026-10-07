@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { Phone, User } from "lucide-react";
 import {
   listingDetailResponseSchema,
   type ListingDetailResponse,
@@ -153,7 +152,7 @@ export default async function ListingDetailPage({
         )}
       </header>
 
-      {/* Gallery + money/custodian card sit side by side on large screens,
+      {/* Gallery + money card sit side by side on large screens,
           starting at the same vertical position — the reservation card is
           never scrolled below the photos, same layout logic as an
           e-commerce product image + buy box. */}
@@ -237,8 +236,6 @@ export default async function ListingDetailPage({
             maxPriceUgx={maxPriceUgx}
             bookingFeePercent={property.booking_fee_percent}
             advanceRentRequired={property.advance_rent_required}
-            custodianName={property.custodian_name}
-            custodianPhone={property.custodian_phone}
           />
         </aside>
       </div>
@@ -265,8 +262,6 @@ function MoneyCard({
   maxPriceUgx,
   bookingFeePercent,
   advanceRentRequired,
-  custodianName,
-  custodianPhone,
   compact = false,
 }: {
   session: Awaited<ReturnType<typeof getServerSession>>;
@@ -275,8 +270,6 @@ function MoneyCard({
   maxPriceUgx: number;
   bookingFeePercent?: number | null;
   advanceRentRequired?: boolean;
-  custodianName?: string | null;
-  custodianPhone?: string | null;
   compact?: boolean;
 }) {
   return (
@@ -358,26 +351,6 @@ function MoneyCard({
             <li>Agree tenancy terms and pay the landlord directly.</li>
             <li>Confirm your move-in here so the room is marked occupied.</li>
           </ol>
-        </div>
-      )}
-      {!compact && custodianName && (
-        <div className="mt-4 border-t border-border pt-4">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Custodian
-          </p>
-          <p className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <User aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            {custodianName}
-          </p>
-          {custodianPhone && (
-            <a
-              href={`tel:${custodianPhone}`}
-              className="mt-1 flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900"
-            >
-              <Phone aria-hidden className="size-4 shrink-0" />
-              {custodianPhone}
-            </a>
-          )}
         </div>
       )}
     </div>
