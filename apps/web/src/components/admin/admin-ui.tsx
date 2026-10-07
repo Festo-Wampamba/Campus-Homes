@@ -10,9 +10,16 @@ export function Freshness({ asOf, source = "CampusHomes operational PostgreSQL" 
   return <p className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-muted-foreground"><Database aria-hidden className="size-3" />Live source: {source} · refreshed {new Date(asOf).toLocaleString()}</p>;
 }
 
+function TrendChip({ trend }: { trend: number }) {
+  const flat = Math.abs(trend) < 0.05;
+  const up = trend > 0;
+  const Arrow = up ? ArrowUpRight : ArrowDownRight;
+  return <span className={cn("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-bold", flat ? "bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground" : up ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950" : "bg-red-50 text-red-700 dark:bg-red-950")}>{!flat && <Arrow aria-hidden className="size-3" />}{flat ? "0%" : `${up ? "+" : "-"}${Math.abs(trend).toFixed(1)}%`}</span>;
+}
+
 export function StatCard({ label, value, detail, icon: Icon, trend, tone = "teal" }: { label: string; value: string; detail: string; icon: LucideIcon; trend?: number | null; tone?: "teal" | "blue" | "amber" | "slate" }) {
   const tones = { teal: "bg-teal-50 text-teal-700 dark:bg-teal-100", blue: "bg-blue-50 text-blue-700 dark:bg-blue-950", amber: "bg-amber-50 text-amber-700 dark:bg-amber-950", slate: "bg-slate-100 text-slate-700 dark:bg-muted dark:text-slate-300" };
-  return <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-border dark:bg-card"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-slate-500 dark:text-muted-foreground">{label}</p><p className="tabular mt-2 text-2xl font-bold tracking-tight text-slate-950 dark:text-foreground">{value}</p></div><span className={cn("grid size-9 place-items-center rounded-lg", tones[tone])}><Icon aria-hidden className="size-4.5" /></span></div><div className="mt-3 flex min-h-4 items-center gap-1.5 text-[11px] text-slate-500 dark:text-muted-foreground">{trend !== undefined && trend !== null && <span className={cn("inline-flex items-center font-bold", trend >= 0 ? "text-emerald-700" : "text-red-700")}>{trend >= 0 ? <ArrowUpRight aria-hidden className="size-3" /> : <ArrowDownRight aria-hidden className="size-3" />}{Math.abs(trend).toFixed(1)}%</span>}<span>{detail}</span></div></article>;
+  return <article className="flex h-full flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5 dark:border-border dark:bg-card"><div className="flex items-center gap-3"><span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", tones[tone])}><Icon aria-hidden className="size-5" /></span><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-500 dark:text-muted-foreground">{label}</p><p className="tabular truncate text-2xl font-bold leading-tight tracking-tight text-slate-950 dark:text-foreground">{value}</p></div></div><div className="flex min-h-5 flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-muted-foreground">{trend !== undefined && trend !== null && <TrendChip trend={trend} />}<span>{detail}</span></div></article>;
 }
 
 export function StatusBadge({ value }: { value: unknown }) {
