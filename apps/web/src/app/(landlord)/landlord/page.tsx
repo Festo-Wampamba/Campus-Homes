@@ -5,6 +5,7 @@ import { ArrowRight, BedDouble, Building2, CalendarCheck, Plus, Wallet } from "l
 
 import { getLandlordProfile, getLandlordReservations, getMyProperties } from "@/lib/landlord";
 import { bookingsTrend } from "@/lib/landlord-analytics";
+import { timeOfDayGreeting } from "@/lib/greeting";
 import { KycBanner } from "@/components/kyc-banner";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +48,7 @@ export default async function LandlordDashboardPage() {
 
   return (
     <>
-      <h1 className="text-2xl">Welcome back{profile.legalName ? `, ${profile.legalName.split(" ")[0]}` : ""}</h1>
+      <h1 className="text-2xl">{timeOfDayGreeting()}{profile.legalName ? `, ${profile.legalName.split(" ")[0]}` : ""}</h1>
       <p className="mt-1 text-sm text-muted-foreground">Here&apos;s what&apos;s happening across your properties.</p>
 
       <div className="mt-6">

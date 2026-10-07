@@ -8,6 +8,7 @@ import { workspaceHome } from "@/lib/auth-routing";
 import { Freshness, PageHeader, SectionCard, StatCard, StatusBadge } from "@/components/admin/admin-ui";
 import { auditIcon, auditTone, describeAuditAction } from "@/components/admin/audit-action";
 import { GrowthChart } from "@/components/admin/growth-chart";
+import { timeOfDayGreeting } from "@/lib/greeting";
 import { cn } from "@/lib/utils";
 import { apiServer } from "@/lib/server-api";
 
@@ -47,7 +48,7 @@ export default async function AdminOverviewPage() {
   const reservationTotal = Math.max(1, data.reservationStatus.reduce((sum, row) => sum + row.count, 0));
 
   return <>
-    <PageHeader eyebrow="Command centre" title={`Good day, ${session.user.name?.split(" ")[0] || "there"}`} description="A live view of CampusHomes growth, trust operations, reservations, and platform health." actions={<Link href="/admin/audit-log" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-border dark:bg-card dark:text-foreground"><RefreshCcw aria-hidden className="size-4" />Review activity</Link>} />
+    <PageHeader eyebrow="Command centre" title={`${timeOfDayGreeting()}, ${session.user.name?.split(" ")[0] || "there"}`} description="A live view of CampusHomes growth, trust operations, reservations, and platform health." actions={<Link href="/admin/audit-log" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-border dark:bg-card dark:text-foreground"><RefreshCcw aria-hidden className="size-4" />Review activity</Link>} />
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label="Total users" value={s.totalUsers.toLocaleString()} detail={`${s.activeUsers.toLocaleString()} active accounts`} trend={change(s.newUsers30d, s.priorUsers30d)} icon={Users} tone="teal" />
       <StatCard label="Properties" value={s.properties.toLocaleString()} detail={`${s.verifiedListings.toLocaleString()} verified listings`} icon={Building2} tone="blue" />
