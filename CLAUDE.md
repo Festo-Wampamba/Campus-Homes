@@ -1194,3 +1194,54 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
   - Local compose services use `restart: unless-stopped` (they stayed down
     after a reboot before, and the setup script only said `fetch failed`;
     it now names the port and says to run `pnpm local:up`).
+
+- **Landlord onboarding UX + domain-expiry outage (2026-10-06, PRs #137 → `development`,
+  #138 → `main` `3ce0153`):** spec/plan under `docs/superpowers/{specs,plans}/2026-10-05-landlord-onboarding-ux*`.
+  - **Gate bug fixed:** the KYC gate lived in the `(landlord)` layout, which in-app
+    (client) navigation skips, so a pending landlord could reach the dashboard.
+    Onboarding + approval-pending now live in a separate `(landlord-setup)` route
+    group; gate rules are pure functions in `apps/web/src/lib/landlord-gate.ts`.
+    Layouts read properties with raw `apiServer` (not `getMyProperties()`, which
+    turns a failure into `[]`) so a failed load stays "unknown" instead of looking
+    like "no property" and reopening the wizard. Same rule for the Account Settings
+    banner: `KycBanner hasLiveListing={null}` = unknown → neutral "verified" copy.
+  - Approval page polls `GET /landlords/me` (5s, 15s after 3 failures, paused while
+    `document.hidden`, 401 → sign-in) and `router.replace("/landlord")` on approval.
+    `GET /listings/properties/mine` gained `hasLiveListing`.
+  - Sign-in: `signInMode(next)` shows landlord-only options for `/landlords/enroll`
+    and `/landlord*`. `signInUrl(..., "register")` → API `?screen=register` →
+    Logto `firstScreen: 'register'` (consumer portal only; any other value 400s).
+    `/choose-workspace` now redirects via `authDestination()` when there's nothing
+    to choose, so a single-workspace user never sees a one-option chooser.
+  - Shared `Dialog` gained `resizable`; its min-height is `min(24rem,90vh)` so it
+    can't exceed `max-h-[90vh]` on short landscape screens and hide the footer.
+  - **CI `security` job fails on any newly published advisory, regardless of the
+    PR.** Fixed by `pnpm-workspace.yaml` overrides `proxy-addr@<2.0.8: 2.0.8`
+    (critical) and `source-map-js@<1.2.2: 1.2.2` (high) — same pattern as the
+    existing overrides.
+  - **Outage: `campushomes.co.ug` and `akolet.co.ug` expired 2026-10-05** (UG
+    Registry, registered 2025-10-05, no auto-renew). Every host — apex, staging,
+    api, `deploy.` (Dokploy), Logto — went NXDOMAIN while the VPS stayed healthy.
+    Diagnosis: `dig` returns NXDOMAIN with the `ug.` SOA in AUTHORITY (registry, not
+    Cloudflare); `whois.co.ug` port 43 says `Status: EXPIRED` (no `whois` binary
+    locally, and the bash hook blocks `/dev/tcp` — use a Python socket). Verify the
+    servers without DNS: `curl --resolve api-staging.campushomes.co.ug:443:169.58.85.25 https://api-staging.campushomes.co.ug/api/v1/health`.
+    `deploy-staging` cannot succeed while DNS is down (`DOKPLOY_API_URL` and the
+    health gate both use the domain); after renewal rerun CI run `37456186182`
+    with `gh run rerun … --failed`. **Renewal is due every Oct 5 — enable
+    auto-renew and add uptime monitoring** (second unnoticed outage after the
+    Contabo suspension).
+  - State at end of day: prod `d8636d1` (schema 56, security release #136 NOT
+    deployed); staging `5bffedc` (58); `main` `3ce0153` waiting for the staging
+    deploy rerun, then the manual prod deploy (`gh workflow run CI --ref main`).
+    Still to verify on staging: admin-console approval → review page auto-opens,
+    and photo + ID-document uploads through the private B2 bucket (local dev has
+    no B2 keys; it uploads to Cloudinary, which passed).
+  - **Local-dev gotchas found:** `preview_start` runs `.claude/launch.json` from
+    the *main checkout*, not a worktree — start `pnpm --filter … dev` from the
+    worktree yourself; `/api/v1/health` `schema.expected` lower than `applied` is
+    the tell. A worktree needs `apps/api/.env` symlinked from the main checkout.
+    The browser pane reports `document.hidden` while not displayed, which pauses
+    the approval poll by design. `pkill -f "next dev"` inside a Bash call can match
+    its own shell (exit 144) — kill by PID from `ss -ltnp`. The local super admin
+    (`festo@campushomes.co.ug`) needs Festo's TOTP, so admin-console steps need Festo.
