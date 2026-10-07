@@ -58,7 +58,7 @@ function LandlordSignIn({ mode, next, error }: { mode: Exclude<SignInMode, "all"
           <Wordmark stacked />
         </div>
         <p className="mb-5 text-center text-sm text-muted-foreground">
-          Landlord account — list and manage your properties on CampusHomes.
+          List and manage your properties on CampusHomes with a landlord account.
         </p>
         <ErrorNotice error={error} />
         <a href={creating ? signInUrl("consumer", "/landlords/enroll", "landlord", "register") : signInUrl("consumer", next, "landlord")} className="block">

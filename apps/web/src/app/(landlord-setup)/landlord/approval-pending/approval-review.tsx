@@ -63,7 +63,7 @@ export function ApprovalReview({ initialStatus }: { initialStatus: ApprovalStatu
           </div>
           {status === "pending" && (
             <p className="text-xs text-muted-foreground">
-              {hasTrouble ? "Having trouble checking — we'll keep trying." : "Checking for updates…"}
+              {hasTrouble ? "We're having trouble checking your status. We'll keep trying." : "Checking for updates…"}
             </p>
           )}
         </CardContent>

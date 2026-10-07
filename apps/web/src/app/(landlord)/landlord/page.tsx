@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Building2, CalendarCheck, Clock, Plus, Wallet } from "lucide-react";
+import { ArrowRight, BedDouble, Building2, CalendarCheck, Plus, Wallet } from "lucide-react";
 
 import { getLandlordProfile, getLandlordReservations, getMyProperties } from "@/lib/landlord";
 import { bookingsTrend } from "@/lib/landlord-analytics";
@@ -57,7 +57,7 @@ export default async function LandlordDashboardPage() {
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" />
         <StatCard label="Active bookings" value={String(activeBookings.length)} icon={CalendarCheck} tone="teal" />
-        <StatCard label="Occupied rooms" value={String(occupied.length)} icon={Clock} tone="coral" />
+        <StatCard label="Occupied rooms" value={String(occupied.length)} icon={BedDouble} tone="coral" />
         <StatCard label="Earnings" value="N/A" detail="Arrives with Phase 2" icon={Wallet} tone="neutral" />
       </div>
 

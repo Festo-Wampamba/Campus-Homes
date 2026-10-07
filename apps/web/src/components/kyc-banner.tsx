@@ -16,7 +16,7 @@ export function KycBanner({
           ? "Your account is verified."
           : hasLiveListing
             ? "Your account is verified and your listings are live. Students can now reserve your rooms."
-            : "Your account is verified. Our Ops team will contact you to schedule an inspection of your property — your listings go live once it passes."}
+            : "Your account is verified. Our Ops team will contact you to schedule an inspection of your property. Your listings go live once it passes."}
       </div>
     );
   }
