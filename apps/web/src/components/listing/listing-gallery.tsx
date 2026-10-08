@@ -53,7 +53,7 @@ export function ListingGallery({ photos, propertyName }: { photos: GalleryPhoto[
                 "relative overflow-hidden rounded-2xl bg-muted outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
                 main
                   ? cn("aspect-[4/3]", hasSide && "sm:col-span-2 sm:row-span-2 sm:aspect-auto sm:h-[30rem]")
-                  : "hidden sm:block",
+                  : cn("hidden sm:block", visible.length === 2 && "sm:row-span-2"),
               )}
             >
               {url ? (
