@@ -765,16 +765,10 @@ export class ListingsService {
                )`,
             [detail.listing.propertyId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES, detail.listing.semesterId],
           );
-          // Custodian contact rides along here too — landlords has no public
-          // SELECT policy either, and a student deciding whether to reserve
-          // needs a name/phone to actually reach, not just an address.
           const propRes = await client.query(
             `SELECT p.id, p.name, p.street_address, p.gps_lat, p.gps_lon,
-                    p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
-                    u.name AS custodian_name, u.phone AS custodian_phone
+                    p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement
              FROM properties p
-             JOIN landlords l ON l.user_id = p.landlord_id
-             JOIN users u ON u.id = l.user_id
              WHERE p.id = $1`,
             [detail.listing.propertyId],
           );
@@ -812,8 +806,6 @@ export class ListingsService {
               booking_fee_percent: string | number | null;
               advance_rent_required: boolean;
               gender_arrangement: string | null;
-              custodian_name: string;
-              custodian_phone: string | null;
             },
             propertyMedia: mediaRes.rows as { id: string; storage_key: string; caption: string | null }[],
           };
