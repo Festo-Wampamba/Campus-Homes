@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
+import { PhotoTile } from "@/components/listing/photo-tile";
 import { StatusChip } from "@/components/status-chip";
 import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -28,7 +29,20 @@ function PropertyStatusChip({ status }: { status: string }) {
   );
 }
 
-function PropertyThumbnail({ property, className }: { property: Property; className?: string }) {
+function PropertyThumbnail({ property, className, whole = false }: { property: Property; className?: string; whole?: boolean }) {
+  // Card-sized covers show the whole photo; the card click opens the detail
+  // dialog, where the photo can be viewed full screen.
+  if (whole && property.coverPhotoKey) {
+    return (
+      <PhotoTile
+        photos={[{ storageKey: property.coverPhotoKey }]}
+        width={600}
+        alt={`${property.name} cover photo`}
+        interactive={false}
+        className={cn("shrink-0", className)}
+      />
+    );
+  }
   const url = property.coverPhotoKey ? listingPhotoUrl(property.coverPhotoKey, 100) : null;
   if (url) {
     return (
@@ -209,7 +223,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                   onClick={() => openDetail(property)}
                   className="cursor-pointer overflow-hidden transition-shadow hover:shadow-md"
                 >
-                  <PropertyThumbnail property={property} className="h-32 w-full rounded-none" />
+                  <PropertyThumbnail property={property} whole className="h-40 w-full rounded-none" />
                   <CardContent className="flex items-start gap-3 p-4">
                     <div className="min-w-0 flex-1">
                       <h2 className="font-display text-sm font-semibold text-foreground">

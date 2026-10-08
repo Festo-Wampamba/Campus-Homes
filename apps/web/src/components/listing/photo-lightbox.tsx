@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -26,11 +26,22 @@ export function PhotoLightbox({
   onNavigate: (delta: 1 | -1) => void;
 }) {
   const open = state !== null;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  // A native modal dialog sits in the browser's top layer, so the viewer
+  // covers the whole screen even when opened from inside another dialog
+  // (e.g. the landlord's property detail window), which would otherwise
+  // clip a fixed-position overlay.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (open && dialog && !dialog.open) dialog.showModal();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
+    // Escape is handled by the dialog's own cancel event, so it closes only
+    // this viewer and never a dialog underneath it.
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight") onNavigate(1);
       if (e.key === "ArrowLeft") onNavigate(-1);
     }
@@ -43,12 +54,15 @@ export function PhotoLightbox({
   const url = listingPhotoUrl(photo.storageKey, 1600);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
       aria-label="Photo viewer"
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-4"
+      className="fixed inset-0 m-0 hidden h-dvh max-h-none w-screen max-w-none flex-col items-center justify-center bg-black/90 p-4 open:flex backdrop:bg-black/60"
       onClick={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
     >
       <button
         type="button"
@@ -99,7 +113,7 @@ export function PhotoLightbox({
         {state.caption}
         {state.photos.length > 1 && ` (${state.index + 1} / ${state.photos.length})`}
       </p>
-    </div>
+    </dialog>
   );
 }
 
