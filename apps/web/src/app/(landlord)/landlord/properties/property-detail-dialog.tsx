@@ -15,11 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { PropertyQrCode } from "@/components/property-qr-code";
+import { PhotoTile } from "@/components/listing/photo-tile";
 import { StatusChip } from "@/components/status-chip";
 import { TenantAgreementBuilderDialog } from "@/components/tenant-agreement-builder-dialog";
 import { ViewDocumentButton } from "@/components/view-document-button";
 import { api, ApiError } from "@/lib/api";
-import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
+import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { formatUgx } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -101,11 +102,14 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 function CoverPhoto({ property }: { property: Property }) {
-  const url = property.coverPhotoKey ? listingPhotoUrl(property.coverPhotoKey, 800) : null;
-  if (!url) return null;
+  if (!property.coverPhotoKey) return null;
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-    <img src={url} alt={`${property.name} cover photo`} className="h-48 w-full rounded-md object-cover" />
+    <PhotoTile
+      photos={[{ storageKey: property.coverPhotoKey }]}
+      width={1200}
+      alt={`${property.name} cover photo`}
+      className="h-56 w-full rounded-md sm:h-64"
+    />
   );
 }
 
@@ -806,14 +810,17 @@ function PropertyMediaManager({
       {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
       {media.length > 0 && (
         <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {media.map((item) => {
-            const url = listingPhotoUrl(item.storageKey, 300);
+          {media.map((item, i) => {
             return (
               <div key={item.id} className="group relative">
-                {url && (
-                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                  <img src={url} alt="Property photo" className="aspect-square w-full rounded-md object-cover" />
-                )}
+                <PhotoTile
+                  photos={media}
+                  index={i}
+                  width={600}
+                  alt={`Property photo ${i + 1}`}
+                  caption="Property photos"
+                  className="aspect-square w-full rounded-md"
+                />
                 <button
                   type="button"
                   aria-label="Remove photo"
@@ -899,14 +906,17 @@ function RoomPhotoManager({
       {error && <p className="text-sm text-destructive">{error}</p>}
       {room.photos.length > 0 && (
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-          {room.photos.map((photo) => {
-            const url = listingPhotoUrl(photo.storageKey, 150);
+          {room.photos.map((photo, i) => {
             return (
               <div key={photo.id} className="group relative">
-                {url && (
-                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
-                  <img src={url} alt="Room photo" className="aspect-square w-full rounded-md object-cover" />
-                )}
+                <PhotoTile
+                  photos={room.photos}
+                  index={i}
+                  width={600}
+                  alt={`Room photo ${i + 1}`}
+                  caption="Room photos"
+                  className="aspect-square w-full rounded-md"
+                />
                 <button
                   type="button"
                   aria-label="Remove photo"
@@ -1107,18 +1117,17 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
                 Verification photos
               </p>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {detail.photos.map((storageKey) => {
-                  const url = listingPhotoUrl(storageKey, 300);
-                  return url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL, same pattern as public listing detail
-                    <img
-                      key={storageKey}
-                      src={url}
-                      alt="Room photo"
-                      className="aspect-square w-full rounded-md object-cover"
-                    />
-                  ) : null;
-                })}
+                {detail.photos.map((storageKey, i) => (
+                  <PhotoTile
+                    key={storageKey}
+                    photos={detail.photos.map((key) => ({ storageKey: key }))}
+                    index={i}
+                    width={600}
+                    alt={`Room photo ${i + 1}`}
+                    caption="Room photos"
+                    className="aspect-square w-full rounded-md"
+                  />
+                ))}
               </div>
             </div>
           )}

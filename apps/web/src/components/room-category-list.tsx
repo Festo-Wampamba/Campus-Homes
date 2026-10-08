@@ -1,22 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, DoorOpen, Images, X } from "lucide-react";
+import { useState } from "react";
+import { BedDouble, Images } from "lucide-react";
 import type { ListingDetailResponse } from "@campushomes/shared";
 
-import { listingPhotoUrl } from "@/lib/cloudinary";
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ReserveButton } from "@/components/reserve-button";
 import { StatusChip } from "@/components/status-chip";
+import { PhotoLightbox, type LightboxPhoto, type LightboxState } from "@/components/listing/photo-lightbox";
 
 type Unit = ListingDetailResponse["units"][number];
 type UnitPhoto = ListingDetailResponse["unitPhotos"][number];
-
-// Both listing_photos (inspection gallery) and unit_photos (per-room) carry
-// enough here — the lightbox only ever needs a storageKey to resolve a URL.
-type LightboxPhoto = { storageKey: string };
 
 type CategoryGroup = {
   key: string;
@@ -82,8 +77,6 @@ function groupByCategory(
   return [...groups.values()].sort((a, b) => a.pricePerTermUgx - b.pricePerTermUgx);
 }
 
-type LightboxState = { photos: LightboxPhoto[]; index: number; caption: string };
-
 export function RoomCategoryList({
   listingId,
   units,
@@ -126,13 +119,13 @@ export function RoomCategoryList({
         {groups.map((group) => (
           <li
             key={group.key}
-            className="grid gap-x-4 gap-y-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-5"
+            className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5"
           >
             <div className="flex min-w-0 items-start gap-3">
-              <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
-                <DoorOpen aria-hidden className="size-4" />
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-700">
+                <BedDouble aria-hidden className="size-5" />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <p className="font-display font-semibold">
                     {roomCategoryLabel(group.category)}
@@ -143,81 +136,82 @@ export function RoomCategoryList({
                     </span>
                   )}
                 </div>
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+                <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
                   <span>Sleeps {group.capacity}</span>
                   <span aria-hidden>·</span>
                   <span>
                     {group.roomCount} {group.roomCount === 1 ? "room" : "rooms"}
                   </span>
                 </p>
+                {group.availableCount > 0 ? (
+                  <StatusChip tone="success">
+                    {group.availableCount} {group.availableCount === 1 ? "bed" : "beds"} free
+                  </StatusChip>
+                ) : (
+                  <StatusChip tone="warning">Fully booked</StatusChip>
+                )}
               </div>
             </div>
 
-            <div className="min-w-0 text-left sm:text-right">
-              <p className="tabular whitespace-nowrap text-sm font-semibold text-foreground">
-                {formatUgx(group.pricePerTermUgx)}
-              </p>
-              <p className="whitespace-nowrap text-xs text-muted-foreground">per bed / semester</p>
-              {group.depositUgx != null && (
-                <p className="mt-0.5 whitespace-nowrap text-xs text-muted-foreground">
-                  Deposit {formatUgx(group.depositUgx)}
+            <div className="flex min-w-0 flex-col gap-3 sm:items-end">
+              <div className="sm:text-right">
+                <p className="tabular whitespace-nowrap font-display text-lg font-semibold text-foreground">
+                  {formatUgx(group.pricePerTermUgx)}
                 </p>
-              )}
-            </div>
-
-            <div className="col-span-full flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3 sm:justify-end">
-              {group.availableCount > 0 ? (
-                <StatusChip tone="success">{group.availableCount} free</StatusChip>
-              ) : (
-                <StatusChip tone="warning">Fully booked</StatusChip>
-              )}
-              {group.roomPhotos.length > 0 && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    setLightbox({
-                      photos: group.roomPhotos,
-                      index: 0,
-                      caption: "Photos of this room, uploaded by the landlord.",
-                    })
-                  }
-                >
-                  <Images aria-hidden className="size-4" />
-                  Room photos
-                </Button>
-              )}
-              {photos.length > 0 && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    setLightbox({
-                      photos,
-                      index: 0,
-                      caption: "General photos of the property.",
-                    })
-                  }
-                >
-                  <Images aria-hidden className="size-4" />
-                  Property photos
-                </Button>
-              )}
-              {canReserve && group.firstAvailableBedId && (
-                <ReserveButton
-                  bedId={group.firstAvailableBedId}
-                  listingId={listingId}
-                  needsProfile={needsProfile}
-                />
-              )}
+                <p className="whitespace-nowrap text-xs text-muted-foreground">
+                  per bed / semester
+                  {group.depositUgx != null && ` · Deposit ${formatUgx(group.depositUgx)}`}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                {group.roomPhotos.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setLightbox({
+                        photos: group.roomPhotos,
+                        index: 0,
+                        caption: "Photos of this room, uploaded by the landlord.",
+                      })
+                    }
+                  >
+                    <Images aria-hidden className="size-4" />
+                    Room photos
+                  </Button>
+                )}
+                {photos.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setLightbox({
+                        photos,
+                        index: 0,
+                        caption: "General photos of the property.",
+                      })
+                    }
+                  >
+                    <Images aria-hidden className="size-4" />
+                    Property photos
+                  </Button>
+                )}
+                {canReserve && group.firstAvailableBedId && (
+                  <ReserveButton
+                    bedId={group.firstAvailableBedId}
+                    listingId={listingId}
+                    needsProfile={needsProfile}
+                  />
+                )}
+              </div>
             </div>
           </li>
         ))}
       </ul>
 
-      <Lightbox
+      <PhotoLightbox
         state={lightbox}
         propertyName={propertyName}
         onClose={() => setLightbox(null)}
@@ -226,120 +220,6 @@ export function RoomCategoryList({
             s ? { ...s, index: (s.index + delta + s.photos.length) % s.photos.length } : s,
           )
         }
-      />
-    </>
-  );
-}
-
-/** Full-size photo viewer, shared between the inspection gallery and a
- * category's room-specific photos — `state` carries which set is open and
- * the caption explaining what the student is looking at. */
-function Lightbox({
-  state,
-  propertyName,
-  onClose,
-  onNavigate,
-}: {
-  state: LightboxState | null;
-  propertyName: string;
-  onClose: () => void;
-  onNavigate: (delta: 1 | -1) => void;
-}) {
-  const open = state !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") onNavigate(1);
-      if (e.key === "ArrowLeft") onNavigate(-1);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, onNavigate]);
-
-  if (!state) return null;
-  const photo = state.photos[state.index];
-  const url = listingPhotoUrl(photo.storageKey, 1600);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Photo viewer"
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-4"
-      onClick={onClose}
-    >
-      <button
-        type="button"
-        aria-label="Close photo viewer"
-        onClick={onClose}
-        className="absolute top-4 right-4 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-      >
-        <X aria-hidden className="size-6" />
-      </button>
-
-      {state.photos.length > 1 && (
-        <>
-          <button
-            type="button"
-            aria-label="Previous photo"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate(-1);
-            }}
-            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white sm:left-4"
-          >
-            <ChevronLeft aria-hidden className="size-7" />
-          </button>
-          <button
-            type="button"
-            aria-label="Next photo"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate(1);
-            }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white sm:right-4"
-          >
-            <ChevronRight aria-hidden className="size-7" />
-          </button>
-        </>
-      )}
-
-      {url && (
-        <LightboxImage
-          // Remounts per photo — the cleanest way to reset the loading
-          // spinner without a setState-in-effect.
-          key={`${photo.storageKey}-${state.index}`}
-          url={url}
-          alt={`${propertyName}, photo ${state.index + 1}`}
-        />
-      )}
-      <p className="mt-3 text-center text-sm text-white/70">
-        {state.caption}
-        {state.photos.length > 1 && ` (${state.index + 1} / ${state.photos.length})`}
-      </p>
-    </div>
-  );
-}
-
-function LightboxImage({ url, alt }: { url: string; alt: string }) {
-  const [loaded, setLoaded] = useState(false);
-  return (
-    <>
-      {!loaded && (
-        <div
-          aria-hidden
-          className="size-16 animate-spin rounded-full border-4 border-white/20 border-t-white/80"
-        />
-      )}
-      {/* eslint-disable-next-line @next/next/no-img-element -- full-viewport lightbox of an arbitrary-origin storage URL, next/image's fixed-layout modes don't fit this */}
-      <img
-        src={url}
-        alt={alt}
-        className={cn("max-h-[80vh] max-w-full rounded-md object-contain", !loaded && "hidden")}
-        onLoad={() => setLoaded(true)}
-        onClick={(e) => e.stopPropagation()}
       />
     </>
   );
