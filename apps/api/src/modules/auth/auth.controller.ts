@@ -84,7 +84,11 @@ export class AuthController {
       }, state);
       await client.signIn({
         redirectUri: `${webOrigin(env)}/api/auth/logto/callback`,
-        ...(portal === 'staff' ? { prompt: 'login' as Prompt } : {}),
+        // Always show Logto's sign-in screen: silently reusing its browser
+        // session could hand back a different account (e.g. a staff member
+        // signed in earlier on this browser when the landlord is signing in).
+        // Magic links (one-time token) sign in without interaction.
+        ...(portal === 'staff' || !token ? { prompt: 'login' as Prompt } : {}),
         extraParams: {
           nonce,
           ...(portal === 'staff' ? { max_age: '0', claims: JSON.stringify({ id_token: { auth_time: { essential: true }, amr: { essential: true } } }) } : {}),
