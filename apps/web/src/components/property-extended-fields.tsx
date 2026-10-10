@@ -52,7 +52,7 @@ export type PropertyExtendedFieldsValue = {
   transportShuttle: boolean;
   advanceRentRequired: boolean;
   bookingFeePercent: string;
-  rentPeriod: RentPeriod | "";
+  rentPeriods: RentPeriod[];
   rentPeriodOther: string;
   selfContainedRoomCount: string;
   nonSelfContainedRoomCount: string;
@@ -76,7 +76,7 @@ export function emptyPropertyExtendedFields(): PropertyExtendedFieldsValue {
     transportShuttle: false,
     advanceRentRequired: false,
     bookingFeePercent: "",
-    rentPeriod: "",
+    rentPeriods: [],
     rentPeriodOther: "",
     selfContainedRoomCount: "",
     nonSelfContainedRoomCount: "",
@@ -301,37 +301,42 @@ export function PropertyExtendedFields({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-rentPeriod`}>Period for collecting rent</Label>
-          <select
-            id={`${idPrefix}-rentPeriod`}
-            value={value.rentPeriod}
-            onChange={(e) => onChange({ rentPeriod: e.target.value as RentPeriod | "" })}
-            className={selectClass}
-          >
-            <option value="">Not specified</option>
-            {RENT_PERIODS.map((r) => (
-              <option key={r} value={r}>
-                {RENT_PERIOD_LABELS[r]}
-              </option>
-            ))}
-          </select>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Period for collecting rent</legend>
+        <p className="text-xs text-muted-foreground">Tick every option you accept.</p>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {RENT_PERIODS.map((r) => (
+            <label key={r} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={value.rentPeriods.includes(r)}
+                onChange={(e) =>
+                  onChange({
+                    rentPeriods: e.target.checked
+                      ? [...value.rentPeriods, r]
+                      : value.rentPeriods.filter((p) => p !== r),
+                  })
+                }
+              />
+              {RENT_PERIOD_LABELS[r]}
+            </label>
+          ))}
         </div>
-        {value.rentPeriod === "other" && (
-          <div className="space-y-1.5">
+        {value.rentPeriods.includes("other") && (
+          <div className="space-y-1.5 sm:max-w-md">
             <Label htmlFor={`${idPrefix}-rentPeriodOther`} required>
-              Describe the rent period
+              Describe the other rent period
             </Label>
             <Input
               id={`${idPrefix}-rentPeriodOther`}
               required
+              placeholder="e.g. per year, or termly in two instalments"
               value={value.rentPeriodOther}
               onChange={(e) => onChange({ rentPeriodOther: e.target.value })}
             />
           </div>
         )}
-      </div>
+      </fieldset>
 
       <div className="flex flex-wrap gap-6">
         <label className="flex items-center gap-2 text-sm">
@@ -410,8 +415,8 @@ export function serializePropertyExtendedFields(v: PropertyExtendedFieldsValue) 
     transportShuttle: v.transportShuttle,
     advanceRentRequired: v.advanceRentRequired,
     bookingFeePercent: v.bookingFeePercent === "" ? null : Number(v.bookingFeePercent),
-    rentPeriod: v.rentPeriod || null,
-    rentPeriodOther: v.rentPeriod === "other" ? v.rentPeriodOther.trim() || null : null,
+    rentPeriods: v.rentPeriods,
+    rentPeriodOther: v.rentPeriods.includes("other") ? v.rentPeriodOther.trim() || null : null,
     selfContainedRoomCount: v.selfContainedRoomCount === "" ? null : Number(v.selfContainedRoomCount),
     nonSelfContainedRoomCount:
       v.nonSelfContainedRoomCount === "" ? null : Number(v.nonSelfContainedRoomCount),
@@ -434,7 +439,7 @@ export function propertyExtendedFieldsFromProperty(p: {
   transportShuttle: boolean;
   advanceRentRequired: boolean;
   bookingFeePercent: number | null;
-  rentPeriod: string | null;
+  rentPeriods: string[];
   rentPeriodOther: string | null;
   selfContainedRoomCount: number | null;
   nonSelfContainedRoomCount: number | null;
@@ -453,7 +458,7 @@ export function propertyExtendedFieldsFromProperty(p: {
     transportShuttle: p.transportShuttle,
     advanceRentRequired: p.advanceRentRequired,
     bookingFeePercent: p.bookingFeePercent == null ? "" : String(p.bookingFeePercent),
-    rentPeriod: (p.rentPeriod ?? "") as RentPeriod | "",
+    rentPeriods: (p.rentPeriods ?? []) as RentPeriod[],
     rentPeriodOther: p.rentPeriodOther ?? "",
     selfContainedRoomCount: p.selfContainedRoomCount == null ? "" : String(p.selfContainedRoomCount),
     nonSelfContainedRoomCount:

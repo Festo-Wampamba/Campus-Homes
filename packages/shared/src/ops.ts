@@ -42,6 +42,15 @@ export const PHOTO_CATEGORIES = [
 ] as const;
 export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number];
 
+// Room photos, where "self-contained" (own bathroom) means something; the
+// toggle is hidden for every other category.
+const BEDROOM_PHOTO_CATEGORIES = new Set<PhotoCategory>([
+  'bedroom', 'single_bedroom', 'double_bedroom', 'triple_bedroom', 'quad_bedroom',
+]);
+export function isBedroomCategory(category: PhotoCategory): boolean {
+  return BEDROOM_PHOTO_CATEGORIES.has(category);
+}
+
 export const PHOTO_CATEGORY_LABELS: Record<PhotoCategory, string> = {
   bedroom: 'Bedroom', single_bedroom: 'Single bedroom', double_bedroom: 'Double bedroom (2 beds)',
   triple_bedroom: 'Triple bedroom (3 beds)', quad_bedroom: 'Quad bedroom (4 beds)', bathroom: 'Bathroom', kitchen: 'Kitchen',
@@ -150,6 +159,10 @@ export const publishListingSchema = z.object({
     )
     .min(1)
     .max(MAX_PUBLISH_UNITS),
+  // The photo set the lead confirmed (types fixed, missed ones added, bad
+  // ones removed). Omitted = keep the old behaviour: promote the visit's
+  // staged photos on first publish, carry the prior version's on re-publish.
+  photos: z.array(visitPhotoSchema).max(40).optional(),
 });
 export type PublishListingInput = z.infer<typeof publishListingSchema>;
 

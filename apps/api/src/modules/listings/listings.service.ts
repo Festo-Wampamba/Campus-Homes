@@ -115,7 +115,7 @@ export class ListingsService {
           transportShuttle: input.transportShuttle,
           advanceRentRequired: input.advanceRentRequired,
           bookingFeePercent: input.bookingFeePercent,
-          rentPeriod: input.rentPeriod,
+          rentPeriods: input.rentPeriods,
           rentPeriodOther: input.rentPeriodOther,
           authorityRole: input.authorityRole,
           authorityRoleOther: input.authorityRoleOther,

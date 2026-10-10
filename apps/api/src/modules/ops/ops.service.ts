@@ -23,12 +23,15 @@ import {
   type SyncVisitInput,
   type UnitOperationalStatus,
   type University,
+  type VisitPhoto,
   normalizeVisitPhotos,
 } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
+import { sendListingPublishedEmail } from './listing-published-email';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
+import type { Db } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import { assertStaffScope } from '../auth/staff-scope';
 import {
@@ -732,7 +735,7 @@ export class OpsService {
       // and account-status check is re-run here, not just trusted from
       // whenever the property was first created.
       const [property] = await db
-        .select({ landlordId: properties.landlordId })
+        .select({ landlordId: properties.landlordId, name: properties.name })
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
       if (!property) {
@@ -935,7 +938,16 @@ export class OpsService {
           });
       }
 
-      return { listing: updated, version, approvedVisit, isRepublish, priorVersionId };
+      // Validated here so a bad photo aborts the whole publish; written after
+      // commit as service_role (see confirmedPhotoRows).
+      const photoRows = input.photos
+        ? await this.confirmedPhotoRows(db, ctx, version.id, priorVersionId, approvedVisit, input.photos)
+        : [];
+
+      return {
+        listing: updated, version, approvedVisit, isRepublish, priorVersionId, photoRows,
+        landlordId: property.landlordId, propertyName: property.name,
+      };
     });
     await this.audit.record(
       ctx,
@@ -945,12 +957,17 @@ export class OpsService {
       { versionId: published.version.id, priceUgx: startingPriceUgx },
     );
 
+    if (published.photoRows.length > 0) {
+      await this.rlsDb.run(SERVICE_CTX, (db) => db.insert(listingPhotos).values(published.photoRows));
+    }
+
     if (published.isRepublish) {
       // A re-publish makes a fresh immutable version; photos belong to the
       // listing, not to whichever version was current, so copy the prior
       // version's listing_photos onto the new one rather than re-promoting the
-      // visit's staged photos (which would duplicate them every edit).
-      if (published.priorVersionId) {
+      // visit's staged photos (which would duplicate them every edit). When
+      // the lead sent a confirmed set, it was already written in the tx above.
+      if (published.priorVersionId && !input.photos) {
         const priorVersionId = published.priorVersionId;
         const newVersionId = published.version.id;
         await this.rlsDb.run(SERVICE_CTX, async (db) => {
@@ -986,7 +1003,8 @@ export class OpsService {
     // visit with no photos staged, or missing GPS (shouldn't happen: the
     // inspection form requires GPS before a visit can even be submitted), is
     // skipped rather than blocking the publish itself on it.
-    const visit = published.approvedVisit;
+    // Skipped when the lead sent a confirmed set (written in the tx above).
+    const visit = input.photos ? undefined : published.approvedVisit;
     // Staged photos are jsonb and may be bare keys (staged before categories)
     // or {storageKey, category} — normalizeVisitPhotos reads both.
     const visitPhotos = normalizeVisitPhotos(visit?.photoStorageKeys);
@@ -1012,7 +1030,81 @@ export class OpsService {
       );
     }
 
+    await this.notifyLandlordPublished(published.landlordId, published.propertyName, input.listingId);
     return published;
+  }
+
+  /** Builds listing_photos rows for the lead's confirmed photo set. A photo
+   * already on the prior version or staged by the inspector keeps its
+   * original capture provenance; anything else is a fresh upload, which must
+   * be the lead's own and is located at the inspected visit's GPS. The rows
+   * are inserted as service_role because RLS only lets Ops insert photos
+   * they captured themselves, and carried-over ones were captured by the
+   * inspector — the provenance checks here are the in-code party check. */
+  private async confirmedPhotoRows(
+    db: Db,
+    ctx: RlsContext,
+    versionId: string,
+    priorVersionId: string | null,
+    visit: typeof verificationVisits.$inferSelect,
+    photos: VisitPhoto[],
+  ) {
+    if (photos.length === 0) return [];
+    type Provenance = { capturedBy: string | null; gpsLat: string; gpsLon: string; capturedAt: Date };
+    const known = new Map<string, Provenance>();
+    if (priorVersionId) {
+      const prior = await db.select().from(listingPhotos).where(eq(listingPhotos.listingVersionId, priorVersionId));
+      for (const p of prior) {
+        known.set(p.storageKey, { capturedBy: p.capturedBy, gpsLat: p.gpsLat, gpsLon: p.gpsLon, capturedAt: p.capturedAt });
+      }
+    }
+    const visitGps = visit.visitGpsLat != null && visit.visitGpsLon != null
+      ? { gpsLat: visit.visitGpsLat, gpsLon: visit.visitGpsLon }
+      : null;
+    if (visitGps) {
+      for (const p of normalizeVisitPhotos(visit.photoStorageKeys)) {
+        if (!known.has(p.storageKey)) {
+          known.set(p.storageKey, { capturedBy: visit.inspectorId, ...visitGps, capturedAt: visit.completedAt ?? new Date() });
+        }
+      }
+    }
+    const added = photos.map((p) => p.storageKey).filter((key) => !known.has(key));
+    assertOwnedStorageKeys(ctx.userId, added);
+    if (added.length > 0 && !visitGps) {
+      throw new BadRequestException('The approved visit has no GPS, so new photos cannot be located');
+    }
+    return photos.map((photo, i) => ({
+        listingVersionId: versionId,
+        storageKey: photo.storageKey,
+        category: photo.category,
+        customLabel: photo.category === 'custom' ? (photo.label ?? null) : null,
+        selfContained: photo.selfContained ?? null,
+        ...(known.get(photo.storageKey) ?? { capturedBy: ctx.userId, ...visitGps!, capturedAt: new Date() }),
+        isPrimary: i === 0,
+        sortOrder: i,
+    }));
+  }
+
+  /** First publish only: one in-app notice (the landlord dashboard shows it
+   * once, then marks it read) plus an email. Both are best-effort; the
+   * listing is already live, so a delivery failure must not fail the publish. */
+  private async notifyLandlordPublished(landlordId: string, propertyName: string, listingId: string) {
+    try {
+      await this.notifications.notify(landlordId, 'listing.published', 'in_app', {
+        message: `${propertyName} has been verified and published by our team. Thank you so much!`,
+        href: '/landlord/properties',
+        listingId,
+      });
+      const [landlord] = await this.rlsDb.run(SERVICE_CTX, (db) =>
+        db.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, landlordId)),
+      );
+      if (landlord?.email) {
+        sendListingPublishedEmail(loadEnv(), { to: landlord.email, landlordName: landlord.name, propertyName })
+          .catch((err: unknown) => console.error('[ops] listing-published email failed:', err));
+      }
+    } catch (err) {
+      console.error('[ops] listing-published notification failed:', err);
+    }
   }
 
   /** Listing + its property for the publish form — lets Ops pre-fill room
@@ -1056,7 +1148,8 @@ export class OpsService {
             where: eq(listingVersions.id, listing.currentVersionId),
           })) ?? null)
         : null;
-      return { listing, property, visitPhotoCount, photos, version };
+      const visitPhotos = normalizeVisitPhotos(approvedVisit?.photoStorageKeys);
+      return { listing, property, visitPhotoCount, visitPhotos, photos, version };
     });
   }
 

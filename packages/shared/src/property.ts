@@ -75,6 +75,10 @@ export const NEARBY_INSTITUTIONS = [
 // accessibility too — same "checklist plus custom key" shape throughout.
 const amenitiesSchema = z.record(z.string(), z.boolean());
 
+// A landlord may accept several rent schedules at once (0059).
+export const rentPeriodsSchema = z.array(z.enum(RENT_PERIODS)).max(RENT_PERIODS.length)
+  .transform((periods) => [...new Set(periods)]);
+
 export const submitPropertySchema = z
   .object({
     name: z.string().min(2).max(200),
@@ -103,7 +107,7 @@ export const submitPropertySchema = z
     transportShuttle: z.boolean().default(false),
     advanceRentRequired: z.boolean().default(false),
     bookingFeePercent: z.number().int().min(0).max(100).nullable().optional(),
-    rentPeriod: z.enum(RENT_PERIODS).nullable().optional(),
+    rentPeriods: rentPeriodsSchema.default([]),
     rentPeriodOther: z.string().trim().max(200).nullable().optional(),
     authorityRole: z.enum(PROPERTY_AUTHORITY_ROLES),
     authorityRoleOther: z.string().trim().max(200).nullable().optional(),
@@ -117,7 +121,7 @@ export const submitPropertySchema = z
     declaredAuthorizesPublish: z.literal(true),
     declaredConsentToProcessing: z.literal(true),
   })
-  .refine((v) => v.rentPeriod !== 'other' || Boolean(v.rentPeriodOther), {
+  .refine((v) => !v.rentPeriods?.includes('other') || Boolean(v.rentPeriodOther), {
     message: 'Describe the rent period',
     path: ['rentPeriodOther'],
   })
@@ -158,7 +162,7 @@ export const updatePropertySchema = z.object({
   transportShuttle: z.boolean().optional(),
   advanceRentRequired: z.boolean().optional(),
   bookingFeePercent: z.number().int().min(0).max(100).nullable().optional(),
-  rentPeriod: z.enum(RENT_PERIODS).nullable().optional(),
+  rentPeriods: rentPeriodsSchema.optional(),
   rentPeriodOther: z.string().trim().max(200).nullable().optional(),
   authorityRole: z.enum(PROPERTY_AUTHORITY_ROLES).optional(),
   authorityRoleOther: z.string().trim().max(200).nullable().optional(),
@@ -195,7 +199,7 @@ export const propertySchema = z.object({
   transportShuttle: z.boolean(),
   advanceRentRequired: z.boolean(),
   bookingFeePercent: z.number().int().nullable(),
-  rentPeriod: z.enum(RENT_PERIODS).nullable(),
+  rentPeriods: z.array(z.enum(RENT_PERIODS)),
   rentPeriodOther: z.string().nullable(),
   authorityRole: z.enum(PROPERTY_AUTHORITY_ROLES).nullable(),
   authorityRoleOther: z.string().nullable(),

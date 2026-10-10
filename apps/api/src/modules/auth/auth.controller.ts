@@ -50,7 +50,6 @@ export class AuthController {
     @Query('token') token: string | undefined,
     @Query('email') email: string | undefined,
     @Query('next') next: string | undefined,
-    @Req() req: Request,
     @Res() res: Response,
     @Query('intent') intentParam?: string,
     @Query('screen') screen?: string,
@@ -71,13 +70,10 @@ export class AuthController {
     const startedAt = Date.now();
     const values: Record<string, string> = {};
     try {
-      const existingToken = readSessionCookie(req);
-      const existing = existingToken ? await this.sessionStore.find(existingToken) : null;
       const client = await this.clients.create(env, portal, values, async (url) => {
         await this.transactions.save(state, {
           portal, intent, next: safeAuthDestination(next), nonce, startedAt,
           browserHash: digest(browserSecret), storage: values,
-          expectedUserId: portal === 'staff' ? existing?.user.id ?? null : null,
         });
         clearLegacyCookies(res, env.AUTH_COOKIE_DOMAIN);
         res.cookie(transactionCookie(state), browserSecret, {
@@ -138,7 +134,6 @@ export class AuthController {
         emailVerified: claims.email_verified === true, phoneVerified: claims.phone_number_verified === true,
       }, transaction.portal, transaction.intent ?? authIntent(undefined, transaction.portal, transaction.next));
       if (!provisioned) return fail('not_invited');
-      if (transaction.expectedUserId && provisioned.id !== transaction.expectedUserId) return fail('account_mismatch');
       if (provisioned.status !== 'active') return res.redirect(`${webOrigin(env)}/account-pending`);
       // LOGTO_MFA_POLICY_VERIFIED alone is not proof: released Logto stamps no
       // MFA claim and its prompt policy lets a user skip enrolment. Trust the
@@ -166,6 +161,9 @@ export class AuthController {
         return fail('mfa_required');
       }
       const { token } = await this.sessionStore.create(provisioned.id, req.ip, req.headers['user-agent'], assurance);
+      // Signing in on a browser that already has a session (possibly another
+      // account, e.g. a landlord switching to their staff account) replaces
+      // it. Other devices keep their own sessions.
       const oldToken = readSessionCookie(req);
       if (oldToken) await this.sessionStore.destroy(oldToken);
       clearLegacyCookies(res, env.AUTH_COOKIE_DOMAIN);
