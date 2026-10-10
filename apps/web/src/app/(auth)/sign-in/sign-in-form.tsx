@@ -14,7 +14,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   sign_in_failed: "Sign-in didn't complete. Please try again.",
   sign_in_expired: "This sign-in attempt expired or was already used. Please start again.",
   auth_unavailable: "Authentication is temporarily unavailable. Please try again shortly.",
-  account_mismatch: "Verification used a different account. Sign out, then continue with the same account.",
   identity_conflict: "Your verified contact matches conflicting CampusHomes records. Contact support and quote the request ID in the address bar.",
   mfa_required: "Staff accounts need 2-step verification. Sign in again and set up an authenticator app when asked, instead of skipping.",
   sso_logout_failed: "Your CampusHomes session ended, but provider sign-out could not be confirmed.",

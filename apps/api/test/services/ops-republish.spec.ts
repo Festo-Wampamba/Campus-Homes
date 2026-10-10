@@ -231,4 +231,51 @@ describe('OpsService.publishListing re-publish', () => {
     );
     expect(rows[0].n).toBe(1);
   });
+
+  it('saves the lead\'s confirmed photo set: inspector photo retyped, a missed one added', async () => {
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: await currentUnits(),
+      photos: [
+        { storageKey: 'photo-k1', category: 'exterior' },
+        { storageKey: `uploads/${opsLeadId}/missed1.jpg`, category: 'kitchen' },
+      ],
+    });
+    const { rows } = await pool.query(
+      `SELECT p.storage_key, p.category::text, p.captured_by = $2 AS by_lead FROM listing_photos p
+       JOIN listings l ON l.current_version_id = p.listing_version_id
+       WHERE l.id = $1 ORDER BY p.sort_order`,
+      [listingId, opsLeadId],
+    );
+    expect(rows).toEqual([
+      { storage_key: 'photo-k1', category: 'exterior', by_lead: false },
+      { storage_key: `uploads/${opsLeadId}/missed1.jpg`, category: 'kitchen', by_lead: true },
+    ]);
+  });
+
+  it('refuses a photo the lead did not upload, leaving the live version untouched', async () => {
+    const before = (await pool.query(`SELECT current_version_id FROM listings WHERE id = $1`, [listingId])).rows[0];
+    await expect(
+      ops.publishListing(leadCtx(), {
+        listingId,
+        amenities: { water: true },
+        units: await currentUnits(),
+        photos: [{ storageKey: 'uploads/someone-else/stolen.jpg', category: 'bedroom' }],
+      }),
+    ).rejects.toThrow(/you uploaded/);
+    const after = (await pool.query(`SELECT current_version_id FROM listings WHERE id = $1`, [listingId])).rows[0];
+    expect(after).toEqual(before);
+  });
 });
+
+async function currentUnits() {
+  const { rows } = await pool.query(
+    `SELECT u.id, u.label FROM units u JOIN listings l ON l.property_id = u.property_id
+     WHERE l.id = $1 ORDER BY u.label`,
+    [listingId],
+  );
+  return rows.map((r: { id: string; label: string }) => ({
+    unitId: r.id, label: r.label, capacity: 1, roomCategory: 'single' as const, pricePerTermUgx: 400_000,
+  }));
+}

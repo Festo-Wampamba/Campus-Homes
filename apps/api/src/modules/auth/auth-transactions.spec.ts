@@ -21,7 +21,7 @@ describe('single-use authentication transactions', () => {
   let store: AuthTransactions;
   function transaction(): AuthTransaction {
     return { portal: 'consumer', next: '/landlord', nonce: 'nonce', browserHash: digest('browser'),
-      startedAt: Date.now(), expectedUserId: null, storage: { signInSession: 'private-pkce-verifier' } };
+      startedAt: Date.now(), storage: { signInSession: 'private-pkce-verifier' } };
   }
   beforeEach(() => {
     process.env.DATABASE_URL = 'postgresql://unused/isolated';
