@@ -27,6 +27,7 @@ import {
 } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
+import { sendListingPublishedEmail } from './listing-published-email';
 import type { RlsContext } from '../../db/rls-context';
 import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
@@ -732,7 +733,7 @@ export class OpsService {
       // and account-status check is re-run here, not just trusted from
       // whenever the property was first created.
       const [property] = await db
-        .select({ landlordId: properties.landlordId })
+        .select({ landlordId: properties.landlordId, name: properties.name })
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
       if (!property) {
@@ -935,7 +936,10 @@ export class OpsService {
           });
       }
 
-      return { listing: updated, version, approvedVisit, isRepublish, priorVersionId };
+      return {
+        listing: updated, version, approvedVisit, isRepublish, priorVersionId,
+        landlordId: property.landlordId, propertyName: property.name,
+      };
     });
     await this.audit.record(
       ctx,
@@ -1012,7 +1016,30 @@ export class OpsService {
       );
     }
 
+    await this.notifyLandlordPublished(published.landlordId, published.propertyName, input.listingId);
     return published;
+  }
+
+  /** First publish only: one in-app notice (the landlord dashboard shows it
+   * once, then marks it read) plus an email. Both are best-effort; the
+   * listing is already live, so a delivery failure must not fail the publish. */
+  private async notifyLandlordPublished(landlordId: string, propertyName: string, listingId: string) {
+    try {
+      await this.notifications.notify(landlordId, 'listing.published', 'in_app', {
+        message: `${propertyName} has been verified and published by our team. Thank you so much!`,
+        href: '/landlord/properties',
+        listingId,
+      });
+      const [landlord] = await this.rlsDb.run(SERVICE_CTX, (db) =>
+        db.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, landlordId)),
+      );
+      if (landlord?.email) {
+        sendListingPublishedEmail(loadEnv(), { to: landlord.email, landlordName: landlord.name, propertyName })
+          .catch((err: unknown) => console.error('[ops] listing-published email failed:', err));
+      }
+    } catch (err) {
+      console.error('[ops] listing-published notification failed:', err);
+    }
   }
 
   /** Listing + its property for the publish form — lets Ops pre-fill room

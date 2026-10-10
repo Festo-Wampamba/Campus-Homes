@@ -8,7 +8,6 @@ import {
   PROPERTY_AUTHORITY_ROLES,
   PROPERTY_OPERATIONAL_STATUSES,
   PROPERTY_TYPES,
-  RENT_PERIODS,
   ROOM_CATEGORIES,
   UNIT_OPERATIONAL_STATUSES,
   UNIVERSITIES,
@@ -17,6 +16,7 @@ import {
   WORKER_TYPES,
 } from './enums.js';
 import { uuid } from './common.js';
+import { rentPeriodsSchema } from './property.js';
 import { africanPhone } from './phone.js';
 
 const optionalEmail = z.union([z.email(), z.literal('')]).optional();
@@ -169,7 +169,7 @@ export const createAdminPropertySchema = z
     transportShuttle: z.boolean().default(false),
     advanceRentRequired: z.boolean().default(false),
     bookingFeePercent: z.number().int().min(0).max(100).nullable().optional(),
-    rentPeriod: z.enum(RENT_PERIODS).nullable().optional(),
+    rentPeriods: rentPeriodsSchema.optional(),
     rentPeriodOther: z.string().trim().max(200).nullable().optional(),
     authorityRole: z.enum(PROPERTY_AUTHORITY_ROLES).nullable().optional(),
     authorityRoleOther: z.string().trim().max(200).nullable().optional(),
@@ -219,7 +219,7 @@ export const updateAdminPropertySchema = z.object({
   transportShuttle: z.boolean().optional(),
   advanceRentRequired: z.boolean().optional(),
   bookingFeePercent: z.number().int().min(0).max(100).nullable().optional(),
-  rentPeriod: z.enum(RENT_PERIODS).nullable().optional(),
+  rentPeriods: rentPeriodsSchema.optional(),
   rentPeriodOther: z.string().trim().max(200).nullable().optional(),
   authorityRole: z.enum(PROPERTY_AUTHORITY_ROLES).nullable().optional(),
   authorityRoleOther: z.string().trim().max(200).nullable().optional(),

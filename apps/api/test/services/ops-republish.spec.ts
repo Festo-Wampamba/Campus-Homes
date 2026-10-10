@@ -10,7 +10,8 @@ import { Pool } from 'pg';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { OpsService } from '../../src/modules/ops/ops.service';
-import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
+import type { MessagingAdapter } from '../../src/adapters/messaging.adapter';
+import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { RlsDb } from '../../src/db/db.module';
 import { testDatabaseUrl } from '../test-database-url';
 
@@ -19,9 +20,11 @@ const TEST_DATABASE_URL = testDatabaseUrl();
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
-const ops = new OpsService(rlsDb, audit, {} as NotificationsService, {} as LogtoManagementClient);
+const notifications = new NotificationsService(rlsDb, {} as MessagingAdapter);
+const ops = new OpsService(rlsDb, audit, notifications, {} as LogtoManagementClient);
 
 let opsLeadId: string;
+let landlordId: string;
 let listingId: string;
 let semesterId: string;
 
@@ -44,7 +47,7 @@ beforeAll(async () => {
      verification_visits, listings, listing_versions, units, beds, unit_semester_pricing,
      listing_photos, reservations CASCADE`,
   );
-  const landlordId = await seed(
+  landlordId = await seed(
     `INSERT INTO users (phone, role, status) VALUES ('+256710000090', 'landlord', 'active') RETURNING id`,
   );
   await pool.query(
@@ -219,5 +222,13 @@ describe('OpsService.publishListing re-publish', () => {
     expect(
       (await pool.query(`SELECT count(*)::int AS n FROM units WHERE id = $1`, [room1])).rows[0].n,
     ).toBe(1);
+  });
+
+  it('notifies the landlord once: on the first publish, not on re-publishes', async () => {
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND template_key = 'listing.published'`,
+      [landlordId],
+    );
+    expect(rows[0].n).toBe(1);
   });
 });

@@ -11,10 +11,8 @@ describe("KycBanner", () => {
     expect(renderToStaticMarkup(<KycBanner status="verified" />)).not.toContain("Students can now reserve");
   });
 
-  it("tells a verified landlord with a live listing that students can reserve", () => {
-    expect(renderToStaticMarkup(<KycBanner status="verified" hasLiveListing />)).toContain(
-      "Students can now reserve your rooms",
-    );
+  it("drops the steady inspection banner once a listing is live", () => {
+    expect(renderToStaticMarkup(<KycBanner status="verified" hasLiveListing />)).not.toContain("inspection");
   });
 
   it("makes no listing claim when listings couldn't be loaded", () => {

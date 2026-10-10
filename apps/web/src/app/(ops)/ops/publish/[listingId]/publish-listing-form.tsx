@@ -24,7 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { AMENITY_OPTIONS, roomCategoryLabel } from "@/lib/format";
+import { amenityGroups, declaredAmenityState, type DeclaredChecklists } from "@/lib/amenity-confirmation";
+import { roomCategoryLabel } from "@/lib/format";
 
 type PublishedVersion = {
   versionNumber: number;
@@ -51,6 +52,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   const router = useRouter();
   const [description, setDescription] = useState("");
   const [amenities, setAmenities] = useState<Record<string, boolean>>({});
+  const [declared, setDeclared] = useState<DeclaredChecklists | null>(null);
   const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([
     emptyRoomCategoryRow(),
   ]);
@@ -79,6 +81,11 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       .then(async ({ listing, property, visitPhotoCount: count, version, photos }) => {
         if (cancelled) return;
         setVisitPhotoCount(count);
+        setDeclared(property);
+        // First publish starts from what the landlord declared; Ops unticks
+        // anything the visit didn't confirm. A live listing keeps its own
+        // confirmed set (below).
+        setAmenities(declaredAmenityState(property));
         if (listing.status === "verified" && version) {
           // Re-opening a live listing to edit it: keep the published snapshot
           // for the banner, pre-fill amenities/description from it, then fall
@@ -242,23 +249,11 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           idPrefix="publish-room"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label>Amenities</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {AMENITY_OPTIONS.map((option) => (
-            <label key={option.key} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={amenities[option.key] ?? false}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, [option.key]: e.target.checked }))
-                }
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-      </div>
+      <AmenityConfirmation
+        groups={amenityGroups(declared)}
+        value={amenities}
+        onToggle={(key, checked) => setAmenities((prev) => ({ ...prev, [key]: checked }))}
+      />
       <div className="space-y-1.5">
         <Label htmlFor="description">Description (optional)</Label>
         <Textarea
@@ -280,5 +275,56 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         {error}
       </p>
     </form>
+  );
+}
+
+function AmenityConfirmation({
+  groups,
+  value,
+  onToggle,
+}: {
+  groups: ReturnType<typeof amenityGroups>;
+  value: Record<string, boolean>;
+  onToggle: (key: string, checked: boolean) => void;
+}) {
+  const others = groups.flatMap((g) => g.others);
+  const checkbox = (option: { key: string; label: string }) => (
+    <label key={option.key} className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={value[option.key] ?? false}
+        onChange={(e) => onToggle(option.key, e.target.checked)}
+      />
+      {option.label}
+    </label>
+  );
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-medium">Amenities</legend>
+      <p className="text-xs text-muted-foreground">
+        Ticked items are what the landlord declared. Untick anything the inspection didn&apos;t
+        confirm. Only ticked items appear on the listing.
+      </p>
+      {groups.map((group) => (
+        <div key={group.title} className="space-y-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {group.title}
+          </p>
+          {group.declared.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">{group.declared.map(checkbox)}</div>
+          ) : (
+            <p className="text-sm text-muted-foreground">The landlord declared none.</p>
+          )}
+        </div>
+      ))}
+      {others.length > 0 && (
+        <details className="rounded-md border border-border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            Add something the landlord didn&apos;t list
+          </summary>
+          <div className="mt-2 grid grid-cols-2 gap-2">{others.map(checkbox)}</div>
+        </details>
+      )}
+    </fieldset>
   );
 }

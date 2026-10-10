@@ -42,6 +42,7 @@ const submitInput = (name: string) => ({
   securityFeatures: {},
   accessibilityFeatures: {},
   photographyConsent: false,
+  rentPeriods: [],
   transportShuttle: false,
   advanceRentRequired: false,
   authorityRole: 'owner' as const,

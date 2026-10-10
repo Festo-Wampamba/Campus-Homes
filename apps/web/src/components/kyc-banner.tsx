@@ -1,5 +1,7 @@
 import { Clock, ShieldAlert, ShieldCheck } from "lucide-react";
 
+import { PublishedNotice } from "@/components/published-notice";
+
 export function KycBanner({
   status,
   hasLiveListing = false,
@@ -9,14 +11,15 @@ export function KycBanner({
   hasLiveListing?: boolean | null;
 }) {
   if (status === "verified") {
+    // Once something is live the steady-state banner goes away; all that's
+    // left is the one-time "published" notice from the first publish.
+    if (hasLiveListing) return <PublishedNotice />;
     return (
       <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-accent px-4 py-3 text-sm font-semibold text-teal-700">
         <ShieldCheck aria-hidden className="size-5 shrink-0" />
         {hasLiveListing === null
           ? "Your account is verified."
-          : hasLiveListing
-            ? "Your account is verified and your listings are live. Students can now reserve your rooms."
-            : "Your account is verified. Our Ops team will contact you to schedule an inspection of your property. Your listings go live once it passes."}
+          : "Your account is verified. Our Ops team will contact you to schedule an inspection of your property. Your listings go live once it passes."}
       </div>
     );
   }
