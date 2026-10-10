@@ -85,7 +85,9 @@ export const properties = pgTable('properties', {
   transportShuttle: boolean('transport_shuttle').notNull().default(false),
   advanceRentRequired: boolean('advance_rent_required').notNull().default(false),
   bookingFeePercent: smallint('booking_fee_percent'),
-  rentPeriod: text('rent_period'),
+  // Multi-select since 0059; the legacy single rent_period column still
+  // exists in the database (unused) until a later migration drops it.
+  rentPeriods: text('rent_periods').array().notNull().default([]),
   rentPeriodOther: text('rent_period_other'),
   // Distinct from `utilities` above (water/electricity/internet/waste
   // status) — the Google Form's furnishing checklist (bathroom/kitchen/

@@ -1245,3 +1245,49 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     the approval poll by design. `pkill -f "next dev"` inside a Bash call can match
     its own shell (exit 144) — kill by PID from `ss -ltnp`. The local super admin
     (`festo@campushomes.co.ug`) needs Festo's TOTP, so admin-console steps need Festo.
+
+- **Rent periods, amenity confirmation, landlord detail, publish notice; prod
+  "wrong password" root cause (2026-10-11):** ADRs started in `docs/adr/`
+  (0001-0003 cover the three data decisions below).
+  - Rent periods are multi-select: migration `0059_rent_periods_array.sql` adds
+    `properties.rent_periods text[]` (backfilled, CHECK-constrained); the app no
+    longer reads `rent_period`, which stays in the DB until a later migration
+    drops it (rolling-deploy safety). Shared: `rentPeriodsSchema`.
+  - Ops publish form pre-ticks everything the landlord declared across all four
+    checklists (`lib/amenity-confirmation.ts`); the lead unticks what the visit
+    didn't confirm. The confirmed set (all four categories) is saved to
+    `listing_versions.amenities`; the property's declaration is never overwritten.
+  - Approved landlords in `/admin/landlord-accounts` open a read-only detail
+    dialog backed by `GET /admin/users/:id`, which now also returns
+    `idDocStorageKey` and the landlord's properties (behind `landlords.read`).
+  - First publish of a listing sends the landlord an in-app `listing.published`
+    notification plus a Resend email (best-effort, after commit). `KycBanner`
+    with a live listing renders only `PublishedNotice`, which shows unread
+    `listing.published` rows once and marks them read immediately.
+  - **Prod "password is wrong" was Logto config drift, not app code.** Prod's
+    sign-in experience had sign-up `password: false` (email code only) while
+    staging had `true`; 5 of 6 prod Logto users had no password at all (4 code-
+    only, 1 Google), so any typed password failed with `invalid_credentials`.
+    Logto also returns that same error for a mistyped or nonexistent email. Fix
+    is the "Create your password" sign-up toggle in the prod Logto console
+    (Festo applying it). Diagnose with the `logs` table in the `logto` DB on the
+    matching Postgres cluster: `payload->'error'->>'code'`, identifier at
+    `payload->'payload'->'identifier'`; submitted passwords are logged masked.
+  - **Same-browser account switch fixed:** staff sign-in used to pin the Logto
+    result to whoever was already signed in (`expectedUserId`), so a landlord
+    session followed by "Administration" with the admin account failed with
+    `account_mismatch`. The pin is gone; a sign-in on a browser that has a
+    session simply replaces it (the callback is still bound to the starting
+    browser's transaction cookie). There is no per-user device limit: each
+    sign-in is its own `sessions` row; only "sign out everywhere" and a
+    non-active account status delete all of a user's sessions.
+  - Notification bell (`app-shell.tsx`) no longer polls hidden tabs and
+    reloads immediately when a tab becomes visible again.
+  - **Ops lead photo editing:** `POST /ops/listings/publish` takes an optional
+    `photos: VisitPhoto[]` (≤40). The publish form's `PhotoSetEditor` starts
+    from the inspector's staged photos (first publish) or the live photos
+    (re-publish); the lead can retype/relabel, remove, and upload missed ones.
+    Rows are validated inside the publish tx (new keys must be the lead's own
+    uploads; carried photos keep inspector provenance) and written after
+    commit as service_role — RLS only lets Ops insert photos they captured.
+    `isBedroomCategory` moved to `packages/shared` (ops.ts).

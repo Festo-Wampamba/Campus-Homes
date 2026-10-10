@@ -10,6 +10,7 @@ import {
   PHOTO_CATEGORIES,
   PHOTO_CATEGORY_LABELS,
   type PhotoCategory,
+  isBedroomCategory,
   normalizeVisitPhotos,
 } from "@campushomes/shared";
 
@@ -104,19 +105,6 @@ function PhotoThumb({
       )}
     </div>
   );
-}
-
-// Categories that describe a room, where "self-contained" (own bathroom) is a
-// meaningful attribute — the toggle is hidden for non-room photos.
-const BEDROOM_CATEGORIES = new Set<PhotoCategory>([
-  "bedroom",
-  "single_bedroom",
-  "double_bedroom",
-  "triple_bedroom",
-  "quad_bedroom",
-]);
-function isBedroomCategory(category: PhotoCategory): boolean {
-  return BEDROOM_CATEGORIES.has(category);
 }
 
 const COMPONENT_LABEL: Record<VerificationChecklistComponent, string> = {

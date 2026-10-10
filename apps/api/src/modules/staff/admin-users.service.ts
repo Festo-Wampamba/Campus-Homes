@@ -208,6 +208,7 @@ export class AdminUsersService {
                l.legal_name AS "legalName", l.kyc_status::text AS "kycStatus",
                l.whatsapp_number AS "whatsappNumber", l.business_type AS "businessType",
                l.business_type_other AS "businessTypeOther",
+               l.id_doc_storage_key AS "idDocStorageKey",
                -- Which providers a user signed in with lived in Better Auth's
                -- accounts table; Logto owns that now and it isn't locally
                -- queryable per-user without a Management API round trip, so
@@ -235,6 +236,15 @@ export class AdminUsersService {
         delete visibleUser.whatsappNumber;
         delete visibleUser.businessType;
         delete visibleUser.businessTypeOther;
+        delete visibleUser.idDocStorageKey;
+      } else if (user.accountType === 'landlord') {
+        visibleUser.properties = (await client.query(`
+          SELECT id, name, street_address AS "streetAddress", status::text,
+                 EXISTS (SELECT 1 FROM listings li WHERE li.property_id = p.id AND li.status = 'verified') AS "hasLiveListing"
+          FROM properties p
+          WHERE p.landlord_id = $1
+          ORDER BY p.created_at DESC
+        `, [userId])).rows;
       }
 
       // Fine-grained access data is a separate sensitivity tier from the

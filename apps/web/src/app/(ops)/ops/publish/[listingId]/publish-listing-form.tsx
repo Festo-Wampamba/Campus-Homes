@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MAX_PUBLISH_UNITS, type Property, type RoomCategory } from "@campushomes/shared";
+import { MAX_PUBLISH_UNITS, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
 
 type PropertyRoom = {
   id: string;
@@ -20,11 +20,13 @@ import {
   RoomCategoryRows,
   type RoomCategoryRow,
 } from "@/components/room-category-rows";
+import { PhotoSetEditor } from "@/components/ops/photo-set-editor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { AMENITY_OPTIONS, roomCategoryLabel } from "@/lib/format";
+import { amenityGroups, declaredAmenityState, type DeclaredChecklists } from "@/lib/amenity-confirmation";
+import { roomCategoryLabel } from "@/lib/format";
 
 type PublishedVersion = {
   versionNumber: number;
@@ -34,7 +36,13 @@ type PublishedVersion = {
   verifiedAt: string;
 };
 
-type PublishedPhoto = { id: string; storageKey: string; category: string | null };
+type PublishedPhoto = {
+  id: string;
+  storageKey: string;
+  category: PhotoCategory | null;
+  customLabel: string | null;
+  selfContained: boolean | null;
+};
 
 type PublishedSnapshot = { version: PublishedVersion; photos: PublishedPhoto[] };
 
@@ -51,6 +59,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   const router = useRouter();
   const [description, setDescription] = useState("");
   const [amenities, setAmenities] = useState<Record<string, boolean>>({});
+  const [declared, setDeclared] = useState<DeclaredChecklists | null>(null);
+  // null until loaded, so a failed load never sends an empty set that would
+  // strip the listing's photos.
+  const [photos, setPhotos] = useState<VisitPhoto[] | null>(null);
   const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([
     emptyRoomCategoryRow(),
   ]);
@@ -73,18 +85,31 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       listing: { propertyId: string; semesterId: string; status: string };
       property: Property;
       visitPhotoCount: number;
+      visitPhotos: VisitPhoto[];
       version: PublishedVersion | null;
       photos: PublishedPhoto[];
     }>(`/ops/listings/${listingId}`)
-      .then(async ({ listing, property, visitPhotoCount: count, version, photos }) => {
+      .then(async ({ listing, property, visitPhotoCount: count, visitPhotos, version, photos: livePhotos }) => {
         if (cancelled) return;
         setVisitPhotoCount(count);
+        setDeclared(property);
+        // First publish starts from what the landlord declared; Ops unticks
+        // anything the visit didn't confirm. A live listing keeps its own
+        // confirmed set (below).
+        setAmenities(declaredAmenityState(property));
+        setPhotos(visitPhotos);
         if (listing.status === "verified" && version) {
           // Re-opening a live listing to edit it: keep the published snapshot
           // for the banner, pre-fill amenities/description from it, then fall
           // through to load the rooms so the whole form is editable. Saving
           // creates a new version and stays verified (photos carried server-side).
-          setPublished({ version, photos });
+          setPublished({ version, photos: livePhotos });
+          setPhotos(livePhotos.map((p) => ({
+            storageKey: p.storageKey,
+            category: p.category ?? "other",
+            ...(p.customLabel ? { label: p.customLabel } : {}),
+            ...(p.selfContained != null ? { selfContained: p.selfContained } : {}),
+          })));
           setDescription(version.description ?? "");
           setAmenities(version.amenities ?? {});
         }
@@ -194,6 +219,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           amenities,
           description: description || undefined,
           units,
+          ...(photos ? { photos } : {}),
         }),
       });
       router.push("/ops");
@@ -214,8 +240,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           </p>
           <p className="mt-1 text-muted-foreground">
             Saving creates a new version and the listing stays verified and visible to students.
-            The {published.photos.length} verification photo
-            {published.photos.length === 1 ? "" : "s"} already on it are carried over automatically.
+            Its photos are listed below; any changes to them apply when you save.
             Removing a room row (or lowering its count) deletes those rooms. Only allowed if they
             have no reservations.
           </p>
@@ -223,9 +248,8 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       )}
       {published === null && visitPhotoCount === 0 && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          The inspector didn&apos;t stage any photos on this visit. Publishing now
-          will go live with no verification photos. You can still publish, but
-          consider getting photos from the inspector first.
+          The inspector didn&apos;t stage any photos on this visit. Add photos
+          below, or the listing will go live without any.
         </p>
       )}
       <div className="space-y-1.5">
@@ -242,23 +266,12 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           idPrefix="publish-room"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label>Amenities</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {AMENITY_OPTIONS.map((option) => (
-            <label key={option.key} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={amenities[option.key] ?? false}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, [option.key]: e.target.checked }))
-                }
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-      </div>
+      {photos && <PhotoSetEditor photos={photos} onChange={setPhotos} />}
+      <AmenityConfirmation
+        groups={amenityGroups(declared)}
+        value={amenities}
+        onToggle={(key, checked) => setAmenities((prev) => ({ ...prev, [key]: checked }))}
+      />
       <div className="space-y-1.5">
         <Label htmlFor="description">Description (optional)</Label>
         <Textarea
@@ -280,5 +293,56 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         {error}
       </p>
     </form>
+  );
+}
+
+function AmenityConfirmation({
+  groups,
+  value,
+  onToggle,
+}: {
+  groups: ReturnType<typeof amenityGroups>;
+  value: Record<string, boolean>;
+  onToggle: (key: string, checked: boolean) => void;
+}) {
+  const others = groups.flatMap((g) => g.others);
+  const checkbox = (option: { key: string; label: string }) => (
+    <label key={option.key} className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={value[option.key] ?? false}
+        onChange={(e) => onToggle(option.key, e.target.checked)}
+      />
+      {option.label}
+    </label>
+  );
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-medium">Amenities</legend>
+      <p className="text-xs text-muted-foreground">
+        Ticked items are what the landlord declared. Untick anything the inspection didn&apos;t
+        confirm. Only ticked items appear on the listing.
+      </p>
+      {groups.map((group) => (
+        <div key={group.title} className="space-y-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {group.title}
+          </p>
+          {group.declared.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">{group.declared.map(checkbox)}</div>
+          ) : (
+            <p className="text-sm text-muted-foreground">The landlord declared none.</p>
+          )}
+        </div>
+      ))}
+      {others.length > 0 && (
+        <details className="rounded-md border border-border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            Add something the landlord didn&apos;t list
+          </summary>
+          <div className="mt-2 grid grid-cols-2 gap-2">{others.map(checkbox)}</div>
+        </details>
+      )}
+    </fieldset>
   );
 }

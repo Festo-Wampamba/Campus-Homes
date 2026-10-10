@@ -256,12 +256,17 @@ export function AppShell({
       });
     void load();
     const refresh = () => { void load(); };
+    // A hidden tab (or a device left open in the background) doesn't poll;
+    // coming back refreshes at once, so another device's activity shows up.
+    const onVisible = () => { if (!document.hidden) void load(); };
     window.addEventListener("campushomes:notifications-refresh", refresh);
-    const interval = window.setInterval(load, 5_000);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(() => { if (!document.hidden) void load(); }, 5_000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("campushomes:notifications-refresh", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [notificationsEndpoint, pathname]);
 

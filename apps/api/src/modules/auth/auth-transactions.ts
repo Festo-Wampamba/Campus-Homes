@@ -15,7 +15,6 @@ export interface AuthTransaction {
   nonce: string;
   browserHash: string;
   startedAt: number;
-  expectedUserId: string | null;
   storage: Record<string, string>;
 }
 

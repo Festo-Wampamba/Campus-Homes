@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
 
 import type { PendingLandlordAccount } from "@campushomes/shared";
 
 import { api, apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { LandlordDetailDialog } from "./landlord-detail-dialog";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -30,6 +31,7 @@ export function LandlordAccountsManager({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   async function approve(userId: string) {
     const name = rows.find((r) => r.userId === userId)?.name || "This landlord";
@@ -162,10 +164,24 @@ export function LandlordAccountsManager({
         </div>
         {approvedRows.length === 0 ? <p className="text-sm text-muted-foreground">No landlords have been approved yet.</p> : (
           <div className="divide-y divide-border rounded-lg border border-border">
-            {approvedRows.map((row) => <div key={row.userId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="font-semibold">{row.name || "Unnamed"}</span><span className="text-muted-foreground">Approved landlord · registered {formatDate(row.createdAt)}</span></div>)}
+            {approvedRows.map((row) => (
+              <button
+                key={row.userId}
+                type="button"
+                onClick={() => setViewingId(row.userId)}
+                className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+              >
+                <span className="font-semibold">{row.name || "Unnamed"}</span>
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  Approved landlord · registered {formatDate(row.createdAt)}
+                  <ChevronRight aria-hidden className="size-4" />
+                </span>
+              </button>
+            ))}
           </div>
         )}
       </section>
+      <LandlordDetailDialog key={viewingId ?? "closed"} userId={viewingId} onClose={() => setViewingId(null)} />
     </div>
   );
 }
