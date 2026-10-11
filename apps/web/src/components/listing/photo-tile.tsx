@@ -6,9 +6,11 @@ import { listingPhotoUrl } from "@/lib/cloudinary";
 import { cn } from "@/lib/utils";
 import { PhotoLightbox, type LightboxPhoto, type LightboxState } from "@/components/listing/photo-lightbox";
 
-/** A photo shown whole (contain over a blurred copy of itself, never
- * cropped). With `interactive`, tapping it opens the full-screen viewer on
- * `photos[index]`, with arrows through the rest of the set. */
+/** One photo. `fit="cover"` (default) fills a fixed-size tile, trimming the
+ * edges of a photo whose shape differs from the tile; `fit="natural"` sizes
+ * the frame to the photo itself, for a photo shown on its own. Either way the
+ * full, uncropped photo opens in the viewer when `interactive`, with arrows
+ * through the rest of `photos`. */
 export function PhotoTile({
   photos,
   index = 0,
@@ -17,6 +19,7 @@ export function PhotoTile({
   caption = alt,
   className,
   interactive = true,
+  fit = "cover",
 }: {
   photos: LightboxPhoto[];
   index?: number;
@@ -25,23 +28,26 @@ export function PhotoTile({
   caption?: string;
   className?: string;
   interactive?: boolean;
+  fit?: "cover" | "natural";
 }) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const photo = photos[index];
   const url = photo ? listingPhotoUrl(photo.storageKey, width) : null;
   if (!url) return null;
 
+  const natural = fit === "natural";
   const image = (
-    <>
-      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL */}
-      <img src={url} alt="" aria-hidden className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-xl" />
-      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL */}
-      <img src={url} alt={alt} className="relative size-full object-contain" />
-    </>
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL
+    <img
+      src={url}
+      alt={alt}
+      className={natural ? "mx-auto block h-auto max-h-[24rem] w-auto max-w-full rounded-md" : "size-full object-cover"}
+    />
   );
+  const frame = natural ? "block w-full" : "relative block overflow-hidden bg-muted";
 
   if (!interactive) {
-    return <div className={cn("relative overflow-hidden bg-muted", className)}>{image}</div>;
+    return <div className={cn(frame, className)}>{image}</div>;
   }
 
   return (
@@ -50,7 +56,7 @@ export function PhotoTile({
         type="button"
         onClick={() => setLightbox({ photos, index, caption })}
         aria-label={`View ${alt} full size`}
-        className={cn("relative block overflow-hidden bg-muted outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring", className)}
+        className={cn(frame, "outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring", className)}
       >
         {image}
       </button>

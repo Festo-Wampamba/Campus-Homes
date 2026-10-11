@@ -82,7 +82,7 @@ export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
                   onClick={() => setEditing(row)}
                   className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
                 >
-                  Tenant agreement
+                  Registration form
                 </button>
               </div>
             </CardContent>

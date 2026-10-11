@@ -108,7 +108,7 @@ function CoverPhoto({ property }: { property: Property }) {
       photos={[{ storageKey: property.coverPhotoKey }]}
       width={1200}
       alt={`${property.name} cover photo`}
-      className="h-56 w-full rounded-md sm:h-64"
+      fit="natural"
     />
   );
 }
@@ -1273,9 +1273,9 @@ export function PropertyDetailDialog({
             <CoverPhoto property={property} />
             <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-foreground">Tenant agreement form</p>
+                <p className="text-sm font-semibold text-foreground">Student registration form</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Design the form students fill out and sign after scanning this property&apos;s QR code.
+                  Design the form students fill out and sign after scanning this property&apos;s QR code below.
                 </p>
               </div>
               <Button type="button" variant="secondary" size="sm" onClick={() => setBuilderOpen(true)}>

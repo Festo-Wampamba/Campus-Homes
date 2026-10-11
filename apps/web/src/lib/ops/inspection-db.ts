@@ -1,4 +1,4 @@
-import type { PhotoCategory, VerificationChecklistComponent, VisitPhoto } from "@campushomes/shared";
+import type { PhotoCategory, RoomCategory, VerificationChecklistComponent, VisitPhoto } from "@campushomes/shared";
 
 export type SyncStatus = "draft" | "queued" | "syncing" | "synced" | "failed";
 
@@ -34,8 +34,11 @@ export interface PendingPhoto {
   category: PhotoCategory;
   // Free-text room type when category is 'custom'.
   label?: string;
-  // Whether the room shown is self-contained — only set for bedroom categories.
+  // Whether the room shown is self-contained — bedroom photos, or any photo
+  // linked to a room type.
   selfContained?: boolean;
+  // The room type this photo belongs to (0060); unset = whole property.
+  roomCategory?: RoomCategory;
 }
 
 /** Drafts written before photo categories existed hold bare Files and bare

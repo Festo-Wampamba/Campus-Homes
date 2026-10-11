@@ -13,9 +13,9 @@ type GalleryPhoto = { id: string; storageKey: string };
 const VISIBLE = 3;
 
 /**
- * Listing gallery: one large photo plus two beside it. Photos are shown whole
- * (object-contain over a blurred copy of themselves), never cropped, and any
- * tile opens the full-screen viewer at that photo.
+ * Listing gallery: one large photo plus two beside it. Each photo fills its
+ * tile (edges trimmed when its shape differs), and any tile opens the
+ * full-screen viewer, which always shows the whole photo.
  */
 export function ListingGallery({ photos, propertyName }: { photos: GalleryPhoto[]; propertyName: string }) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
@@ -57,17 +57,14 @@ export function ListingGallery({ photos, propertyName }: { photos: GalleryPhoto[
               )}
             >
               {url ? (
-                <>
-                  <Image src={url} alt="" aria-hidden fill sizes="10vw" className="scale-110 object-cover opacity-60 blur-2xl" />
-                  <Image
-                    src={url}
-                    alt={`${propertyName}, photo ${i + 1}`}
-                    fill
-                    sizes={main ? "(min-width: 640px) 60vw, 100vw" : "25vw"}
-                    className="object-contain"
-                    priority={main}
-                  />
-                </>
+                <Image
+                  src={url}
+                  alt={`${propertyName}, photo ${i + 1}`}
+                  fill
+                  sizes={main ? "(min-width: 640px) 60vw, 100vw" : "25vw"}
+                  className="object-cover"
+                  priority={main}
+                />
               ) : (
                 <span className="flex h-full items-center justify-center text-muted-foreground">
                   <Camera aria-hidden className="size-5" />

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ImagePlus, Trash2 } from "lucide-react";
 import {
-  isBedroomCategory,
+  canBeSelfContained,
   PHOTO_CATEGORIES,
   PHOTO_CATEGORY_LABELS,
   type PhotoCategory,
@@ -11,6 +11,7 @@ import {
 } from "@campushomes/shared";
 
 import { api } from "@/lib/api";
+import { RoomTypeSelect } from "@/components/ops/room-type-select";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 
 /** The Ops lead's view of a listing's photo set: retype, relabel or remove
@@ -97,7 +98,7 @@ export function PhotoSetEditor({
                   update(i, {
                     category,
                     ...(category === "custom" ? {} : { label: undefined }),
-                    ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+                    ...(canBeSelfContained({ category, roomCategory: photo.roomCategory }) ? {} : { selfContained: undefined }),
                   });
                 }}
                 className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
@@ -116,7 +117,17 @@ export function PhotoSetEditor({
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                 />
               )}
-              {isBedroomCategory(photo.category) && (
+              <RoomTypeSelect
+                value={photo.roomCategory}
+                onChange={(roomCategory) =>
+                  update(i, {
+                    roomCategory,
+                    ...(canBeSelfContained({ ...photo, roomCategory }) ? {} : { selfContained: undefined }),
+                  })
+                }
+                className="h-9 px-2 text-sm"
+              />
+              {canBeSelfContained(photo) && (
                 <label className="flex items-center gap-2 text-xs">
                   <input
                     type="checkbox"

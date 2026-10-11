@@ -55,6 +55,13 @@ export function ScheduleVisitForm({
   // Local date string, so "today" matches the lead's own calendar.
   const [today] = useState(() => new Date().toLocaleDateString("en-CA"));
   const scheduledAt = date && time ? `${date}T${time}` : "";
+  const inspectorName = inspectors.find((i) => i.id === inspectorId)?.name;
+  const summary = scheduledAt && inspectorName
+    ? `${inspectorName} visits on ${new Date(scheduledAt).toLocaleString("en-GB", {
+        weekday: "short", day: "numeric", month: "short", year: "numeric",
+        hour: "numeric", minute: "2-digit", hour12: true,
+      })}`
+    : null;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +109,7 @@ export function ScheduleVisitForm({
           ))}
         </select>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="space-y-1.5">
           <Label htmlFor="visitDate" required>Visit date</Label>
           <Input
@@ -113,22 +120,21 @@ export function ScheduleVisitForm({
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
+          <p className="text-xs text-muted-foreground">Today or a later day.</p>
         </div>
-        <fieldset className="space-y-1.5">
-          <legend className="text-sm font-semibold text-foreground">
-            Time <span className="text-destructive" aria-hidden>*</span>
-          </legend>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="visitHour" required>Time</Label>
+          <div role="group" aria-label="Visit time" className="flex items-center gap-2">
             <select
               id="visitHour"
               aria-label="Hour"
               required
               value={hour}
               onChange={(e) => setHour(e.target.value)}
-              className={cn(selectClassName, "w-auto min-w-0 flex-1")}
+              className={cn(selectClassName, "w-[5.25rem] tabular-nums")}
             >
               <option value="" disabled>
-                Hour
+                HH
               </option>
               {HOURS.map((h) => (
                 <option key={h} value={h}>
@@ -142,7 +148,7 @@ export function ScheduleVisitForm({
               aria-label="Minutes"
               value={minute}
               onChange={(e) => setMinute(e.target.value)}
-              className={cn(selectClassName, "w-auto min-w-0 flex-1")}
+              className={cn(selectClassName, "w-[5.25rem] tabular-nums")}
             >
               {MINUTES.map((m) => (
                 <option key={m} value={m}>
@@ -168,17 +174,18 @@ export function ScheduleVisitForm({
               ))}
             </div>
           </div>
-        </fieldset>
+          <p className="text-xs text-muted-foreground">Hour, minutes (5-minute steps), AM or PM.</p>
+        </div>
       </div>
-      {scheduledAt && (
-        <p className="rounded-md bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800">
-          Visit on{" "}
-          {new Date(scheduledAt).toLocaleString("en-GB", {
-            weekday: "short", day: "numeric", month: "short", year: "numeric",
-            hour: "numeric", minute: "2-digit", hour12: true,
-          })}
-        </p>
-      )}
+      <div
+        aria-live="polite"
+        className={cn(
+          "rounded-md px-3 py-2.5 text-sm",
+          summary ? "bg-teal-50 font-medium text-teal-800" : "border border-dashed border-border text-muted-foreground",
+        )}
+      >
+        {summary ?? "Pick an inspector, a date and a time to see the visit summary here."}
+      </div>
       <Button type="submit" disabled={pending || !propertyId} className="w-full">
         {pending ? "Scheduling…" : "Schedule visit"}
       </Button>

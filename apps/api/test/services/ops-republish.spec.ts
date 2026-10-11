@@ -232,25 +232,25 @@ describe('OpsService.publishListing re-publish', () => {
     expect(rows[0].n).toBe(1);
   });
 
-  it('saves the lead\'s confirmed photo set: inspector photo retyped, a missed one added', async () => {
+  it('saves the lead\'s confirmed photo set: inspector photo retyped, a missed en-suite bathroom linked to its room type', async () => {
     await ops.publishListing(leadCtx(), {
       listingId,
       amenities: { water: true },
       units: await currentUnits(),
       photos: [
         { storageKey: 'photo-k1', category: 'exterior' },
-        { storageKey: `uploads/${opsLeadId}/missed1.jpg`, category: 'kitchen' },
+        { storageKey: `uploads/${opsLeadId}/missed1.jpg`, category: 'bathroom', roomCategory: 'single', selfContained: true },
       ],
     });
     const { rows } = await pool.query(
-      `SELECT p.storage_key, p.category::text, p.captured_by = $2 AS by_lead FROM listing_photos p
+      `SELECT p.storage_key, p.category::text, p.room_category::text, p.captured_by = $2 AS by_lead FROM listing_photos p
        JOIN listings l ON l.current_version_id = p.listing_version_id
        WHERE l.id = $1 ORDER BY p.sort_order`,
       [listingId, opsLeadId],
     );
     expect(rows).toEqual([
-      { storage_key: 'photo-k1', category: 'exterior', by_lead: false },
-      { storage_key: `uploads/${opsLeadId}/missed1.jpg`, category: 'kitchen', by_lead: true },
+      { storage_key: 'photo-k1', category: 'exterior', room_category: null, by_lead: false },
+      { storage_key: `uploads/${opsLeadId}/missed1.jpg`, category: 'bathroom', room_category: 'single', by_lead: true },
     ]);
   });
 

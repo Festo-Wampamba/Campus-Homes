@@ -13,7 +13,7 @@ export default async function OpsPropertiesPage() {
     <>
       <h1 className="text-2xl">Properties</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Find a property to set up or edit its tenant agreement form.
+        Find a property to set up or edit its student registration form.
       </p>
       <div className="mt-6">
         <OpsPropertiesList rows={rows} />

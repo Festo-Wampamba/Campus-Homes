@@ -142,6 +142,10 @@ export const listingPhotoSchema = z.object({
   sortOrder: z.number().int(),
   // Whether the room shown is self-contained (0053); null on non-room photos.
   selfContained: z.boolean().nullable(),
+  // What the photo shows (PHOTO_CATEGORIES) and which room type it belongs to
+  // (0060); both null on older/whole-property photos.
+  category: z.string().nullable().optional(),
+  roomCategory: z.enum(ROOM_CATEGORIES).nullable().optional(),
 });
 export type ListingPhoto = z.infer<typeof listingPhotoSchema>;
 
