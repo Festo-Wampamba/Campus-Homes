@@ -1323,3 +1323,12 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     HH/MM pickers, hints, and an always-present summary placeholder.
   - Landlord `StatCard` takes `href` (whole card is a link; hover-only corner
     arrow; press scale). Stat grids go 4-wide only at `xl` (sidebar width).
+  - **Follow-up: room types without photos.** Two photo sources were never
+    reaching students. (1) Manage Rooms room-type photos (`room_type_photos`
+    on the room type's current approved version): `ListingsService.detail()`
+    now adds them to `unitPhotos` for every priced room of that type (the web
+    dedupes by storage key). (2) Landlords can attach photos to each room-type
+    row in the property form (`proposedRoomCategories[].photoKeys`, ≤8,
+    ownership-checked on submit/update). At first publish the Ops photo
+    editor preloads them linked to that room type; `confirmedPhotoRows`
+    accepts them as known photos with `captured_by` null.

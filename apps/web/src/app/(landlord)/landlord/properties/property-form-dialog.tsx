@@ -64,6 +64,7 @@ function roomRowsFromProperty(property: Property | null): RoomCategoryRow[] {
     depositUgx: row.depositUgx != null ? String(row.depositUgx) : "",
     selfContained: row.selfContained ?? false,
     bedsPerRoom: row.bedsPerRoom != null ? String(row.bedsPerRoom) : undefined,
+    photoKeys: row.photoKeys,
   }));
 }
 
@@ -160,6 +161,7 @@ function PropertyForm({
         selfContained: row.selfContained,
         bedsPerRoom: bedsPerRoom(row),
         ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
+        ...(row.photoKeys?.length ? { photoKeys: row.photoKeys } : {}),
       }));
       // Derived from the rows above, not entered separately — see the
       // comment on proposedRoomCategorySchema.selfContained.
@@ -313,6 +315,7 @@ function PropertyForm({
               idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
               showSelfContained
               showBeds
+              showPhotos
             />
           </div>
           <div className="space-y-1.5">

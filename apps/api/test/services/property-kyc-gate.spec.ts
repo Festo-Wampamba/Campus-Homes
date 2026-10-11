@@ -167,6 +167,19 @@ describe('submitProperty KYC gate', () => {
   });
 });
 
+describe('submitProperty room-type photos', () => {
+  it('refuses a room-type photo the landlord did not upload', async () => {
+    await expect(
+      listings.submitProperty(ctxFor(landlordVerified), {
+        ...submitInput('Borrowed Photo Hostel'),
+        proposedRoomCategories: [
+          { category: 'single', roomCount: 1, pricePerTermUgx: 300000, selfContained: false, photoKeys: ['uploads/someone-else/room.jpg'] },
+        ],
+      }),
+    ).rejects.toThrow(/you uploaded/);
+  });
+});
+
 describe('submitProperty under concurrent pending-KYC submissions', () => {
   it('twelve parallel submissions with reviewer notifications all complete on a max-10 pool', async () => {
     // A reviewer lookup or notify() issued from inside the submission's own

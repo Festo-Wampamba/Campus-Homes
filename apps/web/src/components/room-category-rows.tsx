@@ -1,11 +1,14 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ImagePlus, Plus, Trash2, X } from "lucide-react";
 import { ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api";
+import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +36,12 @@ export type RoomCategoryRow = {
   // Ops publish form only: bed spaces in each room of this row. Fixed for
   // single/double/triple/quad; set by the lead for the variable types.
   bedsPerRoom?: string;
+  // Landlord forms (showPhotos): photos of this room type, bathroom included
+  // for self-contained. Ops confirms them at publish before they go public.
+  photoKeys?: string[];
 };
+
+const MAX_ROOM_TYPE_PHOTOS = 8;
 
 // Mirrors roomTypeInputSchema's fixed capacities (shared/room-management.ts).
 export const FIXED_BEDS_PER_ROOM: Partial<Record<RoomCategory, number>> = {
@@ -72,6 +80,7 @@ export function RoomCategoryRows({
   idPrefix,
   showSelfContained = false,
   showBeds = false,
+  showPhotos = false,
 }: {
   rows: RoomCategoryRow[];
   onChange: (rows: RoomCategoryRow[]) => void;
@@ -81,9 +90,36 @@ export function RoomCategoryRows({
   showSelfContained?: boolean;
   // Ops publish form: per-row "Beds per room" input.
   showBeds?: boolean;
+  // Landlord forms: per-row photos of that room type.
+  showPhotos?: boolean;
 }) {
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
   function update(key: string, patch: Partial<RoomCategoryRow>) {
     onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  }
+
+  async function addPhotos(row: RoomCategoryRow, files: File[]) {
+    const room = MAX_ROOM_TYPE_PHOTOS - (row.photoKeys?.length ?? 0);
+    if (files.length === 0 || room <= 0) return;
+    setUploadingKey(row.key);
+    setPhotoError(null);
+    try {
+      const keys: string[] = [];
+      for (const file of files.slice(0, room)) {
+        const sig = await api<CloudinarySignature>("/uploads/sign", {
+          method: "POST",
+          body: JSON.stringify({ contentType: file.type, size: file.size }),
+        });
+        keys.push((await uploadToCloudinary(file, sig)).publicId);
+      }
+      update(row.key, { photoKeys: [...(row.photoKeys ?? []), ...keys] });
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Couldn't upload. Try again.");
+    } finally {
+      setUploadingKey(null);
+    }
   }
 
   function remove(key: string) {
@@ -208,8 +244,53 @@ export function RoomCategoryRows({
               <Trash2 aria-hidden className="size-4" />
             </Button>
           </div>
+          {showPhotos && (
+            <div className="col-span-full space-y-1.5 border-t border-border pt-2.5">
+              <p className="text-xs text-muted-foreground">
+                Photos of this room type, from different angles
+                {row.selfContained ? ", including its own bathroom" : ""}. Our team checks them at the visit.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {(row.photoKeys ?? []).map((key, j) => {
+                  const src = listingPhotoUrl(key, 160);
+                  return (
+                    <div key={key} className="relative size-16 overflow-hidden rounded-md bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL */}
+                      {src && <img src={src} alt={`${roomCategoryLabel(row.category)} photo ${j + 1}`} className="size-full object-cover" />}
+                      <button
+                        type="button"
+                        aria-label={`Remove photo ${j + 1}`}
+                        onClick={() => update(row.key, { photoKeys: row.photoKeys?.filter((k) => k !== key) })}
+                        className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-black/60 text-white"
+                      >
+                        <X aria-hidden className="size-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+                {(row.photoKeys?.length ?? 0) < MAX_ROOM_TYPE_PHOTOS && (
+                  <label className="inline-flex h-16 cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-input px-3 text-xs font-medium text-muted-foreground hover:bg-muted">
+                    <ImagePlus aria-hidden className="size-4" />
+                    {uploadingKey === row.key ? "Uploading…" : "Add photos"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      disabled={uploadingKey !== null}
+                      onChange={(e) => {
+                        void addPhotos(row, [...(e.target.files ?? [])]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ))}
+      {photoError && <p className="text-sm font-semibold text-destructive">{photoError}</p>}
       {rows.length === 0 && (
         <p className="text-sm text-muted-foreground">No room types added yet.</p>
       )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MAX_PUBLISH_UNITS, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
+import { MAX_PUBLISH_UNITS, PHOTO_CATEGORIES, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
 
 type PropertyRoom = {
   id: string;
@@ -46,6 +46,23 @@ type PublishedPhoto = {
 };
 
 type PublishedSnapshot = { version: PublishedVersion; photos: PublishedPhoto[] };
+
+/** Photos the landlord attached to each room type in the property form,
+ * pre-linked to that room type so the lead only confirms or removes them. */
+function landlordRoomTypePhotos(property: Property, staged: VisitPhoto[]): VisitPhoto[] {
+  const seen = new Set(staged.map((p) => p.storageKey));
+  return (property.proposedRoomCategories ?? []).flatMap((row) =>
+    (row.photoKeys ?? []).filter((key) => !seen.has(key) && seen.add(key)).map((storageKey) => {
+      const bedroom = `${row.category}_bedroom` as PhotoCategory;
+      return {
+        storageKey,
+        category: PHOTO_CATEGORIES.includes(bedroom) ? bedroom : ("bedroom" as const),
+        roomCategory: row.category,
+        selfContained: row.selfContained ?? false,
+      };
+    }),
+  );
+}
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -98,7 +115,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         // anything the visit didn't confirm. A live listing keeps its own
         // confirmed set (below).
         setAmenities(declaredAmenityState(property));
-        setPhotos(visitPhotos);
+        setPhotos([...visitPhotos, ...landlordRoomTypePhotos(property, visitPhotos)]);
         if (listing.status === "verified" && version) {
           // Re-opening a live listing to edit it: keep the published snapshot
           // for the banner, pre-fill amenities/description from it, then fall
