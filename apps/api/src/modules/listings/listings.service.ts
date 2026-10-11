@@ -78,6 +78,7 @@ export class ListingsService {
   // publishListing() independently re-checks KYC before anything goes live.
   async submitProperty(ctx: RlsContext, input: SubmitPropertyInput) {
     if (input.coverPhotoKey) assertOwnedStorageKeys(ctx.userId, [input.coverPhotoKey]);
+    assertOwnedStorageKeys(ctx.userId, input.proposedRoomCategories.flatMap((row) => row.photoKeys ?? []));
     const property = await this.rlsDb.run(ctx, async (db) => {
       const [landlord] = await db
         .select({ kycStatus: landlords.kycStatus })
@@ -191,6 +192,21 @@ export class ListingsService {
         if (current?.coverPhotoKey !== input.coverPhotoKey) {
           assertOwnedStorageKeys(ctx.userId, [input.coverPhotoKey]);
         }
+      }
+      // Room-type photos already saved on this property may be resubmitted
+      // as-is; any new one must be the caller's own upload.
+      if (input.proposedRoomCategories) {
+        const [current] = await db
+          .select({ proposed: properties.proposedRoomCategories })
+          .from(properties)
+          .where(eq(properties.id, propertyId));
+        const saved = new Set(
+          ((current?.proposed ?? []) as { photoKeys?: string[] }[]).flatMap((row) => row.photoKeys ?? []),
+        );
+        assertOwnedStorageKeys(
+          ctx.userId,
+          input.proposedRoomCategories.flatMap((row) => row.photoKeys ?? []).filter((key) => !saved.has(key)),
+        );
       }
       const [property] = await db
         .update(properties)
@@ -734,7 +750,7 @@ export class ListingsService {
       // unit look free. Only a boolean per unit leaves this query. The
       // property row rides along for the same reason (no public SELECT on
       // properties) — name/address/GPS of a verified listing are public data.
-      const { availability, property, propertyMedia } = await this.rlsDb.run(
+      const { availability, property, propertyMedia, roomTypePhotos } = await this.rlsDb.run(
         SERVICE_CTX,
         async (_db, client) => {
           // Availability is per-bed now (0033) — a partially-let room still
@@ -785,6 +801,22 @@ export class ListingsService {
              ORDER BY sort_order, created_at`,
             [detail.listing.propertyId],
           );
+          // Photos the landlord added to each room type in Manage Rooms. Only
+          // the room type's current (approved) version is public, and each
+          // photo is reported against every priced room of that type.
+          const roomTypePhotoRes = await client.query(
+            `SELECT u.id AS "unitId", rtp.storage_key AS "storageKey"
+             FROM units u
+             JOIN room_types rt ON rt.id = u.room_type_id
+             JOIN room_type_photos rtp ON rtp.room_type_version_id = rt.current_version_id
+             WHERE u.property_id = $1
+               AND EXISTS (
+                 SELECT 1 FROM unit_semester_pricing usp
+                 WHERE usp.unit_id = u.id AND usp.semester_id = $2
+               )
+             ORDER BY rtp.is_primary DESC, rtp.sort_order`,
+            [detail.listing.propertyId, detail.listing.semesterId],
+          );
           // Pilot-funnel backstop (0032) — best-effort, same posture as the
           // search() event log above.
           try {
@@ -808,10 +840,11 @@ export class ListingsService {
               gender_arrangement: string | null;
             },
             propertyMedia: mediaRes.rows as { id: string; storage_key: string; caption: string | null }[],
+            roomTypePhotos: roomTypePhotoRes.rows as { unitId: string; storageKey: string }[],
           };
         },
       );
-      return { ...detail, property, availability, propertyMedia };
+      return { ...detail, property, availability, propertyMedia, unitPhotos: [...detail.unitPhotos, ...roomTypePhotos] };
     });
   }
 

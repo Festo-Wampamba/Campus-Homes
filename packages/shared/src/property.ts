@@ -38,6 +38,10 @@ export const proposedRoomCategorySchema = z.object({
   // the landlord sets it for dormitories and other variable types. Optional
   // so proposals saved before this field (2026-09-25) still parse.
   bedsPerRoom: z.number().int().min(1).max(20).optional(),
+  // Photos of this room type the landlord added when choosing it (bathroom
+  // included for self-contained). Not public until Ops confirms them at
+  // publish, where they arrive linked to this room type.
+  photoKeys: z.array(z.string().min(1).max(500)).max(8).optional(),
 });
 export type ProposedRoomCategory = z.infer<typeof proposedRoomCategorySchema>;
 
