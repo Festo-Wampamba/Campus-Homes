@@ -1291,3 +1291,12 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     uploads; carried photos keep inspector provenance) and written after
     commit as service_role — RLS only lets Ops insert photos they captured.
     `isBedroomCategory` moved to `packages/shared` (ops.ts).
+  - **Follow-up (same day): consumer sign-in silently reused Logto's browser
+    session.** After a staff member signed in on a browser, "Manage my
+    properties" went to Logto without `prompt=login`, Logto handed back the
+    staff identity, and the callback routed it to `/landlords/enroll`, where
+    the one-role rule refused it. Consumer sign-in now always sends
+    `prompt=login` (except one-time-token magic links), like staff. The enroll
+    page also detects a staff session and offers sign-out instead of an error.
+    One browser = one signed-in account; two accounts at once need separate
+    browsers or a private window.
