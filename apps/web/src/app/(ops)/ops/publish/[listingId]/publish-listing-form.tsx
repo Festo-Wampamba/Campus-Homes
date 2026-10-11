@@ -42,6 +42,7 @@ type PublishedPhoto = {
   category: PhotoCategory | null;
   customLabel: string | null;
   selfContained: boolean | null;
+  roomCategory: RoomCategory | null;
 };
 
 type PublishedSnapshot = { version: PublishedVersion; photos: PublishedPhoto[] };
@@ -109,6 +110,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
             category: p.category ?? "other",
             ...(p.customLabel ? { label: p.customLabel } : {}),
             ...(p.selfContained != null ? { selfContained: p.selfContained } : {}),
+            ...(p.roomCategory ? { roomCategory: p.roomCategory } : {}),
           })));
           setDescription(version.description ?? "");
           setAmenities(version.amenities ?? {});

@@ -51,6 +51,12 @@ export function isBedroomCategory(category: PhotoCategory): boolean {
   return BEDROOM_PHOTO_CATEGORIES.has(category);
 }
 
+// "Self-contained" applies to a room photo, or to any photo linked to a room
+// type (e.g. that room type's en-suite bathroom).
+export function canBeSelfContained(photo: { category: PhotoCategory; roomCategory?: string | null }): boolean {
+  return isBedroomCategory(photo.category) || Boolean(photo.roomCategory);
+}
+
 export const PHOTO_CATEGORY_LABELS: Record<PhotoCategory, string> = {
   bedroom: 'Bedroom', single_bedroom: 'Single bedroom', double_bedroom: 'Double bedroom (2 beds)',
   triple_bedroom: 'Triple bedroom (3 beds)', quad_bedroom: 'Quad bedroom (4 beds)', bathroom: 'Bathroom', kitchen: 'Kitchen',
@@ -67,6 +73,10 @@ export const visitPhotoSchema = z.object({
   // Whether the room shown is self-contained. Only meaningful for bedroom
   // categories; omitted/undefined on non-room photos (0053).
   selfContained: z.boolean().optional(),
+  // Which room type the photo belongs to, whatever it shows (an en-suite
+  // bathroom can prove the single self-contained rooms). Omitted = the whole
+  // property (0060).
+  roomCategory: z.enum(ROOM_CATEGORIES).optional(),
 });
 export type VisitPhoto = z.infer<typeof visitPhotoSchema>;
 

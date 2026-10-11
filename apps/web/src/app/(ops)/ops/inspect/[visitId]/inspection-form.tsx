@@ -10,7 +10,8 @@ import {
   PHOTO_CATEGORIES,
   PHOTO_CATEGORY_LABELS,
   type PhotoCategory,
-  isBedroomCategory,
+  type RoomCategory,
+  canBeSelfContained,
   normalizeVisitPhotos,
 } from "@campushomes/shared";
 
@@ -19,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
+import { RoomTypeSelect } from "@/components/ops/room-type-select";
 import { getDraft, putDraft, type InspectionDraft, type PendingPhoto } from "@/lib/ops/inspection-db";
 import { syncQueuedDrafts } from "@/lib/ops/sync-manager";
 import { CorrectionFixPanel } from "./correction-fix-panel";
@@ -48,12 +50,14 @@ function PhotoThumb({
   onCategoryChange,
   onLabelChange,
   onSelfContainedChange,
+  onRoomCategoryChange,
 }: {
   photo: PendingPhoto;
   onRemove: () => void;
   onCategoryChange: (category: PhotoCategory) => void;
   onLabelChange: (label: string) => void;
   onSelfContainedChange: (selfContained: boolean) => void;
+  onRoomCategoryChange: (roomCategory: RoomCategory | undefined) => void;
 }) {
   const [url] = useState(() => URL.createObjectURL(photo.file));
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
@@ -93,7 +97,8 @@ function PhotoThumb({
           className="mt-1 w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
         />
       )}
-      {isBedroomCategory(photo.category) && (
+      <RoomTypeSelect value={photo.roomCategory} onChange={onRoomCategoryChange} className="mt-1 px-1 py-0.5" />
+      {canBeSelfContained(photo) && (
         <label className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -346,7 +351,7 @@ export function InspectionForm({
               ...p,
               category,
               ...(category === "custom" ? {} : { label: undefined }),
-              ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+              ...(canBeSelfContained({ category, roomCategory: p.roomCategory }) ? {} : { selfContained: undefined }),
             }
           : p,
       ),
@@ -387,9 +392,27 @@ export function InspectionForm({
               ...p,
               category,
               ...(category === "custom" ? {} : { label: undefined }),
-              ...(isBedroomCategory(category) ? {} : { selfContained: undefined }),
+              ...(canBeSelfContained({ category, roomCategory: p.roomCategory }) ? {} : { selfContained: undefined }),
             }
           : p,
+      ),
+    });
+  }
+
+  function setPhotoRoomCategory(index: number, roomCategory: RoomCategory | undefined) {
+    persist({
+      ...currentDraft,
+      photos: currentDraft.photos.map((p, i) =>
+        i === index ? { ...p, roomCategory, ...(canBeSelfContained({ ...p, roomCategory }) ? {} : { selfContained: undefined }) } : p,
+      ),
+    });
+  }
+
+  function setUploadedPhotoRoomCategory(index: number, roomCategory: RoomCategory | undefined) {
+    persist({
+      ...currentDraft,
+      photoStorageKeys: currentDraft.photoStorageKeys.map((p, i) =>
+        i === index ? { ...p, roomCategory, ...(canBeSelfContained({ ...p, roomCategory }) ? {} : { selfContained: undefined }) } : p,
       ),
     });
   }
@@ -632,7 +655,12 @@ export function InspectionForm({
                               className="w-28 rounded border border-input bg-background px-1 py-0.5 text-xs"
                             />
                           )}
-                          {isBedroomCategory(photo.category) && (
+                          <RoomTypeSelect
+                            value={photo.roomCategory}
+                            onChange={(roomCategory) => setUploadedPhotoRoomCategory(i, roomCategory)}
+                            className="w-auto px-1 py-0.5"
+                          />
+                          {canBeSelfContained(photo) && (
                             <label className="flex items-center gap-1 text-xs text-muted-foreground">
                               <input
                                 type="checkbox"
@@ -665,6 +693,7 @@ export function InspectionForm({
                           onCategoryChange={(category) => setPhotoCategory(i, category)}
                           onLabelChange={(label) => setPhotoLabel(i, label)}
                           onSelfContainedChange={(selfContained) => setPhotoSelfContained(i, selfContained)}
+                          onRoomCategoryChange={(roomCategory) => setPhotoRoomCategory(i, roomCategory)}
                         />
                       ))}
                     </div>

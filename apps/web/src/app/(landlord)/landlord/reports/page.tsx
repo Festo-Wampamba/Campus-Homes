@@ -52,9 +52,9 @@ export default async function LandlordReportsPage() {
       <h1 className="text-2xl">Reports & Analytics</h1>
       <p className="mt-1 text-sm text-muted-foreground">A live snapshot of how your properties are doing.</p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" />
-        <StatCard label="Total beds" value={String(totalRooms)} icon={BedDouble} tone="teal" />
+      <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" href="/landlord/properties" />
+        <StatCard label="Total beds" value={String(totalRooms)} icon={BedDouble} tone="teal" href="/landlord/rooms" />
         <StatCard
           label="Occupancy rate"
           value={occupancyRate === null ? "N/A" : `${occupancyRate}%`}
@@ -62,7 +62,7 @@ export default async function LandlordReportsPage() {
           icon={Percent}
           tone="coral"
         />
-        <StatCard label="Active bookings" value={String(activeBookings)} icon={CalendarCheck} tone="teal" />
+        <StatCard label="Active bookings" value={String(activeBookings)} icon={CalendarCheck} tone="teal" href="/landlord/bookings" />
       </div>
 
       <div className="mt-4">
