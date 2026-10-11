@@ -267,6 +267,27 @@ describe('OpsService.publishListing re-publish', () => {
     const after = (await pool.query(`SELECT current_version_id FROM listings WHERE id = $1`, [listingId])).rows[0];
     expect(after).toEqual(before);
   });
+
+  it('accepts the landlord\'s room-type photo from the property form, linked to that room type', async () => {
+    const key = `uploads/${landlordId}/double-sc.jpg`;
+    await pool.query(
+      `UPDATE properties SET proposed_room_categories = $2::jsonb
+       WHERE id = (SELECT property_id FROM listings WHERE id = $1)`,
+      [listingId, JSON.stringify([{ category: 'double', roomCount: 2, pricePerTermUgx: 400000, selfContained: true, photoKeys: [key] }])],
+    );
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: await currentUnits(),
+      photos: [{ storageKey: key, category: 'double_bedroom', roomCategory: 'double', selfContained: true }],
+    });
+    const { rows } = await pool.query(
+      `SELECT p.room_category::text, p.captured_by FROM listing_photos p
+       JOIN listings l ON l.current_version_id = p.listing_version_id WHERE l.id = $1`,
+      [listingId],
+    );
+    expect(rows).toEqual([{ room_category: 'double', captured_by: null }]);
+  });
 });
 
 async function currentUnits() {

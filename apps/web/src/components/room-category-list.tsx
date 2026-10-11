@@ -78,7 +78,9 @@ function groupByCategory(
   }
   for (const group of groups.values()) {
     const verified = photosForRoomType(verificationPhotos, group).map((p) => ({ storageKey: p.storageKey }));
-    group.roomPhotos = [...verified, ...group.roomPhotos];
+    // A room-type photo is reported once per room of that type; show it once.
+    const seen = new Set<string>();
+    group.roomPhotos = [...verified, ...group.roomPhotos].filter((p) => !seen.has(p.storageKey) && seen.add(p.storageKey));
   }
   return [...groups.values()].sort((a, b) => a.pricePerTermUgx - b.pricePerTermUgx);
 }

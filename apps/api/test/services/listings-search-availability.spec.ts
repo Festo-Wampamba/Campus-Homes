@@ -176,6 +176,32 @@ describe('detail() public availability', () => {
   });
 });
 
+describe('detail() room-type photos', () => {
+  it('shows a room type\'s approved Manage Rooms photo against its rooms', async () => {
+    const { rows: [listing] } = await pool.query(
+      `SELECT property_id, semester_id FROM listings WHERE id = $1`, [listingId],
+    );
+    const roomTypeId = (await pool.query(
+      `INSERT INTO room_types (property_id) VALUES ($1) RETURNING id`, [listing.property_id],
+    )).rows[0].id as string;
+    const versionId = (await pool.query(
+      `INSERT INTO room_type_versions (room_type_id, version_number, title, category, capacity, semester_id, price_per_term_ugx, status)
+       VALUES ($1, 1, 'Single', 'single', 1, $2, 500000, 'approved') RETURNING id`,
+      [roomTypeId, listing.semester_id],
+    )).rows[0].id as string;
+    await pool.query(`UPDATE room_types SET current_version_id = $1 WHERE id = $2`, [versionId, roomTypeId]);
+    await pool.query(`UPDATE units SET room_type_id = $1 WHERE id = $2`, [roomTypeId, unitCancelled]);
+    await pool.query(
+      `INSERT INTO room_type_photos (room_type_version_id, storage_key) VALUES ($1, 'uploads/landlord/single-room.jpg')`,
+      [versionId],
+    );
+
+    const detail = await listings.detail(listingId);
+
+    expect(detail.unitPhotos).toContainEqual({ unitId: unitCancelled, storageKey: 'uploads/landlord/single-room.jpg' });
+  });
+});
+
 describe('search() self-contained filter (0053)', () => {
   // The only still-available bed is on unitCancelled — mark that room
   // self-contained so has_self_contained (computed over available units only)

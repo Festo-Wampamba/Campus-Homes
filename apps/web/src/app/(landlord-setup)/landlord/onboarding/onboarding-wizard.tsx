@@ -195,6 +195,7 @@ export function OnboardingWizard({
         selfContained: row.selfContained,
         bedsPerRoom: bedsPerRoom(row),
         ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
+        ...(row.photoKeys?.length ? { photoKeys: row.photoKeys } : {}),
       }));
       // Derived from the rows above, not entered separately — see the
       // comment on proposedRoomCategorySchema.selfContained.
@@ -368,6 +369,7 @@ export function OnboardingWizard({
                   idPrefix="onboarding-room"
                   showSelfContained
                   showBeds
+                  showPhotos
                 />
               </div>
               <div className="space-y-1.5">

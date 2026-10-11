@@ -1039,7 +1039,8 @@ export class OpsService {
   /** Builds listing_photos rows for the lead's confirmed photo set. A photo
    * already on the prior version or staged by the inspector keeps its
    * original capture provenance; anything else is a fresh upload, which must
-   * be the lead's own and is located at the inspected visit's GPS. The rows
+   * be the lead's own and is located at the inspected visit's GPS (the
+   * landlord's own room-type photos count as known, uncaptured). The rows
    * are inserted as service_role because RLS only lets Ops insert photos
    * they captured themselves, and carried-over ones were captured by the
    * inspector — the provenance checks here are the in-code party check. */
@@ -1067,6 +1068,19 @@ export class OpsService {
       for (const p of normalizeVisitPhotos(visit.photoStorageKeys)) {
         if (!known.has(p.storageKey)) {
           known.set(p.storageKey, { capturedBy: visit.inspectorId, ...visitGps, capturedAt: visit.completedAt ?? new Date() });
+        }
+      }
+    }
+    // Photos the landlord attached to a room type when choosing it (property
+    // form). Not captured by Ops, so captured_by stays null.
+    if (visitGps) {
+      const [property] = await db
+        .select({ proposed: properties.proposedRoomCategories })
+        .from(properties)
+        .where(eq(properties.id, visit.propertyId));
+      for (const row of (property?.proposed ?? []) as { photoKeys?: string[] }[]) {
+        for (const key of row.photoKeys ?? []) {
+          if (!known.has(key)) known.set(key, { capturedBy: null, ...visitGps, capturedAt: new Date() });
         }
       }
     }
