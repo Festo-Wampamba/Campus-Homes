@@ -1,4 +1,5 @@
-import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,15 +22,26 @@ export function StatCard({
   detail,
   icon: Icon,
   tone = "teal",
+  href,
 }: {
   label: string;
   value: string;
   detail?: string;
   icon: LucideIcon;
   tone?: keyof typeof TONES;
+  /** Makes the whole card a link to the page behind the number. */
+  href?: string;
 }) {
-  return (
-    <Card className="h-full">
+  const card = (
+    <Card className={cn("relative h-full", href && "transition-colors duration-150 group-hover:border-primary/40")}>
+      {href && (
+        // Overlays the corner instead of taking layout space, so labels never
+        // truncate; touch users get the press feedback on the link instead.
+        <ArrowUpRight
+          aria-hidden
+          className="absolute top-3 right-3 size-4 text-primary opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
+      )}
       <CardContent className="flex h-full flex-col gap-3 p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", TONES[tone])}>
@@ -43,5 +55,14 @@ export function StatCard({
         {detail && <p className="truncate text-xs text-muted-foreground">{detail}</p>}
       </CardContent>
     </Card>
+  );
+  if (!href) return card;
+  return (
+    <Link
+      href={href}
+      className="group block h-full rounded-lg outline-offset-2 transition-transform duration-150 ease-out focus-visible:outline-2 focus-visible:outline-ring active:scale-[0.98]"
+    >
+      {card}
+    </Link>
   );
 }

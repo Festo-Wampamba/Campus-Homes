@@ -414,6 +414,13 @@
       "when": 1791000000000,
       "tag": "0059_rent_periods_array",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0060_listing_photo_room_category",
+      "breakpoints": true
     }
   ]
 }

@@ -1300,3 +1300,26 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     page also detects a staff session and offers sign-out instead of an error.
     One browser = one signed-in account; two accounts at once need separate
     browsers or a private window.
+
+- **Photo fit, room-type photos, registration-form naming, Ops scheduling,
+  clickable landlord cards (2026-10-11):**
+  - Blurred side fill removed everywhere. `PhotoTile` `fit="cover"` (default)
+    fills fixed tiles (gallery, cards, thumbnails); `fit="natural"` sizes the
+    frame to the photo for a lone image (property window cover). The full,
+    uncropped photo is always one tap away in the viewer.
+  - Room-type photos: migration `0060` adds `listing_photos.room_category`
+    (which room type a photo belongs to, separate from what it shows), carried
+    in `VisitPhoto.roomCategory` from the inspector form (`RoomTypeSelect`),
+    the offline sync, and the Ops `PhotoSetEditor`. "Self-contained" applies to
+    bedroom photos or any room-linked photo (`canBeSelfContained`, shared), so
+    an en-suite bathroom photo can prove a self-contained type. The listing's
+    room rows show only `photosForRoomType()` + the landlord's per-room photos;
+    the per-row "Property photos" (every photo) button is gone. Older unlinked
+    photos still match by bedroom category.
+  - Landlord-facing "Tenant agreement form"/"Tenant registration QR" renamed
+    "Student registration form"; its builder dialog is `resizable`. The form's
+    own default title shown to students is still "Tenant Agreement" (editable).
+  - Ops schedule page shows the property, aligned date/time labels, fixed-width
+    HH/MM pickers, hints, and an always-present summary placeholder.
+  - Landlord `StatCard` takes `href` (whole card is a link; hover-only corner
+    arrow; press scale). Stat grids go 4-wide only at `xl` (sidebar width).

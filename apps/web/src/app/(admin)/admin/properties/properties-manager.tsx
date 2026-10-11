@@ -301,7 +301,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     <AdminModal open={mode === "detail"} onClose={close} title={selected?.name ?? "Property inventory"} description="Operational inventory and scoped property team." wide><div className="space-y-5 p-5">{notice && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{notice}</p>}
       <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-4 dark:border-border">
         <div>
-          <h3 className="text-sm font-bold">Tenant agreement form</h3>
+          <h3 className="text-sm font-bold">Student registration form</h3>
           <p className="mt-1 text-[11px] text-slate-500">The form students fill out and sign after scanning this property&apos;s QR code.</p>
         </div>
         <button type="button" onClick={() => setAgreementOpen(true)} className={fieldButton}>Edit form</button>

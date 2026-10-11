@@ -75,6 +75,8 @@ export const listingPhotos = pgTable('listing_photos', {
   // Whether the room shown is self-contained (0053) — only meaningful for
   // bedroom categories, null on non-room photos.
   selfContained: boolean('self_contained'),
+  // The room type this photo belongs to (0060); null = whole property.
+  roomCategory: roomCategory('room_category'),
   isPrimary: boolean('is_primary').notNull().default(false),
   sortOrder: smallint('sort_order').notNull().default(0),
   metadata: jsonb('metadata'),

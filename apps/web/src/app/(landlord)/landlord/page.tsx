@@ -55,11 +55,11 @@ export default async function LandlordDashboardPage() {
         <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" />
-        <StatCard label="Active bookings" value={String(activeBookings.length)} icon={CalendarCheck} tone="teal" />
-        <StatCard label="Occupied rooms" value={String(occupied.length)} icon={BedDouble} tone="coral" />
-        <StatCard label="Earnings" value="N/A" detail="Arrives with Phase 2" icon={Wallet} tone="neutral" />
+      <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" href="/landlord/properties" />
+        <StatCard label="Active bookings" value={String(activeBookings.length)} icon={CalendarCheck} tone="teal" href="/landlord/bookings" />
+        <StatCard label="Occupied rooms" value={String(occupied.length)} icon={BedDouble} tone="coral" href="/landlord/rooms" />
+        <StatCard label="Earnings" value="N/A" detail="Arrives with Phase 2" icon={Wallet} tone="neutral" href="/landlord/payments" />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">

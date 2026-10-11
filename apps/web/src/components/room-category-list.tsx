@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { BedDouble, Images } from "lucide-react";
-import type { ListingDetailResponse } from "@campushomes/shared";
+import type { ListingDetailResponse, ListingPhoto } from "@campushomes/shared";
 
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
+import { photosForRoomType } from "@/lib/room-type-photos";
 import { Button } from "@/components/ui/button";
 import { ReserveButton } from "@/components/reserve-button";
 import { StatusChip } from "@/components/status-chip";
@@ -25,9 +26,9 @@ type CategoryGroup = {
   // inventory, 0033) — a partially-let double still counts its one free bed.
   availableCount: number;
   firstAvailableBedId: string | null;
-  // Room-specific photos across every unit in this category — a student
-  // reserves "a Double", not one numbered room, so photos from any double
-  // in the category are representative of what they'd get.
+  // This room type's photos only: the inspection photos linked to it (any
+  // angle, its en-suite bathroom included) plus the landlord's own photos of
+  // any room in it. A student reserves "a Double", not one numbered room.
   roomPhotos: LightboxPhoto[];
 };
 
@@ -39,6 +40,7 @@ function groupByCategory(
   units: Unit[],
   availableBedsByUnit: Map<string, { id: string; available: boolean }[]>,
   unitPhotos: UnitPhoto[],
+  verificationPhotos: ListingPhoto[],
 ): CategoryGroup[] {
   const photosByUnit = new Map<string, LightboxPhoto[]>();
   for (const photo of unitPhotos) {
@@ -74,6 +76,10 @@ function groupByCategory(
       });
     }
   }
+  for (const group of groups.values()) {
+    const verified = photosForRoomType(verificationPhotos, group).map((p) => ({ storageKey: p.storageKey }));
+    group.roomPhotos = [...verified, ...group.roomPhotos];
+  }
   return [...groups.values()].sort((a, b) => a.pricePerTermUgx - b.pricePerTermUgx);
 }
 
@@ -90,7 +96,7 @@ export function RoomCategoryList({
   listingId: string;
   units: Unit[];
   availability: { id: string; unit_id: string; available: boolean }[];
-  photos: LightboxPhoto[];
+  photos: ListingPhoto[];
   unitPhotos: UnitPhoto[];
   propertyName: string;
   canReserve: boolean;
@@ -102,7 +108,7 @@ export function RoomCategoryList({
     list.push({ id: bed.id, available: bed.available });
     availableBedsByUnit.set(bed.unit_id, list);
   }
-  const groups = groupByCategory(units, availableBedsByUnit, unitPhotos);
+  const groups = groupByCategory(units, availableBedsByUnit, unitPhotos, photos);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   if (groups.length === 0) {
@@ -173,29 +179,12 @@ export function RoomCategoryList({
                       setLightbox({
                         photos: group.roomPhotos,
                         index: 0,
-                        caption: "Photos of this room, uploaded by the landlord.",
+                        caption: `${roomCategoryLabel(group.category)}${group.selfContained ? ", self-contained" : ""} room photos`,
                       })
                     }
                   >
                     <Images aria-hidden className="size-4" />
-                    Room photos
-                  </Button>
-                )}
-                {photos.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      setLightbox({
-                        photos,
-                        index: 0,
-                        caption: "General photos of the property.",
-                      })
-                    }
-                  >
-                    <Images aria-hidden className="size-4" />
-                    Property photos
+                    Room photos ({group.roomPhotos.length})
                   </Button>
                 )}
                 {canReserve && group.firstAvailableBedId && (

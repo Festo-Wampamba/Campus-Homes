@@ -98,10 +98,10 @@ export function PropertyQrCode({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-foreground">Tenant registration QR</p>
+        <p className="text-sm font-semibold text-foreground">Student registration form QR code</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Print and post this at the property. Scanning it takes a student straight to the digital
-          tenant agreement for {propertyName}. If a phone can&apos;t read the code, the student can
+          Print and post this at the property. Scanning it takes a student straight to the student
+          registration form for {propertyName}. If a phone can&apos;t read the code, the student can
           open the link instead. It&apos;s printed under the code on the downloaded poster.
         </p>
         {targetUrl && (

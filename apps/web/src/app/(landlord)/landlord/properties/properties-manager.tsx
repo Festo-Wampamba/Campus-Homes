@@ -30,8 +30,8 @@ function PropertyStatusChip({ status }: { status: string }) {
 }
 
 function PropertyThumbnail({ property, className, whole = false }: { property: Property; className?: string; whole?: boolean }) {
-  // Card-sized covers show the whole photo; the card click opens the detail
-  // dialog, where the photo can be viewed full screen.
+  // Card covers fill their frame; the card click opens the detail dialog,
+  // where the cover is shown at its own shape and opens full screen.
   if (whole && property.coverPhotoKey) {
     return (
       <PhotoTile

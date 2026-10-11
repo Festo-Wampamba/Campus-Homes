@@ -52,7 +52,7 @@ export default async function LandlordBookingsPage() {
         </div>
       ) : (
         <>
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
             <StatCard label="Total bookings" value={String(reservations.length)} icon={Inbox} tone="teal" />
             <StatCard label="Active now" value={String(activeCount)} icon={Clock} tone="coral" />
             <StatCard label="Fulfilled" value={String(fulfilledCount)} icon={CheckCircle2} tone="teal" />

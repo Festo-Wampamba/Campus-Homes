@@ -520,9 +520,9 @@ export function TenantAgreementBuilderDialog({
   propertyName: string;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="lg" dismissible={false}>
+    <Dialog open={open} onOpenChange={onOpenChange} size="lg" resizable dismissible={false}>
       <DialogHeader
-        title="Tenant agreement form"
+        title="Student registration form"
         description={`Design the form students fill out when they scan ${propertyName}'s QR code.`}
         onClose={() => onOpenChange(false)}
       />
