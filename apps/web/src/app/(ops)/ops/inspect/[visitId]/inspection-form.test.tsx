@@ -147,6 +147,22 @@ describe("InspectionForm", () => {
     expect(container.textContent).toContain("1.230000, 4.560000");
   });
 
+  it("refuses to submit an earlier location while the Coordinates box holds unreadable text", async () => {
+    await putDraft({ ...failedDraft("visit-bad-coords"), syncStatus: "draft", completedAt: null });
+    act(() => {
+      root.render(<InspectionForm visitId="visit-bad-coords" serverVisit={null} />);
+    });
+    await waitFor(() => container.querySelector("#gps-coordinates") !== null);
+
+    const input = container.querySelector<HTMLInputElement>("#gps-coordinates")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "near the market");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Fix or clear the Coordinates box before submitting.");
+  });
+
   it("retries a failed draft when 'Try again' is clicked", async () => {
     await putDraft(failedDraft("visit-retry"));
     const fetchMock = jest.fn().mockResolvedValue({

@@ -452,7 +452,12 @@ export function InspectionForm({
   const allAnswered = VERIFICATION_CHECKLIST_COMPONENTS.every(
     (c) => draft.checklist[c].passed !== null,
   );
-  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null;
+  // Unreadable or out-of-Uganda text in the Coordinates box is never saved,
+  // so the draft may still hold an earlier location; refuse to submit that
+  // while the box shows an error. An empty box keeps the captured location.
+  const manualCoordinates = coordinatesText.trim() ? parseCoordinates(coordinatesText) : null;
+  const manualCoordinatesInvalid = coordinatesText.trim() !== "" && !(manualCoordinates && isInUganda(manualCoordinates));
+  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid;
 
   async function submit() {
     // Cancel any pending debounced autosave first — otherwise it can fire
@@ -761,6 +766,9 @@ export function InspectionForm({
       <Button type="button" disabled={!canSubmit} onClick={submit} className="w-full">
         Submit checklist
       </Button>
+      {manualCoordinatesInvalid && (
+        <p className="text-sm text-destructive">Fix or clear the Coordinates box before submitting.</p>
+      )}
       {draft.syncStatus === "queued" && !online && (
         <p role="status" className="text-sm text-warning">
           Saved on this device. Will sync automatically when back online.
