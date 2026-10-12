@@ -48,6 +48,18 @@ export function parseCoordinates(text: string): Coordinates | null {
   return { lat: round(lat), lon: round(lon) };
 }
 
+/** Shown to inspectors as the accepted formats; every one must parse
+ * (coordinates.test.ts checks it), so the list can't promise a format the
+ * parser rejects. */
+export const COORDINATE_EXAMPLES: readonly { format: string; example: string }[] = [
+  { format: "Decimal (Google Maps)", example: "0.329167, 32.5525" },
+  { format: "Degrees, minutes, seconds", example: "0°19′45″N 32°33′12″E" },
+  { format: "Plain keyboard symbols", example: "0°19'45\"N 32°33'12\"E" },
+  { format: "Spaces only", example: "0 19 45 N 32 33 12 E" },
+  { format: "Degrees and decimal minutes", example: "N0°19.75' E32°33.2'" },
+  { format: "South of the equator (S or a minus sign)", example: "-0.35, 32.6" },
+];
+
 export function isInUganda({ lat, lon }: Coordinates): boolean {
   return lat >= UGANDA_GPS_BOUNDS.minLat && lat <= UGANDA_GPS_BOUNDS.maxLat
     && lon >= UGANDA_GPS_BOUNDS.minLon && lon <= UGANDA_GPS_BOUNDS.maxLon;

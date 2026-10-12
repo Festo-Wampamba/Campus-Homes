@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
 import { RoomTypeSelect } from "@/components/ops/room-type-select";
 import { getDraft, putDraft, type InspectionDraft, type PendingPhoto } from "@/lib/ops/inspection-db";
+import { CoordinatesHint } from "@/components/ops/coordinates-hint";
 import { isInUganda, parseCoordinates } from "@/lib/ops/coordinates";
 import { DRAFT_SYNCED_EVENT, syncQueuedDrafts } from "@/lib/ops/sync-manager";
 import { CorrectionFixPanel } from "./correction-fix-panel";
@@ -794,19 +795,4 @@ export function InspectionForm({
       )}
     </div>
   );
-}
-
-function CoordinatesHint({ text }: { text: string }) {
-  const hintClass = "text-xs";
-  if (!text.trim()) {
-    return <p id="gps-coordinates-hint" className={`${hintClass} text-muted-foreground`}>Paste from Google Maps, or degrees/minutes/seconds.</p>;
-  }
-  const parsed = parseCoordinates(text);
-  if (!parsed) {
-    return <p id="gps-coordinates-hint" className={`${hintClass} text-destructive`}>Couldn&apos;t read that. Use latitude then longitude, e.g. 0.329167, 32.5525.</p>;
-  }
-  if (!isInUganda(parsed)) {
-    return <p id="gps-coordinates-hint" className={`${hintClass} text-destructive`}>That point ({parsed.lat}, {parsed.lon}) is outside Uganda. Check the latitude and longitude aren&apos;t swapped.</p>;
-  }
-  return <p id="gps-coordinates-hint" className={`${hintClass} text-success`}>Using {parsed.lat.toFixed(6)}, {parsed.lon.toFixed(6)}.</p>;
 }

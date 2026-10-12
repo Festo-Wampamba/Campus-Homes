@@ -1,4 +1,4 @@
-import { isInUganda, parseCoordinates } from "./coordinates";
+import { COORDINATE_EXAMPLES, isInUganda, parseCoordinates } from "./coordinates";
 
 describe("parseCoordinates", () => {
   it.each([
@@ -27,5 +27,12 @@ describe("isInUganda", () => {
 
   it("rejects a point with latitude and longitude swapped", () => {
     expect(isInUganda({ lat: 32.5525, lon: 0.329167 })).toBe(false);
+  });
+});
+
+describe("COORDINATE_EXAMPLES", () => {
+  it.each(COORDINATE_EXAMPLES.map(({ example }) => example))("shows only formats that parse inside Uganda: %s", (example) => {
+    const parsed = parseCoordinates(example);
+    expect(parsed !== null && isInUganda(parsed)).toBe(true);
   });
 });
