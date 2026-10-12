@@ -54,6 +54,15 @@ describe('ProvisioningService', () => {
     `, [result?.id])).rows).toEqual([{ key: 'student', scope_type: 'own' }]);
   });
 
+  it('gives a new phone sign-up its phone as contact phone so onboarding does not ask again', async () => {
+    const result = await provisioning.provision(
+      { sub: 'logto-sub-new-contact', phoneNumber: '+256700000499', phoneVerified: true, name: 'Phone Student' },
+      'consumer',
+    );
+    const [row] = (await pool.query(`SELECT contact_phone FROM users WHERE id = $1`, [result?.id])).rows;
+    expect(row.contact_phone).toBe('+256700000499');
+  });
+
   it('refuses to auto-create a user on the staff portal', async () => {
     const result = await provisioning.provision({ sub: 'logto-sub-new-staff', email: 'nobody@campushomes.ug' }, 'staff');
     expect(result).toBeNull();

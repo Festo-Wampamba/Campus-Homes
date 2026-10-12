@@ -197,7 +197,7 @@ export class AdminUsersService {
       }
 
       const user = (await client.query(`
-        SELECT u.id, u.name, u.email, u.phone, u.role::text AS "accountType",
+        SELECT u.id, u.name, u.email, u.phone, u.contact_phone AS "contactPhone", u.role::text AS "accountType",
                u.status::text, u.image, u.email_verified AS "emailVerified",
                u.phone_verified AS "phoneVerified", u.date_of_birth::text AS "dateOfBirth",
                u.gender, u.nationality, u.address,

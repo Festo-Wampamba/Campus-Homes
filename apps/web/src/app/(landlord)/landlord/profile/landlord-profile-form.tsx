@@ -125,6 +125,16 @@ export function PersonalDetailsForm({ particulars }: { particulars: Particulars 
         <Label htmlFor="profile-nationality">Nationality</Label>
         <input id="profile-nationality" className={inputClass} placeholder="Ugandan" value={fields.nationality} onChange={(e) => setField("nationality", e.target.value)} />
       </div>
+      <PhoneField
+        id="profile-contact-phone"
+        label="Phone number"
+        required
+        value={fields.contactPhone}
+        onChange={(value) => setField("contactPhone", value)}
+        hint="So students and our team can reach you."
+        labelClassName="text-sm font-semibold"
+        hintClassName="text-xs"
+      />
       <div className="space-y-1.5">
         <Label htmlFor="profile-address">Address</Label>
         <input id="profile-address" className={inputClass} placeholder="Plot 12, Makerere Hill Road" value={fields.address} onChange={(e) => setField("address", e.target.value)} />

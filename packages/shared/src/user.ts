@@ -8,6 +8,7 @@ import {
   UNIVERSITIES,
 } from './enums.js';
 import { uuid } from './common.js';
+import { africanPhone } from './phone.js';
 
 export const studentProfileSchema = z.object({
   userId: uuid,
@@ -57,7 +58,7 @@ export const upsertLandlordProfileSchema = z
 export type UpsertLandlordProfileInput = z.infer<typeof upsertLandlordProfileSchema>;
 
 // Self-service identity edits (student and landlord "my profile" pages).
-// Deliberately excludes role, status, email, phone, and staff-only fields
+// Deliberately excludes role, status, email, sign-in phone, and staff-only fields
 // (notes, university, legalName) — those go through their own gated paths.
 export const updateSelfParticularsSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
@@ -67,6 +68,8 @@ export const updateSelfParticularsSchema = z.object({
   address: z.string().trim().max(500).nullable().optional(),
   emergencyContactName: z.string().trim().max(200).nullable().optional(),
   emergencyContactPhone: z.string().trim().max(30).nullable().optional(),
+  // users.contact_phone, never users.phone (a sign-in identity).
+  contactPhone: africanPhone.optional(),
 });
 export type UpdateSelfParticularsInput = z.infer<typeof updateSelfParticularsSchema>;
 
@@ -78,6 +81,7 @@ export type SelfParticulars = {
   address: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  contactPhone: string | null;
 };
 
 export type StudentProfileWithParticulars = StudentProfile & SelfParticulars;
@@ -125,9 +129,10 @@ export const usernameSchema = z
 export type Username = z.infer<typeof usernameSchema>;
 
 // First-sign-in identity gate: every account (email, phone, or Google) sets a
-// full name and a username before reaching a portal.
+// full name, a username and a contact phone before reaching a portal.
 export const profileOnboardingSchema = z.object({
   name: z.string().trim().min(1, "Enter your full name").max(200),
   username: usernameSchema,
+  contactPhone: africanPhone,
 });
 export type ProfileOnboardingInput = z.infer<typeof profileOnboardingSchema>;

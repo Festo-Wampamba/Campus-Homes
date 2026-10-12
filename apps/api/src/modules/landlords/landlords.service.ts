@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { and, eq, exists } from 'drizzle-orm';
+import { and, eq, exists, sql } from 'drizzle-orm';
 
 import type {
   PendingLandlordAccount,
@@ -62,7 +62,7 @@ export class LandlordsService {
   pendingAccounts(): Promise<PendingLandlordAccount[]> {
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
       const rows = await db
-        .select({ userId: users.id, name: users.name, phone: users.phone, createdAt: users.createdAt })
+        .select({ userId: users.id, name: users.name, phone: sql<string | null>`coalesce(${users.contactPhone}, ${users.phone})`, createdAt: users.createdAt })
         .from(users)
         .innerJoin(landlords, eq(landlords.userId, users.id))
         .where(and(
@@ -80,7 +80,7 @@ export class LandlordsService {
   approvedAccounts(): Promise<PendingLandlordAccount[]> {
     return this.rlsDb.run(SERVICE_CTX, async (db) => {
       const rows = await db
-        .select({ userId: users.id, name: users.name, phone: users.phone, createdAt: users.createdAt })
+        .select({ userId: users.id, name: users.name, phone: sql<string | null>`coalesce(${users.contactPhone}, ${users.phone})`, createdAt: users.createdAt })
         .from(users)
         .innerJoin(landlords, eq(landlords.userId, users.id))
         .where(and(eq(users.status, 'active'), eq(landlords.kycStatus, 'verified')))
@@ -147,6 +147,7 @@ export class LandlordsService {
           address: users.address,
           emergencyContactName: users.emergencyContactName,
           emergencyContactPhone: users.emergencyContactPhone,
+          contactPhone: users.contactPhone,
         })
         .from(users)
         .where(eq(users.id, ctx.userId));

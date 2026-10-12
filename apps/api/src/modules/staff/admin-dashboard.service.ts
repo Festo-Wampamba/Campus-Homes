@@ -8,6 +8,7 @@ import type { RlsContext } from '../../db/rls-context';
 import { runtimeRedisUrl } from '../../db/redis.module';
 import { loadPermissions } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
+import { DEFAULT_RESERVE_HOURS } from '../reservations/reservations.service';
 
 const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000',
@@ -222,7 +223,7 @@ export class AdminDashboardService {
   users(granted: Set<string>, includeDeleted = false) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const result = await client.query(`
-        SELECT u.id, u.name, u.email, u.phone, u.role::text, u.status::text,
+        SELECT u.id, u.name, u.email, u.phone, u.contact_phone AS "contactPhone", u.role::text, u.status::text,
                u.deleted_at AS "deletedAt", u.deletion_reason AS "deletionReason",
                u.email_verified AS "emailVerified", u.phone_verified AS "phoneVerified",
                -- Which providers a user signed in with lived in Better Auth's
@@ -296,7 +297,7 @@ export class AdminDashboardService {
         ORDER BY coalesce(v.scheduled_at, v.created_at) DESC LIMIT 200
       `) : { rows: [] };
       const kyc = granted.has('landlords.read') ? await client.query(`
-        SELECT u.id, coalesce(nullif(u.name, ''), l.legal_name) AS name, u.email, u.phone,
+        SELECT u.id, coalesce(nullif(u.name, ''), l.legal_name) AS name, u.email, coalesce(u.contact_phone, u.phone) AS phone,
                l.kyc_status::text AS status, l.created_at AS "submittedAt",
                l.kyc_reviewed_at AS "reviewedAt"
         FROM landlords l JOIN users u ON u.id = l.user_id
@@ -452,7 +453,7 @@ export class AdminDashboardService {
         semesters: semesters.rows,
         universities: ['MUK', 'MUBS', 'KIU', 'KYU', 'other'],
         reservationPolicy: {
-          holdHours: number(values.reservation_hold_hours ?? 72),
+          holdHours: number(values.reservation_hold_hours ?? DEFAULT_RESERVE_HOURS),
           feeUgx: number(values.reservation_fee_ugx ?? 5000),
         },
         settings: {
