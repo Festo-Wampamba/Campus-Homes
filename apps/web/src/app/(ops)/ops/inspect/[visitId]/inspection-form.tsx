@@ -22,7 +22,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/status-chip";
 import { RoomTypeSelect } from "@/components/ops/room-type-select";
 import { getDraft, putDraft, type InspectionDraft, type PendingPhoto } from "@/lib/ops/inspection-db";
-import { syncQueuedDrafts } from "@/lib/ops/sync-manager";
+import { isInUganda, parseCoordinates } from "@/lib/ops/coordinates";
+import { DRAFT_SYNCED_EVENT, syncQueuedDrafts } from "@/lib/ops/sync-manager";
 import { CorrectionFixPanel } from "./correction-fix-panel";
 
 function subscribeToConnectivity(callback: () => void) {
@@ -191,8 +192,8 @@ function draftFromServer(visitId: string, visit: OpsVisitDetail): InspectionDraf
   };
 }
 
-const numberFieldClass =
-  "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs sm:h-10";
+const coordinatesFieldClass =
+  "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs placeholder:text-muted-foreground sm:h-10";
 
 export function InspectionForm({
   visitId,
@@ -214,6 +215,7 @@ export function InspectionForm({
   const [gpsStatus, setGpsStatus] = useState<"idle" | "scanning" | "error">("idle");
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [coordinatesText, setCoordinatesText] = useState("");
   const online = useOnline();
 
   useEffect(() => {
@@ -235,6 +237,17 @@ export function InspectionForm({
       cancelled = true;
     };
   }, [visitId, serverVisit]);
+
+  // The background sync loop also syncs this draft; re-read it when an attempt
+  // settles so the screen doesn't keep saying "waiting" after it went through.
+  useEffect(() => {
+    const onSettled = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== visitId) return;
+      void getDraft(visitId).then((latest) => latest && setDraft(latest));
+    };
+    window.addEventListener(DRAFT_SYNCED_EVENT, onSettled);
+    return () => window.removeEventListener(DRAFT_SYNCED_EVENT, onSettled);
+  }, [visitId]);
 
   const persist = useCallback((next: InspectionDraft) => {
     setDraft(next);
@@ -523,39 +536,30 @@ export function InspectionForm({
           {gpsStatus === "error" && gpsError && <p className="text-sm text-destructive">{gpsError}</p>}
           <details className="text-sm">
             <summary className="cursor-pointer font-medium text-muted-foreground">Enter coordinates manually instead</summary>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="gps-lat">GPS latitude</Label>
-                <input
-                  id="gps-lat"
-                  type="number"
-                  step="any"
-                  value={draft.visitGpsLat ?? ""}
-                  onChange={(e) =>
-                    persist({
-                      ...draft,
-                      visitGpsLat: e.target.value === "" ? null : Number(e.target.value),
-                    })
+            <div className="mt-3 space-y-1.5">
+              <Label htmlFor="gps-coordinates">Coordinates</Label>
+              {/* Text, not type="number": a number box silently blanks
+                  degrees/minutes/seconds like 0°19′45″N, so the location
+                  looked entered but was never saved. */}
+              <input
+                id="gps-coordinates"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="e.g. 0.329167, 32.5525 or 0°19′45″N 32°33′12″E"
+                value={coordinatesText}
+                onChange={(e) => {
+                  setCoordinatesText(e.target.value);
+                  const parsed = parseCoordinates(e.target.value);
+                  if (parsed && isInUganda(parsed)) {
+                    persist({ ...draft, visitGpsLat: parsed.lat, visitGpsLon: parsed.lon });
                   }
-                  className={numberFieldClass}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="gps-lon">GPS longitude</Label>
-                <input
-                  id="gps-lon"
-                  type="number"
-                  step="any"
-                  value={draft.visitGpsLon ?? ""}
-                  onChange={(e) =>
-                    persist({
-                      ...draft,
-                      visitGpsLon: e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                  className={numberFieldClass}
-                />
-              </div>
+                }}
+                aria-describedby="gps-coordinates-hint"
+                className={coordinatesFieldClass}
+              />
+              <CoordinatesHint text={coordinatesText} />
             </div>
           </details>
         </CardContent>
@@ -766,6 +770,7 @@ export function InspectionForm({
           <p role="status" className="text-sm text-warning">
             Saved on this device. Still waiting to sync.
           </p>
+          {draft.syncError && <p className="mt-1 text-xs text-warning">Last attempt: {draft.syncError}</p>}
           <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={retrying} onClick={retrySync}>
             {retrying ? "Retrying…" : "Retry sync now"}
           </Button>
@@ -781,6 +786,7 @@ export function InspectionForm({
           <p role="status" className="text-sm text-destructive">
             Couldn&apos;t submit this checklist. Contact your lead if this keeps happening.
           </p>
+          {draft.syncError && <p className="mt-1 text-xs text-destructive">{draft.syncError}</p>}
           <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={retrying} onClick={retrySync}>
             {retrying ? "Retrying…" : "Try again"}
           </Button>
@@ -788,4 +794,19 @@ export function InspectionForm({
       )}
     </div>
   );
+}
+
+function CoordinatesHint({ text }: { text: string }) {
+  const hintClass = "text-xs";
+  if (!text.trim()) {
+    return <p id="gps-coordinates-hint" className={`${hintClass} text-muted-foreground`}>Paste from Google Maps, or degrees/minutes/seconds.</p>;
+  }
+  const parsed = parseCoordinates(text);
+  if (!parsed) {
+    return <p id="gps-coordinates-hint" className={`${hintClass} text-destructive`}>Couldn&apos;t read that. Use latitude then longitude, e.g. 0.329167, 32.5525.</p>;
+  }
+  if (!isInUganda(parsed)) {
+    return <p id="gps-coordinates-hint" className={`${hintClass} text-destructive`}>That point ({parsed.lat}, {parsed.lon}) is outside Uganda. Check the latitude and longitude aren&apos;t swapped.</p>;
+  }
+  return <p id="gps-coordinates-hint" className={`${hintClass} text-success`}>Using {parsed.lat.toFixed(6)}, {parsed.lon.toFixed(6)}.</p>;
 }

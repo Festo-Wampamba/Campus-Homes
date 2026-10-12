@@ -108,6 +108,50 @@ describe("syncQueuedDrafts", () => {
     expect(updated?.syncStatus).toBe("queued");
   });
 
+  it("saves the server's reason when the checklist is rejected", async () => {
+    await putDraft(queuedDraft("visit-reason"));
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ message: "GPS latitude is outside Uganda." }),
+    }) as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    expect((await getDraft("visit-reason"))?.syncError).toBe("Sending the checklist: GPS latitude is outside Uganda.");
+  });
+
+  it("saves a connection reason when the server can't be reached", async () => {
+    await putDraft(queuedDraft("visit-unreachable"));
+    global.fetch = jest.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await syncQueuedDrafts();
+
+    expect((await getDraft("visit-unreachable"))?.syncError).toBe("Sending the checklist: couldn't reach CampusHomes. Check your connection.");
+  });
+
+  it("clears the previous error once a retry succeeds", async () => {
+    await putDraft({ ...queuedDraft("visit-recovered"), syncError: "Sending the checklist: couldn't reach CampusHomes." });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "visit-recovered" }) }) as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    expect((await getDraft("visit-recovered"))?.syncError).toBeUndefined();
+  });
+
+  it("tells an open form when an attempt settles", async () => {
+    await putDraft(queuedDraft("visit-event"));
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "visit-event" }) }) as unknown as typeof fetch;
+    const seen: string[] = [];
+    const listener = (event: Event) => seen.push((event as CustomEvent<string>).detail);
+    window.addEventListener("inspection-draft-synced", listener);
+
+    await syncQueuedDrafts();
+
+    window.removeEventListener("inspection-draft-synced", listener);
+    expect(seen).toEqual(["visit-event"]);
+  });
+
   it("marks a draft with no GPS captured as failed, not retried forever", async () => {
     await putDraft({ ...queuedDraft("visit-no-gps"), visitGpsLat: null, visitGpsLon: null });
     global.fetch = jest.fn();
