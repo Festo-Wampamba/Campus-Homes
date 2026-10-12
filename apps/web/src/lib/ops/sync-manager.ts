@@ -1,6 +1,6 @@
 import type { SyncVisitInput } from "@campushomes/shared";
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { getQueuedDrafts, putDraft, type InspectionDraft } from "./inspection-db";
 
@@ -48,6 +48,21 @@ function toSyncPayload(draft: InspectionDraft): SyncVisitInput {
   };
 }
 
+/** Fired after a sync attempt settles, so an open inspection form re-reads its
+ * draft even when the background loop (not the form) did the syncing. */
+export const DRAFT_SYNCED_EVENT = "inspection-draft-synced";
+
+function notifyDraftSettled(visitId: string) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(DRAFT_SYNCED_EVENT, { detail: visitId }));
+}
+
+/** What the inspector sees under Retry: the step that failed plus the reason. */
+function syncErrorMessage(err: unknown, step: string): string {
+  if (err instanceof ApiError) return `${step}: ${apiErrorMessage(err, "the server refused it")}`;
+  if (err instanceof TypeError) return `${step}: couldn't reach CampusHomes. Check your connection.`;
+  return `${step}: ${err instanceof Error ? err.message : "unexpected error"}`;
+}
+
 async function syncOne(draft: InspectionDraft): Promise<void> {
   // Reassigned as photo-upload progress persists, so the catch block below
   // always saves the latest state — not the pre-upload snapshot, which would
@@ -55,13 +70,16 @@ async function syncOne(draft: InspectionDraft): Promise<void> {
   // later one (or the sync POST itself) failed.
   let current: InspectionDraft = { ...draft, syncStatus: "syncing" };
   await putDraft(current);
+  let step = draft.photos.length ? `Uploading ${draft.photos.length} photo(s)` : "Sending the checklist";
   try {
     current = await uploadPendingPhotos(current);
+    step = "Sending the checklist";
     await api("/ops/visits/sync", {
       method: "POST",
       body: JSON.stringify(toSyncPayload(current)),
     });
-    await putDraft({ ...current, syncStatus: "synced" });
+    await putDraft({ ...current, syncStatus: "synced", syncError: undefined });
+    notifyDraftSettled(draft.visitId);
   } catch (err) {
     // Only network-shaped failures are worth retrying: fetch itself throws a
     // TypeError on a network failure, a 5xx means the server may recover, and
@@ -69,7 +87,8 @@ async function syncOne(draft: InspectionDraft): Promise<void> {
     // validation throws, unexpected errors, other 4xx) is terminal — retrying
     // it forever would just resend the same bad request.
     const isRetryable = err instanceof TypeError || (err instanceof ApiError && (err.status >= 500 || err.status === 429));
-    await putDraft({ ...current, syncStatus: isRetryable ? "queued" : "failed" });
+    await putDraft({ ...current, syncStatus: isRetryable ? "queued" : "failed", syncError: syncErrorMessage(err, step) });
+    notifyDraftSettled(draft.visitId);
   }
 }
 

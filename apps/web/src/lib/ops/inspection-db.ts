@@ -24,6 +24,8 @@ export interface InspectionDraft {
   // retried sync never re-uploads an already-uploaded photo.
   photos: PendingPhoto[];
   photoStorageKeys: VisitPhoto[];
+  // Why the last sync attempt failed, shown under Retry; cleared on success.
+  syncError?: string;
 }
 
 /** A captured-but-not-yet-uploaded photo and the part of the property it shows.
