@@ -1,4 +1,5 @@
 import { ActivityLogIcon, DashboardIcon } from "@radix-ui/react-icons";
+import type { AccountAccess } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +10,13 @@ import { ErrorNotice, TermsNote } from "../sign-in/sign-in-form";
 
 export function isStaffPath(path: string | null): path is string {
   return !!path && /^\/(admin|ops)(?=[/?#]|$)/.test(path);
+}
+
+// Only an already-verified staff session skips the page. Anyone else signed in
+// (e.g. as a landlord) must still reach the buttons: the callback replaces the
+// browser's session with the staff account.
+export function hasVerifiedStaffSession(access: AccountAccess): boolean {
+  return access.assurance.mfaVerified && access.workspaces.some((w) => w === "admin" || w === "ops");
 }
 
 export function StaffSignIn({ next, error }: { next: string | null; error?: string | null }) {

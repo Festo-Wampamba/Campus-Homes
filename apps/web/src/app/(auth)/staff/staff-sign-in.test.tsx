@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { isStaffPath, StaffSignIn } from "./staff-sign-in";
+import type { AccountAccess } from "@campushomes/shared";
+
+import { hasVerifiedStaffSession, isStaffPath, StaffSignIn } from "./staff-sign-in";
 
 describe("isStaffPath", () => {
   it.each([
@@ -38,5 +40,22 @@ describe("StaffSignIn", () => {
 
   it("shows the staff MFA error on the staff page", () => {
     expect(renderToStaticMarkup(<StaffSignIn next={null} error="mfa_required" />)).toContain("2-step verification");
+  });
+});
+
+describe("hasVerifiedStaffSession", () => {
+  const access = (workspaces: AccountAccess["workspaces"], mfaVerified: boolean) =>
+    ({ workspaces, assurance: { mfaVerified, authenticatedAt: null } }) as unknown as AccountAccess;
+
+  it("skips staff sign-in for an MFA-verified staff session", () => {
+    expect(hasVerifiedStaffSession(access(["admin"], true))).toBe(true);
+  });
+
+  it("shows staff sign-in to someone signed in as a landlord", () => {
+    expect(hasVerifiedStaffSession(access(["landlord"], false))).toBe(false);
+  });
+
+  it("shows staff sign-in to staff whose session has not passed MFA", () => {
+    expect(hasVerifiedStaffSession(access(["ops"], false))).toBe(false);
   });
 });

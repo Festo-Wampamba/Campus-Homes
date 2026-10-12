@@ -5,7 +5,7 @@ import { getServerSession } from "@/lib/session";
 import { authDestination } from "@/lib/auth-routing";
 
 import { LiveClock } from "../sign-in/live-clock";
-import { StaffSignIn } from "./staff-sign-in";
+import { hasVerifiedStaffSession, StaffSignIn } from "./staff-sign-in";
 
 export const metadata: Metadata = { title: "Staff sign in", robots: { index: false, follow: false } };
 
@@ -17,7 +17,7 @@ export default async function StaffSignInPage({
   const params = await searchParams;
   const next = safeAuthDestination(params.next);
   const session = await getServerSession();
-  if (session && !params.error) redirect(authDestination(session, next));
+  if (session && !params.error && hasVerifiedStaffSession(session.access)) redirect(authDestination(session, next));
 
   // Same fixed backdrop as /sign-in (see the notes there on scrolling and
   // the click-through clock band).
