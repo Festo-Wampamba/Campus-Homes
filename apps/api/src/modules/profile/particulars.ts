@@ -8,7 +8,7 @@ import { users } from '../../db/schema';
 
 // `users` has no self-UPDATE RLS policy — a client-editable row could escalate
 // role/status. This runs as service_role and hand-picks only the identity
-// fields that carry no privilege; role, status, email, and phone never pass
+// fields that carry no privilege; role, status, email, and the sign-in phone never pass
 // through here. Shared by both the student and landlord "my profile" routes
 // so the allowlist can't drift between the two.
 export function updateSelfParticulars(
@@ -27,6 +27,7 @@ export function updateSelfParticulars(
         ...(input.address !== undefined ? { address: input.address } : {}),
         ...(input.emergencyContactName !== undefined ? { emergencyContactName: input.emergencyContactName } : {}),
         ...(input.emergencyContactPhone !== undefined ? { emergencyContactPhone: input.emergencyContactPhone } : {}),
+        ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
         updatedAt: new Date(),
       })
       .where(eq(users.id, ctx.userId))
@@ -39,6 +40,7 @@ export function updateSelfParticulars(
         address: users.address,
         emergencyContactName: users.emergencyContactName,
         emergencyContactPhone: users.emergencyContactPhone,
+        contactPhone: users.contactPhone,
       });
     return row;
   });

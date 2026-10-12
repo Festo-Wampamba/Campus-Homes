@@ -3,6 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { africanPhone } from "@campushomes/shared";
+
+import { PhoneField } from "@/components/phone-field";
 import { api, apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,29 +13,42 @@ import { Label } from "@/components/ui/label";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
-export function OnboardingForm({ initialName, initialUsername }: { initialName: string; initialUsername: string }) {
+export function OnboardingForm({
+  initialName,
+  initialUsername,
+  initialPhone,
+  next,
+}: {
+  initialName: string;
+  initialUsername: string;
+  initialPhone: string;
+  next: string;
+}) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [username, setUsername] = useState(initialUsername);
+  const [phone, setPhone] = useState(initialPhone);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const usernameValid = USERNAME_PATTERN.test(username);
+  const phoneValid = africanPhone.safeParse(phone).success;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     if (!name.trim()) return setError("Enter your full name.");
     if (!usernameValid) return setError("Username must be 3–20 letters, numbers or underscores.");
+    if (!phoneValid) return setError("Enter a valid mobile number, e.g. 772 123 456.");
     setPending(true);
     try {
       await api("/me/onboarding", {
         method: "POST",
-        body: JSON.stringify({ name: name.trim(), username: username.toLowerCase() }),
+        body: JSON.stringify({ name: name.trim(), username: username.toLowerCase(), contactPhone: phone }),
       });
       // The identity gate reads the session server-side, so a full navigation
       // (not just router.refresh) is what re-runs it with the new profile.
-      router.replace("/choose-workspace");
+      router.replace(next);
       router.refresh();
     } catch (err) {
       setError(apiErrorMessage(err, "Couldn't save your profile. Try again."));
@@ -44,27 +60,37 @@ export function OnboardingForm({ initialName, initialUsername }: { initialName: 
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="onboarding-name">Full name</Label>
-        <Input id="onboarding-name" required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+        <Label htmlFor="onboarding-name" required>Full name</Label>
+        <Input id="onboarding-name" required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sarah Nakato" aria-describedby="onboarding-name-hint" />
+        <p id="onboarding-name-hint" className="text-xs text-muted-foreground">As it appears on your student ID.</p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="onboarding-username">Username</Label>
-        <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-teal-600">
-          <input
-            id="onboarding-username"
-            required
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
-            maxLength={20}
-            placeholder="janedoe"
-            className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none"
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">3–20 characters: letters, numbers, underscores.</p>
+        <Label htmlFor="onboarding-username" required>Username</Label>
+        <Input
+          id="onboarding-username"
+          required
+          autoComplete="username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
+          maxLength={20}
+          placeholder="e.g. sarah_n"
+          aria-describedby="onboarding-username-hint"
+        />
+        <p id="onboarding-username-hint" className="text-xs text-muted-foreground">3–20 letters, numbers or underscores.</p>
       </div>
+      <PhoneField
+        id="onboarding-phone"
+        label="Phone number"
+        required
+        value={phone}
+        onChange={setPhone}
+        placeholder="e.g. 772 123 456"
+        hint="So landlords and our team can reach you."
+        labelClassName="text-sm font-semibold"
+        hintClassName="text-xs"
+      />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" disabled={pending || !name.trim() || !usernameValid} className="w-full">
+      <Button type="submit" disabled={pending || !name.trim() || !usernameValid || !phoneValid} className="w-full">
         {pending ? "Saving…" : "Continue"}
       </Button>
     </form>

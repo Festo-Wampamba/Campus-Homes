@@ -421,6 +421,20 @@
       "when": 1791100000000,
       "tag": "0060_listing_photo_room_category",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0061_reservation_hold_24h",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0062_users_contact_phone",
+      "breakpoints": true
     }
   ]
 }

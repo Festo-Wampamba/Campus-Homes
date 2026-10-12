@@ -44,7 +44,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         // and are exactly the pages that read as credential harvesting to an
         // automated classifier.
         disallow: [
-          "/api/", "/auth/", "/admin", "/ops", "/landlord/", "/student", "/messages", "/calendar", "/profile",
+          "/api/", "/auth/", "/admin", "/ops", "/staff", "/landlord/", "/student", "/messages", "/calendar", "/profile",
           "/reservations", "/saved", "/recently-viewed", "/onboarding", "/agreement", "/dev",
         ],
       },

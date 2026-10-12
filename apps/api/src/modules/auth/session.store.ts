@@ -34,6 +34,7 @@ export interface SessionData {
     username: string | null;
     email: string | null;
     phone: string | null;
+    contactPhone: string | null;
   };
   session: {
     id: string;
@@ -85,6 +86,7 @@ export class SessionStore {
           username: users.username,
           email: users.email,
           phone: users.phone,
+          contactPhone: users.contactPhone,
         })
         .from(sessions)
         .innerJoin(users, eq(users.id, sessions.userId))
@@ -100,7 +102,7 @@ export class SessionStore {
       ? [...(await loadPermissions(this.rlsDb, row.userId)).permissions].sort() : [];
     return {
       access,
-      user: { id: row.userId, role: row.role, status: row.status, name: row.name, username: row.username, email: row.email, phone: row.phone },
+      user: { id: row.userId, role: row.role, status: row.status, name: row.name, username: row.username, email: row.email, phone: row.phone, contactPhone: row.contactPhone },
       session: {
         id: row.sessionId,
         createdAt: row.sessionCreatedAt.toISOString(),

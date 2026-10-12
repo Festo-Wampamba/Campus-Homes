@@ -43,7 +43,7 @@ export class StaffService {
   list() {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => (
       await client.query(`
-        SELECT DISTINCT u.id, u.name, u.email, u.phone, u.role::text, u.status::text
+        SELECT DISTINCT u.id, u.name, u.email, coalesce(u.contact_phone, u.phone) AS phone, u.role::text, u.status::text
         FROM users u
         JOIN user_role_assignments a ON a.user_id = u.id
         JOIN roles r ON r.id = a.role_id

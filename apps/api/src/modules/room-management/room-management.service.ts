@@ -903,7 +903,7 @@ export class RoomManagementService {
       status: string | null; reserved_expires_at: Date | null; booked_at: Date | null; student_name: string | null; student_phone: string | null;
     }>(
       `SELECT b.id,b.label,b.blocked,b.blocked_reason,r.id reservation_id,r.status::text,r.reserved_expires_at,r.booked_at,
-        su.name student_name,su.phone student_phone
+        su.name student_name,coalesce(su.contact_phone,su.phone) student_phone
        FROM beds b LEFT JOIN LATERAL (
          SELECT * FROM reservations r WHERE r.bed_id=b.id AND r.status IN ('reserved','booked','occupied')
          ORDER BY r.created_at DESC LIMIT 1

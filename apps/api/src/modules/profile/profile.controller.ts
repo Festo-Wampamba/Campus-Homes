@@ -64,6 +64,7 @@ export class ProfileController {
           address: users.address,
           emergencyContactName: users.emergencyContactName,
           emergencyContactPhone: users.emergencyContactPhone,
+          contactPhone: users.contactPhone,
         })
         .from(users)
         .where(eq(users.id, ctx.userId));

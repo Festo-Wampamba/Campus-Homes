@@ -53,6 +53,7 @@ export function StudentProfileForm({
   const [address, setAddress] = useState(profile?.address ?? "");
   const [emergencyContactName, setEmergencyContactName] = useState(profile?.emergencyContactName ?? "");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState(profile?.emergencyContactPhone ?? "");
+  const [contactPhone, setContactPhone] = useState(profile?.contactPhone ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -78,6 +79,7 @@ export function StudentProfileForm({
           address: address || null,
           emergencyContactName: emergencyContactName || null,
           emergencyContactPhone: emergencyContactPhone || null,
+          contactPhone: contactPhone || undefined,
         }),
       });
       if (!profile) {
@@ -159,6 +161,16 @@ export function StudentProfileForm({
             <Label htmlFor="nationality">Nationality</Label>
             <input id="nationality" maxLength={100} className={inputClass} placeholder="Ugandan" value={nationality} onChange={(e) => setNationality(e.target.value)} />
           </div>
+          <PhoneField
+            id="contactPhone"
+            label="Phone number"
+            required
+            value={contactPhone}
+            onChange={setContactPhone}
+            hint="So landlords and our team can reach you."
+            labelClassName="text-sm font-semibold"
+            hintClassName="text-xs"
+          />
           <div className="space-y-1.5">
             <Label htmlFor="address">Address</Label>
             <input id="address" maxLength={500} className={inputClass} placeholder="Plot 12, Makerere Hill Road" value={address} onChange={(e) => setAddress(e.target.value)} />

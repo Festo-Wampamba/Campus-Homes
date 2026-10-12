@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AFRICAN_COUNTRIES, normalizePhoneForCountry, type AfricanCountry } from "@campushomes/shared";
 
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const UGANDA = AFRICAN_COUNTRIES.find((country) => country.iso2 === "UG")!;
@@ -33,6 +34,10 @@ export function PhoneField({
   value,
   onChange,
   className,
+  placeholder,
+  hint,
+  labelClassName,
+  hintClassName,
 }: {
   id?: string;
   label: string;
@@ -40,6 +45,12 @@ export function PhoneField({
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  /** Defaults to the selected country's example number. */
+  placeholder?: string;
+  /** Defaults to "e.g. +<dial code> <example>". */
+  hint?: string;
+  labelClassName?: string;
+  hintClassName?: string;
 }) {
   const [country, setCountry] = useState<AfricanCountry>(() => detectCountry(value || `+${UGANDA.dialCode}`));
   const [local, setLocal] = useState(() => localPart(value, country));
@@ -50,14 +61,14 @@ export function PhoneField({
 
   return (
     <label className={cn("block", className)} htmlFor={id}>
-      <span className="mb-1.5 block text-xs font-bold text-foreground">
+      <span className={cn("mb-1.5 block text-xs font-bold text-foreground", labelClassName)}>
         {label}
         {required && <span aria-hidden className="ml-0.5 text-red-600">*</span>}
       </span>
       <div className="flex gap-2">
         <select
           aria-label={`${label} country`}
-          className={cn(fieldClass, "w-[9.5rem] shrink-0")}
+          className={cn(fieldClass, "h-11 w-[9.5rem] shrink-0 sm:h-10")}
           value={country.iso2}
           onChange={(event) => {
             const next = AFRICAN_COUNTRIES.find((c) => c.iso2 === event.target.value) ?? UGANDA;
@@ -71,19 +82,24 @@ export function PhoneField({
             </option>
           ))}
         </select>
-        <input
+        {/* Commit on every keystroke, not on blur: pressing Enter submits the
+            form without a blur, which used to send an empty number. */}
+        <Input
           id={id}
           type="tel"
           inputMode="tel"
-          className={fieldClass}
-          placeholder={country.example}
+          autoComplete="tel-national"
+          required={required}
+          placeholder={placeholder ?? country.example}
           value={local}
-          onChange={(event) => setLocal(event.target.value)}
-          onBlur={() => commit(country, local)}
+          onChange={(event) => {
+            setLocal(event.target.value);
+            commit(country, event.target.value);
+          }}
         />
       </div>
-      <span className="mt-1 block text-[10px] text-muted-foreground">
-        e.g. +{country.dialCode} {country.example}
+      <span className={cn("mt-1 block text-[10px] text-muted-foreground", hintClassName)}>
+        {hint ?? `e.g. +${country.dialCode} ${country.example}`}
       </span>
     </label>
   );
