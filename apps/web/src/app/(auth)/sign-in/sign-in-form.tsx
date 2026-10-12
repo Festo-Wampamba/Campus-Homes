@@ -1,6 +1,6 @@
 "use client";
 
-import { ActivityLogIcon, ArrowRightIcon, DashboardIcon } from "@radix-ui/react-icons";
+import { ArrowRightIcon } from "@radix-ui/react-icons";
 
 import Link from "next/link";
 
@@ -29,7 +29,7 @@ export function signInMode(next: string | null): SignInMode {
   return "all";
 }
 
-function ErrorNotice({ error }: { error?: string | null }) {
+export function ErrorNotice({ error }: { error?: string | null }) {
   if (!error || !ERROR_MESSAGES[error]) return null;
   return (
     <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-center text-xs text-destructive">
@@ -38,7 +38,7 @@ function ErrorNotice({ error }: { error?: string | null }) {
   );
 }
 
-function TermsNote() {
+export function TermsNote() {
   return (
     <p className="mt-4 text-center text-[10px] leading-relaxed text-muted-foreground">
       By continuing you agree to our{" "}
@@ -87,9 +87,6 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
   const mode = signInMode(next);
   if (mode !== "all") return <LandlordSignIn mode={mode} next={next ?? "/landlord"} error={error} />;
 
-  const staffNext = next && (next === "/admin" || next.startsWith("/admin/") ||
-    next === "/ops" || next.startsWith("/ops/")) ? next : undefined;
-
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardContent className="p-4 sm:p-6">
@@ -112,26 +109,12 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
         <a href={signInUrl("consumer", "/landlords/enroll", "landlord")} className="mt-3 block">
           <Button type="button" variant="secondary" className="w-full">Manage my properties</Button>
         </a>
-        <div className="mt-4 border-t border-border pt-4" role="group" aria-labelledby="staff-workspaces">
-          <p id="staff-workspaces" className="text-sm font-semibold text-foreground">Staff workspaces</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Use your invited company account and complete two-step verification.
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <a href={signInUrl("staff", staffNext?.startsWith("/admin") ? staffNext : "/admin", "staff")} className="block">
-              <Button type="button" variant="secondary" className="w-full gap-2 active:-translate-y-px">
-                <DashboardIcon aria-hidden />
-                Administration
-              </Button>
-            </a>
-            <a href={signInUrl("staff", staffNext?.startsWith("/ops") ? staffNext : "/ops", "staff")} className="block">
-              <Button type="button" variant="secondary" className="w-full gap-2 active:-translate-y-px">
-                <ActivityLogIcon aria-hidden />
-                Operations
-              </Button>
-            </a>
-          </div>
-        </div>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          New here?{" "}
+          <a href={signInUrl("consumer", next ?? undefined, "student", "register")} className="font-semibold text-primary underline-offset-2 hover:underline">
+            Create an account
+          </a>
+        </p>
 
         <TermsNote />
       </CardContent>

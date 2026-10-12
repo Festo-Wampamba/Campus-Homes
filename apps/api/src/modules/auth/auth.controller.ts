@@ -111,7 +111,10 @@ export class AuthController {
   async callback(@Req() req: Request, @Res() res: Response) {
     const requestId = correlationId(res);
     const env = loadEnv();
-    const fail = (code: string) => res.redirect(`${webOrigin(env)}/sign-in?error=${code}&requestId=${requestId}`);
+    // Staff sign-in lives on /staff; once the transaction says which portal
+    // started this, errors go back there. Before that, /sign-in.
+    let errorPage = '/sign-in';
+    const fail = (code: string) => res.redirect(`${webOrigin(env)}${errorPage}?error=${code}&requestId=${requestId}`);
     const state = typeof req.query.state === 'string' ? req.query.state : '';
     if (!/^[A-Za-z0-9_-]{43}$/.test(state)) return fail('sign_in_expired');
     const cookie = transactionCookie(state);
@@ -126,6 +129,7 @@ export class AuthController {
       return fail('auth_unavailable');
     }
     if (!transaction) return fail('sign_in_expired');
+    if (transaction.portal === 'staff') errorPage = '/staff';
     try {
       const client = await this.clients.create(env, transaction.portal, transaction.storage, () => undefined);
       await client.handleSignInCallback(`${webOrigin(env)}${req.originalUrl}`);

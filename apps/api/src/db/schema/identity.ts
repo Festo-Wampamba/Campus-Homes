@@ -33,6 +33,8 @@ export const users = pgTable('users', {
   address: text('address'),
   emergencyContactName: text('emergency_contact_name'),
   emergencyContactPhone: text('emergency_contact_phone'),
+  // Onboarding contact number (0062). Never an identity key — see users.phone.
+  contactPhone: text('contact_phone'),
   notes: text('notes'),
   // Admin "delete" is deliberately recoverable: identity and audit history
   // remain intact while all sessions and active access grants are revoked.

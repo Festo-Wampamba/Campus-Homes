@@ -1,9 +1,15 @@
 /**
- * MeController.completeOnboarding against the real docker test DB: sets name +
- * a lowercased username, and rejects a case-insensitive duplicate handle.
+ * MeController.completeOnboarding against the real docker test DB: sets name,
+ * a lowercased username and a contact phone, and rejects a case-insensitive
+ * duplicate handle.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { ConflictException } from '@nestjs/common';
 import { Pool } from 'pg';
+
+import { profileOnboardingSchema } from '@campushomes/shared';
 
 import { RlsDb } from '../../src/db/db.module';
 import { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
@@ -47,17 +53,46 @@ afterAll(async () => {
 describe('MeController.completeOnboarding', () => {
   it('stores the full name and a lowercased username', async () => {
     const userId = await seedUser('+256700000501');
-    await controller.completeOnboarding(reqFor(userId), { name: 'Jane Doe', username: 'JaneDoe' });
+    await controller.completeOnboarding(reqFor(userId), { name: 'Jane Doe', username: 'JaneDoe', contactPhone: '+256772000501' });
     const [row] = (await pool.query(`SELECT name, username FROM users WHERE id = $1`, [userId])).rows;
     expect(row).toEqual({ name: 'Jane Doe', username: 'janedoe' });
   });
 
   it('rejects a username already taken in a different case', async () => {
     const first = await seedUser('+256700000502');
-    await controller.completeOnboarding(reqFor(first), { name: 'First', username: 'sharedhandle' });
+    await controller.completeOnboarding(reqFor(first), { name: 'First', username: 'sharedhandle', contactPhone: '+256772000502' });
     const second = await seedUser('+256700000503');
     await expect(
-      controller.completeOnboarding(reqFor(second), { name: 'Second', username: 'SharedHandle' }),
+      controller.completeOnboarding(reqFor(second), { name: 'Second', username: 'SharedHandle', contactPhone: '+256772000503' }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('stores the contact phone without touching the sign-in phone', async () => {
+    const userId = await seedUser('+256700000504');
+    await controller.completeOnboarding(reqFor(userId), { name: 'Sam', username: 'sam_k', contactPhone: '+256772000504' });
+    const [row] = (await pool.query(`SELECT phone, contact_phone FROM users WHERE id = $1`, [userId])).rows;
+    expect(row).toEqual({ phone: '+256700000504', contact_phone: '+256772000504' });
+  });
+
+  it('rejects a contact phone that is not a valid African mobile number', () => {
+    expect(profileOnboardingSchema.safeParse({ name: 'Sam', username: 'sam_k', contactPhone: '12345' }).success).toBe(false);
+  });
+
+  it('requires a contact phone', () => {
+    expect(profileOnboardingSchema.safeParse({ name: 'Sam', username: 'sam_k' }).success).toBe(false);
+  });
+});
+
+describe('migration 0062 backfill', () => {
+  // The ALTER already ran on this DB; replay only the backfill statement.
+  const backfill = readFileSync(join(__dirname, '../../migrations/0062_users_contact_phone.sql'), 'utf8')
+    .split('--> statement-breakpoint')[1]!;
+
+  it('copies an existing sign-in phone into contact_phone', async () => {
+    const userId = await seedUser('+256700000505');
+    await pool.query(`UPDATE users SET contact_phone = NULL WHERE id = $1`, [userId]);
+    await pool.query(backfill);
+    const [row] = (await pool.query(`SELECT contact_phone FROM users WHERE id = $1`, [userId])).rows;
+    expect(row.contact_phone).toBe('+256700000505');
   });
 });

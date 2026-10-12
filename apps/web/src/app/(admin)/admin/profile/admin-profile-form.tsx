@@ -17,6 +17,7 @@ export interface MyParticulars {
   address: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  contactPhone: string | null;
 }
 
 export function AdminProfileForm({ particulars }: { particulars: MyParticulars }) {
@@ -28,6 +29,7 @@ export function AdminProfileForm({ particulars }: { particulars: MyParticulars }
   const [address, setAddress] = useState(particulars.address ?? "");
   const [emergencyContactName, setEmergencyContactName] = useState(particulars.emergencyContactName ?? "");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState(particulars.emergencyContactPhone ?? "");
+  const [contactPhone, setContactPhone] = useState(particulars.contactPhone ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -48,6 +50,7 @@ export function AdminProfileForm({ particulars }: { particulars: MyParticulars }
           address: address.trim() || null,
           emergencyContactName: emergencyContactName.trim() || null,
           emergencyContactPhone: emergencyContactPhone || null,
+          contactPhone: contactPhone || undefined,
         }),
       });
       setSaved(true);
@@ -79,6 +82,7 @@ export function AdminProfileForm({ particulars }: { particulars: MyParticulars }
           <input className={adminFieldClass} value={nationality} onChange={(e) => setNationality(e.target.value)} placeholder="Ugandan" />
         </AdminField>
       </div>
+      <PhoneField label="Phone number" required value={contactPhone} onChange={setContactPhone} hint="So the team can reach you." />
       <AdminField label="Address">
         <textarea className={adminTextareaClass} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Residential address" />
       </AdminField>
@@ -90,7 +94,7 @@ export function AdminProfileForm({ particulars }: { particulars: MyParticulars }
       </div>
       <div className="grid gap-4 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 sm:grid-cols-2 dark:bg-muted dark:text-muted-foreground">
         <p><span className="font-bold text-slate-700 dark:text-foreground">Email:</span> {particulars.email ?? "N/A"}</p>
-        <p><span className="font-bold text-slate-700 dark:text-foreground">Phone:</span> {particulars.phone ?? "N/A"}</p>
+        <p><span className="font-bold text-slate-700 dark:text-foreground">Sign-in phone:</span> {particulars.phone ?? "N/A"}</p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div className="flex items-center gap-3">

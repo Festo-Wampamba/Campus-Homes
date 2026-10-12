@@ -23,7 +23,7 @@ import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
 import { RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
-const DEFAULT_RESERVE_HOURS = 24;
+export const DEFAULT_RESERVE_HOURS = 24;
 const MAX_ACTIVE_RESERVATIONS = 3;
 // A student already moved in (occupied) can't reserve a new bed until their
 // current term is within this many days of ending — reserving a second home

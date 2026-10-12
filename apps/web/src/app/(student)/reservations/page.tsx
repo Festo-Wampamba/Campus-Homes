@@ -19,7 +19,7 @@ export default async function ReservationsPage() {
           <EmptyState
             icon={Timer}
             title="No reservations yet"
-            body="When you place a 72-hour hold on a room, it appears here with its countdown and payment status."
+            body="When you reserve a room, it appears here with its countdown and status."
             action={
               <Link
                 href="/search"

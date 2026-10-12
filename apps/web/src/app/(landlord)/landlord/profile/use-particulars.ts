@@ -26,11 +26,12 @@ export function useParticulars(profile: LandlordProfileWithParticulars) {
   const [address, setAddress] = useState(profile.address ?? "");
   const [emergencyContactName, setEmergencyContactName] = useState(profile.emergencyContactName ?? "");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState(profile.emergencyContactPhone ?? "");
+  const [contactPhone, setContactPhone] = useState(profile.contactPhone ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const fields = { dateOfBirth, gender, nationality, address, emergencyContactName, emergencyContactPhone };
+  const fields = { dateOfBirth, gender, nationality, address, emergencyContactName, emergencyContactPhone, contactPhone };
   const setters = {
     dateOfBirth: setDateOfBirth,
     gender: setGender,
@@ -38,6 +39,7 @@ export function useParticulars(profile: LandlordProfileWithParticulars) {
     address: setAddress,
     emergencyContactName: setEmergencyContactName,
     emergencyContactPhone: setEmergencyContactPhone,
+    contactPhone: setContactPhone,
   };
 
   function setField(name: keyof typeof fields, value: string) {
@@ -59,6 +61,7 @@ export function useParticulars(profile: LandlordProfileWithParticulars) {
           address: address || null,
           emergencyContactName: emergencyContactName || null,
           emergencyContactPhone: emergencyContactPhone || null,
+          contactPhone: contactPhone || undefined,
         }),
       });
       setSaved(true);

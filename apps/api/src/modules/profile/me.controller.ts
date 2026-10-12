@@ -84,6 +84,7 @@ export class MeController {
           address: users.address,
           emergencyContactName: users.emergencyContactName,
           emergencyContactPhone: users.emergencyContactPhone,
+          contactPhone: users.contactPhone,
         })
         .from(users)
         .where(eq(users.id, ctx.userId));
@@ -97,10 +98,12 @@ export class MeController {
   }
 
   /**
-   * First-sign-in identity gate: set full name + a unique @handle. Runs as
-   * service_role because `users` has no self-UPDATE RLS policy (role/status
-   * escalation risk) — the field allowlist here (name/username only) is what
-   * keeps it safe. Applies to every account, including Google sign-ins that
+   * First-sign-in identity gate: set full name, a unique @handle and a
+   * contact phone. Runs as service_role because `users` has no self-UPDATE
+   * RLS policy (role/status escalation risk) — the field allowlist here
+   * (name/username/contact_phone only) is what keeps it safe. The phone goes
+   * to contact_phone, never users.phone: that column is a sign-in identity
+   * and an unverified number there could lock its real owner out. Applies to every account, including Google sign-ins that
    * arrive without a chosen username.
    */
   @Post('onboarding')
@@ -112,7 +115,7 @@ export class MeController {
       try {
         const [row] = await db
           .update(users)
-          .set({ name: body.name.trim(), username, updatedAt: new Date() })
+          .set({ name: body.name.trim(), username, contactPhone: body.contactPhone, updatedAt: new Date() })
           .where(eq(users.id, ctx.userId))
           .returning({ id: users.id, name: users.name, username: users.username });
         return row;

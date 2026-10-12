@@ -191,9 +191,9 @@ export class ProvisioningService {
     }
     const created = (await client.query<IdentityRow>(`
       INSERT INTO users (
-        id, logto_user_id, phone, email, name, role, status,
+        id, logto_user_id, phone, contact_phone, email, name, role, status,
         phone_verified, email_verified
-      ) VALUES ($1, $2, $3, $4, $5, $6::user_role, 'active', $7, $8)
+      ) VALUES ($1, $2, $3, $3, $4, $5, $6::user_role, 'active', $7, $8)
       RETURNING id, role::text, status::text, deleted_at AS "deletedAt"
     `, [randomUUID(), claims.sub, phone, email, claims.name?.trim() || nameFallback?.trim() || '', role,
       claims.phoneVerified === true, claims.emailVerified === true])).rows[0];

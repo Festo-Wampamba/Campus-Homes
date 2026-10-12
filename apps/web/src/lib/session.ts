@@ -21,12 +21,21 @@ export interface SessionUser {
   username: string | null;
   email: string | null;
   phoneNumber: string | null;
+  // undefined = an older API that doesn't send it yet (see needsProfileSetup).
+  contactPhone?: string | null;
 }
 
-// First-sign-in identity gate: every account needs a full name + @handle
-// before reaching a portal. Google sign-ins arrive without a username.
+// First-sign-in identity gate: every account needs a full name, an @handle
+// and a contact phone before reaching a portal. Google sign-ins arrive without
+// a username. Only an explicit null counts as a missing phone: if this web
+// build goes live before the API that sends contactPhone, undefined must not
+// bounce every user between onboarding and their workspace.
 export function needsProfileSetup(user: SessionUser): boolean {
-  return !user.name?.trim() || !user.username;
+  return !user.name?.trim() || !user.username || user.contactPhone === null;
+}
+
+function onboardingUrl(next: string): string {
+  return `/onboarding?next=${encodeURIComponent(next)}`;
 }
 
 export interface Session {
@@ -35,7 +44,7 @@ export interface Session {
 }
 
 type RawSessionResponse = {
-  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; username: string | null; email: string | null; phone: string | null };
+  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; username: string | null; email: string | null; phone: string | null; contactPhone?: string | null };
   access: AccountAccess;
 } | null;
 
@@ -85,7 +94,7 @@ export async function requireSession(next = "/choose-workspace"): Promise<Sessio
   const session = await getServerSession();
   if (!session) redirect(`/sign-in?next=${encodeURIComponent(next)}`);
   if (session.user.status !== "active") redirect("/account-pending");
-  if (needsProfileSetup(session.user)) redirect("/onboarding");
+  if (needsProfileSetup(session.user)) redirect(onboardingUrl(next));
   return session;
 }
 
@@ -96,6 +105,6 @@ export async function requireWorkspace(workspace: Workspace, path?: string): Pro
   if (destination) redirect(destination);
   // Identity gate runs after the workspace guard admits the user: a
   // logged-in account with no name/username is sent to set them first.
-  if (needsProfileSetup(session!.user)) redirect("/onboarding");
+  if (needsProfileSetup(session!.user)) redirect(onboardingUrl(next));
   return session!;
 }

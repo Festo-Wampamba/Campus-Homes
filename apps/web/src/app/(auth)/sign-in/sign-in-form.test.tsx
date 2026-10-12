@@ -57,22 +57,15 @@ describe("SignInForm landlord mode", () => {
 });
 
 describe("SignInForm", () => {
-  it("offers distinct Administration and Operations staff entry points", () => {
-    const html = renderToStaticMarkup(<SignInForm next={null} />);
-
-    expect(html).toContain("Administration");
-    expect(html).toContain("Operations");
-    expect(html).toContain("portal=staff&amp;intent=staff&amp;next=%2Fadmin");
-    expect(html).toContain("portal=staff&amp;intent=staff&amp;next=%2Fops");
+  it("shows no staff workspaces on the public sign-in page", () => {
+    expect(renderToStaticMarkup(<SignInForm next={null} />)).not.toContain("Administration");
   });
 
-  it("preserves a safe staff destination only for its matching workspace", () => {
-    const adminHtml = renderToStaticMarkup(<SignInForm next="/admin/users" />);
-    const opsHtml = renderToStaticMarkup(<SignInForm next="/ops/inspect" />);
+  it("never starts a staff sign-in from the public page", () => {
+    expect(renderToStaticMarkup(<SignInForm next={null} />)).not.toContain("portal=staff");
+  });
 
-    expect(adminHtml).toContain("next=%2Fadmin%2Fusers");
-    expect(adminHtml).toContain("next=%2Fops");
-    expect(opsHtml).toContain("next=%2Fadmin");
-    expect(opsHtml).toContain("next=%2Fops%2Finspect");
+  it("opens Logto on the register screen for a new student", () => {
+    expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain("intent=student&amp;screen=register");
   });
 });

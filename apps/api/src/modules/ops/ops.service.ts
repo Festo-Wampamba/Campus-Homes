@@ -1228,7 +1228,7 @@ export class OpsService {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
         `SELECT l.user_id, l.legal_name, l.kyc_status, l.id_doc_storage_key, l.created_at,
-                u.name, u.phone, u.email
+                u.name, coalesce(u.contact_phone, u.phone) AS phone, u.email
          FROM landlords l
          JOIN users u ON u.id = l.user_id
          WHERE l.kyc_status = 'pending'
