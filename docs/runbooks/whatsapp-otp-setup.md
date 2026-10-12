@@ -4,6 +4,8 @@ Guided setup for sending CampusHomes sign-in codes over the **official WhatsApp
 Cloud API**. Started 2026-10-12, paused at Step 1 while the URSB and URA
 paperwork is finished.
 
+Tracked as item 1 in [`TODOS.md`](../../TODOS.md).
+
 **To resume:** share this file with Claude and say which step you're on.
 Claude will continue from the first box that is not ticked.
 
