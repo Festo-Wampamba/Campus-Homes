@@ -85,6 +85,8 @@ Mailbox creation alone is not delivery evidence. Before running these checks, co
 
 ## WhatsApp OTP activation
 
+Step-by-step Meta setup (business portfolio, template, token, staging test): `docs/runbooks/whatsapp-otp-setup.md`.
+
 Phone authentication remains disabled until all of these are ready in the target environment:
 
 - a production WhatsApp Business sender and phone-number ID;
