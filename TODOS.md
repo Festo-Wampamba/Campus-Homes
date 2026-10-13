@@ -14,10 +14,10 @@ _Last updated: 2026-10-13._
 | 4 | [Post-deploy checks (production)](#4-post-deploy-checks-production) | Festo | ☐ Open |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
 | 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
-| 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | ☐ Open |
+| 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
 
-Status key: ☐ open · 🔜 queued · 🚧 in progress · ⏸ paused · 💤 later · ✅ done
+Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
 ---
 
@@ -83,6 +83,16 @@ includes PRs #152 and #154. Check on production:
   demands one` (`apps/web/src/app/(ops)/ops/strikes/`) failed once in about
   four runs on 2026-10-12, then passed on rerun.
 - **Rule:** fix it or delete it; never retry until it passes.
+- **2026-10-13 investigation:** 0 failures in 51 runs (30 runs of the file
+  alone, 6 full web suites of 267 tests, 15 runs of the original
+  `src/lib/ops` + `(ops)` combination). The component and test have no race:
+  the rejected `api()` promise settles in the same `act()` every time. The
+  2026-10-12 failure was printed through a `grep` filter, so its error
+  message was lost. Best guess: the 5s Jest timeout while the machine was
+  busy, but that's unconfirmed. Kept the test; it covers the fresh-sign-in
+  link for step-up.
+- **If it fails again:** save the full Jest output (no `grep`) and the
+  machine load, then fix the cause or delete the test.
 
 ## 8. Verify the contact phone by SMS
 
