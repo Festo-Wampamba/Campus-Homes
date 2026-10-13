@@ -10,7 +10,6 @@ _Last updated: 2026-10-13._
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
-| 2 | [Fix 10 failing API tests](#2-fix-10-failing-api-tests) | Claude (spawned task) | 🔜 Queued, not started |
 | 3 | [Prod Logto: password at sign-up](#3-prod-logto-password-at-sign-up) | Festo | ☐ Open |
 | 4 | [Post-deploy checks (production)](#4-post-deploy-checks-production) | Festo | ☐ Open |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
@@ -35,16 +34,6 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · ⏸ paused · 💤 la
 - **Decided:** official Meta Cloud API only, never Evolution API or Baileys
   (2026-10-12). They break Meta's terms and risk a number ban that would
   block every phone sign-in.
-
-## 2. Fix 10 failing API tests
-
-- **What:** `test/services/property-kyc-gate.spec.ts` (7 tests) and
-  `test/services/ops-republish.spec.ts` (3 tests) fail.
-- **Known:** they fail the same way without PR #152. One visible cause is
-  `this.notifications.notify is not a function`, a test setup out of step
-  with the services.
-- **Tracking:** a "Fix 10 failing API tests" task is waiting in the Claude
-  app (click it to start). No PR yet.
 
 ## 3. Prod Logto: password at sign-up
 
@@ -115,6 +104,7 @@ includes PRs #152 and #154. Check on production:
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-13 | Fixed 10 failing API tests (`property-kyc-gate`, `ops-republish`). Cause: `loadEnv()` (via `assertOwnedStorageKeys`) needs `DATABASE_URL`, which a bare local run doesn't set; specs now fall back to the test DB URL. kyc-gate's `OpsService` now gets a real `NotificationsService`, ending the `notify is not a function` log. API suite 835/835 | [#157](https://github.com/Festo-Wampamba/Campus-Homes/pull/157), [#158](https://github.com/Festo-Wampamba/Campus-Homes/pull/158) | `main` (`2c86a7c`); tests only, no production deploy needed |
 | 2026-10-12 | Staff sign-in moved to `/staff`; public `/sign-in` has "Create an account" | [#152](https://github.com/Festo-Wampamba/Campus-Homes/pull/152), [#153](https://github.com/Festo-Wampamba/Campus-Homes/pull/153) | Staging + production (`90303ac`) |
 | 2026-10-12 | Required contact phone at onboarding (`users.contact_phone`, migration 0062) | #152, #153 | Staging + production |
 | 2026-10-12 | Phone box saves while typing (Enter no longer submits an empty number); onboarding hints | #152, #153 | Staging + production |
