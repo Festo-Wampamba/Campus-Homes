@@ -17,6 +17,10 @@ import { testDatabaseUrl } from '../test-database-url';
 
 const TEST_DATABASE_URL = testDatabaseUrl();
 
+// assertOwnedStorageKeys() reads env via loadEnv(), which requires DATABASE_URL;
+// bare `pnpm test` doesn't export one, so fall back to the docker test DB.
+process.env.DATABASE_URL = process.env.DATABASE_URL || TEST_DATABASE_URL;
+
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
 const audit = new AuditService(rlsDb);
