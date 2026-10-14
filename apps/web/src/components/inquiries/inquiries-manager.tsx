@@ -183,6 +183,9 @@ export function InquiriesManager({
               <h3 className="font-bold">{selected.subject}</h3>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {CATEGORY_LABELS[selected.category] ?? selected.category}
+                {selected.reservationId && (
+                  <span className="normal-case">{` · Reservation Ref ${selected.reservationId.slice(0, 8).toUpperCase()}`}</span>
+                )}
               </p>
             </div>
 

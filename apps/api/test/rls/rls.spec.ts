@@ -1044,6 +1044,14 @@ describe('inquiries (0031): listing-scoped enquiries reach the landlord directly
       ),
     ).rejects.toThrow(/landlords may only set landlord_response/i);
   });
+
+  it('the addressed landlord cannot re-point the attached reservation (0063)', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE inquiries SET reservation_id = $2 WHERE id = $1`, [listingInquiry, reservation1]),
+      ),
+    ).rejects.toThrow(/landlords may only set landlord_response/i);
+  });
 });
 
 describe('product_events (0032): pilot-funnel backstop is service-only', () => {

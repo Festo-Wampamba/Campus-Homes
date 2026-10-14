@@ -13,7 +13,7 @@ import type {
 import { RlsDb } from '../../db/db.module';
 import type { Db } from '../../db/client';
 import type { RlsContext } from '../../db/rls-context';
-import { inquiries, listings, properties, users } from '../../db/schema';
+import { inquiries, listings, properties, reservations, users } from '../../db/schema';
 import { loadEnv } from '../../config/env';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -60,6 +60,7 @@ export class InquiriesService {
       landlordId: inquiries.landlordId,
       landlordResponse: inquiries.landlordResponse,
       landlordRespondedAt: inquiries.landlordRespondedAt,
+      reservationId: inquiries.reservationId,
       createdAt: inquiries.createdAt,
       updatedAt: inquiries.updatedAt,
     };
@@ -91,6 +92,15 @@ export class InquiriesService {
     }
 
     const created = await this.rlsDb.run(ctx, async (db) => {
+      // Same transaction, student's own ctx: reservations_student_read only
+      // returns their rows, so another student's reservation id finds nothing.
+      if (input.reservationId) {
+        const [owned] = await db
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(and(eq(reservations.id, input.reservationId), eq(reservations.studentId, ctx.userId)));
+        if (!owned) throw new NotFoundException('Reservation not found');
+      }
       const [row] = await db
         .insert(inquiries)
         .values({
@@ -100,6 +110,7 @@ export class InquiriesService {
           message: input.message,
           listingId: input.listingId ?? null,
           landlordId,
+          reservationId: input.reservationId ?? null,
         })
         .returning({ id: inquiries.id });
       if (!row) throw new Error('Inquiry insert returned no row');
