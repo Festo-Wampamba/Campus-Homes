@@ -17,7 +17,7 @@ import { reservations } from '../../db/schema';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { NotificationsService } from '../notifications/notifications.service';
-import { RESERVATION_EXPIRY_QUEUE_NAME } from '../reservations/reservations.tokens';
+import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE_NAME } from '../reservations/reservations.tokens';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const MAINTENANCE_QUEUE = 'maintenance';
@@ -59,12 +59,18 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
     await this.maintenanceQueue.upsertJobScheduler('semester_reverify_rollover', {
       every: 24 * 3600_000, // daily
     });
+    // Backstop for lost reservation_expiry jobs; a held bed frees up at most
+    // a minute after its hold ends.
+    await this.maintenanceQueue.upsertJobScheduler('reservation_expiry_sweep', {
+      every: 60_000,
+    });
     this.workers.push(
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
           if (job.name === 'verification_sla_alert') return this.slaAlert();
           if (job.name === 'semester_reverify_rollover') return this.reverifyRollover();
+          if (job.name === 'reservation_expiry_sweep') return this.expireOverdueHolds();
         },
         { connection },
       ),
@@ -94,6 +100,13 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
         .where(eq(reservations.id, reservationId));
     });
     this.logger.log(`reservation_expiry processed for reservation ${reservationId}`);
+  }
+
+  async expireOverdueHolds(): Promise<void> {
+    const { rowCount } = await this.rlsDb.run({ userId: NIL_UUID, role: 'service_role' }, (_db, client) =>
+      client.query(EXPIRE_OVERDUE_HOLDS_SQL),
+    );
+    if (rowCount) this.logger.log(`reservation_expiry_sweep expired ${rowCount} overdue hold(s)`);
   }
 
   /** Visits pending past 48h of their 72h SLA → SMS the assigned inspector (§11). */

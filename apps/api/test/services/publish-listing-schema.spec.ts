@@ -7,7 +7,7 @@ const unit = (i: number) => ({
   label: `Single ${i + 1}`,
   capacity: 1,
   roomCategory: 'single' as const,
-  pricePerTermUgx: 10000,
+  pricePerTermUgx: 500_000,
 });
 
 const base = { listingId: '00000000-0000-4000-8000-000000000001', amenities: {} };

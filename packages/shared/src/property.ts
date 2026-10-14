@@ -13,7 +13,7 @@ import {
   UNIT_OPERATIONAL_STATUSES,
   UNIVERSITIES,
 } from './enums.js';
-import { ugxAmount, uuid } from './common.js';
+import { amenityChecklist, ugxAmount, uuid } from './common.js';
 
 // The landlord's intended room-type pricing, e.g. "30 singles at 300k, 40
 // doubles at 700k" — informational only, pre-fills the Ops publish form.
@@ -102,7 +102,7 @@ export const submitPropertySchema = z
     // Google Form "Utilities Included" — furnishing-level (bathroom/
     // kitchen/mattress/...), distinct from properties.utilities (admin-only
     // water/electricity/internet/waste-collection service status).
-    furnishingItems: amenitiesSchema.default({}),
+    furnishingItems: amenityChecklist.default({}),
     securityFeatures: amenitiesSchema.default({}),
     accessibilityFeatures: amenitiesSchema.default({}),
     photographyConsent: z.boolean().default(false),
@@ -157,7 +157,7 @@ export const updatePropertySchema = z.object({
   otherCatchments: z.array(z.string().trim().min(2).max(150)).max(10).optional(),
   proposedRoomCategories: z.array(proposedRoomCategorySchema).max(20).optional(),
   proposedAmenities: amenitiesSchema.optional(),
-  furnishingItems: amenitiesSchema.optional(),
+  furnishingItems: amenityChecklist.optional(),
   securityFeatures: amenitiesSchema.optional(),
   accessibilityFeatures: amenitiesSchema.optional(),
   photographyConsent: z.boolean().optional(),

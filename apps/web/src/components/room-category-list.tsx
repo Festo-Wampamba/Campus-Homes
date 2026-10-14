@@ -25,6 +25,9 @@ type CategoryGroup = {
   // Sum of available BEDS across every unit in this category (bed-level
   // inventory, 0033) — a partially-let double still counts its one free bed.
   availableCount: number;
+  // Beds on a student's temporary hold: unavailable now, but freed when the
+  // hold ends unbooked.
+  heldCount: number;
   firstAvailableBedId: string | null;
   // This room type's photos only: the inspection photos linked to it (any
   // angle, its en-suite bathroom included) plus the landlord's own photos of
@@ -38,7 +41,7 @@ type CategoryGroup = {
 // any available bed in that category server-side, same reserve() logic.
 function groupByCategory(
   units: Unit[],
-  availableBedsByUnit: Map<string, { id: string; available: boolean }[]>,
+  availableBedsByUnit: Map<string, { id: string; available: boolean; held: boolean }[]>,
   unitPhotos: UnitPhoto[],
   verificationPhotos: ListingPhoto[],
 ): CategoryGroup[] {
@@ -54,12 +57,14 @@ function groupByCategory(
     const key = `${unit.roomCategory}-${unit.selfContained}-${unit.pricePerTermUgx}`;
     const beds = availableBedsByUnit.get(unit.id) ?? [];
     const availableBeds = beds.filter((b) => b.available);
+    const heldBeds = beds.filter((b) => b.held).length;
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
     const existing = groups.get(key);
     if (existing) {
       existing.roomCount += 1;
       existing.roomPhotos.push(...unitPhotoList);
       existing.availableCount += availableBeds.length;
+      existing.heldCount += heldBeds;
       existing.firstAvailableBedId ??= availableBeds[0]?.id ?? null;
     } else {
       groups.set(key, {
@@ -71,6 +76,7 @@ function groupByCategory(
         capacity: unit.capacity,
         roomCount: 1,
         availableCount: availableBeds.length,
+        heldCount: heldBeds,
         firstAvailableBedId: availableBeds[0]?.id ?? null,
         roomPhotos: [...unitPhotoList],
       });
@@ -97,17 +103,17 @@ export function RoomCategoryList({
 }: {
   listingId: string;
   units: Unit[];
-  availability: { id: string; unit_id: string; available: boolean }[];
+  availability: { id: string; unit_id: string; available: boolean; held?: boolean }[];
   photos: ListingPhoto[];
   unitPhotos: UnitPhoto[];
   propertyName: string;
   canReserve: boolean;
   needsProfile: boolean;
 }) {
-  const availableBedsByUnit = new Map<string, { id: string; available: boolean }[]>();
+  const availableBedsByUnit = new Map<string, { id: string; available: boolean; held: boolean }[]>();
   for (const bed of availability) {
     const list = availableBedsByUnit.get(bed.unit_id) ?? [];
-    list.push({ id: bed.id, available: bed.available });
+    list.push({ id: bed.id, available: bed.available, held: bed.held ?? false });
     availableBedsByUnit.set(bed.unit_id, list);
   }
   const groups = groupByCategory(units, availableBedsByUnit, unitPhotos, photos);
@@ -156,13 +162,22 @@ export function RoomCategoryList({
                     {group.roomCount} {group.roomCount === 1 ? "room" : "rooms"}
                   </span>
                 </p>
-                {group.availableCount > 0 ? (
-                  <StatusChip tone="success">
-                    {group.availableCount} {group.availableCount === 1 ? "bed" : "beds"} free
-                  </StatusChip>
-                ) : (
-                  <StatusChip tone="warning">Fully booked</StatusChip>
-                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {group.availableCount > 0 ? (
+                    <StatusChip tone="success">
+                      {group.availableCount} {group.availableCount === 1 ? "bed" : "beds"} free
+                    </StatusChip>
+                  ) : group.heldCount > 0 ? (
+                    <StatusChip tone="warning">All reserved for now</StatusChip>
+                  ) : (
+                    <StatusChip tone="warning">Fully booked</StatusChip>
+                  )}
+                  {group.heldCount > 0 && (
+                    <StatusChip tone="neutral">
+                      {group.heldCount} reserved · 24h hold
+                    </StatusChip>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -16,6 +16,7 @@ import { AuditService } from '../../src/modules/ops/audit.service';
 import { OpsService } from '../../src/modules/ops/ops.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
+import { EXPIRE_OVERDUE_HOLDS_SQL } from '../../src/modules/reservations/reservations.tokens';
 import type { RlsContext } from '../../src/db/rls-context';
 import { testDatabaseUrl } from '../test-database-url';
 
@@ -802,6 +803,43 @@ describe('reservation expiry (JobsRunner, 24h)', () => {
       idempotencyKey: 'reserve-key-expire-3-again',
     });
     expect(rereserved.status).toBe('reserved');
+  });
+
+  it('a hold whose expiry job never ran no longer blocks its bed', async () => {
+    const { bedId: bedE4 } = await seedUnitWithBed('Expire D');
+    const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      listingId,
+      bedId: bedE4,
+      idempotencyKey: 'reserve-key-expire-4',
+    });
+    await pool.query(`UPDATE reservations SET reserved_expires_at = now() - interval '1 minute' WHERE id = $1`, [
+      reserved.id,
+    ]);
+
+    const rereserved = await reservationsService.reserve(studentCtx(expireStudentB), {
+      listingId,
+      bedId: bedE4,
+      idempotencyKey: 'reserve-key-expire-4-again',
+    });
+
+    expect(rereserved.status).toBe('reserved');
+  });
+
+  it('the expiry sweep expires every overdue hold', async () => {
+    const { bedId: bedE5 } = await seedUnitWithBed('Expire E');
+    const reserved = await reservationsService.reserve(studentCtx(expireStudentA), {
+      listingId,
+      bedId: bedE5,
+      idempotencyKey: 'reserve-key-expire-5',
+    });
+    await pool.query(`UPDATE reservations SET reserved_expires_at = now() - interval '1 minute' WHERE id = $1`, [
+      reserved.id,
+    ]);
+
+    await pool.query(EXPIRE_OVERDUE_HOLDS_SQL);
+
+    const row = await pool.query(`SELECT status FROM reservations WHERE id = $1`, [reserved.id]);
+    expect(row.rows[0].status).toBe('expired');
   });
 });
 
