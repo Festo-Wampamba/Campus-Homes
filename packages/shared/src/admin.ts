@@ -15,7 +15,7 @@ import {
   USER_STATUSES,
   WORKER_TYPES,
 } from './enums.js';
-import { uuid } from './common.js';
+import { amenityChecklist, rentPerTermUgx, uuid } from './common.js';
 import { rentPeriodsSchema } from './property.js';
 import { africanPhone } from './phone.js';
 
@@ -132,7 +132,7 @@ export const adminUnitInputSchema = z.object({
   // Whether the room has its own bathroom/facilities (0053). Optional on
   // input — defaults to false, matching the units.self_contained column.
   selfContained: z.boolean().optional(),
-  pricePerTermUgx: z.number().int().positive().max(100_000_000),
+  pricePerTermUgx: rentPerTermUgx.max(100_000_000),
   depositUgx: z.number().int().min(0).max(100_000_000).nullable().optional(),
   operationalStatus: z.enum(UNIT_OPERATIONAL_STATUSES).default('available'),
   buildingName: z.string().trim().max(100).nullable().optional(),
@@ -160,7 +160,7 @@ export const createAdminPropertySchema = z
     utilities: z.record(z.string(), z.union([z.boolean(), z.string(), z.number()])).default({}),
     // Google Form "Utilities Included" (furnishing-level) — distinct from
     // `utilities` above (water/electricity/internet/waste-collection status).
-    furnishingItems: z.record(z.string(), z.boolean()).default({}),
+    furnishingItems: amenityChecklist.default({}),
     securityFeatures: z.record(z.string(), z.boolean()).default({}),
     accessibilityFeatures: z.record(z.string(), z.boolean()).default({}),
     photographyConsent: z.boolean().default(false),
@@ -210,7 +210,7 @@ export const updateAdminPropertySchema = z.object({
   operationalStatus: z.enum(PROPERTY_OPERATIONAL_STATUSES).optional(),
   amenities: z.record(z.string(), z.boolean()).optional(),
   utilities: z.record(z.string(), z.union([z.boolean(), z.string(), z.number()])).optional(),
-  furnishingItems: z.record(z.string(), z.boolean()).optional(),
+  furnishingItems: amenityChecklist.optional(),
   securityFeatures: z.record(z.string(), z.boolean()).optional(),
   accessibilityFeatures: z.record(z.string(), z.boolean()).optional(),
   photographyConsent: z.boolean().optional(),

@@ -4,6 +4,7 @@
 import { Building2, ImagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { withAmenity } from "@campushomes/shared";
 
 import { AdminField, AdminModal, adminFieldClass, adminTextareaClass } from "@/components/admin/admin-modal";
 import { StatusBadge } from "@/components/admin/admin-ui";
@@ -278,7 +279,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.advanceRentRequired === "true"} onChange={(e) => setField("advanceRentRequired", String(e.target.checked))} />Advance rent required</label>
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.photographyConsent === "true"} onChange={(e) => setField("photographyConsent", String(e.target.checked))} />Permission to take pictures</label>
           </div>
-          <div className="mt-4"><AdminField label="Utilities included (furnishing)"><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{FURNISHING_ITEMS.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={furnishingItems[item] ?? false} onChange={(e) => setFurnishingItems((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
+          <div className="mt-4"><AdminField label="Utilities included (furnishing)"><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{FURNISHING_ITEMS.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={furnishingItems[item] ?? false} onChange={(e) => setFurnishingItems((current) => withAmenity(current, item, e.target.checked))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
         </section>
 
         <section className="rounded-xl border border-slate-200 p-4 dark:border-border">

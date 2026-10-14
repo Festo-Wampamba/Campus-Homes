@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MAX_PUBLISH_UNITS, PHOTO_CATEGORIES, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
+import { MAX_PUBLISH_UNITS, PHOTO_CATEGORIES, withAmenity, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
 
 type PropertyRoom = {
   id: string;
@@ -289,7 +289,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       <AmenityConfirmation
         groups={amenityGroups(declared)}
         value={amenities}
-        onToggle={(key, checked) => setAmenities((prev) => ({ ...prev, [key]: checked }))}
+        onToggle={(key, checked) => setAmenities((prev) => withAmenity(prev, key, checked))}
       />
       <div className="space-y-1.5">
         <Label htmlFor="description">Description (optional)</Label>

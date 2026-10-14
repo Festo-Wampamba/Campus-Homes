@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { idempotencyKey, ugxAmount, uuid } from './common.js';
+import { idempotencyKey, rentPerTermUgx, uuid } from './common.js';
 import { ROOM_CATEGORIES } from './enums.js';
 
 export const BATHROOM_TYPES = ['ensuite', 'shared', 'private_external', 'unspecified'] as const;
@@ -31,7 +31,7 @@ export const roomTypeInputSchema = z.object({
   description: z.string().trim().max(5000).nullable().optional(),
   amenities: z.array(z.string().trim().min(1).max(80)).max(50),
   semesterId: uuid,
-  pricePerTermUgx: ugxAmount,
+  pricePerTermUgx: rentPerTermUgx,
   depositUgx: z.number().int().min(0).nullable().optional(),
   photos: z.array(roomTypePhotoInputSchema).max(10),
 }).superRefine((value, ctx) => {
