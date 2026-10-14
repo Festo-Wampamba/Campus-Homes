@@ -203,9 +203,13 @@ jobs:
         # + health.controller.ts), so this gate checks for THIS push's SHA
         # specifically — not just "something healthy", which could have been
         # the outgoing container answering before Dokploy's build finished.
+        #
+        # ~15 min (120s + 75 × ~10s), here and in the three gates below: on
+        # 2026-10-14 a staging API build took ~11 min on a busy VPS, the old
+        # 7-min gate failed first, and the web deploy after it never ran.
         run: |
           sleep 120
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 75); do
             body=$(curl -s -m 10 https://api-staging.campushomes.co.ug/api/v1/health || true)
             echo "attempt $attempt: ${body:-no response}"
             case "$body" in
@@ -213,7 +217,7 @@ jobs:
             esac
             sleep 10
           done
-          echo "::error::staging did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          echo "::error::staging did not report healthy on ${GITHUB_SHA} within 15 minutes of the deploy"
           exit 1
 
       # apps/web was never wired into this pipeline — Dokploy's GitHub App
@@ -273,7 +277,7 @@ jobs:
       - name: Wait for staging web to report healthy on this commit
         run: |
           sleep 120
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 75); do
             body=$(curl -s -m 10 https://staging.campushomes.co.ug/version || true)
             echo "attempt $attempt: ${body:-no response}"
             case "$body" in
@@ -281,7 +285,7 @@ jobs:
             esac
             sleep 10
           done
-          echo "::error::staging web did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          echo "::error::staging web did not report healthy on ${GITHUB_SHA} within 15 minutes of the deploy"
           exit 1
 
   # Manual-only (see workflow_dispatch above) — production has stayed a
@@ -346,7 +350,7 @@ jobs:
       - name: Wait for production to report healthy on this commit
         run: |
           sleep 120
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 75); do
             body=$(curl -s -m 10 https://api.campushomes.co.ug/api/v1/health || true)
             echo "attempt $attempt: ${body:-no response}"
             case "$body" in
@@ -354,7 +358,7 @@ jobs:
             esac
             sleep 10
           done
-          echo "::error::production did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          echo "::error::production did not report healthy on ${GITHUB_SHA} within 15 minutes of the deploy"
           exit 1
 
       - name: Set build-arg so the web image can report its own commit
@@ -404,7 +408,7 @@ jobs:
       - name: Wait for production web to report healthy on this commit
         run: |
           sleep 120
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 75); do
             body=$(curl -s -m 10 https://campushomes.co.ug/version || true)
             echo "attempt $attempt: ${body:-no response}"
             case "$body" in
@@ -412,5 +416,5 @@ jobs:
             esac
             sleep 10
           done
-          echo "::error::production web did not report healthy on ${GITHUB_SHA} within 7 minutes of the deploy"
+          echo "::error::production web did not report healthy on ${GITHUB_SHA} within 15 minutes of the deploy"
           exit 1
