@@ -25,6 +25,7 @@ import { api } from "@/lib/api";
 import { CAMPUS_LOCATIONS, UGANDA_BOUNDS } from "@/lib/campuses";
 import { listingPhotoUrl } from "@/lib/cloudinary";
 import {
+  formatAddress,
   formatPriceRange,
   formatUgx,
   GENDER_ARRANGEMENT_LABELS,
@@ -94,6 +95,16 @@ export function SearchClient() {
   const [roomCategory, setRoomCategory] = useState("");
   // "" = any, "true" = self-contained only, "false" = non-self-contained only.
   const [selfContained, setSelfContained] = useState("");
+  const hasFilters = Boolean(minPrice || maxPrice || genderArrangement || roomCategory || selfContained);
+
+  // Search text is a separate intent from the filters, so it stays.
+  function clearFilters() {
+    setMinPrice("");
+    setMaxPrice("");
+    setGenderArrangement("");
+    setRoomCategory("");
+    setSelfContained("");
+  }
 
   // Debounced so typing a name doesn't fire a request per keystroke.
   useEffect(() => {
@@ -207,7 +218,7 @@ export function SearchClient() {
             {campus ? `Near ${campus.name}` : "Verified places here"}
           </h1>
           <p aria-live="polite" className="shrink-0 text-xs font-semibold tracking-wide text-muted-foreground">
-            {data ? `${data.length} found` : "Searching…"}
+            {isError ? "Not loaded" : data ? `${data.length} found` : "Searching…"}
           </p>
         </div>
         <p className="max-w-[42ch] text-sm leading-6 text-muted-foreground">
@@ -293,9 +304,14 @@ export function SearchClient() {
             >
               <option value="">Any bathroom</option>
               <option value="true">Self-contained</option>
-              <option value="false">Shared bathroom</option>
+              <option value="false">Not self-contained</option>
             </select>
           </div>
+          {hasFilters && (
+            <Button variant="link" size="sm" className="self-end" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
         </div>
 
         {isPending && bounds !== null && (
@@ -322,19 +338,40 @@ export function SearchClient() {
           />
         )}
 
-        {data && data.length === 0 && (
-          <EmptyState
-            icon={MapPin}
-            title="No verified places in this area yet"
-            body="Pan or zoom the map toward your campus. New hostels go live as our inspectors verify them."
-          />
+        {/* keepPreviousData keeps the last good rows during an error; showing
+            them (or "0 found") under "Search didn't load" would be wrong. */}
+        {!isError && data && data.length === 0 && (
+          hasFilters ? (
+            <EmptyState
+              icon={MapPin}
+              title="No hostels match your filters"
+              body="Try a wider price range or fewer filters."
+              action={
+                <Button variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : debouncedQ ? (
+            <EmptyState
+              icon={MapPin}
+              title={`No hostels match “${debouncedQ}”`}
+              body="Check the spelling, or search for a nearby area or hostel name."
+            />
+          ) : (
+            <EmptyState
+              icon={MapPin}
+              title="No verified places in this area yet"
+              body="Pan or zoom the map toward your campus. New hostels go live as our inspectors verify them."
+            />
+          )
         )}
 
         {/* On a wide screen with the map hidden, the results column has the
             whole page to fill — a single stretched-out list column looks
             broken there, so it becomes a real grid instead. With the map
             open the column is narrow (~32rem) and stays a list. */}
-        {data && data.length > 0 && (
+        {!isError && data && data.length > 0 && (
           <div className={cn("flex flex-col gap-4", !mapOpen && "lg:grid lg:grid-cols-2 xl:grid-cols-3")}>
             {data.map((row) => (
               <ResultCard
@@ -405,7 +442,7 @@ function ResultCard({
           </div>
           <p className="mt-0.5 flex min-w-0 items-center gap-1 text-sm leading-5 text-muted-foreground">
             <MapPin aria-hidden className="size-3.5 shrink-0" />
-            <span className="truncate">{row.street_address}</span>
+            <span className="truncate">{formatAddress(row.street_address)}</span>
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {rooms && <span className="text-sm text-muted-foreground">{rooms}</span>}

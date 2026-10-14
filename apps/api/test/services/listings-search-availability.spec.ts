@@ -245,6 +245,24 @@ describe('search() availability', () => {
     expect(Number(row!.unit_count)).toBe(1);
   });
 
+  it('counts rooms separately from free beds', async () => {
+    // A second free bed in the one available room: 2 beds, still 1 room.
+    const extra = await pool.query(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 2') RETURNING id`, [unitCancelled]);
+    try {
+      const rows = (await listings.search({
+        minLon: 32.5,
+        minLat: 0.25,
+        maxLon: 32.65,
+        maxLat: 0.42,
+        limit: 50,
+      } as never)) as { id: string; unit_count: number; room_count: number }[];
+      const row = rows.find((r) => r.id === listingId);
+      expect({ beds: Number(row!.unit_count), rooms: Number(row!.room_count) }).toEqual({ beds: 2, rooms: 1 });
+    } finally {
+      await pool.query(`DELETE FROM beds WHERE id = $1`, [extra.rows[0].id]);
+    }
+  });
+
   it('excludes a listing entirely once every bed is occupied', async () => {
     await pool.query(`UPDATE reservations SET status = 'occupied' WHERE bed_id = $1`, [bedCancelled]);
     const rows = (await listings.search({

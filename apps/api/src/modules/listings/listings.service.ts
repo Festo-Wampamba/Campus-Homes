@@ -548,6 +548,7 @@ export class ListingsService {
                 p.gender_arrangement,
                 ph.storage_key AS photo_storage_key,
                 u.min_capacity, u.max_capacity, COALESCE(u.unit_count, 0) AS unit_count,
+                COALESCE(u.room_count, 0) AS room_count,
                 COALESCE(u.max_price, lv.price_per_term_ugx) AS max_price_per_term_ugx,
                 COALESCE(u.has_self_contained, false) AS has_self_contained,
                 COALESCE(rc.categories, '[]'::jsonb) AS room_categories
@@ -564,9 +565,11 @@ export class ListingsService {
            -- Joining beds fans a room out to one row per available bed, so
            -- COUNT(*) here is an available-BED count, not a room count — a
            -- partially-let double still contributes its one free bed. MIN/MAX
-           -- capacity describe the room itself and are unaffected by the fan-out.
+           -- capacity describe the room itself and are unaffected by the fan-out;
+           -- room_count (DISTINCT) is the number of rooms with a free bed.
            SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, MAX(usp.price_per_term_ugx) AS max_price,
+                  COUNT(*) AS unit_count, COUNT(DISTINCT un.id) AS room_count,
+                  MAX(usp.price_per_term_ugx) AS max_price,
                   bool_or(un.self_contained) AS has_self_contained,
                   bool_or(NOT un.self_contained) AS has_non_self_contained
            FROM units un

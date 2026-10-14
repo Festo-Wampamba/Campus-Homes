@@ -130,8 +130,16 @@ export const RENT_PERIOD_LABELS: Record<string, string> = {
 
 // A hostel is never one room at one price — units.capacity varies per room,
 // so search results show the spread instead of implying a single room type.
+// Addresses are stored as typed; drop stray trailing commas ("Makerere Hill,").
+export function formatAddress(address: string): string {
+  return address.trim().replace(/[\s,]+$/, "");
+}
+
+// Search rows carry room_count, and their unit_count is free BEDS; saved
+// rows have no room_count and their unit_count is rooms.
 export function roomSizeLabel(row: {
   unit_count: number;
+  room_count?: number;
   min_capacity: number | null;
   max_capacity: number | null;
 }): string | null {
@@ -142,5 +150,9 @@ export function roomSizeLabel(row: {
     row.min_capacity === row.max_capacity
       ? `Sleeps ${row.min_capacity}`
       : `Sleeps ${row.min_capacity}–${row.max_capacity}`;
+  if (row.room_count !== undefined) {
+    const rooms = `${row.room_count} room${row.room_count === 1 ? "" : "s"}`;
+    return `${sleeps} · ${rooms} · ${row.unit_count} bed${row.unit_count === 1 ? "" : "s"} free`;
+  }
   return `${sleeps} · ${row.unit_count} room${row.unit_count === 1 ? "" : "s"}`;
 }
