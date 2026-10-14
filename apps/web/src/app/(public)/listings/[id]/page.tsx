@@ -9,7 +9,7 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
+import { formatAddress, formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
@@ -126,7 +126,7 @@ export default async function ListingDetailPage({
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <p className="text-md text-muted-foreground">{property.street_address}</p>
+            <p className="text-md text-muted-foreground">{formatAddress(property.street_address)}</p>
             {listing.verifiedAt && (
               <span className="text-xs text-muted-foreground">
                 Inspected{" "}

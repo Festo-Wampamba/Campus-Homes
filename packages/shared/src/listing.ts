@@ -124,7 +124,11 @@ export const listingSearchResultSchema = z.object({
   photo_storage_key: z.string().nullable(),
   min_capacity: z.coerce.number().int().nullable(),
   max_capacity: z.coerce.number().int().nullable(),
+  // Available BEDS (the SQL fans rooms out to free beds); room_count is the
+  // number of rooms those beds sit in. Optional so a web build that ships
+  // before its API doesn't fail to parse every search result.
   unit_count: z.coerce.number().int(),
+  room_count: z.coerce.number().int().optional(),
   room_categories: z.array(roomCategoryBreakdownSchema),
   // True when at least one unit in the listing is self-contained (0053) —
   // drives the "Self-contained" badge on a search card.
