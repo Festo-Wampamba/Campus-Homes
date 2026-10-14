@@ -90,7 +90,7 @@ const FAQS = [
   },
   {
     question: "How many rooms can I reserve at once?",
-    answer: `Up to ${MAX_ACTIVE_RESERVATIONS}. Cancel one you no longer want to free a slot for another.`,
+    answer: `Up to ${MAX_ACTIVE_RESERVATIONS}, counting both rooms on hold and rooms your landlord has confirmed. Cancel a hold you no longer want to free a slot. A confirmed booking can only be released by the landlord; contact support if you need help reaching them.`,
   },
   {
     question: "Do I pay rent through CampusHomes?",
@@ -110,7 +110,7 @@ const FAQS = [
   {
     question: "Can I cancel a reservation?",
     answer:
-      "Yes, any time from My reservations. You confirm before it is cancelled, and the bed is released straight away.",
+      "A room on hold, yes: cancel it any time from My reservations. You confirm first, and the bed is released straight away. Once the landlord has confirmed your booking, only they can release it; contact support if you need help reaching them.",
   },
   {
     question: "How do I get help?",
