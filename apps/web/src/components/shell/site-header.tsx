@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getServerSession } from "@/lib/session";
 import { WORKSPACE_HOME } from "@/lib/auth-routing";
 import { AccountMenu } from "@/components/shell/account-menu";
+import { MobileNav, type NavLink } from "@/components/shell/mobile-nav";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 
@@ -10,9 +11,18 @@ import { Wordmark } from "@/components/shell/wordmark";
 // home/search/listing-detail must see that they're signed in, not just the
 // portal pages (session.ts's getServerSession() is safe to call from any
 // server component, same helper the portal layouts already use).
+const PAGE_LINKS: NavLink[] = [
+  { href: "/search", label: "Find a room" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/support", label: "Support" },
+];
+
 async function SiteHeader() {
   const session = await getServerSession();
   const hasLandlordAccess = session?.access.workspaces.includes("landlord") ?? false;
+  const landlordLink: NavLink = hasLandlordAccess
+    ? { href: WORKSPACE_HOME.landlord, label: "Landlord" }
+    : { href: "/landlords", label: "For landlords" };
 
   return (
     <header className="sticky top-0 z-(--z-sticky) h-16 border-b border-border bg-background/95 text-foreground shadow-sm backdrop-blur-xl">
@@ -21,29 +31,20 @@ async function SiteHeader() {
           <Wordmark className="text-[1.08rem] dark:text-white" />
         </Link>
         <nav className="flex items-center gap-1.5 sm:gap-2">
+          {PAGE_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition duration-300 hover:bg-muted hover:text-foreground md:block"
+            >
+              {link.label}
+            </Link>
+          ))}
           <Link
-            href="/search"
-            className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition duration-300 hover:bg-muted hover:text-foreground md:block"
-          >
-            Find a room
-          </Link>
-          <Link
-            href="/#how-it-works"
-            className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition duration-300 hover:bg-muted hover:text-foreground md:block"
-          >
-            How it works
-          </Link>
-          <Link
-            href="/support"
-            className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition duration-300 hover:bg-muted hover:text-foreground md:block"
-          >
-            Support
-          </Link>
-          <Link
-            href={hasLandlordAccess ? WORKSPACE_HOME.landlord : "/landlords"}
+            href={landlordLink.href}
             className="hidden whitespace-nowrap rounded-lg border border-border px-3.5 py-2 text-sm font-semibold text-foreground transition duration-300 hover:border-teal-600 hover:bg-accent sm:block"
           >
-            {hasLandlordAccess ? "Landlord" : "For landlords"}
+            {landlordLink.label}
           </Link>
           <ThemeToggle />
           {session ? (
@@ -57,6 +58,7 @@ async function SiteHeader() {
               Sign in
             </Link>
           )}
+          <MobileNav links={[...PAGE_LINKS, landlordLink]} />
         </nav>
       </div>
     </header>

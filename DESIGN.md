@@ -29,8 +29,8 @@ ramp — components consume semantic names only.
 | `--teal-600` | `oklch(0.54 0.09 195)` | #008080 | **Primary.** Buttons, links, selection, focus ring, verified badge |
 | `--teal-100` | `oklch(0.95 0.02 195)` | #dceeee | Selected-row bg, badge tint |
 | `--teal-50` | `oklch(0.977 0.01 195)` | #f4f7f7 | Sidebar / panel second neutral |
-| `--coral-500` | `oklch(0.735 0.115 22)` | #f08080 | Secondary accent — marketing highlights, favorites (M2) |
-| `--coral-600` | `oklch(0.65 0.13 22)` | — | Coral on light bg when text-adjacent |
+| `--coral-500` | `oklch(0.82 0.115 58)` | #fcb177 (peach orange) | Secondary accent — marketing highlights, favorites (M2) |
+| `--coral-600` | `oklch(0.55 0.13 45)` | #ae5528 | Coral on light bg when text-adjacent |
 
 ### Neutrals (teal-tinted slate, chroma ≤ 0.01 toward hue 195)
 

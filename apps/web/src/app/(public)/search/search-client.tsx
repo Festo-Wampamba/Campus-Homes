@@ -215,8 +215,8 @@ export function SearchClient() {
           physical inspection.
         </p>
 
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-teal-50 p-3 shadow-xs sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="relative flex-1 sm:min-w-40">
+        <div className="@container flex flex-col gap-2 rounded-xl border border-border bg-teal-50 p-3 shadow-xs">
+          <div className="relative">
             <SearchIcon
               aria-hidden
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -229,7 +229,7 @@ export function SearchClient() {
               className="pl-9"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Input
               type="number"
               inputMode="numeric"
@@ -238,7 +238,6 @@ export function SearchClient() {
               onChange={(e) => setMinPrice(e.target.value)}
               placeholder="Min UGX"
               aria-label="Minimum price per bed per semester"
-              className="w-28"
             />
             <Input
               type="number"
@@ -248,52 +247,55 @@ export function SearchClient() {
               onChange={(e) => setMaxPrice(e.target.value)}
               placeholder="Max UGX"
               aria-label="Maximum price per bed per semester"
-              className="w-28"
             />
           </div>
-          <select
-            value={genderArrangement}
-            onChange={(e) => setGenderArrangement(e.target.value)}
-            aria-label="Gender"
-            className={cn(
-              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
-              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-            )}
-          >
-            {GENDER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={roomCategory}
-            onChange={(e) => setRoomCategory(e.target.value)}
-            aria-label="Room type"
-            className={cn(
-              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
-              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-            )}
-          >
-            {ROOM_TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selfContained}
-            onChange={(e) => setSelfContained(e.target.value)}
-            aria-label="Self-contained"
-            className={cn(
-              "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 sm:w-auto",
-              "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-            )}
-          >
-            <option value="">Any bathroom</option>
-            <option value="true">Self-contained</option>
-            <option value="false">Shared bathroom</option>
-          </select>
+          {/* Container query, not a viewport one: next to the map this panel is
+              only ~27rem wide, where three selects side by side clip their text. */}
+          <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
+            <select
+              value={genderArrangement}
+              onChange={(e) => setGenderArrangement(e.target.value)}
+              aria-label="Gender"
+              className={cn(
+                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10",
+                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              )}
+            >
+              {GENDER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={roomCategory}
+              onChange={(e) => setRoomCategory(e.target.value)}
+              aria-label="Room type"
+              className={cn(
+                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10",
+                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              )}
+            >
+              {ROOM_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selfContained}
+              onChange={(e) => setSelfContained(e.target.value)}
+              aria-label="Self-contained"
+              className={cn(
+                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 col-span-2 @lg:col-span-1",
+                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              )}
+            >
+              <option value="">Any bathroom</option>
+              <option value="true">Self-contained</option>
+              <option value="false">Shared bathroom</option>
+            </select>
+          </div>
         </div>
 
         {isPending && bounds !== null && (
@@ -396,7 +398,7 @@ function ResultCard({
         </div>
         <div className="flex min-w-0 flex-1 flex-col py-0.5">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 truncate font-display text-base font-semibold leading-5 group-hover:text-teal-700 sm:text-lg sm:leading-snug">
+            <h3 className="min-w-0 line-clamp-2 font-display text-base font-semibold leading-5 group-hover:text-teal-700 sm:text-lg sm:leading-snug">
               {row.name}
             </h3>
             <VerifiedBadge size="sm" className="shrink-0" />

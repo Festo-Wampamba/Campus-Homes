@@ -5,7 +5,8 @@
 
 /*
  * CampusHomes tokens — source of truth documented in /DESIGN.md.
- * Brand: teal #008080 + light coral #f08080 (Website Design Scheme),
+ * Brand: teal #008080 + peach orange #fcb177 (accent changed from light
+ * coral #f08080 on 2026-10-14; token names kept as --coral-*),
  * refined into an OKLCH ramp. Semantic names are shadcn-compatible so
  * generated components theme themselves.
  */
@@ -16,9 +17,10 @@
   --teal-600: oklch(0.54 0.09 195);
   --teal-100: oklch(0.95 0.02 195);
   --teal-50: oklch(0.977 0.01 195);
-  /* 0.55 lightness: 5.2:1 on white, 4.9:1 on teal-50 (small coral text). */
-  --coral-600: oklch(0.55 0.13 22);
-  --coral-500: oklch(0.735 0.115 22);
+  /* 0.55 lightness: 5.1:1 on white (small accent text, white-on-hover). */
+  --coral-600: oklch(0.55 0.13 45);
+  /* Peach orange #fcb177: 6.9:1 with teal-900 text. */
+  --coral-500: oklch(0.82 0.115 58);
 
   /* semantic */
   --background: oklch(1 0 0);
@@ -57,8 +59,8 @@
   --teal-600: oklch(0.64 0.1 195);
   --teal-100: oklch(0.3 0.03 195);
   --teal-50: oklch(0.24 0.025 195);
-  --coral-600: oklch(0.68 0.13 22);
-  --coral-500: oklch(0.735 0.115 22);
+  --coral-600: oklch(0.72 0.13 55);
+  --coral-500: oklch(0.82 0.115 58);
 
   --background: oklch(0.19 0.015 245);
   --foreground: oklch(0.93 0.008 240);

@@ -32,7 +32,7 @@ export default async function OpengraphImage() {
           <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1.1, maxWidth: 950 }}>
             Hostels near Makerere, inspected before they are listed.
           </div>
-          <div style={{ fontSize: 30, color: "#f08080" }}>Compare rooms and prices. Reserving is free.</div>
+          <div style={{ fontSize: 30, color: "#fcb177" }}>Compare rooms and prices. Reserving is free.</div>
         </div>
       </div>
     ),
