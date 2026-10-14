@@ -786,7 +786,8 @@ export class ListingsService {
           );
           const propRes = await client.query(
             `SELECT p.id, p.name, p.street_address, p.gps_lat, p.gps_lon,
-                    p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement
+                    p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
+                    p.house_rules
              FROM properties p
              WHERE p.id = $1`,
             [detail.listing.propertyId],
@@ -841,6 +842,7 @@ export class ListingsService {
               booking_fee_percent: string | number | null;
               advance_rent_required: boolean;
               gender_arrangement: string | null;
+              house_rules: string[];
             },
             propertyMedia: mediaRes.rows as { id: string; storage_key: string; caption: string | null }[],
             roomTypePhotos: roomTypePhotoRes.rows as { unitId: string; storageKey: string }[],

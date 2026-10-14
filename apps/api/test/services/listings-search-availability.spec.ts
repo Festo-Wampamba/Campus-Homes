@@ -176,6 +176,20 @@ describe('detail() public availability', () => {
   });
 });
 
+describe('detail() house rules', () => {
+  it('returns the property\'s house rules', async () => {
+    await pool.query(
+      `UPDATE properties SET house_rules = $1::jsonb
+       WHERE id = (SELECT property_id FROM listings WHERE id = $2)`,
+      [JSON.stringify(['No visitors after 10pm']), listingId],
+    );
+
+    const detail = await listings.detail(listingId);
+
+    expect(detail.property.house_rules).toEqual(['No visitors after 10pm']);
+  });
+});
+
 describe('detail() room-type photos', () => {
   it('shows a room type\'s approved Manage Rooms photo against its rooms', async () => {
     const { rows: [listing] } = await pool.query(
