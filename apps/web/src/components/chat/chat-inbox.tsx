@@ -80,7 +80,7 @@ function Composer({ threadId, editing, onCancelEdit, onMessage }: {
       {editing && <div className="mb-2 flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-xs"><span><strong>Editing message</strong> · Esc to cancel</span><button type="button" aria-label="Cancel editing" onClick={onCancelEdit}><X aria-hidden className="size-4" /></button></div>}
       {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
       <div className="flex items-end gap-2">
-        <Textarea autoFocus={Boolean(editing)} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message…" aria-label="Message" className="max-h-36 min-h-11 resize-none" onKeyDown={(event) => {
+        <Textarea autoFocus={Boolean(editing)} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message…" aria-label="Message" className="field-sizing-content max-h-36 min-h-11 resize-none" onKeyDown={(event) => {
           if (event.key === "Escape" && editing) onCancelEdit();
           if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); }
         }} />

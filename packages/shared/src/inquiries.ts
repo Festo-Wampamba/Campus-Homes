@@ -24,6 +24,8 @@ export const createInquirySchema = z.object({
   // Set when the enquiry is asked from a listing page — the server resolves
   // this to the listing's landlord (landlordId is never client-supplied).
   listingId: z.string().uuid().optional(),
+  // One of the student's own reservations; the server checks ownership.
+  reservationId: z.string().uuid().optional(),
 });
 export type CreateInquiryInput = z.infer<typeof createInquirySchema>;
 
@@ -78,6 +80,8 @@ export type Inquiry = {
   landlordId: string | null;
   landlordResponse: string | null;
   landlordRespondedAt: string | null;
+  // Optional so a web build that ships before its API still type-checks.
+  reservationId?: string | null;
   createdAt: string;
   updatedAt: string;
 };

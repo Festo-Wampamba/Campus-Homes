@@ -3,7 +3,7 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-14._
+_Last updated: 2026-10-15._
 
 ## Status board
 
@@ -19,9 +19,9 @@ _Last updated: 2026-10-14._
 | 9 | [Phase 1: mobile menu + search layout](#9-phase-1-mobile-menu--search-layout) | Claude | 👀 On staging (#162), production pending |
 | 10 | [Phase 2: search correctness](#10-phase-2-search-correctness) | Claude | 👀 On staging (#164), production pending |
 | 11 | [Phase 3: reservation journey](#11-phase-3-reservation-journey) | Claude | 👀 On staging (#166), production pending; R03b needs a staging check (Festo) |
-| 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 🚧 In progress |
-| 13 | [Phase 5: data-quality guards + production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Claude / Festo | 🔜 Queued |
-| 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 🔜 Queued |
+| 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 👀 On staging (#170), production pending |
+| 13 | [Phase 5: data-quality guards + production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Claude / Festo | 👀 Code on staging (#174); data fixes wait on Festo |
+| 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 🚧 In progress |
 | 15 | [Cloudflare: turn off Email Address Obfuscation](#15-cloudflare-turn-off-email-address-obfuscation) | Festo | ☐ Open |
 | 16 | [Small UI polish from the 2026-10-14 inspection](#16-small-ui-polish-from-the-2026-10-14-inspection) | — | 💤 Later |
 | 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
@@ -183,9 +183,14 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
   - *Pass:* the 4th attempt shows the explanation.
 - **R03b, phone-number box:** reproduce onboarding and profile phone saving on
   staging. Fix only if it still fails (#152 may have fixed it).
+- **Follow-up, PR #173 (on staging since 2026-10-15, `1fcc572`):** an overdue
+  hold is now expired by a per-minute sweep (`reservation_expiry_sweep`) and
+  again before every new reserve, so a lost BullMQ job can no longer keep a
+  bed blocked. Rooms show "N reserved · 24h hold".
 
 ## 12. Phase 4: information before reserving
 
+- **Shipped:** PR #170, on staging since 2026-10-15 (`1fcc572`).
 - **R12, house rules:** `properties.house_rules` exists (admin-edited) but is
   never shown publicly. Show it on the listing page.
 - **R06 / R09, amenities and gender policy at the reserve step:** summary next
@@ -195,6 +200,8 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 
 ## 13. Phase 5: data-quality guards + production data fixes
 
+- **Shipped (code):** PR #174, on staging since 2026-10-15 (`1fcc572`). The
+  production data fixes below are still open.
 - **Price floor UGX 50,000** (decided 2026-10-14) in the shared Ops-publish,
   room-management and admin price schemas.
   - *Why:* Kasubi Horizon's 6 single rooms are live at **UGX 2** per semester

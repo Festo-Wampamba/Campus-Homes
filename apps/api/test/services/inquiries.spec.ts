@@ -147,3 +147,67 @@ describe('InquiriesService — staff side', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('InquiriesService — attached reservation (R18)', () => {
+  let student2Reservation: string;
+
+  // Bare fixture chain, seeded as the test superuser: only the FK path a
+  // reservation needs, no publish flow.
+  beforeAll(async () => {
+    const landlord = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256700002104', 'landlord', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'LL Inquiry Test', 'verified')`, [landlord]);
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [student2]);
+    const property = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+       VALUES ($1, 'Inquiry Test Hostel', 'Kikoni', 'active', 0.33, 32.57, 'MUK') RETURNING id`,
+      [landlord],
+    );
+    const semester = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Sem Inquiry Test', '2026-08-01', '2026-12-15', '2026-11-15') RETURNING id`,
+    );
+    const listing = await seed(
+      `INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'draft') RETURNING id`,
+      [property, semester],
+    );
+    const version = await seed(
+      `INSERT INTO listing_versions (listing_id, version_number, price_per_term_ugx, amenities, verified_at)
+       VALUES ($1, 1, 500000, '{}', now()) RETURNING id`,
+      [listing],
+    );
+    const unit = await seed(
+      `INSERT INTO units (property_id, label, room_category) VALUES ($1, 'Room 1', 'single') RETURNING id`,
+      [property],
+    );
+    const bed = await seed(`INSERT INTO beds (unit_id, label) VALUES ($1, 'Bed 1') RETURNING id`, [unit]);
+    student2Reservation = await seed(
+      `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+       VALUES ($1, $2, $3, 'reserved', 'inquiry-test-reservation', 500000) RETURNING id`,
+      [student2, bed, version],
+    );
+  });
+
+  it("stores the student's own reservation on the inquiry", async () => {
+    const created = await inquiriesService.create(student2Ctx(), {
+      category: 'reservation',
+      subject: 'Question about my room',
+      message: 'When can I move in?',
+      reservationId: student2Reservation,
+    });
+
+    expect(created?.reservationId).toBe(student2Reservation);
+  });
+
+  it("rejects another student's reservation", async () => {
+    await expect(
+      inquiriesService.create(student1Ctx(), {
+        category: 'reservation',
+        subject: 'Not my booking',
+        message: 'Attaching someone else’s reservation.',
+        reservationId: student2Reservation,
+      }),
+    ).rejects.toThrow('Reservation not found');
+  });
+});
