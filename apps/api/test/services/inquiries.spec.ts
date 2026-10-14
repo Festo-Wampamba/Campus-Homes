@@ -75,6 +75,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Leave nothing behind: purge-cascade.spec counts listing_versions DB-wide.
+  await pool.query(`TRUNCATE users CASCADE`);
   await pool.end();
 });
 
