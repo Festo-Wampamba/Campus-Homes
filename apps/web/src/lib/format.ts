@@ -130,6 +130,21 @@ export const RENT_PERIOD_LABELS: Record<string, string> = {
 
 // A hostel is never one room at one price — units.capacity varies per room,
 // so search results show the spread instead of implying a single room type.
+// Pinned to Kampala so the server render and the browser agree (a server in
+// UTC and a phone in EAT would otherwise print different times).
+const KAMPALA_DATE_TIME = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Africa/Kampala",
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+export function formatDateTime(iso: string): string {
+  return KAMPALA_DATE_TIME.format(new Date(iso));
+}
+
 // Addresses are stored as typed; drop stray trailing commas ("Makerere Hill,").
 export function formatAddress(address: string): string {
   return address.trim().replace(/[\s,]+$/, "");

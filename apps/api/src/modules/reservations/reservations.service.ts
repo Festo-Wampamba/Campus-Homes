@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import type { BookReservationInput, ReleaseReservationInput, ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
@@ -24,7 +24,6 @@ import { AuditService } from '../ops/audit.service';
 import { RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
 export const DEFAULT_RESERVE_HOURS = 24;
-const MAX_ACTIVE_RESERVATIONS = 3;
 // A student already moved in (occupied) can't reserve a new bed until their
 // current term is within this many days of ending — reserving a second home
 // mid-semester makes no sense; reserving next semester's place as this one
@@ -172,8 +171,8 @@ export class ReservationsService {
 
         await this.assertNotLockedInByCurrentOccupancy(client, ctx.userId);
 
-        // One active reservation per student, platform-wide (§12-13 of the
-        // redesign doc) — active means 'reserved' or 'booked'.
+        // At most MAX_ACTIVE_RESERVATIONS live reservations per student,
+        // platform-wide — live means 'reserved' or 'booked'.
         const activeCountRes = await client.query(
           `SELECT count(*) FROM reservations WHERE student_id = $1 AND status IN ('reserved', 'booked')`,
           [ctx.userId],
@@ -518,7 +517,7 @@ export class ReservationsService {
         `SELECT
            r.id, r.student_id AS "studentId", r.bed_id AS "bedId",
            r.listing_version_id AS "listingVersionId", r.status,
-           r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
+           r.reserved_at AS "reservedAt", r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
            r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
            l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",

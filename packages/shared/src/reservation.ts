@@ -75,6 +75,10 @@ export const reservationSchema = z.object({
 });
 export type Reservation = z.infer<typeof reservationSchema>;
 
+// Live ('reserved' or 'booked') reservations one student may hold at once.
+// The API enforces it; the web states it next to the Reserve buttons.
+export const MAX_ACTIVE_RESERVATIONS = 3;
+
 // What a student sees about their own reservation — the bare row plus
 // enough context to tell one reservation apart from another (property name,
 // room type, rent, which bed) without a second round trip. `mine()` joins
@@ -88,6 +92,8 @@ export const studentReservationViewSchema = reservationSchema.extend({
   roomCapacity: z.number().int(),
   rentPerTermUgx: ugxAmount,
   depositUgx: ugxAmount.nullable(),
+  // Optional so a web build that ships before its API still parses the list.
+  reservedAt: z.iso.datetime().nullable().optional(),
 });
 export type StudentReservationView = z.infer<typeof studentReservationViewSchema>;
 
