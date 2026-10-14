@@ -212,7 +212,9 @@ export const listingDetailResponseSchema = z.object({
   // Per-bed now (0033) — a partially-let room still has a free bed to
   // reserve. `id` is the bed id (not the unit id); group by `unit_id` to
   // roll up into a unit/category-level available-bed count.
-  availability: z.array(z.object({ id: uuid, unit_id: uuid, available: z.boolean() })),
+  // `held` = on a student's temporary hold (status 'reserved'); optional so a
+  // web build ahead of the API still parses the older response.
+  availability: z.array(z.object({ id: uuid, unit_id: uuid, available: z.boolean(), held: z.boolean().optional() })),
   // Whole-property gallery — distinct from `photos` above (Ops-captured
   // listing_photos) and unitPhotos (per-room). Landlord-uploadable (0026).
   propertyMedia: z.array(z.object({ id: uuid, storage_key: z.string(), caption: z.string().nullable() })),

@@ -774,7 +774,12 @@ export class ListingsService {
                  SELECT 1 FROM reservations r
                   WHERE r.bed_id = b.id AND r.status = ANY($2::reservation_status[])
                )
-             ) AS available
+             ) AS available,
+             -- Held = a student's temporary hold, shown as "reserved" so a
+             -- browsing student knows the bed may free up again.
+             EXISTS (
+               SELECT 1 FROM reservations r WHERE r.bed_id = b.id AND r.status = 'reserved'
+             ) AS held
              FROM beds b
              JOIN units u ON u.id = b.unit_id
              WHERE u.property_id = $1
@@ -832,7 +837,7 @@ export class ListingsService {
             console.error('[analytics] listing_view event log failed:', err);
           }
           return {
-            availability: availRes.rows as { id: string; unit_id: string; available: boolean }[],
+            availability: availRes.rows as { id: string; unit_id: string; available: boolean; held: boolean }[],
             property: propRes.rows[0] as {
               id: string;
               name: string;
