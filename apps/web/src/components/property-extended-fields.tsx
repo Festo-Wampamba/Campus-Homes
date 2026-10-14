@@ -10,6 +10,7 @@ import {
   type GenderArrangement,
   type PropertyAuthorityRole,
   type RentPeriod,
+  withAmenity,
 } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,7 @@ function CheckboxGrid({
           <input
             type="checkbox"
             checked={value[option.key] ?? false}
-            onChange={(e) => onChange({ ...value, [option.key]: e.target.checked })}
+            onChange={(e) => onChange(withAmenity(value, option.key, e.target.checked))}
           />
           {option.label}
         </label>

@@ -11,7 +11,7 @@ import {
   VERIFICATION_CHECKLIST_COMPONENTS,
   VISIT_RESULTS,
 } from './enums.js';
-import { idempotencyKey, ugxAmount, uuid } from './common.js';
+import { amenityChecklist, idempotencyKey, rentPerTermUgx, ugxAmount, uuid } from './common.js';
 import { verificationChecklistSchema } from './listing.js';
 import { africanPhone } from './phone.js';
 
@@ -141,7 +141,7 @@ export const MAX_PUBLISH_UNITS = 1000;
 
 export const publishListingSchema = z.object({
   listingId: uuid,
-  amenities: z.record(z.string(), z.boolean()),
+  amenities: amenityChecklist,
   description: z.string().max(5000).optional(),
   // Rooms are permanent/property-level (2026-09) — reused across every
   // future semester, not recreated at every publish. `unitId` present means
@@ -163,7 +163,7 @@ export const publishListingSchema = z.object({
         // (0053). Optional on input — defaults to false (non-self-contained),
         // matching the units.self_contained column default.
         selfContained: z.boolean().optional(),
-        pricePerTermUgx: ugxAmount,
+        pricePerTermUgx: rentPerTermUgx,
         depositUgx: ugxAmount.optional(),
       }),
     )
