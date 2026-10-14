@@ -3,7 +3,7 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-13._
+_Last updated: 2026-10-14._
 
 ## Status board
 
@@ -16,6 +16,15 @@ _Last updated: 2026-10-13._
 | 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
+| 9 | [Phase 1: mobile menu + search layout](#9-phase-1-mobile-menu--search-layout) | Claude | 🚧 In progress |
+| 10 | [Phase 2: search correctness](#10-phase-2-search-correctness) | Claude | 🔜 Queued |
+| 11 | [Phase 3: reservation journey](#11-phase-3-reservation-journey) | Claude | 🔜 Queued |
+| 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 🔜 Queued |
+| 13 | [Phase 5: data-quality guards + production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Claude / Festo | 🔜 Queued |
+| 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 🔜 Queued |
+| 15 | [Cloudflare: turn off Email Address Obfuscation](#15-cloudflare-turn-off-email-address-obfuscation) | Festo | ☐ Open |
+| 16 | [Small UI polish from the 2026-10-14 inspection](#16-small-ui-polish-from-the-2026-10-14-inspection) | — | 💤 Later |
+| 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -107,6 +116,128 @@ includes PRs #152 and #154. Check on production:
   unverified number there would let one user lock another out. Copy the email-change flow in
   `apps/api/src/modules/profile/me.controller.ts` (`POST /me/email/code` then `PATCH /me/email`).
 - **Depends on:** contact phone shipped (done); Africa's Talking production account live.
+
+## 9. Phase 1: mobile menu + search layout
+
+Phases 9–14 come from the 2026-10-14 live inspection of campushomes.co.ug, a
+second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
+[`docs/superpowers/plans/2026-10-14-student-journey-fixes.md`](docs/superpowers/plans/2026-10-14-student-journey-fixes.md). One PR to `development` per phase.
+
+- **Ships with:** PR #160, the peach orange accent (`#fcb177`) and a single
+  search icon in the hero search.
+- **R03a, phone layout:** on phones the header hides Find a room, How it works,
+  Support and For landlords with no menu. Add a hamburger menu
+  (`components/shell/site-header.tsx`).
+  - *Pass:* at 375px the menu opens, lists all 4 links, closes on Escape, on
+    tapping outside and after choosing a link.
+- **Search filters:** the hostel-name search gets its own row; price and the
+  three selects sit in a grid (`app/(public)/search/search-client.tsx`).
+  - *Pass:* the placeholder isn't cut off and no select sits alone on a row.
+- **Card names:** hostel names wrap to 2 lines instead of being cut
+  ("Kasubi Horizon Stud…").
+
+## 10. Phase 2: search correctness
+
+- **R01, search reliability:** a failed request shows the error state with
+  Retry, never a false "0 found".
+- **R15, Clear filters:** a button inside the filter area that resets every
+  filter (search text stays).
+  - *Pass:* set several filters, clear them, and filters, count and results
+    all reset together.
+- **Filtered empty state:** zero results caused by filters says "No hostels
+  match your filters" and offers Clear filters, not "No verified places in this
+  area yet".
+- **Room vs bed count:** cards say "108 rooms" for Kasubi Horizon, which has 38
+  rooms and 108 free beds (the API counts beds as `unit_count`). Show
+  "38 rooms · 108 beds free".
+- **R14, bathroom filter wording:** "Self-contained" / "Not self-contained",
+  same data (`units.self_contained`).
+- **Addresses:** trim trailing commas such as "Makerere Hill," in one display
+  helper.
+
+## 11. Phase 3: reservation journey
+
+- **R02, repeated sign-ins:** "Sign in to reserve" and "Sign in to ask a
+  question" link to plain `/sign-in`, so after signing in the student lands on
+  the homepage instead of the room. Add `next=/listings/<id>`. Sessions already
+  last 7 days.
+  - *Pass:* signed out, open a listing, Sign in to reserve, sign in, and you're
+    back on that listing.
+- **R17 + Festo's request, confirmation popup:** after reserving, show a dialog:
+  "Room reserved for you", hostel, room type, bed, and "held for 24 hours, until
+  <time>", taken from the API's `reservedExpiresAt`. Then a "View my
+  reservations" button opens the list with that reservation highlighted.
+- **R04 / R10, My reservations:**
+  - active reservations come first
+  - live countdown
+  - reference and reserved date
+  - "Just reserved" highlight
+  - Cancel asks for confirmation and shows errors
+- **R13, reservation limit:** 3 active per student is already enforced by the
+  API. Say so near the Reserve buttons.
+  - *Pass:* the 4th attempt shows the explanation.
+- **R03b, phone-number box:** reproduce onboarding and profile phone saving on
+  staging. Fix only if it still fails (#152 may have fixed it).
+
+## 12. Phase 4: information before reserving
+
+- **R12, house rules:** `properties.house_rules` exists (admin-edited) but is
+  never shown publicly. Show it on the listing page.
+- **R06 / R09, amenities and gender policy at the reserve step:** summary next
+  to Reserve. Unknown values read "Not provided".
+- **R11, viewings:** give the existing "Request a viewing" option its own
+  button. A structured visiting-hours field needs a migration; see item 17.
+
+## 13. Phase 5: data-quality guards + production data fixes
+
+- **Price floor UGX 50,000** (decided 2026-10-14) in the shared Ops-publish,
+  room-management and admin price schemas.
+  - *Why:* Kasubi Horizon's 6 single rooms are live at **UGX 2** per semester
+    (with a UGX 1,000,000 deposit); validation only checked `> 0`.
+- **Furnishing:** Fully furnished / Partly furnished / Unfurnished become
+  one-choice. Kasubi Horizon currently shows both "Unfurnished" and
+  "Fully furnished".
+- **Production data (Festo approves, done through Ops/admin):**
+  - Kasubi Horizon single-room price (**Festo: correct price needed**)
+  - its furnishing amenities
+  - the listing titled "Makerere Hill, Kampala" (an address, not a name)
+
+## 14. Phase 6: help and support
+
+- **R07, chat box:** the student–landlord chat composer grows with the text
+  (`components/chat/chat-inbox.tsx`).
+- **R16, FAQ:** add answers on the 24h hold and expiry, the 3-room limit,
+  payments (offline, agreed with the landlord), viewings, cancellations and
+  support.
+- **R18, support form:** the student support desk can attach one of the
+  student's own reservations to an inquiry.
+
+## 15. Cloudflare: turn off Email Address Obfuscation
+
+- **What:** Cloudflare dashboard → Security → Settings → turn off
+  **Email Address Obfuscation** for `campushomes.co.ug`.
+- **Why:** it rewrites the footer email in the HTML, so React hits hydration
+  error #418 and re-renders every page on every visit (slower). Cloudflare's
+  decode script is also blocked by our CSP. No code change needed.
+- *Pass:* no `__cf_email__` in the page source and no #418 in the console.
+
+## 16. Small UI polish from the 2026-10-14 inspection
+
+- **Map worker:** MapLibre's worker URL 404s, so it falls back. The map works
+  but loads slowly and logs console errors (`components/map/listings-map.tsx`).
+- **Listing navigation:** clicking a listing card shows the old page for about
+  3s with no loading indicator.
+- **Cookie notice:** on phones it covers about a quarter of the screen.
+
+## 17. Deferred backlog items
+
+- **R05, payment options:** real-money payments are product Phase 2 (decided
+  2026-07-30). Payment is offline with the landlord until then.
+- **R08, hostel location:** "NOT NOW" per Festo's notes.
+- **R19, floating chatbot / help button:** after Phase 6 (FAQ + support).
+  Decide scripted widget vs AI first.
+- **Visiting-hours field (R11 follow-up):** needs a migration plus admin and
+  landlord forms.
 
 ---
 
