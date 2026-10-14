@@ -16,10 +16,10 @@ _Last updated: 2026-10-14._
 | 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
-| 9 | [Phase 1: mobile menu + search layout](#9-phase-1-mobile-menu--search-layout) | Claude | 🚧 In progress |
-| 10 | [Phase 2: search correctness](#10-phase-2-search-correctness) | Claude | 🔜 Queued |
-| 11 | [Phase 3: reservation journey](#11-phase-3-reservation-journey) | Claude | 🔜 Queued |
-| 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 🔜 Queued |
+| 9 | [Phase 1: mobile menu + search layout](#9-phase-1-mobile-menu--search-layout) | Claude | 👀 On staging (#162), production pending |
+| 10 | [Phase 2: search correctness](#10-phase-2-search-correctness) | Claude | 👀 On staging (#164), production pending |
+| 11 | [Phase 3: reservation journey](#11-phase-3-reservation-journey) | Claude | 👀 On staging (#166), production pending; R03b needs a staging check (Festo) |
+| 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 🚧 In progress |
 | 13 | [Phase 5: data-quality guards + production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Claude / Festo | 🔜 Queued |
 | 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 🔜 Queued |
 | 15 | [Cloudflare: turn off Email Address Obfuscation](#15-cloudflare-turn-off-email-address-obfuscation) | Festo | ☐ Open |
@@ -123,6 +123,8 @@ Phases 9–14 come from the 2026-10-14 live inspection of campushomes.co.ug, a
 second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 [`docs/superpowers/plans/2026-10-14-student-journey-fixes.md`](docs/superpowers/plans/2026-10-14-student-journey-fixes.md). One PR to `development` per phase.
 
+- **Shipped:** PR #162, on staging since 2026-10-14 (`37bbde2`).
+
 - **Ships with:** PR #160, the peach orange accent (`#fcb177`) and a single
   search icon in the hero search.
 - **R03a, phone layout:** on phones the header hides Find a room, How it works,
@@ -138,6 +140,7 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 
 ## 10. Phase 2: search correctness
 
+- **Shipped:** PR #164, on staging since 2026-10-14 (`37bbde2`).
 - **R01, search reliability:** a failed request shows the error state with
   Retry, never a false "0 found".
 - **R15, Clear filters:** a button inside the filter area that resets every
@@ -157,6 +160,8 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 
 ## 11. Phase 3: reservation journey
 
+- **Shipped:** PR #166, on staging since 2026-10-14 (`37bbde2`). Still open:
+  R03b below.
 - **R02, repeated sign-ins:** "Sign in to reserve" and "Sign in to ask a
   question" link to plain `/sign-in`, so after signing in the student lands on
   the homepage instead of the room. Add `next=/listings/<id>`. Sessions already
