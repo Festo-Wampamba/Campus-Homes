@@ -9,13 +9,7 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import {
-  AMENITY_OPTIONS,
-  formatAddress,
-  formatUgx,
-  GENDER_ARRANGEMENT_LABELS,
-  humanizeKey,
-} from "@/lib/format";
+import { formatAddress, formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
@@ -186,7 +180,7 @@ export default async function ListingDetailPage({
 
           {amenityKeys.length > 0 && (
             <section aria-labelledby="amenities-heading" className="mt-10">
-              <h2 id="amenities-heading" className="text-xl">
+              <h2 id="amenities-heading" className="scroll-mt-24 text-xl">
                 Amenities we confirmed
               </h2>
               <AmenityList keys={amenityKeys} />
@@ -212,7 +206,7 @@ export default async function ListingDetailPage({
             </h2>
             <BeforeYouReserve
               genderArrangement={property.gender_arrangement}
-              amenityKeys={amenityKeys}
+              amenityCount={amenityKeys.length}
               houseRuleCount={houseRules.length}
             />
             <RoomCategoryList
@@ -287,17 +281,15 @@ export default async function ListingDetailPage({
   );
 }
 
-const AMENITY_LABELS = new Map(AMENITY_OPTIONS.map((o) => [o.key, o.label]));
-
 /** What a student should know before pressing Reserve (R06, R09, R12),
  * placed right above the room list where every Reserve button lives. */
 function BeforeYouReserve({
   genderArrangement,
-  amenityKeys,
+  amenityCount,
   houseRuleCount,
 }: {
   genderArrangement: string | null;
-  amenityKeys: string[];
+  amenityCount: number;
   houseRuleCount: number;
 }) {
   const notProvided = <span className="text-muted-foreground">Not provided</span>;
@@ -307,9 +299,13 @@ function BeforeYouReserve({
       <dd>{genderArrangement ? GENDER_ARRANGEMENT_LABELS[genderArrangement] : notProvided}</dd>
       <dt className="font-semibold">Amenities</dt>
       <dd>
-        {amenityKeys.length > 0
-          ? amenityKeys.map((key) => AMENITY_LABELS.get(key) ?? humanizeKey(key)).join(", ")
-          : notProvided}
+        {amenityCount > 0 ? (
+          <a href="#amenities-heading" className="font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
+            {amenityCount} confirmed, see the list
+          </a>
+        ) : (
+          notProvided
+        )}
       </dd>
       <dt className="font-semibold">House rules</dt>
       <dd>

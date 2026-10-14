@@ -21,7 +21,7 @@ import { REDIS } from '../../db/redis.module';
 import { assertStaffScope } from '../auth/staff-scope';
 import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
-import { RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
+import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
 export const DEFAULT_RESERVE_HOURS = 24;
 // A student already moved in (occupied) can't reserve a new bed until their
@@ -170,6 +170,10 @@ export class ReservationsService {
         const priceRow = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
 
         await this.assertNotLockedInByCurrentOccupancy(client, ctx.userId);
+
+        // Release overdue holds before checking this bed and this student's
+        // limit, so neither depends on the expiry job having already run.
+        await client.query(EXPIRE_OVERDUE_HOLDS_SQL);
 
         // At most MAX_ACTIVE_RESERVATIONS live reservations per student,
         // platform-wide — live means 'reserved' or 'booked'.
