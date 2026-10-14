@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { VerifiedBadge } from "@/components/verified-badge";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatPriceRange, humanizeKey, roomSizeLabel } from "@/lib/format";
+import { formatAddress, formatPriceRange, humanizeKey, roomSizeLabel } from "@/lib/format";
 
 function FeaturedCard({ row }: { row: ListingSearchResult }) {
   const amenities = Object.entries(row.amenities)
@@ -42,7 +42,7 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
         <div className="flex flex-1 flex-col pt-4">
           <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-5 text-coral-600">
             <SewingPinIcon className="size-3.5" />
-            <span className="truncate">{row.street_address}</span>
+            <span className="truncate">{formatAddress(row.street_address)}</span>
           </p>
           <h3 className="mt-2 line-clamp-2 font-display text-lg font-semibold leading-snug transition-colors duration-300 group-hover:text-teal-700">
             {row.name}
