@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { CheckCircle2, LifeBuoy } from "lucide-react";
 
-import { INQUIRY_CATEGORIES, type Inquiry, type InquiryCategory } from "@campushomes/shared";
+import {
+  INQUIRY_CATEGORIES,
+  type Inquiry,
+  type InquiryCategory,
+  type StudentReservationView,
+} from "@campushomes/shared";
 
 import { api, apiErrorMessage } from "@/lib/api";
 
@@ -16,9 +21,18 @@ const CATEGORY_LABELS: Record<InquiryCategory, string> = {
   other: "Something else",
 };
 
-const EMPTY_FORM = { category: "general" as InquiryCategory, subject: "", message: "" };
+const EMPTY_FORM = { category: "general" as InquiryCategory, subject: "", message: "", reservationId: "" };
 
-export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] }) {
+// Same short reference My reservations shows, so student and staff quote one value.
+const reservationRef = (id: string) => id.slice(0, 8).toUpperCase();
+
+export function SupportDesk({
+  initialInquiries,
+  reservations,
+}: {
+  initialInquiries: Inquiry[];
+  reservations: StudentReservationView[];
+}) {
   const [rows, setRows] = useState<Inquiry[]>(initialInquiries);
   const [form, setForm] = useState(EMPTY_FORM);
   const [pending, setPending] = useState(false);
@@ -33,7 +47,12 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
     try {
       const created = await api<Inquiry>("/inquiries", {
         method: "POST",
-        body: JSON.stringify({ ...form, subject: form.subject.trim(), message: form.message.trim() }),
+        body: JSON.stringify({
+          category: form.category,
+          subject: form.subject.trim(),
+          message: form.message.trim(),
+          reservationId: form.reservationId || undefined,
+        }),
       });
       setRows((current) => (created ? [created, ...current] : current));
       setForm(EMPTY_FORM);
@@ -85,6 +104,26 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
               ))}
             </select>
           </div>
+          {reservations.length > 0 && (
+            <div className="space-y-1.5">
+              <label htmlFor="inquiry-reservation" className="text-xs font-semibold text-muted-foreground">
+                Which reservation? (optional)
+              </label>
+              <select
+                id="inquiry-reservation"
+                value={form.reservationId}
+                onChange={(e) => setForm((f) => ({ ...f, reservationId: e.target.value }))}
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                <option value="">None</option>
+                {reservations.map((reservation) => (
+                  <option key={reservation.id} value={reservation.id}>
+                    {reservation.propertyName} · Ref {reservationRef(reservation.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <label htmlFor="inquiry-subject" className="text-xs font-semibold text-muted-foreground">
               Subject
@@ -158,6 +197,9 @@ export function SupportDesk({ initialInquiries }: { initialInquiries: Inquiry[] 
                     month: "short",
                     year: "numeric",
                   })}
+                  {row.reservationId && (
+                    <span className="normal-case">{` · Reservation Ref ${reservationRef(row.reservationId)}`}</span>
+                  )}
                   {row.listingId && (
                     <>
                       {" · "}

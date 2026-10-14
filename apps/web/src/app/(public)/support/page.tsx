@@ -3,6 +3,7 @@ import { Mail, Phone, ShieldAlert } from "lucide-react";
 
 import { getServerSession } from "@/lib/session";
 import { apiServerPublic, apiServerStrict } from "@/lib/server-api";
+import { getMyReservations } from "@/lib/reservations";
 
 import type { Inquiry } from "@campushomes/shared";
 
@@ -20,9 +21,10 @@ export default async function SupportPage() {
 
   // Signed-in students get the inquiry desk (form + their threads); everyone
   // else gets the public contact card. Both still see the contact info.
-  const [support, inquiries] = await Promise.all([
+  const [support, inquiries, reservations] = await Promise.all([
     apiServerPublic<{ email: string; phone: string }>("/listings/support-contact"),
     isStudent ? apiServerStrict<Inquiry[]>("/inquiries/mine").catch(() => []) : Promise.resolve([]),
+    isStudent ? getMyReservations() : Promise.resolve([]),
   ]);
 
   return (
@@ -33,7 +35,7 @@ export default async function SupportPage() {
         look right? Reach the CampusHomes team directly.
       </p>
 
-      {isStudent && <SupportDesk initialInquiries={inquiries} />}
+      {isStudent && <SupportDesk initialInquiries={inquiries} reservations={reservations} />}
 
       <div className="space-y-3 rounded-xl border border-border bg-card p-5">
         <a

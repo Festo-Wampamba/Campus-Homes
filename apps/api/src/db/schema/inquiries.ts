@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { listings } from './listing';
+import { reservations } from './reservation';
 import { users } from './identity';
 
 // Student inquiries (0028): a support question submitted from the student
@@ -15,6 +16,9 @@ import { users } from './identity';
 // server-side from listing_id at insert time — never client-supplied.
 // landlord_response/landlord_responded_at are column-grant-restricted (see
 // 0030) so a landlord's own UPDATE can never touch status/resolution.
+//
+// reservation_id (0063): optional link to one of the student's own
+// reservations; ownership is checked in InquiriesService.create.
 export const inquiries = pgTable('inquiries', {
   id: uuid('id').primaryKey().defaultRandom(),
   studentId: uuid('student_id')
@@ -31,6 +35,7 @@ export const inquiries = pgTable('inquiries', {
   landlordId: uuid('landlord_id').references(() => users.id, { onDelete: 'set null' }),
   landlordResponse: text('landlord_response'),
   landlordRespondedAt: timestamp('landlord_responded_at', { withTimezone: true }),
+  reservationId: uuid('reservation_id').references(() => reservations.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -14,6 +14,7 @@ import {
 import {
   campusSchema,
   listingSearchResultSchema,
+  MAX_ACTIVE_RESERVATIONS,
   testimonialSchema,
   VERIFICATION_CHECKLIST_COMPONENTS,
   type Campus,
@@ -83,9 +84,23 @@ const FAQS = [
     answer: "Reserving a room is free while the platform grows.",
   },
   {
+    question: "How long is a room held for me?",
+    answer:
+      "24 hours from the moment you reserve. My reservations shows the time left. If the hold runs out, it ends on its own and the bed goes back on the list for other students.",
+  },
+  {
+    question: "How many rooms can I reserve at once?",
+    answer: `Up to ${MAX_ACTIVE_RESERVATIONS}. Cancel one you no longer want to free a slot for another.`,
+  },
+  {
     question: "Do I pay rent through CampusHomes?",
     answer:
-      "No. Rent, deposits and tenancy agreements stay directly between you and the landlord. CampusHomes does not collect or mark up your rent.",
+      "No. Rent, deposits and tenancy agreements stay directly between you and the landlord, paid the way you agree with them. CampusHomes does not collect or mark up your rent.",
+  },
+  {
+    question: "Can I see the room before I reserve?",
+    answer:
+      "Yes. Sign in, open the listing and choose Request a viewing to ask the landlord for a time that suits you both.",
   },
   {
     question: "What does Verified actually mean?",
@@ -95,7 +110,12 @@ const FAQS = [
   {
     question: "Can I cancel a reservation?",
     answer:
-      "Yes. A reservation can be cancelled any time from the reservations area in your account, which also shows its current status.",
+      "Yes, any time from My reservations. You confirm before it is cancelled, and the bed is released straight away.",
+  },
+  {
+    question: "How do I get help?",
+    answer:
+      "Sign in and open Support to send our team a question. You can attach one of your reservations so we know which one you mean, and the reply appears on the same page.",
   },
 ];
 
