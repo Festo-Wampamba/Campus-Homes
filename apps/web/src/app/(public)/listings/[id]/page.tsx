@@ -66,6 +66,8 @@ export default async function ListingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const listingId = (await params).id;
+  // Signing in from here returns the student to this listing, not the homepage.
+  const signInHref = `/sign-in?next=${encodeURIComponent(`/listings/${listingId}`)}`;
   const [detail, session] = await Promise.all([getDetail(listingId), getServerSession()]);
   if (!detail) notFound();
   const isStudent = session?.user.status === "active" && session.access.workspaces.includes("student");
@@ -215,7 +217,7 @@ export default async function ListingDetailPage({
                 <AskLandlordDialog listingId={listingId} propertyName={property.name} />
               ) : (
                 <Link
-                  href="/sign-in"
+                  href={signInHref}
                   className="inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-background text-base font-semibold text-foreground shadow-xs hover:bg-muted"
                 >
                   Sign in to ask a question
@@ -231,6 +233,7 @@ export default async function ListingDetailPage({
         <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start">
           <MoneyCard
             session={session}
+            signInHref={signInHref}
             canReserve={canReserve}
             minPriceUgx={minPriceUgx}
             maxPriceUgx={maxPriceUgx}
@@ -243,6 +246,7 @@ export default async function ListingDetailPage({
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/96 p-3 shadow-[0_-12px_32px_-18px_rgba(0,47,47,0.35)] backdrop-blur-xl lg:hidden">
         <MoneyCard
           session={session}
+          signInHref={signInHref}
           canReserve={canReserve}
           minPriceUgx={minPriceUgx}
           maxPriceUgx={maxPriceUgx}
@@ -263,8 +267,10 @@ function MoneyCard({
   bookingFeePercent,
   advanceRentRequired,
   compact = false,
+  signInHref,
 }: {
   session: Awaited<ReturnType<typeof getServerSession>>;
+  signInHref: string;
   canReserve: boolean;
   minPriceUgx: number;
   maxPriceUgx: number;
@@ -304,7 +310,7 @@ function MoneyCard({
       </div>
       {!session && (
         <Link
-          href="/sign-in"
+          href={signInHref}
           className={cn(
             "inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition duration-300 hover:bg-teal-700 active:scale-[0.98]",
             compact ? "shrink-0" : "mt-4 w-full",
