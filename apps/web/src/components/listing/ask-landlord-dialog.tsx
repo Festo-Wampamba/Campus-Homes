@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, MessageCircleQuestion } from "lucide-react";
+import { CalendarCheck, CheckCircle2, MessageCircleQuestion } from "lucide-react";
 
 import type { Inquiry } from "@campushomes/shared";
 
@@ -17,13 +17,16 @@ import { api, apiErrorMessage } from "@/lib/api";
 export function AskLandlordDialog({
   listingId,
   propertyName,
+  viewing = false,
 }: {
   listingId: string;
   propertyName: string;
+  // Opens with "This is a viewing request" already ticked (R11).
+  viewing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
-  const [wantsViewing, setWantsViewing] = useState(false);
+  const [wantsViewing, setWantsViewing] = useState(viewing);
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +37,7 @@ export function AskLandlordDialog({
       // Reset for next time the dialog opens, but only after a successful
       // send — an in-progress draft shouldn't vanish on an accidental close.
       setMessage("");
-      setWantsViewing(false);
+      setWantsViewing(viewing);
       setSent(false);
     }
   }
@@ -65,12 +68,16 @@ export function AskLandlordDialog({
   return (
     <>
       <Button type="button" variant="secondary" className="w-full" onClick={() => setOpen(true)}>
-        <MessageCircleQuestion aria-hidden className="size-4" />
-        Ask about this place
+        {viewing ? (
+          <CalendarCheck aria-hidden className="size-4" />
+        ) : (
+          <MessageCircleQuestion aria-hidden className="size-4" />
+        )}
+        {viewing ? "Request a viewing" : "Ask about this place"}
       </Button>
       <Dialog open={open} onOpenChange={close}>
         <DialogHeader
-          title={sent ? "Sent" : "Ask the landlord"}
+          title={sent ? "Sent" : wantsViewing ? "Request a viewing" : "Ask the landlord"}
           description={sent ? undefined : `Goes directly to ${propertyName}'s landlord. No reservation needed.`}
           onClose={() => close(false)}
         />

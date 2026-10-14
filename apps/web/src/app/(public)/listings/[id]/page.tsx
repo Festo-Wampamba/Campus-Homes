@@ -9,7 +9,13 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatAddress, formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
+import {
+  AMENITY_OPTIONS,
+  formatAddress,
+  formatUgx,
+  GENDER_ARRANGEMENT_LABELS,
+  humanizeKey,
+} from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getStudentProfile } from "@/lib/student";
@@ -90,6 +96,7 @@ export default async function ListingDetailPage({
   const amenityKeys = Object.entries(version.amenities)
     .filter(([, has]) => has)
     .map(([key]) => key);
+  const houseRules = property.house_rules ?? [];
   const orderedPhotos = [...photos].sort(
     (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder,
   );
@@ -186,10 +193,28 @@ export default async function ListingDetailPage({
             </section>
           )}
 
+          {houseRules.length > 0 && (
+            <section id="house-rules" aria-labelledby="house-rules-heading" className="mt-10 scroll-mt-24">
+              <h2 id="house-rules-heading" className="text-xl">
+                House rules
+              </h2>
+              <ul className="mt-3 max-w-[70ch] list-disc space-y-1.5 pl-5 text-md leading-relaxed text-muted-foreground">
+                {houseRules.map((rule, i) => (
+                  <li key={i}>{rule}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section aria-labelledby="units-heading" className="mt-10">
             <h2 id="units-heading" className="text-xl">
               Room types
             </h2>
+            <BeforeYouReserve
+              genderArrangement={property.gender_arrangement}
+              amenityKeys={amenityKeys}
+              houseRuleCount={houseRules.length}
+            />
             <RoomCategoryList
               listingId={listingId}
               units={units}
@@ -212,9 +237,12 @@ export default async function ListingDetailPage({
             <p className="mt-1 text-sm text-muted-foreground">
               Ask the landlord directly, or request a viewing. No reservation needed.
             </p>
-            <div className="mt-3">
+            <div className="mt-3 grid gap-2">
               {session ? (
-                <AskLandlordDialog listingId={listingId} propertyName={property.name} />
+                <>
+                  <AskLandlordDialog listingId={listingId} propertyName={property.name} viewing />
+                  <AskLandlordDialog listingId={listingId} propertyName={property.name} />
+                </>
               ) : (
                 <Link
                   href={signInHref}
@@ -256,6 +284,44 @@ export default async function ListingDetailPage({
       {/* Clears the fixed mobile bar so it never covers the last room row. */}
       <div className="h-28 lg:hidden" aria-hidden />
     </div>
+  );
+}
+
+const AMENITY_LABELS = new Map(AMENITY_OPTIONS.map((o) => [o.key, o.label]));
+
+/** What a student should know before pressing Reserve (R06, R09, R12),
+ * placed right above the room list where every Reserve button lives. */
+function BeforeYouReserve({
+  genderArrangement,
+  amenityKeys,
+  houseRuleCount,
+}: {
+  genderArrangement: string | null;
+  amenityKeys: string[];
+  houseRuleCount: number;
+}) {
+  const notProvided = <span className="text-muted-foreground">Not provided</span>;
+  return (
+    <dl className="mt-4 grid gap-x-4 gap-y-2 rounded-xl border border-border bg-muted/50 p-4 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
+      <dt className="font-semibold">Who can stay</dt>
+      <dd>{genderArrangement ? GENDER_ARRANGEMENT_LABELS[genderArrangement] : notProvided}</dd>
+      <dt className="font-semibold">Amenities</dt>
+      <dd>
+        {amenityKeys.length > 0
+          ? amenityKeys.map((key) => AMENITY_LABELS.get(key) ?? humanizeKey(key)).join(", ")
+          : notProvided}
+      </dd>
+      <dt className="font-semibold">House rules</dt>
+      <dd>
+        {houseRuleCount > 0 ? (
+          <a href="#house-rules" className="font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
+            {houseRuleCount === 1 ? "1 rule" : `${houseRuleCount} rules`}, read before reserving
+          </a>
+        ) : (
+          notProvided
+        )}
+      </dd>
+    </dl>
   );
 }
 

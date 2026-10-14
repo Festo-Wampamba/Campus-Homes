@@ -199,6 +199,9 @@ export const listingDetailResponseSchema = z.object({
     booking_fee_percent: z.coerce.number().nullable(),
     advance_rent_required: z.boolean(),
     gender_arrangement: z.enum(GENDER_ARRANGEMENTS).nullable(),
+    // Admin-edited (properties.house_rules). Optional so a web build ahead
+    // of the API still parses the older response.
+    house_rules: z.array(z.string()).optional(),
   }),
   photos: z.array(listingPhotoSchema),
   units: z.array(unitSchema),
