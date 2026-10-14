@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { StudentReservationView } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { StatusChip } from "@/components/status-chip";
 import { MessageButton } from "@/components/chat/message-button";
-import { api } from "@/lib/api";
-import { formatUgx, roomCategoryLabel } from "@/lib/format";
+import { api, ApiError } from "@/lib/api";
+import { formatDateTime, formatUgx, roomCategoryLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<StudentReservationView["status"], string> = {
   reserved: "Reserved",
@@ -32,120 +34,231 @@ const STATUS_TONE: Record<StudentReservationView["status"], "success" | "warning
   expired: "neutral",
 };
 
-function formatCountdown(reservedExpiresAt: string | null): string | null {
-  if (!reservedExpiresAt) return null;
-  const ms = new Date(reservedExpiresAt).getTime() - Date.now();
-  if (ms <= 0) return "Expiring…";
+const LIVE_STATUSES = new Set<StudentReservationView["status"]>(["reserved", "booked", "occupied"]);
+
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: string | string[] } | null;
+    if (typeof body?.message === "string") return body.message;
+    if (Array.isArray(body?.message)) return body.message.join(", ");
+  }
+  return fallback;
+}
+
+// The current minute, ticking on the client. The server snapshot is null so
+// the countdown renders only in the browser and never mismatches hydration.
+function subscribeMinute(onChange: () => void) {
+  const timer = setInterval(onChange, 30_000);
+  return () => clearInterval(timer);
+}
+function useMinuteNow(): number | null {
+  return useSyncExternalStore(
+    subscribeMinute,
+    () => Math.floor(Date.now() / 60_000) * 60_000,
+    () => null,
+  );
+}
+
+function formatCountdown(reservedExpiresAt: string, now: number): string {
+  const ms = new Date(reservedExpiresAt).getTime() - now;
+  if (ms <= 0) return "expiring";
   const hours = Math.floor(ms / 3_600_000);
   const minutes = Math.floor((ms % 3_600_000) / 60_000);
   return `${hours}h ${minutes}m left`;
 }
 
-function CancelButton({ reservationId }: { reservationId: string }) {
+function CancelButton({ reservationId, propertyName }: { reservationId: string; propertyName: string }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function cancel() {
+    setError(null);
     setPending(true);
     try {
       await api(`/reservations/${reservationId}/cancel`, { method: "POST" });
+      setOpen(false);
       router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't cancel the reservation. Try again."));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <Button type="button" variant="secondary" size="sm" disabled={pending} onClick={cancel}>
-      {pending ? "Cancelling…" : "Cancel reservation"}
-    </Button>
+    <>
+      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        Cancel reservation
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen} size="sm">
+        <DialogHeader
+          title="Cancel this reservation?"
+          description={propertyName}
+          onClose={() => setOpen(false)}
+        />
+        <DialogBody>
+          <p className="text-sm text-foreground">
+            The room goes back on the market straight away and another student can reserve it.
+          </p>
+          {error && (
+            <p role="alert" className="mt-3 text-sm font-semibold text-destructive">
+              {error}
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+            Keep it
+          </Button>
+          <Button type="button" variant="destructive" disabled={pending} onClick={cancel}>
+            {pending ? "Cancelling…" : "Cancel reservation"}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    </>
   );
 }
 
 function MoveInButton({ reservationId }: { reservationId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function confirm() {
+    setError(null);
     setPending(true);
     try {
       await api(`/reservations/${reservationId}/move-in`, { method: "POST" });
       router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't confirm your move-in. Try again."));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <Button type="button" size="sm" disabled={pending} onClick={confirm}>
-      {pending ? "Confirming…" : "Confirm move-in"}
-    </Button>
+    <div className="flex flex-col items-end gap-1">
+      <Button type="button" size="sm" disabled={pending} onClick={confirm}>
+        {pending ? "Confirming…" : "Confirm move-in"}
+      </Button>
+      {error && (
+        <p role="alert" className="max-w-48 text-right text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
-function ReservationCard({ reservation }: { reservation: StudentReservationView }) {
-  const countdown = formatCountdown(reservation.reservedExpiresAt);
+function ReservationCard({
+  reservation,
+  highlighted,
+  now,
+}: {
+  reservation: StudentReservationView;
+  highlighted: boolean;
+  now: number | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const heldUntil = reservation.status === "reserved" ? reservation.reservedExpiresAt : null;
+
+  useEffect(() => {
+    if (highlighted) ref.current?.scrollIntoView({ block: "center" });
+  }, [highlighted]);
 
   return (
-    <Card>
-      <CardContent className="flex flex-wrap items-start justify-between gap-3 p-5">
-        <div className="min-w-0">
-          <Link
-            href={`/listings/${reservation.listingId}`}
-            className="font-semibold text-foreground hover:underline"
-          >
-            {reservation.propertyName}
-          </Link>
-          <p className="text-sm text-muted-foreground">{reservation.propertyStreetAddress}</p>
+    <div ref={ref}>
+      <Card className={cn(highlighted && "ring-2 ring-teal-600 ring-offset-2 ring-offset-background")}>
+        <CardContent className="flex flex-wrap items-start justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <Link
+              href={`/listings/${reservation.listingId}`}
+              className="font-semibold text-foreground hover:underline"
+            >
+              {reservation.propertyName}
+            </Link>
+            <p className="text-sm text-muted-foreground">{reservation.propertyStreetAddress}</p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <StatusChip tone={STATUS_TONE[reservation.status]}>
-              {STATUS_LABEL[reservation.status]}
-            </StatusChip>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <StatusChip tone={STATUS_TONE[reservation.status]}>
+                {STATUS_LABEL[reservation.status]}
+              </StatusChip>
+              {highlighted && <StatusChip tone="success">Just reserved</StatusChip>}
+            </div>
+
+            <p className="mt-2 text-sm text-foreground">
+              {roomCategoryLabel(reservation.roomCategory)} ({reservation.bedLabel}) · sleeps{" "}
+              {reservation.roomCapacity} · {formatUgx(reservation.rentPerTermUgx)} / semester
+              {reservation.depositUgx != null && ` + ${formatUgx(reservation.depositUgx)} deposit`}
+            </p>
+            {heldUntil && (
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                Held for you until {formatDateTime(heldUntil)}
+                {now !== null && ` · ${formatCountdown(heldUntil, now)}`}
+              </p>
+            )}
+            {(reservation.bookingFeeCollectedUgx || reservation.depositCollectedUgx) && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {[
+                  reservation.bookingFeeCollectedUgx
+                    ? `${formatUgx(reservation.bookingFeeCollectedUgx)} booking fee`
+                    : null,
+                  reservation.depositCollectedUgx
+                    ? `${formatUgx(reservation.depositCollectedUgx)} deposit`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" + ") + " recorded"}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ref {reservation.id.slice(0, 8).toUpperCase()}
+              {reservation.reservedAt && ` · Reserved ${formatDateTime(reservation.reservedAt)}`}
+            </p>
           </div>
-
-          <p className="mt-2 text-sm text-foreground">
-            {roomCategoryLabel(reservation.roomCategory)} ({reservation.bedLabel}) · sleeps{" "}
-            {reservation.roomCapacity} · {formatUgx(reservation.rentPerTermUgx)} / semester
-            {reservation.depositUgx != null && ` + ${formatUgx(reservation.depositUgx)} deposit`}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {reservation.status === "reserved" && countdown
-              ? `Reserved for you: ${countdown}`
-              : null}
-            {(reservation.bookingFeeCollectedUgx || reservation.depositCollectedUgx) &&
-              [
-                reservation.bookingFeeCollectedUgx
-                  ? `${formatUgx(reservation.bookingFeeCollectedUgx)} booking fee`
-                  : null,
-                reservation.depositCollectedUgx
-                  ? `${formatUgx(reservation.depositCollectedUgx)} deposit`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" + ") + " recorded"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {reservation.status === "reserved" && <CancelButton reservationId={reservation.id} />}
-          {reservation.status === "booked" && <MoveInButton reservationId={reservation.id} />}
-          {reservation.status !== "cancelled" &&
-            reservation.status !== "refunded" &&
-            reservation.status !== "expired" &&
-            reservation.status !== "released" && (
+          <div className="flex shrink-0 items-center gap-2">
+            {reservation.status === "reserved" && (
+              <CancelButton reservationId={reservation.id} propertyName={reservation.propertyName} />
+            )}
+            {reservation.status === "booked" && <MoveInButton reservationId={reservation.id} />}
+            {LIVE_STATUSES.has(reservation.status) && (
               <MessageButton reservationId={reservation.id} messagesHref="/messages" />
             )}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-export function ReservationsList({ reservations }: { reservations: StudentReservationView[] }) {
+// Live reservations first; within each group the API's newest-first order.
+export function sortLiveFirst(reservations: StudentReservationView[]): StudentReservationView[] {
+  return [...reservations].sort(
+    (a, b) => Number(LIVE_STATUSES.has(b.status)) - Number(LIVE_STATUSES.has(a.status)),
+  );
+}
+
+export function ReservationsList({
+  reservations,
+  highlightId,
+}: {
+  reservations: StudentReservationView[];
+  highlightId?: string;
+}) {
+  const now = useMinuteNow();
+
   return (
     <div className="mt-6 space-y-3">
-      {reservations.map((reservation) => (
-        <ReservationCard key={reservation.id} reservation={reservation} />
+      {sortLiveFirst(reservations).map((reservation) => (
+        <ReservationCard
+          key={reservation.id}
+          reservation={reservation}
+          highlighted={reservation.id === highlightId}
+          now={now}
+        />
       ))}
     </div>
   );

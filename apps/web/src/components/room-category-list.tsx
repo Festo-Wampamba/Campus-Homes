@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BedDouble, Images } from "lucide-react";
-import type { ListingDetailResponse, ListingPhoto } from "@campushomes/shared";
+import { MAX_ACTIVE_RESERVATIONS, type ListingDetailResponse, type ListingPhoto } from "@campushomes/shared";
 
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
 import { photosForRoomType } from "@/lib/room-type-photos";
@@ -123,6 +123,11 @@ export function RoomCategoryList({
 
   return (
     <>
+      {canReserve && (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Reserving is free. You can hold up to {MAX_ACTIVE_RESERVATIONS} rooms at a time.
+        </p>
+      )}
       <ul className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {groups.map((group) => (
           <li
@@ -194,6 +199,8 @@ export function RoomCategoryList({
                     bedId={group.firstAvailableBedId}
                     listingId={listingId}
                     needsProfile={needsProfile}
+                    propertyName={propertyName}
+                    roomLabel={`${roomCategoryLabel(group.category)}${group.selfContained ? ", self-contained" : ""}`}
                   />
                 )}
               </div>

@@ -8,8 +8,12 @@ import { ReservationsList } from "./reservations-list";
 
 export const metadata: Metadata = { title: "My reservations" };
 
-export default async function ReservationsPage() {
-  const reservations = await getMyReservations();
+export default async function ReservationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
+  const [reservations, { new: justReservedId }] = await Promise.all([getMyReservations(), searchParams]);
 
   return (
     <>
@@ -31,7 +35,7 @@ export default async function ReservationsPage() {
           />
         </div>
       ) : (
-        <ReservationsList reservations={reservations} />
+        <ReservationsList reservations={reservations} highlightId={justReservedId} />
       )}
     </>
   );

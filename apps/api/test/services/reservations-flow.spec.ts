@@ -291,6 +291,11 @@ describe('reserve -> book -> move-in (bed-level state machine, §6-8)', () => {
     expect(replay.id).toBe(first.rows[0].id);
   });
 
+  it("lists the student's reservation with when it was reserved", async () => {
+    const rows = (await reservationsService.mine(studentCtx(student1))) as { status: string; reservedAt: Date | null }[];
+    expect(rows.find((r) => r.status === 'reserved')?.reservedAt).toBeInstanceOf(Date);
+  });
+
   it('rejects a second live reservation on the same bed', async () => {
     await expect(
       reservationsService.reserve(studentCtx(student2), {

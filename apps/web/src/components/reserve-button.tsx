@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { UniversitySelectField } from "@/components/university-select-field";
 import { api, ApiError } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
+
+type Reserved = { id: string; reservedAt: string | null; reservedExpiresAt: string | null };
+
+function holdHours(reserved: Reserved): number | null {
+  if (!reserved.reservedAt || !reserved.reservedExpiresAt) return null;
+  return Math.round((Date.parse(reserved.reservedExpiresAt) - Date.parse(reserved.reservedAt)) / 3_600_000);
+}
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -27,16 +35,21 @@ export function ReserveButton({
   bedId,
   listingId,
   needsProfile,
+  propertyName,
+  roomLabel,
 }: {
   bedId: string;
   listingId: string;
   needsProfile: boolean;
+  propertyName: string;
+  roomLabel: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProfileStep, setShowProfileStep] = useState(false);
   const [university, setUniversity] = useState<University | "">("");
+  const [reserved, setReserved] = useState<Reserved | null>(null);
 
   async function startReserve() {
     setError(null);
@@ -44,11 +57,14 @@ export function ReserveButton({
     try {
       // Reserve is a 24h temporary claim (§6) — landlord Books it offline,
       // no payment/checkout step here at all.
-      await api("/reservations/reserve", {
+      // The hold length is read from the response, not assumed: admins can
+      // change reservation_hold_hours.
+      const result = await api<Reserved>("/reservations/reserve", {
         method: "POST",
         body: JSON.stringify({ bedId, listingId, idempotencyKey: crypto.randomUUID() }),
       });
-      router.push("/reservations");
+      setReserved(result);
+      setPending(false);
     } catch (err) {
       setError(errorMessage(err, "Couldn't start your reservation. Try again."));
       setPending(false);
@@ -110,6 +126,59 @@ export function ReserveButton({
             {pending ? "Reserving…" : "Continue and reserve"}
           </Button>
         </DialogFooter>
+      </Dialog>
+      <Dialog
+        open={reserved !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setReserved(null);
+          // The bed just left the available pool; re-read the room list.
+          router.refresh();
+        }}
+      >
+        {reserved && (
+          <>
+            <DialogHeader
+              title="Room reserved for you"
+              description={`${propertyName} · ${roomLabel}`}
+              onClose={() => {
+                setReserved(null);
+                router.refresh();
+              }}
+            />
+            <DialogBody>
+              <div className="space-y-3 text-sm text-foreground">
+                {reserved.reservedExpiresAt && (
+                  <p className="rounded-lg bg-teal-50 p-3 font-semibold text-teal-900">
+                    {holdHours(reserved) !== null
+                      ? `We're holding this room for you for ${holdHours(reserved)} hours, until ${formatDateTime(reserved.reservedExpiresAt)}.`
+                      : `We're holding this room for you until ${formatDateTime(reserved.reservedExpiresAt)}.`}
+                  </p>
+                )}
+                <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+                  <li>Contact the landlord to view the room and agree rent and terms.</li>
+                  <li>The landlord confirms your booking. Pay them directly, not through CampusHomes.</li>
+                  <li>If nothing is confirmed before the hold ends, the room is released for other students.</li>
+                </ol>
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setReserved(null);
+                  router.refresh();
+                }}
+              >
+                Keep browsing
+              </Button>
+              <Button type="button" onClick={() => router.push(`/reservations?new=${reserved.id}`)}>
+                View my reservations
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </Dialog>
     </div>
   );
