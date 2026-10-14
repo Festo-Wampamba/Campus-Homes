@@ -44,7 +44,7 @@ function FeaturedCard({ row }: { row: ListingSearchResult }) {
             <SewingPinIcon className="size-3.5" />
             <span className="truncate">{row.street_address}</span>
           </p>
-          <h3 className="mt-2 truncate font-display text-lg font-semibold leading-snug transition-colors duration-300 group-hover:text-teal-700">
+          <h3 className="mt-2 line-clamp-2 font-display text-lg font-semibold leading-snug transition-colors duration-300 group-hover:text-teal-700">
             {row.name}
           </h3>
           <p className="mt-1.5 min-h-5 line-clamp-1 text-sm leading-5 text-muted-foreground">
