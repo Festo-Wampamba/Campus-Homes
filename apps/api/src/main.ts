@@ -62,6 +62,9 @@ async function bootstrap() {
   }));
   // Campus NAT puts many students behind one IP; each navigation beacons /events,
   // so it must not starve the same clients' real writes.
+  // Each question spends the shared Groq quota, so CampusHomes AI gets a
+  // tighter bucket than ordinary writes (still roomy for a campus NAT).
+  http.use('/api/v1/support/ask', writeRateLimit(app.get(REDIS), { limit: 20, windowSec: 60, namespace: 'support-ai' }));
   http.use('/api/v1/events', writeRateLimit(app.get(REDIS), { limit: 300, windowSec: 60, namespace: 'events' }));
   http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 300, windowSec: 60, skip: isEventsRequest }));
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {

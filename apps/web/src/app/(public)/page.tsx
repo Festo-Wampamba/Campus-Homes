@@ -14,7 +14,7 @@ import {
 import {
   campusSchema,
   listingSearchResultSchema,
-  MAX_ACTIVE_RESERVATIONS,
+  SUPPORT_FAQS,
   testimonialSchema,
   VERIFICATION_CHECKLIST_COMPONENTS,
   type Campus,
@@ -78,56 +78,6 @@ const CAMPUS_CARDS = [
   },
 ] as const;
 
-const FAQS = [
-  {
-    question: "How much does it cost to reserve a room?",
-    answer: "Reserving a room is free while the platform grows.",
-  },
-  {
-    question: "What is the difference between reserving and booking?",
-    answer:
-      "Reserving holds a bed for you for 24 hours, for free, while you view the room and agree terms with the landlord. It is not final: you can cancel it, and it ends on its own if the 24 hours run out. Booking makes the bed yours. After you agree terms, you tap Request booking in My reservations and the landlord confirms it. A booking does not expire, only the landlord can release it, and rent is paid to the landlord directly.",
-  },
-  {
-    question: "How long is a room held for me?",
-    answer:
-      "24 hours from the moment you reserve. My reservations shows the time left. If the hold runs out, it ends on its own and the bed goes back on the list for other students.",
-  },
-  {
-    question: "How many rooms can I reserve at once?",
-    answer: `Up to ${MAX_ACTIVE_RESERVATIONS}, and one of each room type per hostel, counting both rooms on hold and rooms your landlord has confirmed. Cancel a hold you no longer want to free a slot. A confirmed booking can only be released by the landlord; contact support if you need help reaching them.`,
-  },
-  {
-    question: "How do I book a room?",
-    answer:
-      "Reserve it first (free). After you have viewed it and agreed terms with the landlord, open My reservations and tap Request booking. The landlord then confirms your booking.",
-  },
-  {
-    question: "Do I pay rent through CampusHomes?",
-    answer:
-      "No. Rent, deposits and tenancy agreements stay directly between you and the landlord, paid the way you agree with them. CampusHomes does not collect or mark up your rent.",
-  },
-  {
-    question: "Can I see the room before I reserve?",
-    answer:
-      "Yes. Sign in, open the listing and choose Request a viewing to ask the landlord for a time that suits you both.",
-  },
-  {
-    question: "What does Verified actually mean?",
-    answer:
-      "A CampusHomes inspector physically visited the property and confirmed location, rooms, amenities, photos, landlord identity and safety before publication.",
-  },
-  {
-    question: "Can I cancel a reservation?",
-    answer:
-      "A room on hold, yes: cancel it any time from My reservations. You confirm first, and the bed is released straight away. Once the landlord has confirmed your booking, only they can release it; contact support if you need help reaching them.",
-  },
-  {
-    question: "How do I get help?",
-    answer:
-      "Sign in and open Support to send our team a question. You can attach one of your reservations so we know which one you mean, and the reply appears on the same page.",
-  },
-];
 
 
 async function getFeaturedListings() {
@@ -451,7 +401,7 @@ export default async function HomePage() {
             </h2>
           </div>
           <div className="divide-y divide-border border-y border-border">
-            {FAQS.map((faq) => (
+            {SUPPORT_FAQS.map((faq) => (
               <details key={faq.question} className="group py-1">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-5 py-5 font-display text-base font-semibold marker:content-none sm:text-lg">
                   {faq.question}
