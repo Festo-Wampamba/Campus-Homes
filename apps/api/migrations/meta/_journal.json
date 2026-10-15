@@ -442,6 +442,13 @@
       "when": 1791400000000,
       "tag": "0063_inquiry_reservation_link",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0064_reservation_booking_request",
+      "breakpoints": true
     }
   ]
 }

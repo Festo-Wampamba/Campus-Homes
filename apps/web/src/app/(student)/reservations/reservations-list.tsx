@@ -67,6 +67,41 @@ function formatCountdown(reservedExpiresAt: string, now: number): string {
   return `${hours}h ${minutes}m left`;
 }
 
+// The student asks the landlord to confirm (book) the room; the landlord
+// still books it from their side after agreeing terms and payment.
+function RequestBookingButton({ reservationId, requestedAt }: { reservationId: string; requestedAt: string | null }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (requestedAt) return <StatusChip tone="neutral">Booking requested</StatusChip>;
+
+  async function request() {
+    setError(null);
+    setPending(true);
+    try {
+      await api(`/reservations/${reservationId}/request-booking`, { method: "POST" });
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't send your booking request. Try again."));
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button type="button" size="sm" disabled={pending} onClick={() => void request()}>
+        {pending ? "Sending…" : "Request booking"}
+      </Button>
+      {error && (
+        <p role="alert" className="max-w-48 text-right text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CancelButton({ reservationId, propertyName }: { reservationId: string; propertyName: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -219,7 +254,10 @@ function ReservationCard({
               {reservation.reservedAt && ` · Reserved ${formatDateTime(reservation.reservedAt)}`}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {reservation.status === "reserved" && (
+              <RequestBookingButton reservationId={reservation.id} requestedAt={reservation.bookingRequestedAt ?? null} />
+            )}
             {reservation.status === "reserved" && (
               <CancelButton reservationId={reservation.id} propertyName={reservation.propertyName} />
             )}

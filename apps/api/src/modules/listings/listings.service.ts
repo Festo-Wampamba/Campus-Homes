@@ -388,6 +388,7 @@ export class ListingsService {
               status: r?.status ?? null,
               reservedExpiresAt: r?.reservedExpiresAt ?? null,
               bookedAt: r?.bookedAt ?? null,
+              bookingRequestedAt: r?.bookingRequestedAt ?? null,
               bookingFeeCollectedUgx: r?.bookingFeeCollectedUgx ?? null,
               depositCollectedUgx: r?.depositCollectedUgx ?? null,
             };

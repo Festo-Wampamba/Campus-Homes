@@ -41,6 +41,27 @@ async function render(availability: { id: string; unit_id: string; available: bo
   );
 }
 
+async function renderForStudent(myLiveBeds: Map<string, "reserved" | "booked">, units = [UNIT]) {
+  await act(async () =>
+    root.render(
+      <RoomCategoryList
+        listingId="listing-1"
+        units={units}
+        availability={[
+          { id: BED_A, unit_id: UNIT.id, available: true, held: false },
+          { id: BED_B, unit_id: UNIT.id, available: false, held: true },
+        ]}
+        photos={[]}
+        unitPhotos={[]}
+        propertyName="Kikoni Rise"
+        canReserve
+        needsProfile={false}
+        myLiveBeds={myLiveBeds}
+      />,
+    ),
+  );
+}
+
 beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -78,5 +99,20 @@ describe("RoomCategoryList", () => {
     ]);
 
     expect(container.textContent).toContain("Fully booked");
+  });
+
+  it("shows Reserved instead of Reserve on a room type the student already holds", async () => {
+    await renderForStudent(new Map([[BED_B, "reserved"]]));
+
+    const labels = [...container.querySelectorAll("a, button")].map((el) => el.textContent?.trim());
+    expect(labels).toEqual(["Reserved"]);
+  });
+
+  it("shows Reserved on every price row of a held room type", async () => {
+    const pricier = { ...UNIT, id: "44444444-4444-4444-8444-444444444444", label: "D2", pricePerTermUgx: 1_200_000 };
+    await renderForStudent(new Map([[BED_B, "reserved"]]), [UNIT, pricier]);
+
+    const labels = [...container.querySelectorAll("a, button")].map((el) => el.textContent?.trim());
+    expect(labels).toEqual(["Reserved", "Reserved"]);
   });
 });

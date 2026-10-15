@@ -77,7 +77,7 @@ export type Reservation = z.infer<typeof reservationSchema>;
 
 // Live ('reserved' or 'booked') reservations one student may hold at once.
 // The API enforces it; the web states it next to the Reserve buttons.
-export const MAX_ACTIVE_RESERVATIONS = 3;
+export const MAX_ACTIVE_RESERVATIONS = 5;
 
 // What a student sees about their own reservation — the bare row plus
 // enough context to tell one reservation apart from another (property name,
@@ -94,6 +94,8 @@ export const studentReservationViewSchema = reservationSchema.extend({
   depositUgx: ugxAmount.nullable(),
   // Optional so a web build that ships before its API still parses the list.
   reservedAt: z.iso.datetime().nullable().optional(),
+  // Set once the student asked the landlord to confirm the booking.
+  bookingRequestedAt: z.iso.datetime().nullable().optional(),
 });
 export type StudentReservationView = z.infer<typeof studentReservationViewSchema>;
 

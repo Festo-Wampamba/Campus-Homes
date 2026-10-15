@@ -12,6 +12,7 @@ import { listingPhotoUrl } from "@/lib/cloudinary";
 import { formatAddress, formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
+import { getMyReservations } from "@/lib/reservations";
 import { getStudentProfile } from "@/lib/student";
 import { cn } from "@/lib/utils";
 import { AmenityList } from "@/components/listing/amenity-list";
@@ -71,10 +72,17 @@ export default async function ListingDetailPage({
   const [detail, session] = await Promise.all([getDetail(listingId), getServerSession()]);
   if (!detail) notFound();
   const isStudent = session?.user.status === "active" && session.access.workspaces.includes("student");
-  const [studentProfile, savedListings] = await Promise.all([
+  const [studentProfile, savedListings, myReservations] = await Promise.all([
     isStudent ? getStudentProfile() : Promise.resolve(null),
     isStudent ? getSavedListings() : Promise.resolve([]),
+    isStudent ? getMyReservations() : Promise.resolve([]),
   ]);
+  // Beds this student already holds, so their room type shows as reserved.
+  const myLiveBeds = new Map(
+    myReservations
+      .filter((r) => r.status === "reserved" || r.status === "booked")
+      .map((r) => [r.bedId, r.status as "reserved" | "booked"]),
+  );
   // Any signed-in student can reserve immediately — a missing `students` row
   // (university/year, required by the reservations FK) is collected inline
   // by ReserveButton's quick-registration dialog on first reserve, not as a
@@ -218,6 +226,7 @@ export default async function ListingDetailPage({
               propertyName={property.name}
               canReserve={canReserve}
               needsProfile={needsProfile}
+              myLiveBeds={myLiveBeds}
             />
           </section>
 

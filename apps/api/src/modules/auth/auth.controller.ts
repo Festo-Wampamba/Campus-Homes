@@ -168,6 +168,14 @@ export class AuthController {
         }
         return fail('mfa_required');
       }
+      // Students only (Festo, 2026-10-15): no 2-step prompt. Best-effort;
+      // failing it only means Logto may offer the skippable prompt again.
+      if (!staffFlow && provisioned.role === 'student') {
+        void this.management.skipMfaPrompt(claims.sub).catch((error: unknown) => this.logger.warn(JSON.stringify({
+          event: 'auth.callback.mfa_skip_failed', requestId,
+          error: redactSecrets(error instanceof Error ? error.message : String(error)),
+        })));
+      }
       const { token } = await this.sessionStore.create(provisioned.id, req.ip, req.headers['user-agent'], assurance);
       // Signing in on a browser that already has a session (possibly another
       // account, e.g. a landlord switching to their staff account) replaces

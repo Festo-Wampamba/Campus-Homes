@@ -56,6 +56,12 @@ export class ReservationsController {
     return this.reservationsService.cancel(rlsCtx(req), id);
   }
 
+  @Post(':id/request-booking')
+  @Roles('student')
+  requestBooking(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservationsService.requestBooking(rlsCtx(req), id);
+  }
+
   @Post(':id/move-in')
   @Roles('student', 'landlord', 'custodian')
   confirmMoveIn(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {

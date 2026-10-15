@@ -67,7 +67,7 @@ describe("ReserveButton after a successful reservation", () => {
   });
 
   it("says when the hold ends, in Kampala time", () => {
-    expect(container.textContent).toContain("until Thu 15 Oct, 14:30");
+    expect(container.textContent).toContain("until Thu 15 Oct, 2:30 pm");
   });
 
   it("opens My reservations on the new reservation", async () => {

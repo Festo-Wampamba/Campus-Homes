@@ -13,6 +13,7 @@ import { assertStubAllowed } from '../../config/integration-guard';
 import { REDIS } from '../../db/redis.module';
 import { AuthModule } from '../auth/auth.module';
 import { FinanceModule } from '../finance/finance.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { OpsModule } from '../ops/ops.module';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
@@ -20,7 +21,7 @@ import { PAYMENTS, RESERVATION_EXPIRY_QUEUE, RESERVATION_EXPIRY_QUEUE_NAME } fro
 import { WebhookController } from './webhook.controller';
 
 @Module({
-  imports: [AuthModule, OpsModule, FinanceModule],
+  imports: [AuthModule, OpsModule, FinanceModule, NotificationsModule],
   controllers: [ReservationsController, WebhookController],
   providers: [
     ReservationsService,

@@ -52,12 +52,24 @@ describe("ReservationsList", () => {
   it("shows when the hold ends", () => {
     const html = renderToStaticMarkup(<ReservationsList reservations={[RESERVED_OLDER]} />);
 
-    expect(html).toContain("Held for you until Thu 15 Oct, 14:30");
+    expect(html).toContain("Held for you until Thu 15 Oct, 2:30 pm");
   });
 
   it("shows a short reference for support", () => {
     const html = renderToStaticMarkup(<ReservationsList reservations={[RESERVED_OLDER]} />);
 
     expect(html).toContain("Ref BBBB0000");
+  });
+
+  it("offers Request booking on a room on hold", () => {
+    const html = renderToStaticMarkup(<ReservationsList reservations={[RESERVED_OLDER]} />);
+    expect(html).toContain("Request booking");
+  });
+
+  it("shows the booking request once sent", () => {
+    const html = renderToStaticMarkup(
+      <ReservationsList reservations={[{ ...RESERVED_OLDER, bookingRequestedAt: "2026-10-15T08:00:00.000Z" }]} />,
+    );
+    expect(html).toContain("Booking requested");
   });
 });

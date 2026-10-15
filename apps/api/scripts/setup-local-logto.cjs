@@ -127,7 +127,7 @@ async function configureSignIn(api) {
   await api('PATCH', '/sign-in-exp', {
     signUp: { identifiers: ['email'], password: false, verify: true },
     signIn: { methods: [{ identifier: 'email', password: true, verificationCode: true, isPasswordPrimary: false }] },
-    mfa: { factors: ['Totp', 'BackupCode'], policy: 'PromptAtSignInAndSignUp' },
+    mfa: { factors: ['Totp', 'BackupCode'], policy: 'PromptOnlyAtSignIn' },
   });
 }
 
