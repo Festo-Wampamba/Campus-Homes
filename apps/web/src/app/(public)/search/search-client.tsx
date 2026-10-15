@@ -55,7 +55,7 @@ const GENDER_OPTIONS = [
 
 const ROOM_TYPE_OPTIONS = [
   { value: "", label: "Any room type" },
-  // "Any bathroom" filters self-contained separately.
+  // The bathroom select filters self-contained separately.
   ...ROOM_CATEGORIES.filter((c) => c !== "other" && c !== "self_contained").map((category) => ({
     value: category,
     label: humanizeKey(category),
@@ -302,16 +302,17 @@ export function SearchClient() {
                 "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
               )}
             >
-              <option value="">Any bathroom</option>
+              {/* Placeholder only: the list itself offers the two real choices. */}
+              <option value="" disabled hidden>
+                Bathroom
+              </option>
               <option value="true">Self-contained</option>
               <option value="false">Not self-contained</option>
             </select>
           </div>
-          {hasFilters && (
-            <Button variant="link" size="sm" className="self-end" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          )}
+          <Button variant="secondary" size="sm" className="self-end" disabled={!hasFilters} onClick={clearFilters}>
+            Clear filters
+          </Button>
         </div>
 
         {isPending && bounds !== null && (

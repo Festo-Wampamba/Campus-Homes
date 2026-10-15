@@ -239,6 +239,8 @@ export const propertyRoomBedSchema = z.object({
   status: z.enum(RESERVATION_STATUSES).nullable(),
   reservedExpiresAt: z.iso.datetime().nullable(),
   bookedAt: z.iso.datetime().nullable(),
+  // The student asked to book (optional: rolling deploys).
+  bookingRequestedAt: z.iso.datetime().nullable().optional(),
   bookingFeeCollectedUgx: z.number().nullable(),
   depositCollectedUgx: z.number().nullable(),
 });

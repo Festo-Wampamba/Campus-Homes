@@ -157,7 +157,7 @@ export function ReserveButton({
                 )}
                 <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
                   <li>Contact the landlord to view the room and agree rent and terms.</li>
-                  <li>The landlord confirms your booking. Pay them directly, not through CampusHomes.</li>
+                  <li>Once you agree, tap Request booking in My reservations. The landlord confirms it; pay them directly, not through CampusHomes.</li>
                   <li>If nothing is confirmed before the hold ends, the room is released for other students.</li>
                 </ol>
               </div>

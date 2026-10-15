@@ -67,12 +67,12 @@ function clearFiltersButtons() {
 }
 
 describe("SearchClient", () => {
-  it("hides Clear filters until a filter is set", async () => {
+  it("disables Clear filters until a filter is set", async () => {
     mockApi.mockResolvedValue([]);
 
     await renderSearch();
 
-    expect(clearFiltersButtons()).toHaveLength(0);
+    expect(clearFiltersButtons()[0].disabled).toBe(true);
   });
 
   it("says no hostels match the filters when a filter empties the results", async () => {

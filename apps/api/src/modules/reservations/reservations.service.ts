@@ -21,6 +21,7 @@ import { REDIS } from '../../db/redis.module';
 import { assertStaffScope } from '../auth/staff-scope';
 import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
 export const DEFAULT_RESERVE_HOURS = 24;
@@ -49,6 +50,8 @@ export class ReservationsService {
     private readonly audit: AuditService,
     @Optional() @Inject(REDIS) private readonly redis: Redis | null,
     @Optional() @Inject(RESERVATION_EXPIRY_QUEUE) private readonly expiryQueue: Queue | null,
+    // Explicit token: a `| null` union emits no usable type metadata for DI.
+    @Optional() @Inject(NotificationsService) private readonly notifications: NotificationsService | null = null,
   ) {}
 
   /** Landlord (own property) or an actively-assigned custodian — the two
@@ -175,17 +178,7 @@ export class ReservationsService {
         // limit, so neither depends on the expiry job having already run.
         await client.query(EXPIRE_OVERDUE_HOLDS_SQL);
 
-        // At most MAX_ACTIVE_RESERVATIONS live reservations per student,
-        // platform-wide — live means 'reserved' or 'booked'.
-        const activeCountRes = await client.query(
-          `SELECT count(*) FROM reservations WHERE student_id = $1 AND status IN ('reserved', 'booked')`,
-          [ctx.userId],
-        );
-        if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
-          throw new ConflictException(
-            `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations. Cancel or complete one before reserving another.`,
-          );
-        }
+        await this.assertStudentCanTakeRoom(client, ctx.userId, input.bedId, 'student');
 
         // reservations.student_id FKs to students.user_id — a signed-up
         // student who never completed their profile would otherwise hit a
@@ -334,18 +327,9 @@ export class ReservationsService {
 
         await this.assertNotLockedInByCurrentOccupancy(client, studentId);
 
-        // Walk-in creates a brand-new active reservation for this student —
-        // the same platform-wide cap reserve() enforces (§12-13), or a
-        // landlord could Book past it for a student who's already at 3.
-        const activeCountRes = await client.query(
-          `SELECT count(*) FROM reservations WHERE student_id = $1 AND status IN ('reserved', 'booked')`,
-          [studentId],
-        );
-        if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
-          throw new ConflictException(
-            `This student already has ${MAX_ACTIVE_RESERVATIONS} active reservations. Release or complete one before booking another.`,
-          );
-        }
+        // Walk-in creates a brand-new active reservation for this student, so
+        // the same per-student rules as reserve() apply (§12-13).
+        await this.assertStudentCanTakeRoom(client, studentId, bedId, 'landlord');
       }
 
       const now = new Date();
@@ -468,6 +452,98 @@ export class ReservationsService {
     return { outcome };
   }
 
+  /** Per-student rules for a new live reservation: at most
+   * MAX_ACTIVE_RESERVATIONS, and one per room type (category + self-contained)
+   * per hostel. The transaction-scoped advisory lock serializes concurrent
+   * requests for one student, so two beds can't both pass the checks before
+   * either commits (the DB's uniqueness is only per bed). */
+  private async assertStudentCanTakeRoom(
+    client: PoolClient,
+    studentId: string,
+    bedId: string,
+    actor: 'student' | 'landlord',
+  ): Promise<void> {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('reservation-student:' || $1, 0))`, [studentId]);
+    const activeCountRes = await client.query(
+      `SELECT count(*) FROM reservations WHERE student_id = $1 AND status IN ('reserved', 'booked')`,
+      [studentId],
+    );
+    if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
+      throw new ConflictException(
+        actor === 'student'
+          ? `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations, the most you can hold at once. Cancel a room on hold in My reservations to reserve this one.`
+          : `This student already has ${MAX_ACTIVE_RESERVATIONS} active reservations. Release or complete one before booking another.`,
+      );
+    }
+    const sameRoomRes = await client.query(
+      `SELECT 1
+       FROM reservations r
+       JOIN beds rb ON rb.id = r.bed_id
+       JOIN units ru ON ru.id = rb.unit_id
+       JOIN beds tb ON tb.id = $2
+       JOIN units tu ON tu.id = tb.unit_id
+       WHERE r.student_id = $1 AND r.status IN ('reserved', 'booked')
+         AND ru.property_id = tu.property_id
+         AND ru.room_category = tu.room_category
+         AND ru.self_contained = tu.self_contained
+       LIMIT 1`,
+      [studentId, bedId],
+    );
+    if (sameRoomRes.rowCount) {
+      throw new ConflictException(
+        actor === 'student'
+          ? 'You already have this room reserved. See My reservations.'
+          : 'This student already holds a room of this type here.',
+      );
+    }
+  }
+
+  /** Student asks the landlord to confirm (book) a room they hold. Stamped
+   * once; asking again is a no-op, so the landlord isn't notified twice. */
+  async requestBooking(ctx: RlsContext, reservationId: string) {
+    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const res = await client.query<{
+        status: string; booking_requested_at: Date | null; landlord_id: string; property_name: string; room_category: string;
+      }>(
+        `SELECT r.status, r.booking_requested_at, p.landlord_id, p.name AS property_name, u.room_category
+         FROM reservations r
+         JOIN beds b ON b.id = r.bed_id
+         JOIN units u ON u.id = b.unit_id
+         JOIN properties p ON p.id = u.property_id
+         WHERE r.id = $1 AND r.student_id = $2`,
+        [reservationId, ctx.userId],
+      );
+      const row = res.rows[0];
+      if (!row) throw new NotFoundException('Reservation not found');
+      if (row.status !== 'reserved') {
+        throw new ConflictException(`Cannot request booking for a reservation that is ${row.status}`);
+      }
+      if (row.booking_requested_at) return { requestedAt: row.booking_requested_at, newlyRequested: false, row };
+      const updated = await client.query<{ booking_requested_at: Date }>(
+        `UPDATE reservations SET booking_requested_at = now(), updated_at = now() WHERE id = $1 RETURNING booking_requested_at`,
+        [reservationId],
+      );
+      return { requestedAt: updated.rows[0]!.booking_requested_at, newlyRequested: true, row };
+    });
+
+    if (result.newlyRequested) {
+      await this.audit.record(ctx, 'reservation.request_booking', 'reservation', reservationId, {});
+      const room = result.row.room_category.replace(/_/g, ' ');
+      // Best-effort: the request is stored and shows on the landlord's property
+      // page either way.
+      for (const channel of ['in_app', 'sms'] as const) {
+        this.notifications
+          ?.notify(result.row.landlord_id, 'reservation.booking_requested', channel, {
+            reservationId,
+            message: `A student asked to book a ${room} room at ${result.row.property_name}. Confirm it from the property's rooms.`,
+            href: '/landlord/properties',
+          })
+          .catch((err: unknown) => console.error('[reservations] booking request notify failed:', err));
+      }
+    }
+    return { bookingRequestedAt: result.requestedAt };
+  }
+
   /** Move-in confirmation (§8): student or the bed's landlord/custodian.
    * Only a Booked reservation can move in. */
   async confirmMoveIn(ctx: RlsContext, reservationId: string) {
@@ -522,6 +598,7 @@ export class ReservationsService {
            r.id, r.student_id AS "studentId", r.bed_id AS "bedId",
            r.listing_version_id AS "listingVersionId", r.status,
            r.reserved_at AS "reservedAt", r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
+           r.booking_requested_at AS "bookingRequestedAt",
            r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
            l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",

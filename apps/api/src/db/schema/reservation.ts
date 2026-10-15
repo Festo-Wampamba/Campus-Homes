@@ -57,6 +57,8 @@ export const reservations = pgTable(
     // 24h from reserve; cleared once Booked (a booked bed never auto-expires).
     reservedExpiresAt: timestamp('reserved_expires_at', { withTimezone: true }),
 
+    // Student asked the landlord to confirm the booking (0064).
+    bookingRequestedAt: timestamp('booking_requested_at', { withTimezone: true }),
     bookedAt: timestamp('booked_at', { withTimezone: true }),
     // The landlord/custodian who clicked Book — null for a still-Reserved row.
     bookedBy: uuid('booked_by').references(() => users.id),

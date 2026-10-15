@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 
 import { getServerSession } from "@/lib/session";
@@ -19,6 +20,9 @@ const PAGE_LINKS: NavLink[] = [
 
 async function SiteHeader() {
   const session = await getServerSession();
+  // Sign-in returns to the page it was opened from (the home page needs no next).
+  const path = (await headers()).get("x-campushomes-path") ?? "/";
+  const signInHref = path === "/" ? "/sign-in" : `/sign-in?next=${encodeURIComponent(path)}`;
   const hasLandlordAccess = session?.access.workspaces.includes("landlord") ?? false;
   const landlordLink: NavLink = hasLandlordAccess
     ? { href: WORKSPACE_HOME.landlord, label: "Landlord" }
@@ -51,7 +55,7 @@ async function SiteHeader() {
             <AccountMenu user={session.user} access={session.access} />
           ) : (
             <Link
-              href="/sign-in"
+              href={signInHref}
               data-cta="header-sign-in"
               className="inline-flex h-10 items-center whitespace-nowrap rounded-lg border border-teal-900/25 px-4 text-sm font-bold text-teal-900 transition-colors duration-300 hover:border-teal-900 hover:bg-teal-900 hover:text-white sm:px-5 dark:border-border dark:text-foreground"
             >
