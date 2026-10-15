@@ -53,6 +53,11 @@ const GENDER_OPTIONS = [
   })),
 ];
 
+const BATHROOM_OPTIONS = [
+  { value: "true", label: "Self-contained" },
+  { value: "false", label: "Not self-contained" },
+];
+
 const ROOM_TYPE_OPTIONS = [
   { value: "", label: "Any room type" },
   // The bathroom select filters self-contained separately.
@@ -293,22 +298,30 @@ export function SearchClient() {
                 </option>
               ))}
             </select>
-            <select
-              value={selfContained}
-              onChange={(e) => setSelfContained(e.target.value)}
-              aria-label="Self-contained"
-              className={cn(
-                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10 col-span-2 @lg:col-span-1",
-                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
-            >
-              {/* Placeholder only: the list itself offers the two real choices. */}
-              <option value="" disabled hidden>
-                Bathroom
-              </option>
-              <option value="true">Self-contained</option>
-              <option value="false">Not self-contained</option>
-            </select>
+            {/* Two toggles, not a select: a select needs a third "Bathroom"
+                placeholder entry. Tapping the active one clears it. */}
+            <div role="group" aria-label="Bathroom" className="col-span-2 grid grid-cols-2 gap-2 @lg:col-span-3">
+              {BATHROOM_OPTIONS.map((opt) => {
+                const isActive = selfContained === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setSelfContained(isActive ? "" : opt.value)}
+                    className={cn(
+                      "h-11 rounded-md border px-3 text-sm font-semibold shadow-xs transition-colors duration-150 sm:h-10",
+                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      isActive
+                        ? "border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-300 dark:bg-teal-900/40 dark:text-teal-50"
+                        : "border-input bg-background text-foreground hover:bg-muted",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <Button variant="secondary" size="sm" className="self-end" disabled={!hasFilters} onClick={clearFilters}>
             Clear filters

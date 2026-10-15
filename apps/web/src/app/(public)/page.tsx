@@ -24,6 +24,7 @@ import {
 import { CampusListingsTabs } from "@/components/campus-listings-tabs";
 import { HomeMapPreview } from "@/components/home-map-preview";
 import { HomeSearch } from "@/components/home-search";
+import { SiteStructuredData } from "@/components/seo/site-structured-data";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { api } from "@/lib/api";
 import { UGANDA_BOUNDS } from "@/lib/campuses";
@@ -128,6 +129,7 @@ export default async function HomePage() {
 
   return (
     <>
+      <SiteStructuredData />
       <section className="relative isolate flex min-h-[34rem] flex-col overflow-hidden bg-teal-900 text-white sm:min-h-[39rem]">
         <div className="absolute inset-0">
           <Image

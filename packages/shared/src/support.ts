@@ -162,7 +162,7 @@ export const SUPPORT_MANUAL: SupportManualSection[] = [
     id: 'landlords',
     title: 'For landlords',
     steps: [
-      'Open For landlords, then Manage my properties to create a landlord account.',
+      'Open Sign in, then Landlord sign in, to create a landlord account (new landlords can also start from For landlords).',
       'Complete onboarding: your legal name, an ID document, and your first property with its room types, prices and photos.',
       'Our team reviews your details and inspects the property in person. Once it passes, the listing is published and appears in search.',
       'Manage Rooms keeps prices and free beds up to date. When a student taps Request booking, the bed shows "booking requested"; confirm it with Book.',

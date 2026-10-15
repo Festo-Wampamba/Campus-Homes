@@ -41,17 +41,28 @@ const montez = Montez({
   display: "swap",
 });
 
+// "Campus Homes" (spaced) is how many people search for the brand, so the
+// default title and description carry both spellings.
 const DESCRIPTION =
-  "Compare student hostels near Makerere University that a CampusHomes inspector has visited in person. See rooms, prices and amenities, and reserve for free.";
+  "CampusHomes (Campus Homes) lists student hostels near Makerere University that an inspector has visited in person. Compare rooms, prices and amenities, and reserve for free.";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(await getSiteUrl()),
+    applicationName: "CampusHomes",
     title: {
-      default: "CampusHomes | Inspected student hostels in Uganda",
+      default: "CampusHomes (Campus Homes) | Student hostels near Makerere",
       template: "%s · CampusHomes",
     },
     description: DESCRIPTION,
+    keywords: [
+      "CampusHomes",
+      "Campus Homes",
+      "student hostels Kampala",
+      "Makerere hostels",
+      "student accommodation Uganda",
+      "hostels near Makerere University",
+    ],
     openGraph: {
       type: "website",
       siteName: "CampusHomes",
