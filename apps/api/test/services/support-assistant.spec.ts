@@ -20,6 +20,16 @@ describe('askSupportAssistant', () => {
     expect(reply).toBe('24 hours.');
   });
 
+  it('removes Markdown bold the model adds despite the plain-text rule', async () => {
+    const reply = await askSupportAssistant(
+      ENV,
+      QUESTION,
+      groqAnswering('Tap **For landlords**, then **Manage my properties**.') as unknown as typeof fetch,
+    );
+
+    expect(reply).toBe('Tap For landlords, then Manage my properties.');
+  });
+
   it('grounds the question in the user manual', async () => {
     const fetchMock = groqAnswering('24 hours.');
     await askSupportAssistant(ENV, QUESTION, fetchMock as unknown as typeof fetch);
