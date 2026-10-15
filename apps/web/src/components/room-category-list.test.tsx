@@ -74,31 +74,22 @@ afterEach(() => {
 });
 
 describe("RoomCategoryList", () => {
-  it("counts a bed on a 24h hold as reserved", async () => {
+  it("does not show other students' holds", async () => {
     await render([
       { id: BED_A, unit_id: UNIT.id, available: true, held: false },
       { id: BED_B, unit_id: UNIT.id, available: false, held: true },
     ]);
 
-    expect(container.textContent).toContain("1 reserved · 24h hold");
+    expect(container.textContent).not.toMatch(/reserved/i);
   });
 
-  it("says a room type is reserved for now, not fully booked, when only holds block it", async () => {
+  it("says no beds are free when none are", async () => {
     await render([
       { id: BED_A, unit_id: UNIT.id, available: false, held: true },
-      { id: BED_B, unit_id: UNIT.id, available: false, held: true },
-    ]);
-
-    expect(container.textContent).toContain("All reserved for now");
-  });
-
-  it("still says fully booked when the beds are taken, not held", async () => {
-    await render([
-      { id: BED_A, unit_id: UNIT.id, available: false, held: false },
       { id: BED_B, unit_id: UNIT.id, available: false, held: false },
     ]);
 
-    expect(container.textContent).toContain("Fully booked");
+    expect(container.textContent).toContain("No beds free right now");
   });
 
   it("shows Reserved instead of Reserve on a room type the student already holds", async () => {

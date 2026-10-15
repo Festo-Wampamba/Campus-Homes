@@ -58,6 +58,10 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
         >
           {isStudent && (
             <>
+              <Link role="menuitem" href="/dashboard" className={menuItemClass} onClick={() => setOpen(false)}>
+                <LayoutDashboard aria-hidden className="size-4 text-muted-foreground" />
+                My dashboard
+              </Link>
               <Link role="menuitem" href="/reservations" className={menuItemClass} onClick={() => setOpen(false)}>
                 <UserIcon aria-hidden className="size-4 text-muted-foreground" />
                 My reservations
