@@ -1,4 +1,4 @@
-import { Calendar, CalendarCheck, Clock, Heart, LifeBuoy, MessageCircle, Search, User } from "lucide-react";
+import { Calendar, CalendarCheck, Clock, Heart, LayoutDashboard, LifeBuoy, MessageCircle, Search, User } from "lucide-react";
 
 import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
@@ -15,6 +15,7 @@ export default async function StudentLayout({
       homeHref="/"
       notificationsEndpoint="/notifications"
       nav={[
+        { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard aria-hidden className="size-4 shrink-0" /> },
         { label: "Find housing", href: "/search", icon: <Search aria-hidden className="size-4 shrink-0" /> },
         { label: "My reservations", href: "/reservations", icon: <CalendarCheck aria-hidden className="size-4 shrink-0" /> },
         { label: "Messages", href: "/messages", icon: <MessageCircle aria-hidden className="size-4 shrink-0" /> },
