@@ -88,7 +88,9 @@ const envSchema = z.object({
   // CampusHomes AI on /support (Groq's OpenAI-compatible API). Unset = the
   // assistant answers 503 and the page points students to the manual/contact.
   GROQ_API_KEY: z.string().min(1).optional(),
-  GROQ_MODEL: z.string().min(1).default('llama-3.1-8b-instant'),
+  // Free Groq accounts can't use the Llama models (404); gpt-oss-20b is a
+  // production model on the free plan.
+  GROQ_MODEL: z.string().min(1).default('openai/gpt-oss-20b'),
   AUTH_EMAIL_FROM: z.string().min(1).default('CampusHomes <hello@campushomes.co.ug>'),
   // Comma-separated inbox(es) that receive new student inquiries. Unset =
   // inquiries are stored only (dev/staging posture); set + RESEND_API_KEY in

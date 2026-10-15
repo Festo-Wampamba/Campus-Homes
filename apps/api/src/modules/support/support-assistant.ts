@@ -67,5 +67,6 @@ export async function askSupportAssistant(
     logger.warn('Groq returned no answer');
     throw new ServiceUnavailableException(UNAVAILABLE);
   }
-  return reply.trim();
+  // The page shows plain text; models still add **bold** now and then.
+  return reply.replace(/\*\*(.+?)\*\*/g, '$1').trim();
 }
