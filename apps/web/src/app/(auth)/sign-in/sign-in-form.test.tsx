@@ -20,7 +20,7 @@ describe("SignInForm landlord mode", () => {
   });
 
   it("hides student housing when coming to enrol", () => {
-    expect(renderToStaticMarkup(<SignInForm next="/landlords/enroll" />)).not.toContain("Find student housing");
+    expect(renderToStaticMarkup(<SignInForm next="/landlords/enroll" />)).not.toContain("Student sign in");
   });
 
   it("hides staff workspaces when coming to enrol", () => {
@@ -36,7 +36,7 @@ describe("SignInForm landlord mode", () => {
   });
 
   it("hides student housing when coming to the dashboard", () => {
-    expect(renderToStaticMarkup(<SignInForm next="/landlord" />)).not.toContain("Find student housing");
+    expect(renderToStaticMarkup(<SignInForm next="/landlord" />)).not.toContain("Student sign in");
   });
 
   it("links an enrolling landlord to the sign-in variant", () => {
@@ -52,7 +52,7 @@ describe("SignInForm landlord mode", () => {
   });
 
   it("keeps the full chooser without a landlord destination", () => {
-    expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain("Find student housing");
+    expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain("Student sign in");
   });
 });
 

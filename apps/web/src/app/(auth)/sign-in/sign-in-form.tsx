@@ -103,11 +103,11 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
         <a href={signInUrl("consumer", next ?? undefined, "student")} className="block">
           <Button type="button" className="w-full gap-2">
             <ArrowRightIcon aria-hidden />
-            Find student housing
+            Student sign in
           </Button>
         </a>
         <a href={signInUrl("consumer", "/landlords/enroll", "landlord")} className="mt-3 block">
-          <Button type="button" variant="secondary" className="w-full">Manage my properties</Button>
+          <Button type="button" variant="secondary" className="w-full">Landlord sign in</Button>
         </a>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           New here?{" "}

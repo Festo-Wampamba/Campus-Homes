@@ -1,4 +1,4 @@
-import { sendAuthEmail, sendVerificationCodeEmail } from './auth.email';
+import { sendAuthEmail, sendVerificationCodeEmail, verificationContent } from './auth.email';
 import type { Env } from '../../config/env';
 
 const baseEnv = {
@@ -56,5 +56,33 @@ describe('sendVerificationCodeEmail without a provider', () => {
     await sendVerificationCodeEmail(baseEnv, { to: 'dev@example.com', code: '482913', kind: 'sign-in' });
     expect(info.mock.calls.flat().join(' ')).not.toContain('482913');
     info.mockRestore();
+  });
+});
+
+describe('verificationContent', () => {
+  // 09:00 UTC is 12:00 in Kampala (EAT, UTC+3).
+  const issuedAt = new Date('2026-10-16T09:00:00Z');
+
+  it('puts the code in the subject so it shows in the notification', () => {
+    expect(verificationContent('sign-in', '641334', issuedAt).subject).toBe('Your CampusHomes sign-in code: 641334');
+  });
+
+  it('tells the reader when the code expires, in Kampala time', () => {
+    expect(verificationContent('sign-in', '641334', issuedAt).text).toContain(
+      'This code expires in 10 minutes, at 12:10 pm EAT.',
+    );
+  });
+
+  it('says a new code cancels this one', () => {
+    expect(verificationContent('register', '641334', issuedAt).text).toContain('Requesting a new code cancels this one');
+  });
+
+  it('shows each digit in its own box', () => {
+    const { html } = verificationContent('sign-in', '641334', issuedAt);
+    expect(html.match(/border:2px solid #087f80/g)).toHaveLength(6);
+  });
+
+  it('keeps the whole code on one copyable line', () => {
+    expect(verificationContent('forgot-password', '641334', issuedAt).html).toContain('letter-spacing:2px;color:#0b3f3f">641334</span>');
   });
 });
