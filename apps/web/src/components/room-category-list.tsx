@@ -63,10 +63,8 @@ function groupByCategory(
     const availableBeds = beds.filter((b) => b.available);
     const heldBeds = beds.filter((b) => b.held).length;
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
-    const myStatus = beds.map((b) => myLiveBeds.get(b.id)).find(Boolean) ?? null;
     const existing = groups.get(key);
     if (existing) {
-      existing.myStatus ??= myStatus;
       existing.roomCount += 1;
       existing.roomPhotos.push(...unitPhotoList);
       existing.availableCount += availableBeds.length;
@@ -84,12 +82,20 @@ function groupByCategory(
         availableCount: availableBeds.length,
         heldCount: heldBeds,
         firstAvailableBedId: availableBeds[0]?.id ?? null,
-        myStatus,
+        myStatus: null,
         roomPhotos: [...unitPhotoList],
       });
     }
   }
+  // The API's one-per-room-type rule ignores price, so a held bed marks every
+  // price row of its category + self-contained type.
+  const heldByType = new Map<string, "reserved" | "booked">();
+  for (const unit of units) {
+    const held = (availableBedsByUnit.get(unit.id) ?? []).map((b) => myLiveBeds.get(b.id)).find(Boolean);
+    if (held) heldByType.set(`${unit.roomCategory}-${unit.selfContained}`, held);
+  }
   for (const group of groups.values()) {
+    group.myStatus = heldByType.get(`${group.category}-${group.selfContained}`) ?? null;
     const verified = photosForRoomType(verificationPhotos, group).map((p) => ({ storageKey: p.storageKey }));
     // A room-type photo is reported once per room of that type; show it once.
     const seen = new Set<string>();

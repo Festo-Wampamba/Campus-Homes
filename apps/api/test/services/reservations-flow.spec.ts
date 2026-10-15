@@ -587,6 +587,40 @@ describe('one live reservation per room type per hostel', () => {
     ).rejects.toThrow(/already have this room reserved/i);
   });
 
+  it('a reserve waits for a concurrent same-type reservation and then refuses', async () => {
+    const racer = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000084', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [racer]);
+    const [roomA, roomB] = [await sameTypeRoom('Race A'), await sameTypeRoom('Race B')];
+    const versionId = (await pool.query('SELECT current_version_id FROM listings WHERE id = $1', [listingId])).rows[0]
+      .current_version_id as string;
+
+    // Another request for this student is mid-transaction (holding its lock)
+    // and is about to commit a reservation of the same room type.
+    const other = await pool.connect();
+    await other.query('BEGIN');
+    await other.query(`SELECT pg_advisory_xact_lock(hashtextextended('reservation-student:' || $1, 0))`, [racer]);
+    const pending = reservationsService.reserve(studentCtx(racer), { listingId, bedId: roomA.bedId, idempotencyKey: 'race-a' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await other.query(
+      `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, idempotency_key, price_per_term_ugx)
+       VALUES ($1, $2, $3, 'reserved', 'race-b', 500000)`,
+      [racer, roomB.bedId, versionId],
+    );
+    await other.query('COMMIT');
+    other.release();
+
+    await expect(pending).rejects.toThrow(/already have this room reserved/i);
+  });
+
+  it('a walk-in Book of the same room type is refused too', async () => {
+    const walkIn = await sameTypeRoom('Same type walk-in');
+    await expect(
+      reservationsService.book(landlordCtx(landlord1), { bedId: walkIn.bedId, studentPhone: '+256710000081' }),
+    ).rejects.toThrow(/already holds a room of this type/i);
+  });
+
   it('allows a different room type in the same hostel', async () => {
     const other = await seedUnitWithBed('Other type');
     const reserved = await reservationsService.reserve(ctx, { listingId, bedId: other.bedId, idempotencyKey: 'other-type' });
