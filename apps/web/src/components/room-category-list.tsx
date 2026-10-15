@@ -41,7 +41,7 @@ type CategoryGroup = {
 // any available bed in that category server-side, same reserve() logic.
 function groupByCategory(
   units: Unit[],
-  availableBedsByUnit: Map<string, { id: string; available: boolean; held: boolean }[]>,
+  availableBedsByUnit: Map<string, { id: string; available: boolean }[]>,
   unitPhotos: UnitPhoto[],
   verificationPhotos: ListingPhoto[],
   myLiveBeds: Map<string, "reserved" | "booked">,
@@ -111,7 +111,7 @@ export function RoomCategoryList({
 }: {
   listingId: string;
   units: Unit[];
-  availability: { id: string; unit_id: string; available: boolean; held?: boolean }[];
+  availability: { id: string; unit_id: string; available: boolean }[];
   photos: ListingPhoto[];
   unitPhotos: UnitPhoto[];
   propertyName: string;
@@ -119,10 +119,10 @@ export function RoomCategoryList({
   needsProfile: boolean;
   myLiveBeds?: Map<string, "reserved" | "booked">;
 }) {
-  const availableBedsByUnit = new Map<string, { id: string; available: boolean; held: boolean }[]>();
+  const availableBedsByUnit = new Map<string, { id: string; available: boolean }[]>();
   for (const bed of availability) {
     const list = availableBedsByUnit.get(bed.unit_id) ?? [];
-    list.push({ id: bed.id, available: bed.available, held: bed.held ?? false });
+    list.push({ id: bed.id, available: bed.available });
     availableBedsByUnit.set(bed.unit_id, list);
   }
   const groups = groupByCategory(units, availableBedsByUnit, unitPhotos, photos, myLiveBeds);

@@ -24,7 +24,7 @@ const BED_B = "33333333-3333-4333-8333-333333333333";
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(availability: { id: string; unit_id: string; available: boolean; held?: boolean }[]) {
+async function render(availability: { id: string; unit_id: string; available: boolean }[]) {
   await act(async () =>
     root.render(
       <RoomCategoryList
@@ -48,8 +48,8 @@ async function renderForStudent(myLiveBeds: Map<string, "reserved" | "booked">, 
         listingId="listing-1"
         units={units}
         availability={[
-          { id: BED_A, unit_id: UNIT.id, available: true, held: false },
-          { id: BED_B, unit_id: UNIT.id, available: false, held: true },
+          { id: BED_A, unit_id: UNIT.id, available: true },
+          { id: BED_B, unit_id: UNIT.id, available: false },
         ]}
         photos={[]}
         unitPhotos={[]}
@@ -74,10 +74,10 @@ afterEach(() => {
 });
 
 describe("RoomCategoryList", () => {
-  it("does not show other students' holds", async () => {
+  it("shows only free beds, never other students' holds", async () => {
     await render([
-      { id: BED_A, unit_id: UNIT.id, available: true, held: false },
-      { id: BED_B, unit_id: UNIT.id, available: false, held: true },
+      { id: BED_A, unit_id: UNIT.id, available: true },
+      { id: BED_B, unit_id: UNIT.id, available: false },
     ]);
 
     expect(container.textContent).not.toMatch(/reserved/i);
@@ -85,8 +85,8 @@ describe("RoomCategoryList", () => {
 
   it("says no beds are free when none are", async () => {
     await render([
-      { id: BED_A, unit_id: UNIT.id, available: false, held: true },
-      { id: BED_B, unit_id: UNIT.id, available: false, held: false },
+      { id: BED_A, unit_id: UNIT.id, available: false },
+      { id: BED_B, unit_id: UNIT.id, available: false },
     ]);
 
     expect(container.textContent).toContain("No beds free right now");
