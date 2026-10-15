@@ -88,6 +88,16 @@ export class LogtoManagementClient {
     });
   }
 
+  /** Students are never asked to set up 2-step verification. With the
+   * PromptOnlyAtSignIn policy Logto skips the prompt at registration; marking
+   * the account as skipped stops it at later sign-ins too. */
+  async skipMfaPrompt(logtoUserId: string): Promise<void> {
+    await this.request(`/api/users/${encodeURIComponent(logtoUserId)}/logto-configs`, {
+      method: 'PATCH',
+      body: JSON.stringify({ mfa: { skipped: true } }),
+    });
+  }
+
   async createUser(input: {
     primaryEmail?: string;
     primaryPhone?: string;

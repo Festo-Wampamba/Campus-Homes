@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BedDouble, Images } from "lucide-react";
+import Link from "next/link";
+import { BedDouble, CircleCheck, Images } from "lucide-react";
 import { MAX_ACTIVE_RESERVATIONS, type ListingDetailResponse, type ListingPhoto } from "@campushomes/shared";
 
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
@@ -29,6 +30,8 @@ type CategoryGroup = {
   // hold ends unbooked.
   heldCount: number;
   firstAvailableBedId: string | null;
+  // Set when the signed-in student already holds a bed of this room type.
+  myStatus: "reserved" | "booked" | null;
   // This room type's photos only: the inspection photos linked to it (any
   // angle, its en-suite bathroom included) plus the landlord's own photos of
   // any room in it. A student reserves "a Double", not one numbered room.
@@ -44,6 +47,7 @@ function groupByCategory(
   availableBedsByUnit: Map<string, { id: string; available: boolean; held: boolean }[]>,
   unitPhotos: UnitPhoto[],
   verificationPhotos: ListingPhoto[],
+  myLiveBeds: Map<string, "reserved" | "booked">,
 ): CategoryGroup[] {
   const photosByUnit = new Map<string, LightboxPhoto[]>();
   for (const photo of unitPhotos) {
@@ -59,8 +63,10 @@ function groupByCategory(
     const availableBeds = beds.filter((b) => b.available);
     const heldBeds = beds.filter((b) => b.held).length;
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
+    const myStatus = beds.map((b) => myLiveBeds.get(b.id)).find(Boolean) ?? null;
     const existing = groups.get(key);
     if (existing) {
+      existing.myStatus ??= myStatus;
       existing.roomCount += 1;
       existing.roomPhotos.push(...unitPhotoList);
       existing.availableCount += availableBeds.length;
@@ -78,6 +84,7 @@ function groupByCategory(
         availableCount: availableBeds.length,
         heldCount: heldBeds,
         firstAvailableBedId: availableBeds[0]?.id ?? null,
+        myStatus,
         roomPhotos: [...unitPhotoList],
       });
     }
@@ -100,6 +107,7 @@ export function RoomCategoryList({
   propertyName,
   canReserve,
   needsProfile,
+  myLiveBeds = new Map(),
 }: {
   listingId: string;
   units: Unit[];
@@ -109,6 +117,7 @@ export function RoomCategoryList({
   propertyName: string;
   canReserve: boolean;
   needsProfile: boolean;
+  myLiveBeds?: Map<string, "reserved" | "booked">;
 }) {
   const availableBedsByUnit = new Map<string, { id: string; available: boolean; held: boolean }[]>();
   for (const bed of availability) {
@@ -116,7 +125,7 @@ export function RoomCategoryList({
     list.push({ id: bed.id, available: bed.available, held: bed.held ?? false });
     availableBedsByUnit.set(bed.unit_id, list);
   }
-  const groups = groupByCategory(units, availableBedsByUnit, unitPhotos, photos);
+  const groups = groupByCategory(units, availableBedsByUnit, unitPhotos, photos, myLiveBeds);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   if (groups.length === 0) {
@@ -209,7 +218,16 @@ export function RoomCategoryList({
                     Room photos ({group.roomPhotos.length})
                   </Button>
                 )}
-                {canReserve && group.firstAvailableBedId && (
+                {canReserve && group.myStatus && (
+                  <Link
+                    href="/reservations"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md bg-amber-300 px-3 text-sm font-semibold text-amber-950 transition-colors hover:bg-amber-400"
+                  >
+                    <CircleCheck aria-hidden className="size-4" />
+                    {group.myStatus === "booked" ? "Booked" : "Reserved"}
+                  </Link>
+                )}
+                {canReserve && !group.myStatus && group.firstAvailableBedId && (
                   <ReserveButton
                     bedId={group.firstAvailableBedId}
                     listingId={listingId}

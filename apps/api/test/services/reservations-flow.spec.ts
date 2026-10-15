@@ -6,6 +6,7 @@
  */
 import { ForbiddenException } from '@nestjs/common';
 import { Pool } from 'pg';
+import { MAX_ACTIVE_RESERVATIONS, ROOM_CATEGORIES } from '@campushomes/shared';
 import { eq } from 'drizzle-orm';
 
 import { createDbPool } from '../../src/db/client';
@@ -82,12 +83,19 @@ async function seed(sql: string, params: unknown[] = []): Promise<string> {
 
 /** Clones a fresh single-bed unit off the same listing as unitId, with its
  * one bed, for tests that need inventory beyond the beforeAll-seeded Room 1A. */
+// Each seeded room gets its own room type (category × self-contained, 18
+// combinations), because a student may hold only one reservation per room
+// type per hostel. Tests reserving several rooms then reserve different types.
+let seededRooms = 0;
 async function seedUnitWithBed(label: string): Promise<{ unitId: string; bedId: string }> {
+  const n = seededRooms++;
+  const category = ROOM_CATEGORIES[n % ROOM_CATEGORIES.length];
+  const selfContained = Math.floor(n / ROOM_CATEGORIES.length) % 2 === 1;
   const newUnitId = await seed(
-    `INSERT INTO units (property_id, label, capacity, room_category)
-     SELECT property_id, $2, 1, room_category
+    `INSERT INTO units (property_id, label, capacity, room_category, self_contained)
+     SELECT property_id, $2, 1, $3, $4
      FROM units WHERE id = $1 RETURNING id`,
-    [unitId, label],
+    [unitId, label, category, selfContained],
   );
   const priceRes = await pool.query(
     `SELECT price_per_term_ugx, deposit_ugx FROM unit_semester_pricing WHERE unit_id = $1 AND semester_id = $2`,
@@ -506,8 +514,8 @@ describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   });
 });
 
-describe('3 active reservations per student, platform-wide (§12-13)', () => {
-  it('allows exactly 3 concurrent reserved/booked reservations, rejects the 4th', async () => {
+describe('active reservations per student, platform-wide (§12-13)', () => {
+  it(`allows exactly ${MAX_ACTIVE_RESERVATIONS} concurrent reserved/booked reservations, rejects the next`, async () => {
     // A fresh student with none of the above describe blocks' reservations.
     const freshStudent = await seed(
       `INSERT INTO users (phone, role, status) VALUES ('+256710000099', 'student', 'active') RETURNING id`,
@@ -515,29 +523,17 @@ describe('3 active reservations per student, platform-wide (§12-13)', () => {
     await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
     const ctx = studentCtx(freshStudent);
 
-    const [bedCap1, bedCap2, bedCap3, bedCap4] = await Promise.all([
-      seedUnitWithBed('Cap 1'),
-      seedUnitWithBed('Cap 2'),
-      seedUnitWithBed('Cap 3'),
-      seedUnitWithBed('Cap 4'),
-    ]);
+    const beds = [];
+    for (let i = 0; i <= MAX_ACTIVE_RESERVATIONS; i++) beds.push(await seedUnitWithBed(`Cap ${i}`));
+    const extra = beds.pop()!;
 
-    for (const [i, bed] of [bedCap1, bedCap2, bedCap3].entries()) {
-      const r = await reservationsService.reserve(ctx, {
-        listingId,
-        bedId: bed.bedId,
-        idempotencyKey: `reserve-key-cap-${i}`,
-      });
-      expect(r.status).toBe('reserved');
+    for (const [i, bed] of beds.entries()) {
+      await reservationsService.reserve(ctx, { listingId, bedId: bed.bedId, idempotencyKey: `reserve-key-cap-${i}` });
     }
 
     await expect(
-      reservationsService.reserve(ctx, {
-        listingId,
-        bedId: bedCap4.bedId,
-        idempotencyKey: 'reserve-key-cap-3',
-      }),
-    ).rejects.toThrow(/3 active reservations/i);
+      reservationsService.reserve(ctx, { listingId, bedId: extra.bedId, idempotencyKey: 'reserve-key-cap-extra' }),
+    ).rejects.toThrow(new RegExp(`${MAX_ACTIVE_RESERVATIONS} active reservations`, 'i'));
   });
 
   it('a walk-in Book also counts against the platform-wide cap', async () => {
@@ -547,43 +543,82 @@ describe('3 active reservations per student, platform-wide (§12-13)', () => {
     await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
     const phone = '+256710000098';
 
-    const [bedWalk1, bedWalk2, bedWalk3, bedWalk4] = await Promise.all([
-      seedUnitWithBed('Walk 1'),
-      seedUnitWithBed('Walk 2'),
-      seedUnitWithBed('Walk 3'),
-      seedUnitWithBed('Walk 4'),
-    ]);
-    for (const bed of [bedWalk1, bedWalk2, bedWalk3]) {
-      await reservationsService.book(landlordCtx(landlord1), {
-        bedId: bed.bedId,
-        studentPhone: phone,
-      });
+    const beds = [];
+    for (let i = 0; i <= MAX_ACTIVE_RESERVATIONS; i++) beds.push(await seedUnitWithBed(`Walk ${i}`));
+    const extra = beds.pop()!;
+    for (const bed of beds) {
+      await reservationsService.book(landlordCtx(landlord1), { bedId: bed.bedId, studentPhone: phone });
     }
 
     await expect(
-      reservationsService.book(landlordCtx(landlord1), {
-        bedId: bedWalk4.bedId,
-        studentPhone: phone,
-      }),
-    ).rejects.toThrow(/3 active reservations/i);
+      reservationsService.book(landlordCtx(landlord1), { bedId: extra.bedId, studentPhone: phone }),
+    ).rejects.toThrow(new RegExp(`${MAX_ACTIVE_RESERVATIONS} active reservations`, 'i'));
+  });
+});
+
+describe('one live reservation per room type per hostel', () => {
+  let ctx: RlsContext;
+  let firstRoom: { unitId: string; bedId: string };
+
+  beforeAll(async () => {
+    const freshStudent = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000081', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
+    ctx = studentCtx(freshStudent);
+    firstRoom = await seedUnitWithBed('Same type A');
+    await reservationsService.reserve(ctx, { listingId, bedId: firstRoom.bedId, idempotencyKey: 'same-type-a' });
+  });
+
+  async function sameTypeRoom(label: string) {
+    const room = await seedUnitWithBed(label);
+    await pool.query(
+      `UPDATE units SET room_category = u.room_category, self_contained = u.self_contained
+       FROM units u WHERE u.id = $2 AND units.id = $1`,
+      [room.unitId, firstRoom.unitId],
+    );
+    return room;
+  }
+
+  it('rejects a second reservation of the same room type', async () => {
+    const second = await sameTypeRoom('Same type B');
+    await expect(
+      reservationsService.reserve(ctx, { listingId, bedId: second.bedId, idempotencyKey: 'same-type-b' }),
+    ).rejects.toThrow(/already have this room reserved/i);
+  });
+
+  it('allows a different room type in the same hostel', async () => {
+    const other = await seedUnitWithBed('Other type');
+    const reserved = await reservationsService.reserve(ctx, { listingId, bedId: other.bedId, idempotencyKey: 'other-type' });
+    expect(reserved.status).toBe('reserved');
   });
 });
 
 describe('cancel (student cancels their own Reserved bed, §6)', () => {
+  // Dedicated student: student2 still holds rooms from earlier blocks, and a
+  // student may hold only one reservation per room type.
+  let cancelStudent: string;
+  beforeAll(async () => {
+    cancelStudent = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000082', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [cancelStudent]);
+  });
+
   it('lets a student cancel their own reserved bed', async () => {
     const { bedId: bedC1 } = await seedUnitWithBed('Cancel A');
-    const reserved = await reservationsService.reserve(studentCtx(student2), {
+    const reserved = await reservationsService.reserve(studentCtx(cancelStudent), {
       listingId,
       bedId: bedC1,
       idempotencyKey: 'reserve-key-cancel-1',
     });
-    const result = await reservationsService.cancel(studentCtx(student2), reserved.id);
+    const result = await reservationsService.cancel(studentCtx(cancelStudent), reserved.id);
     expect(result).toEqual({ outcome: 'cancelled' });
   });
 
   it('a student cannot cancel a reservation that is not theirs', async () => {
     const { bedId: bedC2 } = await seedUnitWithBed('Cancel B');
-    const reserved = await reservationsService.reserve(studentCtx(student2), {
+    const reserved = await reservationsService.reserve(studentCtx(cancelStudent), {
       listingId,
       bedId: bedC2,
       idempotencyKey: 'reserve-key-cancel-2',
@@ -595,14 +630,14 @@ describe('cancel (student cancels their own Reserved bed, §6)', () => {
 
   it('a student cannot cancel a reservation once it is booked (only Release can free it)', async () => {
     const { bedId: bedC3 } = await seedUnitWithBed('Cancel C');
-    const reserved = await reservationsService.reserve(studentCtx(student2), {
+    const reserved = await reservationsService.reserve(studentCtx(cancelStudent), {
       listingId,
       bedId: bedC3,
       idempotencyKey: 'reserve-key-cancel-3',
     });
     await reservationsService.book(landlordCtx(landlord1), { reservationId: reserved.id });
     await expect(
-      reservationsService.cancel(studentCtx(student2), reserved.id),
+      reservationsService.cancel(studentCtx(cancelStudent), reserved.id),
     ).rejects.toThrow(/cannot cancel/i);
   });
 });

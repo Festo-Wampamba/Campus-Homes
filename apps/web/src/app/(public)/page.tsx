@@ -90,7 +90,7 @@ const FAQS = [
   },
   {
     question: "How many rooms can I reserve at once?",
-    answer: `Up to ${MAX_ACTIVE_RESERVATIONS}, counting both rooms on hold and rooms your landlord has confirmed. Cancel a hold you no longer want to free a slot. A confirmed booking can only be released by the landlord; contact support if you need help reaching them.`,
+    answer: `Up to ${MAX_ACTIVE_RESERVATIONS}, and one of each room type per hostel, counting both rooms on hold and rooms your landlord has confirmed. Cancel a hold you no longer want to free a slot. A confirmed booking can only be released by the landlord; contact support if you need help reaching them.`,
   },
   {
     question: "Do I pay rent through CampusHomes?",
@@ -437,7 +437,7 @@ export default async function HomePage() {
         <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[0.75fr_1.25fr] lg:px-8">
           <div>
             <h2 id="faq-heading" className="text-3xl tracking-[-0.035em] sm:text-4xl">
-              Common questions
+              Frequently Asked Questions (FAQ)
             </h2>
           </div>
           <div className="divide-y divide-border border-y border-border">

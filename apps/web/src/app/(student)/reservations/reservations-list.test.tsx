@@ -52,7 +52,7 @@ describe("ReservationsList", () => {
   it("shows when the hold ends", () => {
     const html = renderToStaticMarkup(<ReservationsList reservations={[RESERVED_OLDER]} />);
 
-    expect(html).toContain("Held for you until Thu 15 Oct, 14:30");
+    expect(html).toContain("Held for you until Thu 15 Oct, 2:30 pm");
   });
 
   it("shows a short reference for support", () => {

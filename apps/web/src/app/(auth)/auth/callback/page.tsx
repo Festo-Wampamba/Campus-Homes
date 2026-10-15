@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { safeAuthDestination } from "@campushomes/shared";
 import { AuthCard } from "@/components/auth-card";
 import { authDestination } from "@/lib/auth-routing";
-import { getServerSession } from "@/lib/session";
+import { getServerSession, needsProfileSetup } from "@/lib/session";
 
 // This page's whole job is to read the just-set session cookie and route
 // off it — caching its HTML (Next was serving it `x-nextjs-cache: HIT` with
@@ -22,5 +22,11 @@ export default async function AuthCallbackPage({ searchParams }: { searchParams:
       </AuthCard>
     );
   }
-  redirect(authDestination(session, next));
+  const destination = authDestination(session, next);
+  // A new account completes its profile right after sign-up, then lands where
+  // it was heading, not later when it first opens a portal page.
+  if (session.user.status === "active" && needsProfileSetup(session.user)) {
+    redirect(`/onboarding?next=${encodeURIComponent(destination)}`);
+  }
+  redirect(destination);
 }

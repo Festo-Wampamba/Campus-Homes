@@ -183,8 +183,28 @@ export class ReservationsService {
         );
         if (Number(activeCountRes.rows[0].count) >= MAX_ACTIVE_RESERVATIONS) {
           throw new ConflictException(
-            `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations. Cancel or complete one before reserving another.`,
+            `You already have ${MAX_ACTIVE_RESERVATIONS} active reservations, the most you can hold at once. Cancel a room on hold in My reservations to reserve this one.`,
           );
+        }
+
+        // One live reservation per room type per hostel: a room type is what
+        // the listing shows as one row (category + self-contained).
+        const sameRoomRes = await client.query(
+          `SELECT 1
+           FROM reservations r
+           JOIN beds rb ON rb.id = r.bed_id
+           JOIN units ru ON ru.id = rb.unit_id
+           JOIN beds tb ON tb.id = $2
+           JOIN units tu ON tu.id = tb.unit_id
+           WHERE r.student_id = $1 AND r.status IN ('reserved', 'booked')
+             AND ru.property_id = tu.property_id
+             AND ru.room_category = tu.room_category
+             AND ru.self_contained = tu.self_contained
+           LIMIT 1`,
+          [ctx.userId, input.bedId],
+        );
+        if (sameRoomRes.rowCount) {
+          throw new ConflictException('You already have this room reserved. See My reservations.');
         }
 
         // reservations.student_id FKs to students.user_id — a signed-up

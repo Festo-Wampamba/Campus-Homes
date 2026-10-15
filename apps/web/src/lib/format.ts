@@ -137,8 +137,9 @@ const KAMPALA_DATE_TIME = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
   month: "short",
-  hour: "2-digit",
+  hour: "numeric",
   minute: "2-digit",
+  hour12: true,
 });
 
 export function formatDateTime(iso: string): string {

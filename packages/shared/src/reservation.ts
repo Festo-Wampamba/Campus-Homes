@@ -77,7 +77,7 @@ export type Reservation = z.infer<typeof reservationSchema>;
 
 // Live ('reserved' or 'booked') reservations one student may hold at once.
 // The API enforces it; the web states it next to the Reserve buttons.
-export const MAX_ACTIVE_RESERVATIONS = 3;
+export const MAX_ACTIVE_RESERVATIONS = 5;
 
 // What a student sees about their own reservation — the bare row plus
 // enough context to tell one reservation apart from another (property name,

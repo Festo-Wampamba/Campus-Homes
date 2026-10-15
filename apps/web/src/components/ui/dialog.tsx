@@ -107,11 +107,14 @@ function Dialog({
       )}
     >
       {/* flex column filling the dialog's max-height — DialogBody is the
-          only flexible/scrollable region (flex-1 min-h-0), so header and
+          only flexible/scrollable region (flex-auto min-h-0), so header and
           footer (with the submit button) can never get clipped off the
-          bottom the way plain stacked blocks + overflow-hidden would. */}
+          bottom the way plain stacked blocks + overflow-hidden would.
+          flex-auto, not flex-1: the dialog's height is auto, and Safari
+          (iOS) sizes a `flex-basis: 0%` child of an auto-height column to
+          zero — the open dialog collapsed to a thin line over the backdrop. */}
       {open && (
-        <div className="flex min-h-0 flex-1 flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex min-h-0 flex-auto flex-col" onClick={(e) => e.stopPropagation()}>
           {children}
         </div>
       )}
@@ -149,7 +152,7 @@ function DialogHeader({
 }
 
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("min-h-0 flex-1 overflow-y-auto p-5", className)} {...props} />;
+  return <div className={cn("min-h-0 flex-auto overflow-y-auto p-5", className)} {...props} />;
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {

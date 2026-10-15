@@ -88,4 +88,15 @@ describe('self-hosted Logto Management API', () => {
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ mfa: { skipped: false } }) }),
     ]);
   });
+
+  it('marks a student as having skipped the MFA prompt', async () => {
+    const fetcher = jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ mfa: { skipped: true } })));
+    await client().skipMfaPrompt('user-1');
+    expect(fetcher.mock.calls[1]).toEqual([
+      'https://auth.example.test/api/users/user-1/logto-configs',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ mfa: { skipped: true } }) }),
+    ]);
+  });
 });

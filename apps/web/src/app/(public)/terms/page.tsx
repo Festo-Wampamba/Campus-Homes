@@ -37,7 +37,7 @@ export default async function TermsPage() {
       <ul>
         <li>Reserving a room on CampusHomes is free.</li>
         <li>A reservation holds a bed for you while you arrange the rest with the landlord. It is not a tenancy.</li>
-        <li>You can hold up to three active reservations and cancel any of them from your account.</li>
+        <li>You can hold up to five active reservations, one per room type in each hostel, and cancel a room on hold from your account.</li>
         <li>The landlord confirms the booking and collects rent directly. CampusHomes does not collect or mark up rent.</li>
       </ul>
 
