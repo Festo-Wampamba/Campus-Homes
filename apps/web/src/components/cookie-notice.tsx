@@ -38,9 +38,9 @@ export function CookieNotice() {
     <div
       role="region"
       aria-label="Cookie notice"
-      className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-2xl flex-col gap-3 rounded-lg border border-border bg-card p-4 text-sm text-card-foreground shadow-lg sm:flex-row sm:items-center sm:gap-5"
+      className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-2xl items-center gap-3 rounded-lg border border-border bg-card p-3 text-xs text-card-foreground shadow-lg sm:gap-5 sm:p-4 sm:text-sm"
     >
-      <p className="leading-6">
+      <p className="leading-5 sm:leading-6">
         We only use essential cookies to keep you signed in. No advertising or tracking cookies.{" "}
         <Link href="/privacy#cookies" className="font-semibold text-teal-700 underline underline-offset-4 dark:text-teal-300">
           Privacy policy
