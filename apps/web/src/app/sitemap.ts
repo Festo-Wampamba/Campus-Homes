@@ -13,7 +13,9 @@ async function listingIds(): Promise<string[]> {
   try {
     const query = new URLSearchParams({
       ...Object.fromEntries(Object.entries(UGANDA_BOUNDS).map(([k, v]) => [k, String(v)])),
-      limit: "200",
+      // The search API caps limit at 50; asking for more is a 400, which left
+      // every listing out of the sitemap.
+      limit: "50",
       university: "MUK",
     });
     const rows = listingSearchResultSchema

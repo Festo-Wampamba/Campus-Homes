@@ -95,6 +95,36 @@ describe("SearchClient", () => {
     expect(genderSelect().value).toBe("");
   });
 
+  it("offers exactly two bathroom choices", async () => {
+    mockApi.mockResolvedValue([]);
+    await renderSearch();
+
+    const labels = [...container.querySelectorAll('[aria-label="Bathroom"] button')].map((b) => b.textContent);
+    expect(labels).toEqual(["Self-contained", "Not self-contained"]);
+  });
+
+  it("searches self-contained rooms when that bathroom choice is tapped", async () => {
+    mockApi.mockResolvedValue([]);
+    await renderSearch();
+
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Bathroom"] button')!.click());
+    await settle();
+
+    expect(String(mockApi.mock.calls.at(-1)?.[0])).toContain("selfContained=true");
+  });
+
+  it("clears the bathroom filter when the active choice is tapped again", async () => {
+    mockApi.mockResolvedValue([]);
+    await renderSearch();
+    const selfContained = () => container.querySelector<HTMLButtonElement>('[aria-label="Bathroom"] button')!;
+
+    await act(async () => selfContained().click());
+    await act(async () => selfContained().click());
+    await settle();
+
+    expect(selfContained().getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("does not claim an area is empty when the search failed", async () => {
     mockApi.mockRejectedValue(new Error("network down"));
 
