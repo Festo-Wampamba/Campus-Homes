@@ -60,4 +60,16 @@ describe("ReservationsList", () => {
 
     expect(html).toContain("Ref BBBB0000");
   });
+
+  it("offers Request booking on a room on hold", () => {
+    const html = renderToStaticMarkup(<ReservationsList reservations={[RESERVED_OLDER]} />);
+    expect(html).toContain("Request booking");
+  });
+
+  it("shows the booking request once sent", () => {
+    const html = renderToStaticMarkup(
+      <ReservationsList reservations={[{ ...RESERVED_OLDER, bookingRequestedAt: "2026-10-15T08:00:00.000Z" }]} />,
+    );
+    expect(html).toContain("Booking requested");
+  });
 });

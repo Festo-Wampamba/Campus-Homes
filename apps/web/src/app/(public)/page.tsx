@@ -93,6 +93,11 @@ const FAQS = [
     answer: `Up to ${MAX_ACTIVE_RESERVATIONS}, and one of each room type per hostel, counting both rooms on hold and rooms your landlord has confirmed. Cancel a hold you no longer want to free a slot. A confirmed booking can only be released by the landlord; contact support if you need help reaching them.`,
   },
   {
+    question: "How do I book a room?",
+    answer:
+      "Reserve it first (free). After you have viewed it and agreed terms with the landlord, open My reservations and tap Request booking. The landlord then confirms your booking.",
+  },
+  {
     question: "Do I pay rent through CampusHomes?",
     answer:
       "No. Rent, deposits and tenancy agreements stay directly between you and the landlord, paid the way you agree with them. CampusHomes does not collect or mark up your rent.",

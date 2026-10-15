@@ -94,6 +94,8 @@ export const studentReservationViewSchema = reservationSchema.extend({
   depositUgx: ugxAmount.nullable(),
   // Optional so a web build that ships before its API still parses the list.
   reservedAt: z.iso.datetime().nullable().optional(),
+  // Set once the student asked the landlord to confirm the booking.
+  bookingRequestedAt: z.iso.datetime().nullable().optional(),
 });
 export type StudentReservationView = z.infer<typeof studentReservationViewSchema>;
 

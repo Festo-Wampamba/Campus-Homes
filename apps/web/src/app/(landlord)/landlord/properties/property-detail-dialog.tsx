@@ -229,7 +229,7 @@ function bedStatusChip(bed: PropertyDetail["rooms"][number]["beds"][number]) {
     case "reserved":
       return (
         <StatusChip key={bed.id} tone="warning">
-          {bed.label}: Reserved
+          {bed.label}: Reserved{bed.bookingRequestedAt ? " · booking requested" : ""}
         </StatusChip>
       );
     case "booked":

@@ -21,6 +21,7 @@ import { REDIS } from '../../db/redis.module';
 import { assertStaffScope } from '../auth/staff-scope';
 import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
 export const DEFAULT_RESERVE_HOURS = 24;
@@ -49,6 +50,8 @@ export class ReservationsService {
     private readonly audit: AuditService,
     @Optional() @Inject(REDIS) private readonly redis: Redis | null,
     @Optional() @Inject(RESERVATION_EXPIRY_QUEUE) private readonly expiryQueue: Queue | null,
+    // Explicit token: a `| null` union emits no usable type metadata for DI.
+    @Optional() @Inject(NotificationsService) private readonly notifications: NotificationsService | null = null,
   ) {}
 
   /** Landlord (own property) or an actively-assigned custodian — the two
@@ -488,6 +491,52 @@ export class ReservationsService {
     return { outcome };
   }
 
+  /** Student asks the landlord to confirm (book) a room they hold. Stamped
+   * once; asking again is a no-op, so the landlord isn't notified twice. */
+  async requestBooking(ctx: RlsContext, reservationId: string) {
+    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const res = await client.query<{
+        status: string; booking_requested_at: Date | null; landlord_id: string; property_name: string; room_category: string;
+      }>(
+        `SELECT r.status, r.booking_requested_at, p.landlord_id, p.name AS property_name, u.room_category
+         FROM reservations r
+         JOIN beds b ON b.id = r.bed_id
+         JOIN units u ON u.id = b.unit_id
+         JOIN properties p ON p.id = u.property_id
+         WHERE r.id = $1 AND r.student_id = $2`,
+        [reservationId, ctx.userId],
+      );
+      const row = res.rows[0];
+      if (!row) throw new NotFoundException('Reservation not found');
+      if (row.status !== 'reserved') {
+        throw new ConflictException(`Cannot request booking for a reservation that is ${row.status}`);
+      }
+      if (row.booking_requested_at) return { requestedAt: row.booking_requested_at, newlyRequested: false, row };
+      const updated = await client.query<{ booking_requested_at: Date }>(
+        `UPDATE reservations SET booking_requested_at = now(), updated_at = now() WHERE id = $1 RETURNING booking_requested_at`,
+        [reservationId],
+      );
+      return { requestedAt: updated.rows[0]!.booking_requested_at, newlyRequested: true, row };
+    });
+
+    if (result.newlyRequested) {
+      await this.audit.record(ctx, 'reservation.request_booking', 'reservation', reservationId, {});
+      const room = result.row.room_category.replace(/_/g, ' ');
+      // Best-effort: the request is stored and shows on the landlord's property
+      // page either way.
+      for (const channel of ['in_app', 'sms'] as const) {
+        this.notifications
+          ?.notify(result.row.landlord_id, 'reservation.booking_requested', channel, {
+            reservationId,
+            message: `A student asked to book a ${room} room at ${result.row.property_name}. Confirm it from the property's rooms.`,
+            href: '/landlord/properties',
+          })
+          .catch((err: unknown) => console.error('[reservations] booking request notify failed:', err));
+      }
+    }
+    return { bookingRequestedAt: result.requestedAt };
+  }
+
   /** Move-in confirmation (§8): student or the bed's landlord/custodian.
    * Only a Booked reservation can move in. */
   async confirmMoveIn(ctx: RlsContext, reservationId: string) {
@@ -542,6 +591,7 @@ export class ReservationsService {
            r.id, r.student_id AS "studentId", r.bed_id AS "bedId",
            r.listing_version_id AS "listingVersionId", r.status,
            r.reserved_at AS "reservedAt", r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
+           r.booking_requested_at AS "bookingRequestedAt",
            r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
            l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",

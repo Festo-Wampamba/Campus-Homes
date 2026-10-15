@@ -642,6 +642,31 @@ describe('cancel (student cancels their own Reserved bed, §6)', () => {
   });
 });
 
+describe('student requests booking (landlord still confirms)', () => {
+  let requester: string;
+  let reservationId: string;
+
+  beforeAll(async () => {
+    requester = await seed(
+      `INSERT INTO users (phone, role, status) VALUES ('+256710000083', 'student', 'active') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [requester]);
+    const room = await seedUnitWithBed('Booking request');
+    reservationId = (
+      await reservationsService.reserve(studentCtx(requester), { listingId, bedId: room.bedId, idempotencyKey: 'booking-request' })
+    ).id;
+  });
+
+  it('stamps the request on the student\'s own reserved room', async () => {
+    const result = await reservationsService.requestBooking(studentCtx(requester), reservationId);
+    expect(result.bookingRequestedAt).toBeInstanceOf(Date);
+  });
+
+  it("refuses another student's reservation", async () => {
+    await expect(reservationsService.requestBooking(studentCtx(student3), reservationId)).rejects.toThrow(/not found/i);
+  });
+});
+
 describe('occupancy lock-in: an occupied student can only rebook within 3 weeks of term end', () => {
   function isoDaysFromNow(days: number): string {
     const d = new Date();
