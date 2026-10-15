@@ -84,6 +84,11 @@ const FAQS = [
     answer: "Reserving a room is free while the platform grows.",
   },
   {
+    question: "What is the difference between reserving and booking?",
+    answer:
+      "Reserving holds a bed for you for 24 hours, for free, while you view the room and agree terms with the landlord. It is not final: you can cancel it, and it ends on its own if the 24 hours run out. Booking makes the bed yours. After you agree terms, you tap Request booking in My reservations and the landlord confirms it. A booking does not expire, only the landlord can release it, and rent is paid to the landlord directly.",
+  },
+  {
     question: "How long is a room held for me?",
     answer:
       "24 hours from the moment you reserve. My reservations shows the time left. If the hold runs out, it ends on its own and the bed goes back on the list for other students.",

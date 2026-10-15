@@ -22,7 +22,9 @@ type CategoryGroup = {
   pricePerTermUgx: number;
   depositUgx: number | null;
   capacity: number;
-  roomCount: number;
+  // Rooms with at least one free bed: a single, or a double/triple/quad with
+  // every bed reserved or booked, drops out of the count.
+  freeRoomCount: number;
   // Sum of available BEDS across every unit in this category (bed-level
   // inventory, 0033) — a partially-let double still counts its one free bed.
   availableCount: number;
@@ -61,7 +63,7 @@ function groupByCategory(
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
     const existing = groups.get(key);
     if (existing) {
-      existing.roomCount += 1;
+      existing.freeRoomCount += availableBeds.length > 0 ? 1 : 0;
       existing.roomPhotos.push(...unitPhotoList);
       existing.availableCount += availableBeds.length;
       existing.firstAvailableBedId ??= availableBeds[0]?.id ?? null;
@@ -73,7 +75,7 @@ function groupByCategory(
         pricePerTermUgx: unit.pricePerTermUgx,
         depositUgx: unit.depositUgx,
         capacity: unit.capacity,
-        roomCount: 1,
+        freeRoomCount: availableBeds.length > 0 ? 1 : 0,
         availableCount: availableBeds.length,
         firstAvailableBedId: availableBeds[0]?.id ?? null,
         myStatus: null,
@@ -166,10 +168,14 @@ export function RoomCategoryList({
                 </div>
                 <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
                   <span>Sleeps {group.capacity}</span>
-                  <span aria-hidden>·</span>
-                  <span>
-                    {group.roomCount} {group.roomCount === 1 ? "room" : "rooms"}
-                  </span>
+                  {group.freeRoomCount > 0 && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>
+                        {group.freeRoomCount} {group.freeRoomCount === 1 ? "room" : "rooms"} free
+                      </span>
+                    </>
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {/* Other students' holds stay private: a student sees free

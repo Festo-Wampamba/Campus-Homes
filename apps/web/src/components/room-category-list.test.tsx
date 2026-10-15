@@ -24,12 +24,12 @@ const BED_B = "33333333-3333-4333-8333-333333333333";
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(availability: { id: string; unit_id: string; available: boolean }[]) {
+async function render(availability: { id: string; unit_id: string; available: boolean }[], units = [UNIT]) {
   await act(async () =>
     root.render(
       <RoomCategoryList
         listingId="listing-1"
-        units={[UNIT]}
+        units={units}
         availability={availability}
         photos={[]}
         unitPhotos={[]}
@@ -90,6 +90,30 @@ describe("RoomCategoryList", () => {
     ]);
 
     expect(container.textContent).toContain("No beds free right now");
+  });
+
+  it("counts only rooms that still have a free bed", async () => {
+    const fullRoom = { ...UNIT, id: "44444444-4444-4444-8444-444444444444", label: "D2" };
+    await render(
+      [
+        { id: BED_A, unit_id: UNIT.id, available: true },
+        { id: BED_B, unit_id: UNIT.id, available: false },
+        { id: "55555555-5555-4555-8555-555555555555", unit_id: fullRoom.id, available: false },
+        { id: "66666666-6666-4666-8666-666666666666", unit_id: fullRoom.id, available: false },
+      ],
+      [UNIT, fullRoom],
+    );
+
+    expect(container.textContent).toContain("1 room free");
+  });
+
+  it("drops the room count when every room is taken", async () => {
+    await render([
+      { id: BED_A, unit_id: UNIT.id, available: false },
+      { id: BED_B, unit_id: UNIT.id, available: false },
+    ]);
+
+    expect(container.textContent).not.toMatch(/\broom/);
   });
 
   it("shows Reserved instead of Reserve on a room type the student already holds", async () => {
