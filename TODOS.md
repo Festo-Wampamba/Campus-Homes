@@ -10,7 +10,7 @@ _Last updated: 2026-10-15._
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
-| 3 | [Prod Logto: password at sign-up](#3-prod-logto-password-at-sign-up) | Festo | ☐ Open |
+| 3 | [Logto settings: MFA prompt + prod password at sign-up](#3-logto-settings-mfa-prompt--prod-password-at-sign-up) | Festo | ☐ Open (staging still `PromptAtSignInAndSignUp`) |
 | 4 | [Post-deploy checks (production)](#4-post-deploy-checks-production) | Festo | ☐ Open |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
 | 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
@@ -21,10 +21,12 @@ _Last updated: 2026-10-15._
 | 11 | [Phase 3: reservation journey](#11-phase-3-reservation-journey) | Claude | 👀 On staging (#166), production pending; R03b needs a staging check (Festo) |
 | 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 👀 On staging (#170), production pending |
 | 13 | [Phase 5: data-quality guards + production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Claude / Festo | 👀 Code on staging (#174); data fixes wait on Festo |
-| 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 🚧 In progress |
+| 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 👀 On staging (#176, #178), production pending |
 | 15 | [Cloudflare: turn off Email Address Obfuscation](#15-cloudflare-turn-off-email-address-obfuscation) | Festo | ☐ Open |
-| 16 | [Small UI polish from the 2026-10-14 inspection](#16-small-ui-polish-from-the-2026-10-14-inspection) | — | 💤 Later |
+| 16 | [Small UI polish from the 2026-10-14 inspection](#16-small-ui-polish-from-the-2026-10-14-inspection) | Claude | 🔜 Next |
 | 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
+| 18 | [Student journey fixes from staging feedback](#18-student-journey-fixes-from-staging-feedback) | Claude / Festo | 👀 On staging (#180, #182), Festo testing; production pending |
+| 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo | ☐ Open |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -44,12 +46,26 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
   (2026-10-12). They break Meta's terms and risk a number ban that would
   block every phone sign-in.
 
-## 3. Prod Logto: password at sign-up
+## 3. Logto settings: MFA prompt + prod password at sign-up
 
-- **What:** Production Logto → Sign-in experience → sign-up → turn on
-  "Create your password". Staging already has it on.
-- **Why:** sign-up on production is code-only today, so new users have no
-  password.
+- **MFA prompt (staging and production):** Multi-factor auth → Policy:
+  - **Require MFA:** "Optional MFA".
+  - **MFA set-up prompt:** "Ask users to set up MFA on their next sign-in
+    attempt after registration (skippable, one-time prompt)", which is
+    `PromptOnlyAtSignIn`.
+  - Never "Adaptive MFA": it only allows non-skippable prompts.
+  - *Why:* both are `PromptAtSignInAndSignUp` (checked 2026-10-15), so new
+    students see a skippable 2-step screen at sign-up. The API already marks
+    students as skipped (`skipMfaPrompt()`, #180); staff still need an
+    enrolled factor.
+  - *Check:*
+    `curl -s https://auth-staging.campushomes.co.ug/api/.well-known/sign-in-exp | python3 -c "import sys,json;print(json.load(sys.stdin)['mfa'])"`
+    should print `'policy': 'PromptOnlyAtSignIn'` (same with `auth.` for
+    production).
+- **Password at sign-up (production only):** Sign-in experience → sign-up →
+  turn on "Create your password". Staging already has it on.
+  - *Why:* sign-up on production is code-only today (`password: False`), so
+    new users have no password.
 
 ## 4. Post-deploy checks (production)
 
@@ -68,6 +84,15 @@ includes PRs #152 and #154. Check on production:
       "Using 0.329167, 32.553333"; typing `near the market` shows the
       "isn't a supported coordinates format" message with samples and
       disables Submit
+
+**Next production deploy** (`gh workflow run CI --ref main`, Festo approves)
+takes production from `90303ac` to current `main` (`36c1b63` or later):
+Phases 1–6 (items 9–14) plus item 18. It applies migrations 0063 and 0064
+(schema 62 → 64). After it:
+
+- [ ] `/api/v1/health` reports the new commit and schema 64/64
+- [ ] Spot-check items 9–14 and 18 on production
+- [ ] Apply the Logto settings in item 3 to production
 
 ## 5. Kiwanda: resubmit 4 pending inspections
 
@@ -181,12 +206,15 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 - **R13, reservation limit:** 3 active per student is already enforced by the
   API. Say so near the Reserve buttons.
   - *Pass:* the 4th attempt shows the explanation.
+  - *Changed in #180:* the limit is now 5, plus one live reservation per room
+    type per hostel (see item 18).
 - **R03b, phone-number box:** reproduce onboarding and profile phone saving on
   staging. Fix only if it still fails (#152 may have fixed it).
 - **Follow-up, PR #173 (on staging since 2026-10-15, `1fcc572`):** an overdue
   hold is now expired by a per-minute sweep (`reservation_expiry_sweep`) and
   again before every new reserve, so a lost BullMQ job can no longer keep a
-  bed blocked. Rooms show "N reserved · 24h hold".
+  bed blocked. Rooms showed "N reserved · 24h hold" until #182 made other
+  students' holds private (item 18).
 
 ## 12. Phase 4: information before reserving
 
@@ -216,13 +244,20 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 
 ## 14. Phase 6: help and support
 
+- **Shipped:** PR #176 (release #177) and FAQ wording PR #178 (release #179),
+  on staging since 2026-10-15.
 - **R07, chat box:** the student–landlord chat composer grows with the text
-  (`components/chat/chat-inbox.tsx`).
-- **R16, FAQ:** add answers on the 24h hold and expiry, the 3-room limit,
+  (`components/chat/chat-inbox.tsx`, Tailwind `field-sizing-content`, capped
+  at `max-h-36`; Firefox keeps the fixed box).
+- **R16, FAQ:** answers on the 24h hold and expiry, the reservation limit,
   payments (offline, agreed with the landlord), viewings, cancellations and
-  support.
+  support. Only holds can be cancelled by the student; a confirmed booking is
+  released by the landlord (#178).
 - **R18, support form:** the student support desk can attach one of the
-  student's own reservations to an inquiry.
+  student's own reservations to an inquiry (migration 0063,
+  `inquiries.reservation_id`; ownership checked under the student's RLS).
+- **Festo to check on staging:** the chat box grows with long messages; the
+  support form's "Which reservation?" picker.
 
 ## 15. Cloudflare: turn off Email Address Obfuscation
 
@@ -246,10 +281,54 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 - **R05, payment options:** real-money payments are product Phase 2 (decided
   2026-07-30). Payment is offline with the landlord until then.
 - **R08, hostel location:** "NOT NOW" per Festo's notes.
-- **R19, floating chatbot / help button:** after Phase 6 (FAQ + support).
-  Decide scripted widget vs AI first.
+- **R19, floating chatbot / help button:** Phase 6 is on staging, so this
+  is unblocked. Decide scripted widget vs AI first.
 - **Visiting-hours field (R11 follow-up):** needs a migration plus admin and
   landlord forms.
+
+## 18. Student journey fixes from staging feedback
+
+- **Shipped:** PR #180 (release #181) and PR #182 (release #183), on staging
+  since 2026-10-15 (`36c1b63`, schema 64/64). Production pending (item 4).
+- **iPhone Reserve:** the popup collapsed to a thin line on Safari
+  (`flex-1` inside an auto-height column). Fixed with `flex-auto` in the
+  shared `components/ui/dialog.tsx`.
+- **Sign-up order:** a new account goes to "Complete your profile" first,
+  then back to the page it came from. The header Sign in link carries `next`.
+- **No 2-step prompt for students:** the API marks new students as MFA
+  skipped. Also needs the Logto policy in item 3.
+- **Search filters:** bathroom select reads Self-contained / Not
+  self-contained; Clear filters is always visible.
+- **Reservation rules:** limit 3 → 5; one live reservation per room type
+  (category + self-contained) per hostel; both checked under a per-student
+  advisory lock so parallel requests can't slip past.
+- **Yellow "Reserved" button** on the room types the student holds.
+- **12-hour times** (`Fri 16 Oct, 2:51 am`).
+- **Request booking:** the student asks the landlord to confirm a held room
+  (migration 0064, `reservations.booking_requested_at`); the landlord gets
+  an in-app + SMS notification and confirms with the existing Book action.
+  No in-app payment.
+- **Other students' holds are private (#182):** room rows no longer show
+  "N reserved · 24h hold"; the listing API no longer returns a hold flag.
+- **My dashboard (#182):** `/dashboard`, first in the student sidebar and
+  "My dashboard" in the account menu: live reservations "N of 5", next hold
+  end, favourites, messages, profile.
+- **Festo verified on staging:** sign-up → Skip → Complete your profile →
+  back; 12-hour times in the Reserve popup; yellow Reserved button.
+- **Festo still to check on staging (student):**
+  - [ ] On an iPhone, Reserve shows the popup
+  - [ ] My dashboard from the account dropdown
+  - [ ] Request booking → the landlord sees "booking requested" and gets
+        the notification
+  - [ ] Other students' holds don't show on room rows
+  - [ ] R03b phone box (item 11)
+
+## 19. Rotate exposed staging secrets
+
+- **What:** rotate the staging passwords/keys that were pasted in chat
+  during the 2026-08 infra rescue.
+- **When:** before any real data goes on the shared staging/production
+  Postgres, Redis or Logto.
 
 ---
 
