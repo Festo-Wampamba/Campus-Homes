@@ -31,6 +31,12 @@ const TILE_URL =
   process.env.NEXT_PUBLIC_TILE_URL ||
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+// MapLibre resolves its worker next to its own module URL, which after
+// bundling is /_next/static/chunks/ where the worker isn't emitted (404 →
+// "Worker failed to load"). `pnpm dev`/`build` copy the worker and the shared
+// chunk it imports into public/maplibre/ from the installed package.
+maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {

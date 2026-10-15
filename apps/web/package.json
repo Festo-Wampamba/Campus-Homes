@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "pnpm maplibre:worker && next dev",
+    "build": "pnpm maplibre:worker && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "maplibre:worker": "mkdir -p public/maplibre && cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs public/maplibre/"
   },
   "dependencies": {
     "@campushomes/shared": "workspace:*",

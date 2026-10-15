@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# copied from maplibre-gl at dev/build time (see listings-map.tsx)
+/public/maplibre/
