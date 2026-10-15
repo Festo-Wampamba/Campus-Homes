@@ -20,6 +20,7 @@ import { ProfileModule } from './modules/profile/profile.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { RoomManagementModule } from './modules/room-management/room-management.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { SupportModule } from './modules/support/support.module';
 import { TenantAgreementsModule } from './modules/tenant-agreements/tenant-agreements.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { RootController } from './root.controller';
@@ -45,6 +46,7 @@ import { RootController } from './root.controller';
     TenantAgreementsModule,
     LeadsModule,
     InquiriesModule,
+    SupportModule,
   ],
   controllers: [HealthController, RootController],
   providers: [

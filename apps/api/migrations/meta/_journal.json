@@ -449,6 +449,13 @@
       "when": 1791500000000,
       "tag": "0064_reservation_booking_request",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1791600000000,
+      "tag": "0065_support_whatsapp",
+      "breakpoints": true
     }
   ]
 }
