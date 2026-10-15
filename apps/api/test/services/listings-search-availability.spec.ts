@@ -176,17 +176,15 @@ describe('detail() public availability', () => {
   });
 });
 
-describe('detail() held beds', () => {
-  it('flags a bed with a live 24h hold as held', async () => {
+describe('detail() keeps other students\' holds private', () => {
+  it('reports a held bed only as unavailable, with no hold flag', async () => {
     const detail = await listings.detail(listingId);
 
-    expect(detail.availability.find((a) => a.unit_id === unitReserved)?.held).toBe(true);
-  });
-
-  it('does not flag an occupied bed as held', async () => {
-    const detail = await listings.detail(listingId);
-
-    expect(detail.availability.find((a) => a.unit_id === unitOccupied)?.held).toBe(false);
+    expect(detail.availability.find((a) => a.unit_id === unitReserved)).toEqual({
+      id: expect.any(String),
+      unit_id: unitReserved,
+      available: false,
+    });
   });
 });
 

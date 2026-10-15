@@ -21,7 +21,7 @@ export function workspaceForPath(path: string): Workspace | null {
   for (const workspace of ["landlord", "ops", "admin"] as const) {
     if (within(path, `/${workspace}`)) return workspace;
   }
-  if (["/profile", "/reservations", "/messages", "/saved", "/recently-viewed", "/calendar", "/agreement"].some((root) => within(path, root))) return "student";
+  if (["/dashboard", "/profile", "/reservations", "/messages", "/saved", "/recently-viewed", "/calendar", "/agreement"].some((root) => within(path, root))) return "student";
   return null;
 }
 

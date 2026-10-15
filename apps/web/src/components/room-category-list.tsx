@@ -26,9 +26,6 @@ type CategoryGroup = {
   // Sum of available BEDS across every unit in this category (bed-level
   // inventory, 0033) — a partially-let double still counts its one free bed.
   availableCount: number;
-  // Beds on a student's temporary hold: unavailable now, but freed when the
-  // hold ends unbooked.
-  heldCount: number;
   firstAvailableBedId: string | null;
   // Set when the signed-in student already holds a bed of this room type.
   myStatus: "reserved" | "booked" | null;
@@ -44,7 +41,7 @@ type CategoryGroup = {
 // any available bed in that category server-side, same reserve() logic.
 function groupByCategory(
   units: Unit[],
-  availableBedsByUnit: Map<string, { id: string; available: boolean; held: boolean }[]>,
+  availableBedsByUnit: Map<string, { id: string; available: boolean }[]>,
   unitPhotos: UnitPhoto[],
   verificationPhotos: ListingPhoto[],
   myLiveBeds: Map<string, "reserved" | "booked">,
@@ -61,14 +58,12 @@ function groupByCategory(
     const key = `${unit.roomCategory}-${unit.selfContained}-${unit.pricePerTermUgx}`;
     const beds = availableBedsByUnit.get(unit.id) ?? [];
     const availableBeds = beds.filter((b) => b.available);
-    const heldBeds = beds.filter((b) => b.held).length;
     const unitPhotoList = photosByUnit.get(unit.id) ?? [];
     const existing = groups.get(key);
     if (existing) {
       existing.roomCount += 1;
       existing.roomPhotos.push(...unitPhotoList);
       existing.availableCount += availableBeds.length;
-      existing.heldCount += heldBeds;
       existing.firstAvailableBedId ??= availableBeds[0]?.id ?? null;
     } else {
       groups.set(key, {
@@ -80,7 +75,6 @@ function groupByCategory(
         capacity: unit.capacity,
         roomCount: 1,
         availableCount: availableBeds.length,
-        heldCount: heldBeds,
         firstAvailableBedId: availableBeds[0]?.id ?? null,
         myStatus: null,
         roomPhotos: [...unitPhotoList],
@@ -117,7 +111,7 @@ export function RoomCategoryList({
 }: {
   listingId: string;
   units: Unit[];
-  availability: { id: string; unit_id: string; available: boolean; held?: boolean }[];
+  availability: { id: string; unit_id: string; available: boolean }[];
   photos: ListingPhoto[];
   unitPhotos: UnitPhoto[];
   propertyName: string;
@@ -125,10 +119,10 @@ export function RoomCategoryList({
   needsProfile: boolean;
   myLiveBeds?: Map<string, "reserved" | "booked">;
 }) {
-  const availableBedsByUnit = new Map<string, { id: string; available: boolean; held: boolean }[]>();
+  const availableBedsByUnit = new Map<string, { id: string; available: boolean }[]>();
   for (const bed of availability) {
     const list = availableBedsByUnit.get(bed.unit_id) ?? [];
-    list.push({ id: bed.id, available: bed.available, held: bed.held ?? false });
+    list.push({ id: bed.id, available: bed.available });
     availableBedsByUnit.set(bed.unit_id, list);
   }
   const groups = groupByCategory(units, availableBedsByUnit, unitPhotos, photos, myLiveBeds);
@@ -178,19 +172,14 @@ export function RoomCategoryList({
                   </span>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
+                  {/* Other students' holds stay private: a student sees free
+                      beds, and their own hold as the Reserved button. */}
                   {group.availableCount > 0 ? (
                     <StatusChip tone="success">
                       {group.availableCount} {group.availableCount === 1 ? "bed" : "beds"} free
                     </StatusChip>
-                  ) : group.heldCount > 0 ? (
-                    <StatusChip tone="warning">All reserved for now</StatusChip>
                   ) : (
-                    <StatusChip tone="warning">Fully booked</StatusChip>
-                  )}
-                  {group.heldCount > 0 && (
-                    <StatusChip tone="neutral">
-                      {group.heldCount} reserved · 24h hold
-                    </StatusChip>
+                    <StatusChip tone="warning">No beds free right now</StatusChip>
                   )}
                 </div>
               </div>
