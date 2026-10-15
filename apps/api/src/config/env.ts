@@ -85,6 +85,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
+  // CampusHomes AI on /support (Groq's OpenAI-compatible API). Unset = the
+  // assistant answers 503 and the page points students to the manual/contact.
+  GROQ_API_KEY: z.string().min(1).optional(),
+  GROQ_MODEL: z.string().min(1).default('llama-3.1-8b-instant'),
   AUTH_EMAIL_FROM: z.string().min(1).default('CampusHomes <hello@campushomes.co.ug>'),
   // Comma-separated inbox(es) that receive new student inquiries. Unset =
   // inquiries are stored only (dev/staging posture); set + RESEND_API_KEY in
