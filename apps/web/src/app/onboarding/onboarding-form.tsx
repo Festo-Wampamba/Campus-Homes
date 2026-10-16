@@ -61,7 +61,7 @@ export function OnboardingForm({
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="onboarding-name" required>Full name</Label>
-        <Input id="onboarding-name" required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sarah Nakato" aria-describedby="onboarding-name-hint" />
+        <Input id="onboarding-name" required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Muwanguzi Festo" aria-describedby="onboarding-name-hint" />
         <p id="onboarding-name-hint" className="text-xs text-muted-foreground">As it appears on your student ID.</p>
       </div>
       <div className="space-y-1.5">
@@ -73,7 +73,7 @@ export function OnboardingForm({
           value={username}
           onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
           maxLength={20}
-          placeholder="e.g. sarah_n"
+          placeholder="e.g. muwanguzi_f"
           aria-describedby="onboarding-username-hint"
         />
         <p id="onboarding-username-hint" className="text-xs text-muted-foreground">3–20 letters, numbers or underscores.</p>

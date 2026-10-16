@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarCheck, Heart, MessageCircle, Search, User } from "lucide-react";
+import { CalendarCheck, ChevronRight, Heart, MessageCircle, Search, User } from "lucide-react";
 
 import { MAX_ACTIVE_RESERVATIONS } from "@campushomes/shared";
 
+import { StatusChip } from "@/components/status-chip";
+import { bookingStage, isBooking } from "@/lib/booking-progress";
 import { getMyReservations } from "@/lib/reservations";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, roomCategoryLabel } from "@/lib/format";
 
 export const metadata: Metadata = { title: "My dashboard" };
+
+// In-progress bookings first, then completed, then ended ones.
+const STAGE_ORDER: Record<string, number> = { reserved: 0, booked: 1, occupied: 2 };
 
 export default async function StudentDashboardPage() {
   const [session, reservations, saved] = await Promise.all([
@@ -23,6 +28,9 @@ export default async function StudentDashboardPage() {
     .filter((at): at is string => Boolean(at))
     .sort()[0];
   const firstName = session?.user.name?.trim().split(/\s+/)[0];
+  const bookings = reservations
+    .filter(isBooking)
+    .sort((a, b) => (STAGE_ORDER[a.status] ?? 3) - (STAGE_ORDER[b.status] ?? 3));
 
   const cards = [
     {
@@ -61,6 +69,43 @@ export default async function StudentDashboardPage() {
           </li>
         ))}
       </ul>
+
+      <section aria-labelledby="my-bookings-heading" className="mt-8">
+        <h2 id="my-bookings-heading" className="text-lg">My bookings</h2>
+        {bookings.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            No booking requests yet. Reserve a room, agree terms with the landlord, then tap Request booking in My
+            reservations to follow it here.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {bookings.map((booking) => {
+              const stage = bookingStage(booking);
+              return (
+                <li key={booking.id}>
+                  <Link
+                    href={`/reservations?track=${booking.id}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors duration-150 hover:border-teal-600"
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-foreground">{booking.propertyName}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {roomCategoryLabel(booking.roomCategory)} ({booking.bedLabel}) · Ref{" "}
+                        {booking.id.slice(0, 8).toUpperCase()}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <StatusChip tone={stage.tone}>{stage.label}</StatusChip>
+                      <span className="sr-only">Track this booking</span>
+                      <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <Link
         href="/search"

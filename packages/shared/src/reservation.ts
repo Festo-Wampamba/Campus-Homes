@@ -96,6 +96,10 @@ export const studentReservationViewSchema = reservationSchema.extend({
   reservedAt: z.iso.datetime().nullable().optional(),
   // Set once the student asked the landlord to confirm the booking.
   bookingRequestedAt: z.iso.datetime().nullable().optional(),
+  // Booking tracker: when the move-in was confirmed, and when the status last
+  // changed (the date a cancelled, expired or released reservation ended).
+  moveInConfirmedAt: z.iso.datetime().nullable().optional(),
+  updatedAt: z.iso.datetime().nullable().optional(),
 });
 export type StudentReservationView = z.infer<typeof studentReservationViewSchema>;
 

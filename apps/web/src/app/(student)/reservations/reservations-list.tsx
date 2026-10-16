@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { StudentReservationView } from "@campushomes/shared";
 
@@ -10,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { StatusChip } from "@/components/status-chip";
 import { MessageButton } from "@/components/chat/message-button";
+import { BookingTracker } from "@/components/reservations/booking-tracker";
 import { api, ApiError } from "@/lib/api";
 import { formatDateTime, formatUgx, roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -191,21 +193,25 @@ function MoveInButton({ reservationId }: { reservationId: string }) {
 function ReservationCard({
   reservation,
   highlighted,
+  tracked,
   now,
 }: {
   reservation: StudentReservationView;
   highlighted: boolean;
+  tracked: boolean;
   now: number | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [isTrackerOpen, setIsTrackerOpen] = useState(tracked);
   const heldUntil = reservation.status === "reserved" ? reservation.reservedExpiresAt : null;
+  const trackerId = `booking-tracker-${reservation.id}`;
 
   useEffect(() => {
-    if (highlighted) ref.current?.scrollIntoView({ block: "center" });
-  }, [highlighted]);
+    if (highlighted || tracked) ref.current?.scrollIntoView({ block: "center" });
+  }, [highlighted, tracked]);
 
   return (
-    <div ref={ref}>
+    <div ref={ref} id={`reservation-${reservation.id}`}>
       <Card className={cn(highlighted && "ring-2 ring-teal-600 ring-offset-2 ring-offset-background")}>
         <CardContent className="flex flex-wrap items-start justify-between gap-3 p-5">
           <div className="min-w-0">
@@ -267,6 +273,23 @@ function ReservationCard({
             )}
           </div>
         </CardContent>
+        <div className="border-t border-border px-5 py-3">
+          <button
+            type="button"
+            aria-expanded={isTrackerOpen}
+            aria-controls={trackerId}
+            onClick={() => setIsTrackerOpen((open) => !open)}
+            className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-semibold text-teal-700 dark:text-teal-300"
+          >
+            Track booking
+            <ChevronDown aria-hidden className={cn("size-4 transition-transform duration-200", isTrackerOpen && "rotate-180")} />
+          </button>
+          {isTrackerOpen && (
+            <div className="pb-2 pt-1">
+              <BookingTracker reservation={reservation} id={trackerId} />
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );
@@ -282,9 +305,12 @@ export function sortLiveFirst(reservations: StudentReservationView[]): StudentRe
 export function ReservationsList({
   reservations,
   highlightId,
+  trackId,
 }: {
   reservations: StudentReservationView[];
   highlightId?: string;
+  // Opens this reservation's booking tracker (links from the dashboard).
+  trackId?: string;
 }) {
   const now = useMinuteNow();
 
@@ -295,6 +321,7 @@ export function ReservationsList({
           key={reservation.id}
           reservation={reservation}
           highlighted={reservation.id === highlightId}
+          tracked={reservation.id === trackId}
           now={now}
         />
       ))}
