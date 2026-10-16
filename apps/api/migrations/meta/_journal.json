@@ -470,6 +470,13 @@
       "when": 1791800000000,
       "tag": "0067_support_contact_row",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791900000000,
+      "tag": "0068_units_room_change_grant",
+      "breakpoints": true
     }
   ]
 }
