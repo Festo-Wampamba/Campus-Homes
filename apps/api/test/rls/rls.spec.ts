@@ -475,6 +475,43 @@ describe('units.operational_status (0024): off-platform-occupancy write path', (
   });
 });
 
+describe('units room details (0068): approved room changes write them, nobody else can', () => {
+  it('service_role can rewrite room details (the room-change approve path)', async () => {
+    const res = await asIdentity({ userId: opsLead, role: 'service_role' }, async (c) =>
+      c.query(
+        `UPDATE units SET label = 'A08', capacity = 1, room_category = 'single',
+           building_name = 'Block A', floor_label = 'Ground' WHERE id = $1`,
+        [unit1],
+      ),
+    );
+    expect(res.rowCount).toBe(1);
+  });
+
+  it("a landlord cannot rename their own room directly", async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE units SET label = 'A08' WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("a landlord cannot archive their own room directly", async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(`UPDATE units SET archived_at = now() WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it('ops_lead cannot rename a room outside the approve path', async () => {
+    await expect(
+      asIdentity({ userId: opsLead, role: 'ops_lead' }, async (c) =>
+        c.query(`UPDATE units SET label = 'A08' WHERE id = $1`, [unit1]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+});
+
 describe('beds.blocked (0034): bed-level manual override, column-restricted grant', () => {
   it("a landlord can flip their own bed's blocked status", async () => {
     const res = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
