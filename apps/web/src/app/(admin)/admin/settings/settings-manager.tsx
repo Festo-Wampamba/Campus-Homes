@@ -27,7 +27,7 @@ export function SettingsManager({ policy, settings, semesters, canManage }: { po
     try {
       await api("/admin/settings", { method: "PATCH", body: JSON.stringify({ reservationHoldHours: Number(form.holdHours), reservationFeeUgx: Number(form.feeUgx), verificationValidMonths: Number(form.verificationValidMonths), reportRetentionDays: Number(form.reportRetentionDays), registrationsOpen: form.registrationsOpen, maintenanceMode: form.maintenanceMode, supportContact: { email: form.supportEmail, phone: form.supportPhone } }) });
       setNotice("Platform settings saved. New reservation holds now use the updated fee and duration."); router.refresh();
-    } catch { setNotice("Settings could not be saved. Check the allowed ranges and sign-in freshness."); } finally { setPending(false); }
+    } catch (error) { setNotice(apiErrorMessage(error, "Settings could not be saved.")); } finally { setPending(false); }
   }
 
   function openCreateSemester() { setEditingId(null); setSemester(defaultSemester); setSemesterOpen(true); }
