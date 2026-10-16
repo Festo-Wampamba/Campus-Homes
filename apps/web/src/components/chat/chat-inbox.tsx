@@ -1,16 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCheck, MessageSquarePlus, Pencil, Search, Send, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, CheckCheck, Clock, MessageSquarePlus, Pencil, Search, Send, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { ChatContact, ChatMessage, ChatThread } from "@campushomes/shared";
+import type { ChatContact, ChatMessage, ChatThread, ThreadPresence } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiErrorMessage } from "@/lib/api";
+import { formatLastSeen } from "@/lib/last-seen";
 import { cn } from "@/lib/utils";
 import { useThreadMessages } from "./use-thread-messages";
+import { useThreadPresence } from "./use-thread-presence";
+
+// "typing…" for the other person: at most one ping this often while writing.
+const TYPING_PING_MS = 3000;
+
+type PendingMessage = { key: string; threadId: string; body: string; failed: boolean };
 
 function initials(name: string | null | undefined) {
   return (name || "CH").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -46,30 +53,60 @@ function sameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-function Composer({ threadId, editing, onCancelEdit, onMessage }: {
+/** WhatsApp ticks: ✓ sent, ✓✓ grey delivered (they had CampusHomes open), ✓✓ blue read. */
+function MessageTicks({ message }: { message: ChatMessage }) {
+  if (message.readAt) return <CheckCheck role="img" aria-label="Read" className="size-3.5 text-sky-300" />;
+  if (message.deliveredAt) return <CheckCheck role="img" aria-label="Delivered" className="size-3.5 opacity-70" />;
+  return <Check role="img" aria-label="Sent" className="size-3.5 opacity-70" />;
+}
+
+function PresenceLine({ presence, fallback }: { presence: ThreadPresence | null; fallback: string }) {
+  if (presence?.typing) return <span className="block text-xs font-semibold italic text-teal-700 dark:text-teal-300">typing…</span>;
+  if (presence?.online) return <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden className="size-2 rounded-full bg-success" />Online</span>;
+  if (presence?.lastSeenAt) return <span className="block text-xs text-muted-foreground">{formatLastSeen(presence.lastSeenAt)}</span>;
+  return <span className="block text-xs capitalize text-muted-foreground">{fallback}</span>;
+}
+
+function Composer({ threadId, editing, onCancelEdit, onMessage, onSend }: {
   threadId: string;
   editing: ChatMessage | null;
   onCancelEdit: () => void;
   onMessage: (message: ChatMessage) => void;
+  // New messages are sent by the inbox so they can show "Sending…" at once.
+  onSend: (body: string) => void;
 }) {
   const [body, setBody] = useState(editing?.body ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastTypingPing = useRef(0);
+
+  function handleChange(value: string) {
+    setBody(value);
+    if (!editing && value.trim() && Date.now() - lastTypingPing.current > TYPING_PING_MS) {
+      lastTypingPing.current = Date.now();
+      void api("/presence/typing", { method: "POST", body: JSON.stringify({ threadId }) }).catch(() => undefined);
+    }
+  }
 
   async function submit() {
     const trimmed = body.trim();
     if (!trimmed || pending) return;
+    if (!editing) {
+      onSend(trimmed);
+      setBody("");
+      return;
+    }
     setPending(true);
     setError(null);
     try {
-      const path = editing ? `/chat/threads/${threadId}/messages/${editing.id}/edit` : `/chat/threads/${threadId}/messages`;
+      const path = `/chat/threads/${threadId}/messages/${editing.id}/edit`;
       const message = await api<ChatMessage>(path, { method: "POST", body: JSON.stringify({ body: trimmed }) });
       onMessage(message);
       setBody("");
       onCancelEdit();
       window.dispatchEvent(new Event("campushomes:notifications-refresh"));
     } catch (caught) {
-      setError(apiErrorMessage(caught, editing ? "Could not save your edit." : "Message failed to send."));
+      setError(apiErrorMessage(caught, "Could not save your edit."));
     } finally {
       setPending(false);
     }
@@ -80,7 +117,7 @@ function Composer({ threadId, editing, onCancelEdit, onMessage }: {
       {editing && <div className="mb-2 flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-xs"><span><strong>Editing message</strong> · Esc to cancel</span><button type="button" aria-label="Cancel editing" onClick={onCancelEdit}><X aria-hidden className="size-4" /></button></div>}
       {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
       <div className="flex items-end gap-2">
-        <Textarea autoFocus={Boolean(editing)} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message…" aria-label="Message" className="field-sizing-content max-h-36 min-h-11 resize-none" onKeyDown={(event) => {
+        <Textarea autoFocus={Boolean(editing)} value={body} onChange={(event) => handleChange(event.target.value)} placeholder="Write a message…" aria-label="Message" className="field-sizing-content max-h-36 min-h-11 resize-none" onKeyDown={(event) => {
           if (event.key === "Escape" && editing) onCancelEdit();
           if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); }
         }} />
@@ -102,6 +139,7 @@ export function ChatInbox({ initialThreads, currentUserId }: { initialThreads: C
   const [starting, setStarting] = useState(false);
   const [newMessageOpen, setNewMessageOpen] = useState(false);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
+  const [pending, setPending] = useState<PendingMessage[]>([]);
 
   useEffect(() => {
     const refresh = () => api<ChatThread[]>("/chat/threads").then(setThreads).catch(() => undefined);
@@ -118,6 +156,7 @@ export function ChatInbox({ initialThreads, currentUserId }: { initialThreads: C
   const activeThreadId = searchParams.get("thread") ?? sortedThreads[0]?.id ?? null;
   const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
   const { messages, appendMessage, replaceMessage } = useThreadMessages(activeThreadId);
+  const presence = useThreadPresence(activeThreadId);
 
   function selectThread(id: string) {
     setEditing(null);
@@ -150,6 +189,20 @@ export function ChatInbox({ initialThreads, currentUserId }: { initialThreads: C
     setThreads((current) => current.map((thread) => thread.id === message.threadId ? { ...thread, lastMessageAt: message.sentAt, lastMessageSnippet: message.body } : thread));
   }
 
+  // Shows the message at once with a clock, then swaps in the saved one (✓).
+  async function sendMessage(threadId: string, body: string, key: string = crypto.randomUUID()) {
+    setPending((current) => [...current.filter((item) => item.key !== key), { key, threadId, body, failed: false }]);
+    try {
+      const message = await api<ChatMessage>(`/chat/threads/${threadId}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+      setPending((current) => current.filter((item) => item.key !== key));
+      appendMessage(message);
+      setThreads((current) => current.map((thread) => thread.id === message.threadId ? { ...thread, lastMessageAt: message.sentAt, lastMessageSnippet: message.body } : thread));
+      window.dispatchEvent(new Event("campushomes:notifications-refresh"));
+    } catch {
+      setPending((current) => current.map((item) => item.key === key ? { ...item, failed: true } : item));
+    }
+  }
+
   return (
     <div className="mt-6 grid min-h-[34rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm md:grid-cols-[320px_1fr]">
       <aside className="border-b border-border md:border-b-0 md:border-r">
@@ -160,19 +213,20 @@ export function ChatInbox({ initialThreads, currentUserId }: { initialThreads: C
         <div className="max-h-[34rem] divide-y divide-border overflow-y-auto">
           {!filteredThreads.length && <p className="p-5 text-sm text-muted-foreground">{query ? "No conversations match your search." : "No conversations yet. Select New message to start one."}</p>}
           {filteredThreads.map((thread) => <button key={thread.id} type="button" onClick={() => selectThread(thread.id)} className={cn("flex w-full gap-3 p-3 text-left transition-colors hover:bg-muted", thread.id === activeThreadId && "bg-accent")}>
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(thread.counterpartName)}</span>
+            <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(thread.counterpartName)}{thread.counterpartOnline && <span role="img" aria-label="Online" className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-card bg-success" />}</span>
             <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><strong className="truncate text-sm">{thread.counterpartName ?? "CampusHomes user"}</strong><span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{relativeTime(thread.lastMessageAt)}</span></span><span className="mt-0.5 block text-[11px] capitalize text-muted-foreground">{thread.counterpartKind ?? (thread.reservationId ? "Reservation contact" : "Direct contact")}</span><span className="mt-1 flex items-center gap-2"><span className={cn("min-w-0 flex-1 truncate text-xs", thread.unreadCount ? "font-semibold text-foreground" : "text-muted-foreground")}>{thread.lastMessageSnippet ?? "Start the conversation"}</span>{!!thread.unreadCount && <span aria-label={`${thread.unreadCount} unread messages`} className="grid min-w-5 place-items-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{thread.unreadCount}</span>}</span></span>
           </button>)}
         </div>
       </aside>
       <section className="flex min-w-0 flex-col">
         {!activeThreadId || !activeThread ? <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><MessageSquarePlus aria-hidden className="mb-3 size-8 text-muted-foreground" /><p className="font-semibold">Choose a conversation</p><p className="mt-1 text-sm text-muted-foreground">Open an existing chat or start a new message.</p></div> : <>
-          <header className="flex items-center gap-3 border-b border-border px-4 py-3"><span className="grid size-10 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(activeThread.counterpartName)}</span><span><strong className="block text-sm">{activeThread.counterpartName ?? "CampusHomes user"}</strong><span className="block text-xs capitalize text-muted-foreground">{activeThread.counterpartKind ?? "CampusHomes conversation"}</span></span></header>
+          <header className="flex items-center gap-3 border-b border-border px-4 py-3"><span className="grid size-10 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(activeThread.counterpartName)}</span><span><strong className="block text-sm">{activeThread.counterpartName ?? "CampusHomes user"}</strong><PresenceLine presence={presence} fallback={activeThread.counterpartKind ?? "CampusHomes conversation"} /></span></header>
           <div className="flex-1 space-y-2 overflow-y-auto bg-muted/25 p-4">
             {!messages.length && <div className="grid h-full place-items-center text-center text-sm text-muted-foreground"><p>No messages yet.<br />Write below to begin the conversation.</p></div>}
-            {messages.map((message, index) => { const own = message.fromUserId === currentUserId; const showDay = index === 0 || !sameDay(messages[index - 1].sentAt, message.sentAt); return <div key={message.id}>{showDay && <div className="my-4 flex items-center gap-3 text-[11px] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">{dayLabel(message.sentAt)}</div>}<div className={cn("group w-fit max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm", own ? "ml-auto rounded-br-sm bg-teal-700 text-white" : "rounded-bl-sm border border-border bg-card text-foreground")}><p className="whitespace-pre-wrap break-words">{message.body}</p><span className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">{messageTime(message.sentAt)}{message.editedAt ? " · edited" : ""}{own && <CheckCheck aria-label={message.readAt ? "Read" : "Sent"} className={cn("size-3", message.readAt && "text-cyan-200")} />}</span>{own && <button type="button" onClick={() => setEditing(message)} className="mt-1 hidden items-center gap-1 text-[11px] underline group-hover:inline-flex group-focus-within:inline-flex"><Pencil aria-hidden className="size-3" /> Edit</button>}</div></div>; })}
+            {messages.map((message, index) => { const own = message.fromUserId === currentUserId; const showDay = index === 0 || !sameDay(messages[index - 1].sentAt, message.sentAt); return <div key={message.id}>{showDay && <div className="my-4 flex items-center gap-3 text-[11px] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">{dayLabel(message.sentAt)}</div>}<div className={cn("group w-fit max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm", own ? "ml-auto rounded-br-sm bg-teal-700 text-white" : "rounded-bl-sm border border-border bg-card text-foreground")}><p className="whitespace-pre-wrap break-words">{message.body}</p><span className="mt-1 flex items-center justify-end gap-1 text-[10px]"><span className="opacity-70">{messageTime(message.sentAt)}{message.editedAt ? " · edited" : ""}</span>{own && <MessageTicks message={message} />}</span>{own && <button type="button" onClick={() => setEditing(message)} className="mt-1 hidden items-center gap-1 text-[11px] underline group-hover:inline-flex group-focus-within:inline-flex"><Pencil aria-hidden className="size-3" /> Edit</button>}</div></div>; })}
+            {pending.filter((item) => item.threadId === activeThreadId).map((item) => <div key={item.key} className={cn("ml-auto w-fit max-w-[82%] rounded-2xl rounded-br-sm px-3.5 py-2.5 text-sm shadow-sm", item.failed ? "border border-destructive bg-card text-foreground" : "bg-teal-700 text-white")}><p className="whitespace-pre-wrap break-words">{item.body}</p>{item.failed ? <span role="alert" className="mt-1 flex flex-wrap items-center justify-end gap-2 text-[11px] text-destructive">Not sent<button type="button" className="font-semibold underline" onClick={() => void sendMessage(item.threadId, item.body, item.key)}>Retry</button><button type="button" className="underline" onClick={() => setPending((current) => current.filter((p) => p.key !== item.key))}>Discard</button></span> : <span className="mt-1 flex justify-end"><Clock role="img" aria-label="Sending" className="size-3.5 opacity-70" /></span>}</div>)}
           </div>
-          <Composer key={`${activeThreadId}:${editing?.id ?? "new"}`} threadId={activeThreadId} editing={editing} onCancelEdit={() => setEditing(null)} onMessage={handleMessage} />
+          <Composer key={`${activeThreadId}:${editing?.id ?? "new"}`} threadId={activeThreadId} editing={editing} onCancelEdit={() => setEditing(null)} onMessage={handleMessage} onSend={(body) => void sendMessage(activeThreadId, body)} />
         </>}
       </section>
       {newMessageOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4" onMouseDown={() => setNewMessageOpen(false)}><Card role="dialog" aria-modal="true" aria-label="Start a new conversation" className="w-full max-w-md" onMouseDown={(event) => event.stopPropagation()}><CardContent className="p-5"><div className="flex items-center justify-between"><h2 className="font-display text-lg font-bold">New message</h2><Button variant="ghost" size="icon" aria-label="Close" onClick={() => setNewMessageOpen(false)}><X aria-hidden className="size-4" /></Button></div><p className="mt-1 text-sm text-muted-foreground">Choose an eligible CampusHomes contact.</p>{contactsError && <p role="alert" className="mt-3 text-sm text-destructive">{contactsError}</p>}<div className="mt-4 max-h-80 divide-y divide-border overflow-y-auto rounded-lg border border-border">{contacts === null && <p className="p-4 text-sm text-muted-foreground">Loading contacts…</p>}{contacts?.length === 0 && !contactsError && <p className="p-4 text-sm text-muted-foreground">No eligible contacts yet. A conversation becomes available after an enquiry or reservation, or when a student contacts a verified landlord.</p>}{contacts?.map((contact) => <button key={contact.userId} type="button" disabled={starting} onClick={() => void startConversation(contact)} className="flex w-full items-center gap-3 p-3 text-left hover:bg-muted disabled:opacity-60"><span className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(contact.name)}</span><span><strong className="block text-sm">{contact.name ?? "CampusHomes user"}</strong><span className="block text-xs text-muted-foreground">{contact.context}</span></span></button>)}</div></CardContent></Card></div>}

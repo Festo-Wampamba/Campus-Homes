@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { getServerSession } from "@/lib/session";
 import { WORKSPACE_HOME } from "@/lib/auth-routing";
+import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 import { AccountMenu } from "@/components/shell/account-menu";
 import { MobileNav, type NavLink } from "@/components/shell/mobile-nav";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
@@ -52,7 +53,10 @@ async function SiteHeader() {
           </Link>
           <ThemeToggle />
           {session ? (
-            <AccountMenu user={session.user} access={session.access} />
+            <>
+              <PresenceHeartbeat />
+              <AccountMenu user={session.user} access={session.access} />
+            </>
           ) : (
             <Link
               href={signInHref}
