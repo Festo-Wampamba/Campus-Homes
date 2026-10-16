@@ -83,6 +83,6 @@ describe('verificationContent', () => {
   });
 
   it('keeps the whole code on one copyable line', () => {
-    expect(verificationContent('forgot-password', '641334', issuedAt).html).toContain('letter-spacing:2px;color:#0b3f3f">641334</span>');
+    expect(verificationContent('forgot-password', '641334', issuedAt).html).toContain('user-select:all">641334</span>');
   });
 });

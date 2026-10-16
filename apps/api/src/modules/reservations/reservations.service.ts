@@ -599,12 +599,14 @@ export class ReservationsService {
            r.listing_version_id AS "listingVersionId", r.status,
            r.reserved_at AS "reservedAt", r.reserved_expires_at AS "reservedExpiresAt", r.booked_at AS "bookedAt",
            r.booking_requested_at AS "bookingRequestedAt",
+           m.confirmed_at AS "moveInConfirmedAt", r.updated_at AS "updatedAt",
            r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
            l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",
            b.label AS "bedLabel", u.room_category AS "roomCategory", u.capacity AS "roomCapacity",
            r.price_per_term_ugx AS "rentPerTermUgx", r.deposit_ugx AS "depositUgx"
          FROM reservations r
+         LEFT JOIN move_ins m ON m.reservation_id = r.id
          JOIN beds b ON b.id = r.bed_id
          JOIN units u ON u.id = b.unit_id
          JOIN listing_versions lv ON lv.id = r.listing_version_id

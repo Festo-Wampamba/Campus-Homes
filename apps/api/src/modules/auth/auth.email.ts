@@ -94,7 +94,7 @@ export function verificationContent(kind: VerificationEmailKind, code: string, n
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef7f6;border:1px solid #cfe5e2;border-radius:14px"><tr><td style="padding:18px 12px 16px" align="center">
 <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#087f80;margin-bottom:12px">Your code</div>
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>${digitCells}</tr></table>
-<div style="margin-top:14px;font-size:14px;color:#3d5c5c">Code: <span style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:2px;color:#0b3f3f">${safeCode}</span></div>
+<div style="margin-top:14px;font-size:14px;color:#3d5c5c">Code: <span style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:2px;color:#0b3f3f;-webkit-user-select:all;user-select:all">${safeCode}</span></div>
 </td></tr></table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:#fff6ee;border-left:4px solid #e47e7e;border-radius:8px"><tr><td style="padding:12px 16px;font-size:14px;line-height:1.6;color:#173b3b"><strong>${escapeHtml(expiry)}</strong><br>Requesting a new code cancels this one; only the newest code works.</td></tr></table>
 <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#627979">Never share this code. CampusHomes staff will never ask you for it. If you didn't request it, you can ignore this email; your account stays safe.</p>
