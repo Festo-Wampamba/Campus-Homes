@@ -72,7 +72,7 @@ export function useThreadMessages(threadId: string | null) {
           if (seenIds.current.has(message.id)) return;
           seenIds.current.add(message.id);
           setMessages((prev) => [...prev, message]);
-          if (message.fromUserId) {
+          if (message.fromUserId && !document.hidden) {
             void api(`/chat/threads/${threadId}/read`, { method: "POST" }).then(() => {
               window.dispatchEvent(new Event("campushomes:notifications-refresh"));
             });
@@ -90,19 +90,25 @@ export function useThreadMessages(threadId: string | null) {
       };
     }
 
+    // Blue ticks mean the person actually looked: only a visible tab reads.
+    const markReadIfVisible = () => {
+      if (!document.hidden) void api(`/chat/threads/${threadId}/read`, { method: "POST" }).catch(() => undefined);
+    };
     const interval = setInterval(async () => {
       try {
         const rows = await api<ChatMessage[]>(`/chat/threads/${threadId}/messages`);
         if (cancelled) return;
         setMessages(chronological(rows));
-        await api(`/chat/threads/${threadId}/read`, { method: "POST" });
+        markReadIfVisible();
       } catch {
         // Transient — next tick retries (same pattern as usePaymentPoll).
       }
     }, 4000);
+    document.addEventListener("visibilitychange", markReadIfVisible);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", markReadIfVisible);
     };
   }, [threadId]);
 

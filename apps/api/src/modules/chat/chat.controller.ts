@@ -47,6 +47,12 @@ export class ChatController {
     return this.chat.messages(rlsCtx(req), id);
   }
 
+  @Get('threads/:id/presence')
+  @Roles('student', 'landlord')
+  threadPresence(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.chat.threadPresence(rlsCtx(req), id);
+  }
+
   @Post('threads/:id/read')
   @Roles('student', 'landlord')
   markRead(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {

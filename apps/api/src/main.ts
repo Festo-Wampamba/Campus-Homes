@@ -66,7 +66,14 @@ async function bootstrap() {
   // tighter bucket than ordinary writes (still roomy for a campus NAT).
   http.use('/api/v1/support/ask', writeRateLimit(app.get(REDIS), { limit: 20, windowSec: 60, namespace: 'support-ai' }));
   http.use('/api/v1/events', writeRateLimit(app.get(REDIS), { limit: 300, windowSec: 60, namespace: 'events' }));
-  http.use('/api/v1', writeRateLimit(app.get(REDIS), { limit: 300, windowSec: 60, skip: isEventsRequest }));
+  // Every visible tab beats every 25 s and typing pings every few seconds;
+  // a campus NAT puts many students behind one IP, so presence gets its own bucket.
+  http.use('/api/v1/presence', writeRateLimit(app.get(REDIS), { limit: 600, windowSec: 60, namespace: 'presence', failOpen: true }));
+  http.use('/api/v1', writeRateLimit(app.get(REDIS), {
+    limit: 300,
+    windowSec: 60,
+    skip: (req) => isEventsRequest(req) || req.originalUrl.startsWith('/api/v1/presence'),
+  }));
   http.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
     const isExempt = req.originalUrl.startsWith('/api/v1/admin') || req.originalUrl.startsWith('/api/v1/health');
     if (isExempt || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
