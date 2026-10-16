@@ -3,30 +3,31 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-15._
+_Last updated: 2026-10-17._
+
+**Where things stand:** production, staging, `main` and `development` all run
+`93941a1` (schema 67/67). Flow: feature branch → PR to `development` →
+release PR to `main` (deploys staging) → production by hand with
+`gh workflow run CI --ref main`.
 
 ## Status board
 
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
-| 3 | [Logto settings: MFA prompt + prod password at sign-up](#3-logto-settings-mfa-prompt--prod-password-at-sign-up) | Festo | ☐ Open (staging still `PromptAtSignInAndSignUp`) |
-| 4 | [Post-deploy checks (production)](#4-post-deploy-checks-production) | Festo | ☐ Open |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
 | 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
-| 9 | [Phase 1: mobile menu + search layout](#9-phase-1-mobile-menu--search-layout) | Claude | 👀 On staging (#162), production pending |
-| 10 | [Phase 2: search correctness](#10-phase-2-search-correctness) | Claude | 👀 On staging (#164), production pending |
-| 11 | [Phase 3: reservation journey](#11-phase-3-reservation-journey) | Claude | 👀 On staging (#166), production pending; R03b needs a staging check (Festo) |
-| 12 | [Phase 4: information before reserving](#12-phase-4-information-before-reserving) | Claude | 👀 On staging (#170), production pending |
-| 13 | [Phase 5: data-quality guards + production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Claude / Festo | 👀 Code on staging (#174); data fixes wait on Festo |
-| 14 | [Phase 6: help and support](#14-phase-6-help-and-support) | Claude | 👀 On staging (#176, #178), production pending |
-| 15 | [Cloudflare: turn off Email Address Obfuscation](#15-cloudflare-turn-off-email-address-obfuscation) | Festo | ☐ Open |
-| 16 | [Small UI polish from the 2026-10-14 inspection](#16-small-ui-polish-from-the-2026-10-14-inspection) | Claude | 🔜 Next |
+| 13 | [Production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Festo → Claude | ☐ Open (needs correct price, furnishing, title) |
 | 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
-| 18 | [Student journey fixes from staging feedback](#18-student-journey-fixes-from-staging-feedback) | Claude / Festo | 👀 On staging (#180, #182), Festo testing; production pending |
-| 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo | ☐ Open |
+| 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo + Claude | ☐ Open |
+| 20 | [Room-change approve fails: `permission denied for table units`](#20-room-change-approve-fails-permission-denied-for-table-units) | Claude | 🔜 Next (bug, blocks room edits) |
+| 21 | [Phone numbers: exactly 10 digits](#21-phone-numbers-exactly-10-digits) | Claude | 🔜 Queued |
+| 22 | [Student registration link clickable, opens in a new tab](#22-student-registration-link-clickable-opens-in-a-new-tab) | Claude | 🔜 Queued |
+| 23 | [Inspection submit requires at least one photo](#23-inspection-submit-requires-at-least-one-photo) | Claude | 🔜 Queued |
+| 24 | [Staging tests: chat + booking tracker](#24-staging-tests-chat--booking-tracker) | Festo | ☐ Open (paused by item 20) |
+| 25 | [Code backlog](#25-code-backlog) | Claude | 💤 Later |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -45,54 +46,6 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 - **Decided:** official Meta Cloud API only, never Evolution API or Baileys
   (2026-10-12). They break Meta's terms and risk a number ban that would
   block every phone sign-in.
-
-## 3. Logto settings: MFA prompt + prod password at sign-up
-
-- **MFA prompt (staging and production):** Multi-factor auth → Policy:
-  - **Require MFA:** "Optional MFA".
-  - **MFA set-up prompt:** "Ask users to set up MFA on their next sign-in
-    attempt after registration (skippable, one-time prompt)", which is
-    `PromptOnlyAtSignIn`.
-  - Never "Adaptive MFA": it only allows non-skippable prompts.
-  - *Why:* both are `PromptAtSignInAndSignUp` (checked 2026-10-15), so new
-    students see a skippable 2-step screen at sign-up. The API already marks
-    students as skipped (`skipMfaPrompt()`, #180); staff still need an
-    enrolled factor.
-  - *Check:*
-    `curl -s https://auth-staging.campushomes.co.ug/api/.well-known/sign-in-exp | python3 -c "import sys,json;print(json.load(sys.stdin)['mfa'])"`
-    should print `'policy': 'PromptOnlyAtSignIn'` (same with `auth.` for
-    production).
-- **Password at sign-up (production only):** Sign-in experience → sign-up →
-  turn on "Create your password". Staging already has it on.
-  - *Why:* sign-up on production is code-only today (`password: False`), so
-    new users have no password.
-
-## 4. Post-deploy checks (production)
-
-Production runs `90303ac` (deployed 2026-10-12, schema 62/62), which
-includes PRs #152 and #154. Check on production:
-
-- [ ] An account without a contact phone is sent to onboarding once, then
-      lands on the page it was heading to. **All 16 current production
-      accounts have no phone on record, so everyone, staff included, will
-      see this once.**
-- [ ] A new reservation shows a ~24h countdown; Admin → Settings shows 24
-      (production has no saved setting, so the built-in 24h default applies)
-- [ ] Staff sign-in from `/staff` works, with two-step verification
-- [ ] Signed in as a landlord, opening `/staff` still shows the staff buttons
-- [ ] Ops inspection: pasting `0°19′45″N 32°33′12″E` shows
-      "Using 0.329167, 32.553333"; typing `near the market` shows the
-      "isn't a supported coordinates format" message with samples and
-      disables Submit
-
-**Next production deploy** (`gh workflow run CI --ref main`, Festo approves)
-takes production from `90303ac` to current `main` (`36c1b63` or later):
-Phases 1–6 (items 9–14) plus item 18. It applies migrations 0063 and 0064
-(schema 62 → 64). After it:
-
-- [ ] `/api/v1/health` reports the new commit and schema 64/64
-- [ ] Spot-check items 9–14 and 18 on production
-- [ ] Apply the Logto settings in item 3 to production
 
 ## 5. Kiwanda: resubmit 4 pending inspections
 
@@ -142,90 +95,6 @@ Phases 1–6 (items 9–14) plus item 18. It applies migrations 0063 and 0064
   `apps/api/src/modules/profile/me.controller.ts` (`POST /me/email/code` then `PATCH /me/email`).
 - **Depends on:** contact phone shipped (done); Africa's Talking production account live.
 
-## 9. Phase 1: mobile menu + search layout
-
-Phases 9–14 come from the 2026-10-14 live inspection of campushomes.co.ug, a
-second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
-[`docs/superpowers/plans/2026-10-14-student-journey-fixes.md`](docs/superpowers/plans/2026-10-14-student-journey-fixes.md). One PR to `development` per phase.
-
-- **Shipped:** PR #162, on staging since 2026-10-14 (`37bbde2`).
-
-- **Ships with:** PR #160, the peach orange accent (`#fcb177`) and a single
-  search icon in the hero search.
-- **R03a, phone layout:** on phones the header hides Find a room, How it works,
-  Support and For landlords with no menu. Add a hamburger menu
-  (`components/shell/site-header.tsx`).
-  - *Pass:* at 375px the menu opens, lists all 4 links, closes on Escape, on
-    tapping outside and after choosing a link.
-- **Search filters:** the hostel-name search gets its own row; price and the
-  three selects sit in a grid (`app/(public)/search/search-client.tsx`).
-  - *Pass:* the placeholder isn't cut off and no select sits alone on a row.
-- **Card names:** hostel names wrap to 2 lines instead of being cut
-  ("Kasubi Horizon Stud…").
-
-## 10. Phase 2: search correctness
-
-- **Shipped:** PR #164, on staging since 2026-10-14 (`37bbde2`).
-- **R01, search reliability:** a failed request shows the error state with
-  Retry, never a false "0 found".
-- **R15, Clear filters:** a button inside the filter area that resets every
-  filter (search text stays).
-  - *Pass:* set several filters, clear them, and filters, count and results
-    all reset together.
-- **Filtered empty state:** zero results caused by filters says "No hostels
-  match your filters" and offers Clear filters, not "No verified places in this
-  area yet".
-- **Room vs bed count:** cards say "108 rooms" for Kasubi Horizon, which has 38
-  rooms and 108 free beds (the API counts beds as `unit_count`). Show
-  "38 rooms · 108 beds free".
-- **R14, bathroom filter wording:** "Self-contained" / "Not self-contained",
-  same data (`units.self_contained`).
-- **Addresses:** trim trailing commas such as "Makerere Hill," in one display
-  helper.
-
-## 11. Phase 3: reservation journey
-
-- **Shipped:** PR #166, on staging since 2026-10-14 (`37bbde2`). Still open:
-  R03b below.
-- **R02, repeated sign-ins:** "Sign in to reserve" and "Sign in to ask a
-  question" link to plain `/sign-in`, so after signing in the student lands on
-  the homepage instead of the room. Add `next=/listings/<id>`. Sessions already
-  last 7 days.
-  - *Pass:* signed out, open a listing, Sign in to reserve, sign in, and you're
-    back on that listing.
-- **R17 + Festo's request, confirmation popup:** after reserving, show a dialog:
-  "Room reserved for you", hostel, room type, bed, and "held for 24 hours, until
-  <time>", taken from the API's `reservedExpiresAt`. Then a "View my
-  reservations" button opens the list with that reservation highlighted.
-- **R04 / R10, My reservations:**
-  - active reservations come first
-  - live countdown
-  - reference and reserved date
-  - "Just reserved" highlight
-  - Cancel asks for confirmation and shows errors
-- **R13, reservation limit:** 3 active per student is already enforced by the
-  API. Say so near the Reserve buttons.
-  - *Pass:* the 4th attempt shows the explanation.
-  - *Changed in #180:* the limit is now 5, plus one live reservation per room
-    type per hostel (see item 18).
-- **R03b, phone-number box:** reproduce onboarding and profile phone saving on
-  staging. Fix only if it still fails (#152 may have fixed it).
-- **Follow-up, PR #173 (on staging since 2026-10-15, `1fcc572`):** an overdue
-  hold is now expired by a per-minute sweep (`reservation_expiry_sweep`) and
-  again before every new reserve, so a lost BullMQ job can no longer keep a
-  bed blocked. Rooms showed "N reserved · 24h hold" until #182 made other
-  students' holds private (item 18).
-
-## 12. Phase 4: information before reserving
-
-- **Shipped:** PR #170, on staging since 2026-10-15 (`1fcc572`).
-- **R12, house rules:** `properties.house_rules` exists (admin-edited) but is
-  never shown publicly. Show it on the listing page.
-- **R06 / R09, amenities and gender policy at the reserve step:** summary next
-  to Reserve. Unknown values read "Not provided".
-- **R11, viewings:** give the existing "Request a viewing" option its own
-  button. A structured visiting-hours field needs a migration; see item 17.
-
 ## 13. Phase 5: data-quality guards + production data fixes
 
 - **Shipped (code):** PR #174, on staging since 2026-10-15 (`1fcc572`). The
@@ -242,40 +111,6 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
   - its furnishing amenities
   - the listing titled "Makerere Hill, Kampala" (an address, not a name)
 
-## 14. Phase 6: help and support
-
-- **Shipped:** PR #176 (release #177) and FAQ wording PR #178 (release #179),
-  on staging since 2026-10-15.
-- **R07, chat box:** the student–landlord chat composer grows with the text
-  (`components/chat/chat-inbox.tsx`, Tailwind `field-sizing-content`, capped
-  at `max-h-36`; Firefox keeps the fixed box).
-- **R16, FAQ:** answers on the 24h hold and expiry, the reservation limit,
-  payments (offline, agreed with the landlord), viewings, cancellations and
-  support. Only holds can be cancelled by the student; a confirmed booking is
-  released by the landlord (#178).
-- **R18, support form:** the student support desk can attach one of the
-  student's own reservations to an inquiry (migration 0063,
-  `inquiries.reservation_id`; ownership checked under the student's RLS).
-- **Festo to check on staging:** the chat box grows with long messages; the
-  support form's "Which reservation?" picker.
-
-## 15. Cloudflare: turn off Email Address Obfuscation
-
-- **What:** Cloudflare dashboard → Security → Settings → turn off
-  **Email Address Obfuscation** for `campushomes.co.ug`.
-- **Why:** it rewrites the footer email in the HTML, so React hits hydration
-  error #418 and re-renders every page on every visit (slower). Cloudflare's
-  decode script is also blocked by our CSP. No code change needed.
-- *Pass:* no `__cf_email__` in the page source and no #418 in the console.
-
-## 16. Small UI polish from the 2026-10-14 inspection
-
-- **Map worker:** MapLibre's worker URL 404s, so it falls back. The map works
-  but loads slowly and logs console errors (`components/map/listings-map.tsx`).
-- **Listing navigation:** clicking a listing card shows the old page for about
-  3s with no loading indicator.
-- **Cookie notice:** on phones it covers about a quarter of the screen.
-
 ## 17. Deferred backlog items
 
 - **R05, payment options:** real-money payments are product Phase 2 (decided
@@ -286,43 +121,6 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 - **Visiting-hours field (R11 follow-up):** needs a migration plus admin and
   landlord forms.
 
-## 18. Student journey fixes from staging feedback
-
-- **Shipped:** PR #180 (release #181) and PR #182 (release #183), on staging
-  since 2026-10-15 (`36c1b63`, schema 64/64). Production pending (item 4).
-- **iPhone Reserve:** the popup collapsed to a thin line on Safari
-  (`flex-1` inside an auto-height column). Fixed with `flex-auto` in the
-  shared `components/ui/dialog.tsx`.
-- **Sign-up order:** a new account goes to "Complete your profile" first,
-  then back to the page it came from. The header Sign in link carries `next`.
-- **No 2-step prompt for students:** the API marks new students as MFA
-  skipped. Also needs the Logto policy in item 3.
-- **Search filters:** bathroom select reads Self-contained / Not
-  self-contained; Clear filters is always visible.
-- **Reservation rules:** limit 3 → 5; one live reservation per room type
-  (category + self-contained) per hostel; both checked under a per-student
-  advisory lock so parallel requests can't slip past.
-- **Yellow "Reserved" button** on the room types the student holds.
-- **12-hour times** (`Fri 16 Oct, 2:51 am`).
-- **Request booking:** the student asks the landlord to confirm a held room
-  (migration 0064, `reservations.booking_requested_at`); the landlord gets
-  an in-app + SMS notification and confirms with the existing Book action.
-  No in-app payment.
-- **Other students' holds are private (#182):** room rows no longer show
-  "N reserved · 24h hold"; the listing API no longer returns a hold flag.
-- **My dashboard (#182):** `/dashboard`, first in the student sidebar and
-  "My dashboard" in the account menu: live reservations "N of 5", next hold
-  end, favourites, messages, profile.
-- **Festo verified on staging:** sign-up → Skip → Complete your profile →
-  back; 12-hour times in the Reserve popup; yellow Reserved button.
-- **Festo still to check on staging (student):**
-  - [ ] On an iPhone, Reserve shows the popup
-  - [ ] My dashboard from the account dropdown
-  - [ ] Request booking → the landlord sees "booking requested" and gets
-        the notification
-  - [ ] Other students' holds don't show on room rows
-  - [ ] R03b phone box (item 11)
-
 ## 19. Rotate exposed staging secrets
 
 - **What:** rotate the staging passwords/keys that were pasted in chat
@@ -330,12 +128,97 @@ second inspection report and Festo's handwritten backlog (R01–R19). Full plan:
 - **When:** before any real data goes on the shared staging/production
   Postgres, Redis or Logto.
 
+## 20. Room-change approve fails: `permission denied for table units`
+
+- **Seen:** 2026-10-17 on staging. Landlord Joel Mikes (Naguru Hieghts)
+  renamed room "Double 1" → "A08" and submitted it for Ops review; Ops lead
+  Approve showed "Internal server error".
+- **Cause (staging API log, 10/16 22:36 and 22:42 UTC):**
+  `error: permission denied for table units` (`aclcheck_error`). It's a
+  missing **grant** on `units` for `app_user` (UPDATE, or the renamed
+  column), not an RLS policy denial.
+- **Fix:** find the statement the approve path runs
+  (`RoomManagementOpsController` → `/ops/room-change-requests/:id/approve`).
+  Add a new migration granting the narrowest privilege it needs (or run that
+  write under the service path already used for unit writes). Add an RLS test
+  for the grant. Existing migrations stay untouched.
+- *Pass:* approve that same pending change on staging, and A08 shows on the
+  landlord's Manage Rooms without "Staged".
+
+## 21. Phone numbers: exactly 10 digits
+
+- **What:** "Complete your profile" accepted `0778398` (7 digits). Uganda
+  numbers must be exactly 10 digits in local form (`07XXXXXXXX`), i.e. 9
+  after `+256`.
+- **Where:** `packages/shared/src/phone.ts` (`africanPhone` allows 6–10
+  national digits) and the `PhoneField` used by onboarding, profile, admin
+  user editor and staff invite. Decide whether the rule is Uganda-only or
+  per-country lengths before changing the shared schema.
+- *Pass:* 7, 9 and 11 digits are rejected with a clear message; `0778398xxx`
+  and `+256 778 398 xxx` save.
+
+## 22. Student registration link clickable, opens in a new tab
+
+- **What:** in the landlord property dialog ("Student registration form QR
+  code"), the `https://…/agreement/<propertyId>` link is plain text. Make it
+  a link with `target="_blank" rel="noopener noreferrer"` so a landlord can
+  open it and register a student straight away.
+- *Pass:* clicking the URL opens the registration form in a new tab; Copy
+  link and Open still work.
+
+## 23. Inspection submit requires at least one photo
+
+- **What:** the Ops visit inspection can be submitted without photos, so
+  inspectors forget them. Block Submit until at least one photo is attached.
+  Show the reason next to the button, and enforce it in the API's visit sync
+  too, not only in the form.
+- **Mind:** the offline sync path. A visit captured offline must keep its
+  photos queued and still pass the check when it syncs.
+- *Pass:* Submit is disabled with "Add at least one photo" until a photo is
+  added; an API call without photos is rejected with a 400.
+
+## 24. Staging tests: chat + booking tracker
+
+Two browsers on staging: normal window = landlord, Incognito = student.
+
+- [ ] **Chat:**
+  - [ ] ticks go clock → 1 grey → 2 grey → blue
+  - [ ] Online / typing… / "last seen today at …"
+  - [ ] Offline (DevTools Network → Offline) shows Not sent → Retry
+- [ ] **Booking tracker:**
+  - [ ] Reserved → Request booking → landlord Book → Confirm move-in, each
+        step dated
+  - [ ] My bookings on the dashboard shows the right status
+  - [ ] a cancelled reservation ends in a red step
+- [ ] Older staging checks still open: iPhone Reserve popup; other students'
+  holds hidden on room rows.
+
+## 25. Code backlog
+
+- **Chat Phase 2:** Soketi (instant delivery), typing over client events.
+  Later: privacy toggles, SMS/email nudge for unread messages.
+- **AI support:** send only the relevant manual sections. Each question uses
+  ~2,200 tokens; Groq free tier allows ~8,000/min.
+- **Lint noise:** 1,125 warnings from the gitignored `public/maplibre/*.mjs`.
+  Adding them to the ESLint ignores needs Festo's OK (config-protection hook).
+- **Local `drizzle-kit check`** fails with `EISDIR` on this machine. CI doesn't
+  run it; find the cause before trusting it again.
+
 ---
 
 ## Done
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-17 | Admin → Settings save creates missing rows and shows the real API error; migration 0067 restores `support_contact` (WhatsApp +256768561023) on production, where the row was missing | [#199](https://github.com/Festo-Wampamba/Campus-Homes/pull/199), [#200](https://github.com/Festo-Wampamba/Campus-Homes/pull/200) | Staging + production (`93941a1`, schema 67) |
+| 2026-10-17 | Production deploy `3847c51` → `93941a1`, schema 66 → 67 | workflow run `38968508854` | Production |
+| 2026-10-17 | Festo, dashboards: old Zoho DKIM record deleted (Zoho verified); Cloudflare Email Address Obfuscation off + cache purged (was item 15); sitemap submitted to Google (Success, 17 pages) and Bing (Success, 17 URLs); Logto MFA prompt set to one-time skippable on staging + production; production sign-up "Create your password" on (was item 3) | — | Production |
+| 2026-10-16 | Chat: WhatsApp-style ticks, online / last seen, typing (migration 0066) | [#197](https://github.com/Festo-Wampamba/Campus-Homes/pull/197), [#198](https://github.com/Festo-Wampamba/Campus-Homes/pull/198) | Staging + production |
+| 2026-10-16 | Booking tracker on My reservations + My bookings on the dashboard | [#195](https://github.com/Festo-Wampamba/Campus-Homes/pull/195), [#196](https://github.com/Festo-Wampamba/Campus-Homes/pull/196) | Staging + production |
+| 2026-10-16 | Verification-code email, Student/Landlord sign in, two-button bathroom filter, sitemap fix, JSON-LD, `/llms.txt` | [#193](https://github.com/Festo-Wampamba/Campus-Homes/pull/193), [#194](https://github.com/Festo-Wampamba/Campus-Homes/pull/194) | Staging + production |
+| 2026-10-15 | Support page (AI / Contact / User manual), Groq `openai/gpt-oss-20b`, plain-text replies (migration 0065) | #189–#192 | Staging + production |
+| 2026-10-15 | Map worker 404, listing loading skeleton, compact cookie notice (was item 16); free-room counts + reserving-vs-booking FAQ | #185–#188 | Staging + production |
+| 2026-10-15 | Phases 1–6 of the student-journey fixes + staging feedback fixes (were items 9–12, 14, 18); production post-deploy (was item 4) superseded by later deploys | #162–#183 | Staging + production |
 | 2026-10-13 | Fixed 10 failing API tests (`property-kyc-gate`, `ops-republish`). Cause: `loadEnv()` (via `assertOwnedStorageKeys`) needs `DATABASE_URL`, which a bare local run doesn't set; specs now fall back to the test DB URL. kyc-gate's `OpsService` now gets a real `NotificationsService`, ending the `notify is not a function` log. API suite 835/835 | [#157](https://github.com/Festo-Wampamba/Campus-Homes/pull/157), [#158](https://github.com/Festo-Wampamba/Campus-Homes/pull/158) | `main` (`2c86a7c`); tests only, no production deploy needed |
 | 2026-10-12 | Staff sign-in moved to `/staff`; public `/sign-in` has "Create an account" | [#152](https://github.com/Festo-Wampamba/Campus-Homes/pull/152), [#153](https://github.com/Festo-Wampamba/Campus-Homes/pull/153) | Staging + production (`90303ac`) |
 | 2026-10-12 | Required contact phone at onboarding (`users.contact_phone`, migration 0062) | #152, #153 | Staging + production |
