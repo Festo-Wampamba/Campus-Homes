@@ -72,4 +72,16 @@ describe("ReservationsList", () => {
     );
     expect(html).toContain("Booking requested");
   });
+
+  it("opens the booking tracker for the reservation linked from the dashboard", () => {
+    const html = renderToStaticMarkup(
+      <ReservationsList reservations={[RESERVED_OLDER]} trackId={RESERVED_OLDER.id} />,
+    );
+    expect(html).toContain('aria-label="Booking progress"');
+  });
+
+  it("keeps the booking tracker closed until asked", () => {
+    const html = renderToStaticMarkup(<ReservationsList reservations={[RESERVED_OLDER]} />);
+    expect(html).not.toContain('aria-label="Booking progress"');
+  });
 });

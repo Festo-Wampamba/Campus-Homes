@@ -25,6 +25,6 @@ describe("OnboardingForm", () => {
 
   it("shows example hints as placeholders, not as pre-filled values", () => {
     const html = renderToStaticMarkup(<OnboardingForm initialName="" initialUsername="" initialPhone="" next="/choose-workspace" />);
-    expect(html).toContain('placeholder="e.g. Sarah Nakato"');
+    expect(html).toContain('placeholder="e.g. Muwanguzi Festo"');
   });
 });

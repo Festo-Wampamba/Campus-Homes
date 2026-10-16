@@ -11,9 +11,9 @@ export const metadata: Metadata = { title: "My reservations" };
 export default async function ReservationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; track?: string }>;
 }) {
-  const [reservations, { new: justReservedId }] = await Promise.all([getMyReservations(), searchParams]);
+  const [reservations, { new: justReservedId, track: trackId }] = await Promise.all([getMyReservations(), searchParams]);
 
   return (
     <>
@@ -35,7 +35,7 @@ export default async function ReservationsPage({
           />
         </div>
       ) : (
-        <ReservationsList reservations={reservations} highlightId={justReservedId} />
+        <ReservationsList reservations={reservations} highlightId={justReservedId} trackId={trackId} />
       )}
     </>
   );
