@@ -14,6 +14,7 @@ import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import { chatMessages, chatThreads } from '../../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PresenceService } from '../presence/presence.service';
 import { REALTIME } from './chat.tokens';
 
 @Injectable()
@@ -22,6 +23,7 @@ export class ChatService {
     private readonly rlsDb: RlsDb,
     @Inject(REALTIME) private readonly realtime: RealtimeAdapter,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly presence?: PresenceService,
   ) {}
 
   /** Thread provisioning is service-side (§6): scoped to one reservation,
@@ -116,6 +118,18 @@ export class ChatService {
         // the sender see a false failure and send the same message twice.
         console.error('[chat] recipient notification failed:', err);
       });
+      // Recipient has CampusHomes open: their next poll shows it, so it is
+      // delivered now (two grey ticks) rather than at their next heartbeat.
+      if (await this.presence?.isOnline(recipient.recipient_id)) {
+        const deliveredAt = new Date();
+        await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, (_db, client) =>
+          client.query(`UPDATE chat_messages SET delivered_at = $2 WHERE id = $1 AND delivered_at IS NULL`, [
+            message.id,
+            deliveredAt,
+          ]),
+        );
+        return { ...message, deliveredAt };
+      }
     }
     return message;
   }
@@ -225,7 +239,7 @@ export class ChatService {
 
       const updated = await client.query(
         `UPDATE chat_messages
-         SET read_at = now()
+         SET read_at = now(), delivered_at = COALESCE(delivered_at, now())
          WHERE thread_id = $1 AND from_user_id IS DISTINCT FROM $2 AND read_at IS NULL
          RETURNING id`,
         [threadId, ctx.userId],
@@ -241,10 +255,11 @@ export class ChatService {
     });
   }
 
-  myThreads(ctx: RlsContext) {
-    return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) =>
-      (await client.query(
+  async myThreads(ctx: RlsContext) {
+    const threads = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) =>
+      (await client.query<{ counterpartId: string; counterpartLastSeenAt: Date | null } & Record<string, unknown>>(
         `SELECT t.id, t.reservation_id AS "reservationId", t.student_id AS "studentId",
+                other.id AS "counterpartId", other.last_seen_at AS "counterpartLastSeenAt",
                 t.landlord_id AS "landlordId", t.last_message_at AS "lastMessageAt",
                 COALESCE(NULLIF(other.name, ''), other.email, other.phone, 'CampusHomes user') AS "counterpartName",
                 CASE WHEN t.student_id = $1 THEN 'landlord' ELSE 'student' END AS "counterpartKind",
@@ -260,10 +275,31 @@ export class ChatService {
          LEFT JOIN chat_messages unread ON unread.thread_id = t.id
            AND unread.from_user_id IS DISTINCT FROM $1 AND unread.read_at IS NULL
          WHERE t.student_id=$1 OR t.landlord_id=$1
-         GROUP BY t.id, other.name, other.email, other.phone, latest.body
+         GROUP BY t.id, other.id, other.name, other.email, other.phone, other.last_seen_at, latest.body
          ORDER BY t.last_message_at DESC NULLS LAST, t.created_at DESC`, [ctx.userId],
       )).rows,
     );
+    const online = (await this.presence?.onlineSet(threads.map((t) => t.counterpartId))) ?? new Set<string>();
+    return threads.map((t) => ({ ...t, counterpartOnline: online.has(t.counterpartId) }));
+  }
+
+  /** The other person in a thread: online, last seen and typing. Participants only. */
+  async threadPresence(ctx: RlsContext, threadId: string) {
+    const other = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) =>
+      (await client.query<{ id: string; last_seen_at: Date | null }>(
+        `SELECT u.id, u.last_seen_at
+         FROM chat_threads t
+         JOIN users u ON u.id = CASE WHEN t.student_id = $2 THEN t.landlord_id ELSE t.student_id END
+         WHERE t.id = $1 AND (t.student_id = $2 OR t.landlord_id = $2)`,
+        [threadId, ctx.userId],
+      )).rows[0],
+    );
+    if (!other) throw new ForbiddenException('Not a participant');
+    const [online, typing] = await Promise.all([
+      this.presence?.isOnline(other.id) ?? false,
+      this.presence?.isTyping(threadId, other.id) ?? false,
+    ]);
+    return { online, lastSeenAt: other.last_seen_at, typing };
   }
 
   private static readonly THREAD_CHANNEL_RE = /^private-thread-([0-9a-f-]{36})$/i;

@@ -24,6 +24,8 @@ export const chatMessageSchema = z.object({
   sentAt: z.iso.datetime(),
   editedAt: z.iso.datetime().nullable().optional(),
   readAt: z.iso.datetime().nullable(),
+  // Set once the recipient had CampusHomes open (two grey ticks).
+  deliveredAt: z.iso.datetime().nullable().optional(),
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
@@ -37,6 +39,9 @@ export const chatThreadSchema = z.object({
   counterpartKind: z.enum(['student', 'landlord']).optional(),
   lastMessageSnippet: z.string().nullable().optional(),
   unreadCount: z.number().int().nonnegative().optional(),
+  counterpartId: uuid.optional(),
+  counterpartOnline: z.boolean().optional(),
+  counterpartLastSeenAt: z.iso.datetime().nullable().optional(),
 });
 export type ChatThread = z.infer<typeof chatThreadSchema>;
 
@@ -47,3 +52,14 @@ export const chatContactSchema = z.object({
   context: z.string(),
 });
 export type ChatContact = z.infer<typeof chatContactSchema>;
+
+// The other person in an open conversation, polled with its messages.
+export const threadPresenceSchema = z.object({
+  online: z.boolean(),
+  lastSeenAt: z.iso.datetime().nullable(),
+  typing: z.boolean(),
+});
+export type ThreadPresence = z.infer<typeof threadPresenceSchema>;
+
+export const typingSchema = z.object({ threadId: uuid });
+export type TypingInput = z.infer<typeof typingSchema>;

@@ -40,6 +40,8 @@ export const users = pgTable('users', {
   // remain intact while all sessions and active access grants are revoked.
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   deletionReason: text('deletion_reason'),
+  // Chat "last seen" (0066), written by the presence heartbeat.
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

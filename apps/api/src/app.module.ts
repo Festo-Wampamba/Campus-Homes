@@ -16,6 +16,7 @@ import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OpsModule } from './modules/ops/ops.module';
+import { PresenceModule } from './modules/presence/presence.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { RoomManagementModule } from './modules/room-management/room-management.module';
@@ -47,6 +48,7 @@ import { RootController } from './root.controller';
     LeadsModule,
     InquiriesModule,
     SupportModule,
+    PresenceModule,
   ],
   controllers: [HealthController, RootController],
   providers: [

@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
+import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 
 type NotificationRow = {
   id: string;
@@ -288,6 +289,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <PresenceHeartbeat />
       <aside className={cn("fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 lg:block", collapsed ? "w-16" : "w-62")}>
         <Sidebar nav={nav} pathname={pathname} collapsed={collapsed} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
       </aside>

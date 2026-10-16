@@ -4,12 +4,13 @@ import { NoopRealtime, SoketiRealtime, type RealtimeAdapter } from '../../adapte
 import { loadEnv } from '../../config/env';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PresenceModule } from '../presence/presence.module';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { REALTIME } from './chat.tokens';
 
 @Module({
-  imports: [AuthModule, NotificationsModule],
+  imports: [AuthModule, NotificationsModule, PresenceModule],
   controllers: [ChatController],
   providers: [
     ChatService,

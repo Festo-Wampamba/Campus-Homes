@@ -50,6 +50,8 @@ export const chatMessages = pgTable(
     body: text('body').notNull(), // max 2000 — CHECK in SQL migration
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
     editedAt: timestamp('edited_at', { withTimezone: true }),
+    // Recipient had CampusHomes open (0066): one grey tick becomes two.
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
     readAt: timestamp('read_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }), // soft delete (DPPA)
   },
