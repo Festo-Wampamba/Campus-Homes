@@ -22,14 +22,17 @@ const SERVICE_CTX: RlsContext = {
 // This stable virtual-resource ID represents the singleton settings collection.
 const PLATFORM_SETTINGS_AUDIT_ID = '00000000-0000-0000-0000-000000000001';
 
-const SETTING_KEYS: Record<keyof PlatformSettingsUpdateInput, string> = {
-  reservationHoldHours: 'reservation_hold_hours',
-  reservationFeeUgx: 'reservation_fee_ugx',
-  verificationValidMonths: 'verification_valid_months',
-  registrationsOpen: 'registrations_open',
-  maintenanceMode: 'maintenance_mode',
-  reportRetentionDays: 'report_retention_days',
-  supportContact: 'support_contact',
+// Descriptions match the 0013 seed. A database can be missing a row (production
+// lost support_contact in its 2026-09 reset), so saving creates it rather than
+// failing the whole form.
+const SETTING_KEYS: Record<keyof PlatformSettingsUpdateInput, { key: string; description: string }> = {
+  reservationHoldHours: { key: 'reservation_hold_hours', description: 'Hours a room is exclusively held while payment completes' },
+  reservationFeeUgx: { key: 'reservation_fee_ugx', description: 'CampusHomes reservation service fee in UGX' },
+  verificationValidMonths: { key: 'verification_valid_months', description: 'Months before a property needs reverification' },
+  registrationsOpen: { key: 'registrations_open', description: 'Allow new student and landlord registrations' },
+  maintenanceMode: { key: 'maintenance_mode', description: 'Temporarily restrict public application access' },
+  reportRetentionDays: { key: 'report_retention_days', description: 'Days generated report audit records are retained' },
+  supportContact: { key: 'support_contact', description: 'Public support contact details' },
 };
 
 function semesterName(input: CreateSemesterInput): string {
@@ -54,12 +57,14 @@ export class AdminConfigService {
       try {
         const updated = [];
         for (const [field, value] of entries) {
-          const key = SETTING_KEYS[field];
+          const { key, description } = SETTING_KEYS[field];
           const row = (await client.query(`
-            UPDATE platform_settings SET value = $2::jsonb, updated_by = $3, updated_at = now()
-            WHERE key = $1 RETURNING key, value, description, updated_at AS "updatedAt"
-          `, [key, JSON.stringify(value), actor.userId])).rows[0];
-          if (!row) throw new NotFoundException(`Setting ${key} is not initialized`);
+            INSERT INTO platform_settings (key, value, description, updated_by)
+            VALUES ($1, $2::jsonb, $4, $3)
+            ON CONFLICT (key) DO UPDATE
+              SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()
+            RETURNING key, value, description, updated_at AS "updatedAt"
+          `, [key, JSON.stringify(value), actor.userId, description])).rows[0];
           updated.push(row);
         }
         await client.query('COMMIT');
