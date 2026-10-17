@@ -85,6 +85,18 @@ describe('update', () => {
     expect((await invitationRow(created.id)).roleKey).toBe('ops_lead');
   });
 
+  // The email shows role, scope and expiry, and every edit renews the expiry.
+  it('sends a fresh email when only the role changes', async () => {
+    const created = await invite('edit-resend@campushomes.ug', 'ops_inspector');
+    const attempts = async () => (await pool.query(
+      `SELECT delivery_attempts AS n FROM auth_invitations WHERE id = $1`, [created.id])).rows[0].n;
+    const before = await attempts();
+    await staff.updateInvitation(ctx(), PERMS, PLATFORM, created.id, {
+      name: 'Invitee', email: 'edit-resend@campushomes.ug', roleKey: 'ops_lead', scopeType: 'platform_wide', reason: 'promoted',
+    });
+    expect(await attempts()).toBe(before + 1);
+  });
+
   it('refuses to move an invitation onto a registered email', async () => {
     const created = await invite('edit-email@campushomes.ug');
     await expect(staff.updateInvitation(ctx(), PERMS, PLATFORM, created.id, {

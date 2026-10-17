@@ -31,7 +31,7 @@ import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 
-type NotificationRow = {
+export type NotificationRow = {
   id: string;
   templateKey: string;
   payload: { message?: string; href?: string; threadId?: string };
@@ -60,6 +60,17 @@ function activeHref(pathname: string, nav: AppNavItem[]) {
   return nav
     .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
+
+/** Unread notifications behind the open page's sidebar badge (same exact-href
+ * rule the badge uses). Opening that page counts as seeing them, so they are
+ * marked read on the server and the dot stays gone after a reload. Chat
+ * notifications link to the inbox but belong to one thread (payload.threadId);
+ * opening the inbox doesn't mean every thread was read, so they're skipped. */
+export function notificationsSeenOn(unread: NotificationRow[], pathname: string, nav: AppNavItem[]): string[] {
+  const active = activeHref(pathname, nav);
+  if (!active) return [];
+  return unread.filter((item) => item.payload?.href === active && !item.payload?.threadId).map((item) => item.id);
 }
 
 function Sidebar({
@@ -277,6 +288,10 @@ export function AppShell({
     document.title = count > 0 ? `(${count}) ${baseDocumentTitle.current}` : baseDocumentTitle.current;
     return () => { if (baseDocumentTitle.current) document.title = baseDocumentTitle.current; };
   }, [unreadNotifications]);
+
+  useEffect(() => {
+    for (const id of notificationsSeenOn(unreadNotifications, pathname, nav)) markNotificationRead(id);
+  }, [pathname, nav, unreadNotifications]);
 
   function markNotificationRead(id: string) {
     setNotifications((current) => current?.map((item) => (

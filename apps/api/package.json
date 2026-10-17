@@ -24,6 +24,7 @@
     "local:logto": "node ./scripts/setup-local-logto.cjs",
     "auth:brand-signin": "node --env-file=.env ./scripts/set-signin-branding.cjs",
     "logto:backfill-profiles": "node --env-file=.env ./scripts/backfill-logto-profiles.cjs",
+    "auth:staff-mfa": "node --env-file=.env ./scripts/apply-staff-mfa.cjs",
     "lint": "eslint src test"
   },
   "dependencies": {

@@ -3,7 +3,7 @@
 import { UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CATCHMENTS, STAFF_ROLE_KEYS, type StaffRoleKey } from "@campushomes/shared";
+import { CATCHMENTS, STAFF_ROLE_KEYS, STAFF_ROLE_LABELS, type StaffRoleKey } from "@campushomes/shared";
 
 import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -11,16 +11,6 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneField } from "@/components/phone-field";
-
-const ROLE_LABELS: Record<StaffRoleKey, string> = {
-  super_admin: "Super Admin",
-  platform_admin: "Platform Admin",
-  ops_lead: "Ops Lead",
-  ops_inspector: "Ops Inspector",
-  finance_admin: "Finance Admin",
-  support_admin: "Support Admin",
-  auditor: "Auditor",
-};
 
 const selectClassName =
   "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground";
@@ -158,7 +148,7 @@ export function InviteStaffForm({ invitation }: { invitation?: EditableInvitatio
                 >
                   {STAFF_ROLE_KEYS.map((key) => (
                     <option key={key} value={key}>
-                      {ROLE_LABELS[key]}
+                      {STAFF_ROLE_LABELS[key]}
                     </option>
                   ))}
                 </select>

@@ -26,6 +26,15 @@ export const STAFF_ROLE_KEYS = [
   'auditor',
 ] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
+export const STAFF_ROLE_LABELS: Record<StaffRoleKey, string> = {
+  super_admin: 'Super Admin',
+  platform_admin: 'Platform Admin',
+  ops_lead: 'Ops Lead',
+  ops_inspector: 'Ops Inspector',
+  finance_admin: 'Finance Admin',
+  support_admin: 'Support Admin',
+  auditor: 'Auditor',
+};
 
 export const PROPERTY_ROLE_KEYS = ['landlord', 'custodian', 'property_worker', 'student'] as const;
 export type PropertyRoleKey = (typeof PROPERTY_ROLE_KEYS)[number];
@@ -119,6 +128,10 @@ export const ROOM_CATEGORIES = [
   'dormitory',
   'other',
 ] as const;
+// What anyone can pick for a new room. 'bedsitter' is retired (2026-10-17:
+// unclear to landlords and students); it stays in ROOM_CATEGORIES only so
+// rooms already saved with it still read and display.
+export const SELECTABLE_ROOM_CATEGORIES = ROOM_CATEGORIES.filter((category) => category !== 'bedsitter');
 
 export const VISIT_RESULTS = ['pending', 'passed', 'failed'] as const;
 export const LISTING_STATUSES = [

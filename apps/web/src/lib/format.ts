@@ -13,6 +13,10 @@ export const ROOM_CATEGORY_LABELS: Record<string, string> = {
   double: "Double",
   triple: "Triple",
   quad: "Quad",
+  studio: "Studio",
+  self_contained: "Self-contained",
+  bedsitter: "Bedsitter",
+  dormitory: "Dormitory",
   other: "Other",
 };
 

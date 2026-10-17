@@ -205,6 +205,17 @@ export class ProvisioningService {
     if (user.deletedAt || user.status === 'suspended') return false;
     if (portal !== 'staff') return user.status === 'active' || user.status === 'pending';
     if (user.status !== 'active') return false;
+    return this.activeStaffRole(client, user.id);
+  }
+
+  /** Whether the account holds any active staff role right now (revoked and
+   * expired grants don't count). The auth callback uses it to take former
+   * staff out of Logto's MFA-required staff organization. */
+  async hasActiveStaffRole(userId: string): Promise<boolean> {
+    return this.rlsDb.run(SERVICE_CTX, (_db, client) => this.activeStaffRole(client, userId));
+  }
+
+  private async activeStaffRole(client: PoolClient, userId: string): Promise<boolean> {
     const row = (await client.query(`
       SELECT 1 FROM user_role_assignments a
       JOIN roles r ON r.id = a.role_id
@@ -212,7 +223,7 @@ export class ProvisioningService {
         AND a.revoked_at IS NULL AND a.valid_from <= now()
         AND (a.valid_until IS NULL OR a.valid_until > now())
       LIMIT 1
-    `, [user.id, STAFF_ROLE_KEYS])).rows[0];
+    `, [userId, STAFF_ROLE_KEYS])).rows[0];
     return Boolean(row);
   }
 

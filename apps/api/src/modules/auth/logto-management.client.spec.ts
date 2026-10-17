@@ -89,6 +89,82 @@ describe('self-hosted Logto Management API', () => {
     ]);
   });
 
+  describe('addToStaffMfaOrganization', () => {
+    const token = () => new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }));
+
+    it('adds the user to the existing MFA-required staff organization', async () => {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: true }])))
+        .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      await client().addToStaffMfaOrganization('user-1');
+      expect(fetcher.mock.calls[2]).toEqual([
+        'https://auth.example.test/api/organizations/org-1/users',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ userIds: ['user-1'] }) }),
+      ]);
+    });
+
+    it('creates the organization with MFA required when it does not exist yet', async () => {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'org-2' })))
+        .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      await client().addToStaffMfaOrganization('user-1');
+      expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string)).toMatchObject({ name: 'CampusHomes Staff', isMfaRequired: true });
+    });
+
+    it('turns MFA back on for an existing staff organization that has it off', async () => {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: false }])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'org-1', isMfaRequired: true })))
+        .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      await client().addToStaffMfaOrganization('user-1');
+      expect(fetcher.mock.calls[2]).toEqual([
+        'https://auth.example.test/api/organizations/org-1',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ isMfaRequired: true }) }),
+      ]);
+    });
+
+    it('removes a former staff member from the organization', async () => {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: true }])))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      await client().removeFromStaffMfaOrganization('user-1');
+      expect(fetcher.mock.calls[2]).toEqual([
+        'https://auth.example.test/api/organizations/org-1/users/user-1',
+        expect.objectContaining({ method: 'DELETE' }),
+      ]);
+    });
+
+    it('treats removing a non-member as success', async () => {
+      jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: true }])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'entity.not_found' }), { status: 404 }));
+      await expect(client().removeFromStaffMfaOrganization('user-1')).resolves.toBeUndefined();
+    });
+
+    it('lists every organization member across pages', async () => {
+      jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: true }])))
+        .mockResolvedValueOnce(new Response(JSON.stringify(Array.from({ length: 100 }, (_, i) => ({ id: `u${i}` })))))
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'u100' }])));
+      expect(await client().listStaffMfaOrganizationMembers()).toHaveLength(101);
+    });
+
+    it('treats an already-member response as success', async () => {
+      jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: true }])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'entity.unique_integrity_violation' }), { status: 422 }));
+      await expect(client().addToStaffMfaOrganization('user-1')).resolves.toBeUndefined();
+    });
+  });
+
   describe('updateUserDetails', () => {
     function calls() {
       const fetcher = jest.spyOn(global, 'fetch')

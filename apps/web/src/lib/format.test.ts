@@ -1,4 +1,4 @@
-import { formatAddress, roomSizeLabel } from "./format";
+import { formatAddress, roomCategoryLabel, roomSizeLabel } from "./format";
 
 describe("formatAddress", () => {
   it("drops a trailing comma", () => {
@@ -19,5 +19,15 @@ describe("roomSizeLabel", () => {
 
   it("keeps the room count for rows without room_count", () => {
     expect(roomSizeLabel({ unit_count: 3, min_capacity: 2, max_capacity: 2 })).toBe("Sleeps 2 · 3 rooms");
+  });
+});
+
+describe("roomCategoryLabel", () => {
+  it("labels a dormitory properly", () => {
+    expect(roomCategoryLabel("dormitory")).toBe("Dormitory");
+  });
+
+  it("labels self-contained without the underscore", () => {
+    expect(roomCategoryLabel("self_contained")).toBe("Self-contained");
   });
 });
