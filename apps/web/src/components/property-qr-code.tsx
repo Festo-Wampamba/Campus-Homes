@@ -83,7 +83,7 @@ export function PropertyQrCode({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard can be blocked (insecure context, permissions); the link is
-      // still visible and selectable right beside the button.
+      // still visible beside the button and opens in a new tab.
     }
   }
 
@@ -106,9 +106,14 @@ export function PropertyQrCode({
         </p>
         {targetUrl && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <code className="min-w-0 max-w-full truncate rounded-md bg-muted px-2 py-1 text-xs text-foreground select-all">
+            <a
+              href={targetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 max-w-full truncate rounded-md bg-muted px-2 py-1 font-mono text-xs text-teal-700 underline-offset-4 hover:underline dark:text-teal-300"
+            >
               {targetUrl}
-            </code>
+            </a>
             <button
               type="button"
               onClick={copyLink}
