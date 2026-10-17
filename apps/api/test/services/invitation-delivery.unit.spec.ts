@@ -33,7 +33,7 @@ describe('staff invitation email delivery', () => {
     expect(url.pathname).toBe('/api/auth/logto/sign-in');
     expect(Object.fromEntries(url.searchParams)).toEqual({ portal: 'staff', intent: 'staff', token: 'one-time-value', email: invitation.email });
     expect(body.to).toEqual([invitation.email]);
-    expect(body.text).toContain('Set up an authenticator app');
+    expect(body.text).toContain('set up an authenticator app');
   });
 
   it('requests a fresh token for every delivery attempt', async () => {
