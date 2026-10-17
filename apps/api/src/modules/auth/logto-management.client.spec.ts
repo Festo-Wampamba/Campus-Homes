@@ -89,6 +89,40 @@ describe('self-hosted Logto Management API', () => {
     ]);
   });
 
+  describe('addToStaffMfaOrganization', () => {
+    const token = () => new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }));
+
+    it('adds the user to the existing MFA-required staff organization', async () => {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff' }])))
+        .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      await client().addToStaffMfaOrganization('user-1');
+      expect(fetcher.mock.calls[2]).toEqual([
+        'https://auth.example.test/api/organizations/org-1/users',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ userIds: ['user-1'] }) }),
+      ]);
+    });
+
+    it('creates the organization with MFA required when it does not exist yet', async () => {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'org-2' })))
+        .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      await client().addToStaffMfaOrganization('user-1');
+      expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string)).toMatchObject({ name: 'CampusHomes Staff', isMfaRequired: true });
+    });
+
+    it('treats an already-member response as success', async () => {
+      jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(token())
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff' }])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'entity.unique_integrity_violation' }), { status: 422 }));
+      await expect(client().addToStaffMfaOrganization('user-1')).resolves.toBeUndefined();
+    });
+  });
+
   describe('updateUserDetails', () => {
     function calls() {
       const fetcher = jest.spyOn(global, 'fetch')
