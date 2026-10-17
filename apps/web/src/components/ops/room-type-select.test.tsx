@@ -17,4 +17,8 @@ describe("RoomTypeSelect", () => {
   it("names room types with proper labels", () => {
     expect(render()).toContain(">Dormitory room</option>");
   });
+
+  it("still shows a legacy self-contained value already stored on a photo", () => {
+    expect(renderToStaticMarkup(<RoomTypeSelect value="self_contained" onChange={() => {}} />)).toContain('value="self_contained"');
+  });
 });
