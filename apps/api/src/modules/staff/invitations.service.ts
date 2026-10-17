@@ -6,6 +6,9 @@ import { loadEnv } from '../../config/env';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import type { RoleAssignment } from '../auth/permissions';
+import type { StaffRoleKey } from '@campushomes/shared';
+
+import { sendStaffInvitationEmail } from '../auth/auth.email';
 import { LogtoManagementClient } from '../auth/logto-management.client';
 import {
   assertGrantAllowed, assignRoleInTransaction, recordAccessAudit, SERVICE_CTX, STAFF_ROLE_KEYS,
@@ -164,7 +167,10 @@ export async function acceptInvitationsInTransaction(
 export class InvitationDeliveryService {
   constructor(private readonly logto: LogtoManagementClient) {}
 
-  async send(invitation: Pick<Invitation, 'email' | 'expiresAt' | 'validUntil'>): Promise<void> {
+  async send(
+    invitation: Pick<Invitation, 'email' | 'expiresAt' | 'validUntil' | 'name' | 'roleKey' | 'scopeType' | 'scopeId'>,
+    inviterName: string | null = null,
+  ): Promise<void> {
     const env = loadEnv();
     if (!invitation.email) throw new Error('Staff invitations require email; create a new email invitation');
     const expiresAt = Math.min(new Date(invitation.expiresAt).getTime(),
@@ -175,15 +181,16 @@ export class InvitationDeliveryService {
     const { token } = await this.logto.createOneTimeToken(invitation.email, 'SignIn', expiresIn);
     const url = new URL('/api/auth/logto/sign-in', env.WEB_ORIGIN);
     url.search = new URLSearchParams({ portal: 'staff', intent: 'staff', token, email: invitation.email }).toString();
-    const message = `You have been invited to CampusHomes staff. Open this one-time link to verify your email and complete staff sign-in: ${url.toString()}. This link expires at ${new Date(expiresAt).toISOString()}. Staff access also requires authenticator verification.`;
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [invitation.email],
-        subject: 'Your CampusHomes staff invitation', text: message }),
-    });
-    if (!response.ok) throw new Error('Invitation email delivery failed');
+    // Provider responses never reach the caller; the invite row only records a generic failure.
+    await sendStaffInvitationEmail(env, invitation.email, {
+      name: invitation.name,
+      roleKey: invitation.roleKey as StaffRoleKey,
+      scopeType: invitation.scopeType,
+      scopeId: invitation.scopeId ?? null,
+      inviterName,
+      url: url.toString(),
+      expiresAt: new Date(expiresAt),
+    }).catch(() => { throw new Error('Invitation email delivery failed'); });
   }
 }
 
@@ -294,15 +301,21 @@ export class InvitationsService {
   }
 
   private async deliver(id: string) {
-    const row = await this.rlsDb.run(SERVICE_CTX, async (_db, client) =>
-      (await client.query<Invitation>(`UPDATE auth_invitations SET delivery_attempts = delivery_attempts + 1,
+    const claimed = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const invitation = (await client.query<Invitation>(`UPDATE auth_invitations SET delivery_attempts = delivery_attempts + 1,
         last_delivery_attempt_at = now() WHERE id = $1 AND status = 'pending' AND expires_at > now()
           AND (valid_until IS NULL OR valid_until > now())
           AND (last_delivery_attempt_at IS NULL OR last_delivery_attempt_at < now() - interval '1 minute')
-        RETURNING ${INVITATION_COLUMNS}`, [id])).rows[0]);
-    if (!row) return { id, delivery: 'not_sent' };
+        RETURNING ${INVITATION_COLUMNS}`, [id])).rows[0];
+      if (!invitation) return null;
+      const inviter = (await client.query<{ name: string | null }>('SELECT name FROM users WHERE id = $1',
+        [invitation.invitedBy])).rows[0];
+      return { invitation, inviterName: inviter?.name ?? null };
+    });
+    if (!claimed) return { id, delivery: 'not_sent' };
+    const row = claimed.invitation;
     let failed = false;
-    try { await this.delivery.send(row); } catch { failed = true; }
+    try { await this.delivery.send(row, claimed.inviterName); } catch { failed = true; }
     await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await client.query(`UPDATE auth_invitations SET last_delivery_error = $2,
         delivered_at = CASE WHEN $2::text IS NULL THEN now() ELSE delivered_at END, updated_at = now()
