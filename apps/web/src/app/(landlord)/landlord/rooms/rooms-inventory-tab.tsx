@@ -31,6 +31,17 @@ interface RoomsInventoryTabProps {
   onRoomUpdated: (updatedRoom: RoomUnit) => void;
   onRoomsAdded: (newRooms: RoomUnit[]) => void;
   onRoomArchived?: (roomId: string) => void;
+  /** Controlled by Manage Rooms so its stat cards can filter this table. */
+  filterStatus: string;
+  onFilterStatusChange: (status: string) => void;
+}
+
+/** "has_free_beds" is what the Available Beds card means: any room a student
+ * could still reserve a bed in, empty or partly taken. */
+export function roomMatchesStatus(derivedStatus: string, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "has_free_beds") return derivedStatus === "available" || derivedStatus === "partially_occupied";
+  return derivedStatus === filter;
 }
 
 export function RoomsInventoryTab({
@@ -40,12 +51,13 @@ export function RoomsInventoryTab({
   onRoomUpdated,
   onRoomsAdded,
   onRoomArchived,
+  filterStatus,
+  onFilterStatusChange: setFilterStatus,
 }: RoomsInventoryTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterBuilding, setFilterBuilding] = useState("all");
   const [filterFloor, setFilterFloor] = useState("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   // Dialog & Drawer state
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -106,7 +118,7 @@ export function RoomsInventoryTab({
         return false;
       }
 
-      if (filterStatus !== "all" && r.derivedStatus !== filterStatus) {
+      if (!roomMatchesStatus(r.derivedStatus, filterStatus)) {
         return false;
       }
 
@@ -275,7 +287,7 @@ export function RoomsInventoryTab({
   }
 
   return (
-    <div className="space-y-5">
+    <div id="rooms-inventory" className="scroll-mt-24 space-y-5">
       {/* Sub-Header & Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -376,6 +388,7 @@ export function RoomsInventoryTab({
               className="h-10 w-full rounded-md border border-input bg-card px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
             >
               <option value="all">All Statuses</option>
+              <option value="has_free_beds">Has free beds</option>
               <option value="available">Available</option>
               <option value="partially_occupied">Partially Occupied</option>
               <option value="fully_occupied">Fully Occupied</option>
