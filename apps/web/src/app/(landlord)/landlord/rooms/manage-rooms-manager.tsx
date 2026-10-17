@@ -39,6 +39,9 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
 
   // Lifted from the rooms table so the stat cards above can filter it.
   const [roomStatusFilter, setRoomStatusFilter] = useState("all");
+  // Bumped by a stat card so the table's own filters (search, type, building,
+  // floor) reset too: each card describes the whole property.
+  const [inventoryResetKey, setInventoryResetKey] = useState(0);
   const [activeTab, setActiveTab] = useState<"types" | "rooms">(
     (searchParams.get("tab") as "types" | "rooms") || "rooms",
   );
@@ -365,6 +368,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               aria-pressed={card.filter !== "all" && roomStatusFilter === card.filter}
               onClick={() => {
                 handleTabChange("rooms");
+                setInventoryResetKey((key) => key + 1);
                 setRoomStatusFilter(card.filter);
                 requestAnimationFrame(() => document.getElementById("rooms-inventory")?.scrollIntoView({ behavior: "smooth", block: "start" }));
               }}
@@ -438,6 +442,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
         >
           {activeTab === "rooms" && (
             <RoomsInventoryTab
+              key={inventoryResetKey}
               propertyId={property.id}
               roomTypes={roomTypes}
               rooms={rooms}
