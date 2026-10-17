@@ -158,6 +158,16 @@ export class AuthController {
           event: 'auth.callback.staff_mfa_org_failed', requestId,
           error: redactSecrets(error instanceof Error ? error.message : String(error)),
         })));
+      } else {
+        // Revoked or expired staff roles have no event of their own; a later
+        // consumer sign-in takes the account out of the staff organization so
+        // it stops getting staff-only mandatory MFA. Fire-and-forget.
+        void this.provisioning.hasActiveStaffRole(provisioned.id)
+          .then((isStaff) => (isStaff ? undefined : this.management.removeFromStaffMfaOrganization(claims.sub)))
+          .catch((error: unknown) => this.logger.warn(JSON.stringify({
+            event: 'auth.callback.staff_mfa_org_cleanup_failed', requestId,
+            error: redactSecrets(error instanceof Error ? error.message : String(error)),
+          })));
       }
       const mfaEnrolled = staffFlow && env.LOGTO_MFA_POLICY_VERIFIED ? await this.management.hasMfaFactor(claims.sub) : false;
       const mfaPolicyHolds = env.LOGTO_MFA_POLICY_VERIFIED && mfaEnrolled;

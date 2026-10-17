@@ -61,6 +61,20 @@ async function main() {
     }
   }
   console.log(`Staff organization: ${ids.length - failed} of ${ids.length} staff member(s) added.`);
+
+  // Former staff (revoked or expired roles) must not keep mandatory MFA.
+  const staff = new Set(ids);
+  const members = await logto.listStaffMfaOrganizationMembers();
+  const former = members.filter((id) => !staff.has(id));
+  for (const id of former) {
+    try {
+      await logto.removeFromStaffMfaOrganization(id);
+    } catch (err) {
+      failed += 1;
+      console.error(`Failed to remove ${id}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  console.log(`Removed ${former.length} former staff member(s) from the organization.`);
   if (failed) process.exitCode = 1;
 }
 
