@@ -1,4 +1,4 @@
-import { ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
+import { SELECTABLE_ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
 
 import { roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,9 @@ export function RoomTypeSelect({
       className={cn("w-full rounded border border-input bg-background text-xs", className)}
     >
       <option value="">Whole property</option>
-      {ROOM_CATEGORIES.map((c) => (
+      {/* Self-contained has its own checkbox beside each photo. A retired
+          type (bedsitter) stays selectable only on a photo that already has it. */}
+      {[...SELECTABLE_ROOM_CATEGORIES.filter((c) => c !== "self_contained"), ...(value && !(SELECTABLE_ROOM_CATEGORIES as readonly RoomCategory[]).includes(value) ? [value] : [])].map((c) => (
         <option key={c} value={c}>{roomCategoryLabel(c)} room</option>
       ))}
     </select>

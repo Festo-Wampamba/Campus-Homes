@@ -119,6 +119,10 @@ export const ROOM_CATEGORIES = [
   'dormitory',
   'other',
 ] as const;
+// What anyone can pick for a new room. 'bedsitter' is retired (2026-10-17:
+// unclear to landlords and students); it stays in ROOM_CATEGORIES only so
+// rooms already saved with it still read and display.
+export const SELECTABLE_ROOM_CATEGORIES = ROOM_CATEGORIES.filter((category) => category !== 'bedsitter');
 
 export const VISIT_RESULTS = ['pending', 'passed', 'failed'] as const;
 export const LISTING_STATUSES = [
