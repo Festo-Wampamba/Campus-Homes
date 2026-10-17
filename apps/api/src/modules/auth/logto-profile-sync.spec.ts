@@ -30,6 +30,10 @@ describe('toLogtoUserDetails', () => {
     expect(toLogtoUserDetails(row).customData.accountType).toBe('student');
   });
 
+  it('caps the name at the 128 characters Logto accepts', () => {
+    expect(toLogtoUserDetails({ ...row, name: 'a'.repeat(200) }).name).toHaveLength(128);
+  });
+
   it('leaves unset profile fields out rather than sending nulls Logto would reject', () => {
     expect(toLogtoUserDetails({ ...row, gender: null, dateOfBirth: null, address: null }).profile).toEqual({});
   });

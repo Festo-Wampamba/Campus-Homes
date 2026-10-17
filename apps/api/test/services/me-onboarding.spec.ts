@@ -15,6 +15,7 @@ import { RlsDb } from '../../src/db/db.module';
 import { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import type { LogtoProfileSync } from '../../src/modules/auth/logto-profile-sync';
 import { MeController } from '../../src/modules/profile/me.controller';
+import { updateSelfParticulars } from '../../src/modules/profile/particulars';
 import type { AuthenticatedRequest } from '../../src/modules/auth/auth.guard';
 import { testDatabaseUrl } from '../test-database-url';
 
@@ -101,6 +102,14 @@ describe('MeController.completeOnboarding', () => {
     const userId = await seedUser('+256700000509');
     await controller.completeOnboarding(reqFor(userId), { name: 'Dan', username: 'dan_m', contactPhone: '+256772000509', gender: 'male' });
     expect(logtoSync.push).toHaveBeenCalledWith(userId);
+  });
+
+  it('does not let a student clear their gender from the profile page', async () => {
+    const userId = await seedUser('+256700000510');
+    await controller.completeOnboarding(reqFor(userId), { name: 'Eve', username: 'eve_k', contactPhone: '+256772000510', gender: 'female' });
+    await expect(
+      updateSelfParticulars(rlsDb, { userId, role: 'student' }, { gender: null }, logtoSync as unknown as LogtoProfileSync),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects a contact phone that is not a valid African mobile number', () => {

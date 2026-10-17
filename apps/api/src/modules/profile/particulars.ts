@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 
 import type { UpdateSelfParticularsInput } from '@campushomes/shared';
@@ -20,6 +21,14 @@ export async function updateSelfParticulars(
   logtoSync: LogtoProfileSync,
 ) {
   const saved = await rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+    // Students and landlords must keep a gender (onboarding requires one), so
+    // they can't clear it here; staff may.
+    if (input.gender === null) {
+      const [current] = await db.select({ role: users.role }).from(users).where(eq(users.id, ctx.userId));
+      if (current?.role === 'student' || current?.role === 'landlord') {
+        throw new BadRequestException('Choose your gender');
+      }
+    }
     const [row] = await db
       .update(users)
       .set({

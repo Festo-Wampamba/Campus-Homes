@@ -46,7 +46,9 @@ export function toLogtoUserDetails(row: LogtoProfileRow) {
     ...(row.address ? { address: { formatted: row.address } } : {}),
   };
   return {
-    name: row.name,
+    // Logto rejects names over 128 characters (ours allow 200); a rejected
+    // name PATCH would also stop the profile and custom-data updates.
+    name: row.name?.slice(0, 128) ?? null,
     profile,
     customData: {
       accountType: row.role,
