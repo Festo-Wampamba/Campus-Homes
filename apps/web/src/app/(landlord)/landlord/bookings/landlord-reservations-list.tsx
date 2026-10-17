@@ -5,6 +5,7 @@ import type { LandlordReservationView } from "@campushomes/shared";
 import { CheckCircle2, Search } from "lucide-react";
 
 import { api, ApiError } from "@/lib/api";
+import type { BookingStage } from "@/lib/booking-stage";
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { usePagination } from "@/lib/use-pagination";
 import { MessageButton } from "@/components/chat/message-button";
 
-type RoomInfo = { label: string; propertyName: string; roomCategory: string; pricePerTermUgx: number };
+import type { RoomInfo } from "./room-lookup";
 
 const STATUS_LABEL: Record<LandlordReservationView["status"], string> = {
   reserved: "Reserved",
@@ -39,15 +40,23 @@ const STATUS_TONE: Record<
   expired: "neutral",
 };
 
-const FILTERS: { key: "all" | LandlordReservationView["status"]; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "reserved", label: "Reserved" },
-  { key: "booked", label: "Booked" },
-  { key: "occupied", label: "Moved in" },
-  { key: "released", label: "Released" },
-  { key: "cancelled", label: "Cancelled" },
-  { key: "expired", label: "Expired" },
-];
+type FilterKey = "all" | LandlordReservationView["status"];
+
+// Each page lists only its own stage (see lib/booking-stage.ts).
+const FILTERS: Record<BookingStage, { key: FilterKey; label: string }[]> = {
+  reservation: [
+    { key: "all", label: "All" },
+    { key: "reserved", label: "Active holds" },
+    { key: "released", label: "Released" },
+    { key: "expired", label: "Expired" },
+    { key: "cancelled", label: "Cancelled" },
+  ],
+  booking: [
+    { key: "all", label: "All" },
+    { key: "booked", label: "Awaiting move-in" },
+    { key: "occupied", label: "Moved in" },
+  ],
+};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -149,12 +158,21 @@ function ReleaseButton({
 export function LandlordReservationsList({
   reservations,
   roomsByBedId,
+  stage,
+  initialFilter = "all",
 }: {
   reservations: LandlordReservationView[];
   roomsByBedId: Map<string, RoomInfo>;
+  stage: BookingStage;
+  /** From the page URL (?status=), so the stat cards above can filter. */
+  initialFilter?: string;
 }) {
+  const filters = FILTERS[stage];
   const [rows, setRows] = useState(reservations);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  const [filter, setFilter] = useState<FilterKey>(
+    filters.some((f) => f.key === initialFilter) ? (initialFilter as FilterKey) : "all",
+  );
+
   const [query, setQuery] = useState("");
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
 
@@ -199,7 +217,7 @@ export function LandlordReservationsList({
   return (
     <div className="mt-6">
       <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map(({ key, label }) => (
+        {filters.map(({ key, label }) => (
           <button
             key={key}
             type="button"
@@ -230,7 +248,7 @@ export function LandlordReservationsList({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="mt-6 text-center text-sm text-muted-foreground">No bookings match this filter.</p>
+        <p className="mt-6 text-center text-sm text-muted-foreground">{stage === "booking" ? "No bookings match this filter." : "No reservations match this filter."}</p>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-md border border-border">
           <table className="w-full text-left text-sm">

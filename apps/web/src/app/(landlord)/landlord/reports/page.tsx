@@ -62,7 +62,7 @@ export default async function LandlordReportsPage() {
           icon={Percent}
           tone="coral"
         />
-        <StatCard label="Active bookings" value={String(activeBookings)} icon={CalendarCheck} tone="teal" href="/landlord/bookings" />
+        <StatCard label="Reservations & bookings" detail="Active holds and confirmed" value={String(activeBookings)} icon={CalendarCheck} tone="teal" href="/landlord/reservations" />
       </div>
 
       <div className="mt-4">
