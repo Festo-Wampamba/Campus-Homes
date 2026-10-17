@@ -23,6 +23,21 @@ describe("OnboardingForm", () => {
     expect(html).toContain('value="772123456"');
   });
 
+  it("asks students and landlords to choose a gender", () => {
+    const html = renderToStaticMarkup(<OnboardingForm initialName="" initialUsername="" initialPhone="" askGender next="/choose-workspace" />);
+    expect(html).toMatch(/<select[^>]*id="onboarding-gender"[^>]*required/);
+  });
+
+  it("does not ask staff for a gender", () => {
+    const html = renderToStaticMarkup(<OnboardingForm initialName="" initialUsername="" initialPhone="" next="/choose-workspace" />);
+    expect(html).not.toContain('id="onboarding-gender"');
+  });
+
+  it("pre-selects a gender the account already has", () => {
+    const html = renderToStaticMarkup(<OnboardingForm initialName="" initialUsername="" initialPhone="" askGender initialGender="male" next="/choose-workspace" />);
+    expect(html).toMatch(/<option value="male" selected/);
+  });
+
   it("shows example hints as placeholders, not as pre-filled values", () => {
     const html = renderToStaticMarkup(<OnboardingForm initialName="" initialUsername="" initialPhone="" next="/choose-workspace" />);
     expect(html).toContain('placeholder="e.g. Muwanguzi Festo"');

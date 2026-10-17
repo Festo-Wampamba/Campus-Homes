@@ -16,6 +16,7 @@ import type {
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { LogtoManagementClient } from '../auth/logto-management.client';
+import { LogtoProfileSync } from '../auth/logto-profile-sync';
 import {
   assertFreshSignIn,
   assignmentsForPermission,
@@ -76,6 +77,8 @@ export class AdminUsersService {
     private readonly audit: AuditService,
     _logtoManagement: LogtoManagementClient,
     private readonly roleAssignments: RoleAssignmentService = new RoleAssignmentService(rlsDb),
+    // Optional so unit tests that build the service by hand needn't stub it.
+    private readonly logtoSync?: LogtoProfileSync,
   ) {}
 
   async create(actor: RlsContext, input: CreateAdminUserInput) {
@@ -473,6 +476,7 @@ export class AdminUsersService {
       fields: Object.keys(input),
     });
     if (contactChange) await this.audit.record(actor, 'users.contact_change', 'user', userId, contactChange);
+    this.logtoSync?.push(userId);
     return result;
   }
 

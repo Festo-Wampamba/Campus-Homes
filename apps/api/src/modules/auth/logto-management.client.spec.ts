@@ -89,6 +89,47 @@ describe('self-hosted Logto Management API', () => {
     ]);
   });
 
+  describe('updateUserDetails', () => {
+    function calls() {
+      const fetcher = jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+        .mockImplementation(async () => new Response(JSON.stringify({})));
+      return fetcher;
+    }
+    const details = {
+      name: 'Jane Doe',
+      profile: { gender: 'female', birthdate: '2004-02-01' },
+      customData: { contactPhone: '+256772000501' },
+    };
+
+    it('patches the display name on the user', async () => {
+      const fetcher = calls();
+      await client().updateUserDetails('user-1', details);
+      expect(fetcher.mock.calls[1]).toEqual([
+        'https://auth.example.test/api/users/user-1',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ name: 'Jane Doe' }) }),
+      ]);
+    });
+
+    it('merges profile fields through the partial profile endpoint', async () => {
+      const fetcher = calls();
+      await client().updateUserDetails('user-1', details);
+      expect(fetcher.mock.calls[2]).toEqual([
+        'https://auth.example.test/api/users/user-1/profile',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ profile: details.profile }) }),
+      ]);
+    });
+
+    it('merges contact details into custom data', async () => {
+      const fetcher = calls();
+      await client().updateUserDetails('user-1', details);
+      expect(fetcher.mock.calls[3]).toEqual([
+        'https://auth.example.test/api/users/user-1/custom-data',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ customData: details.customData }) }),
+      ]);
+    });
+  });
+
   it('marks a student as having skipped the MFA prompt', async () => {
     const fetcher = jest.spyOn(global, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))

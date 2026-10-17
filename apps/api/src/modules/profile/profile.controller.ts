@@ -26,6 +26,7 @@ import { savedListings, students, users } from '../../db/schema';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ListingsService } from '../listings/listings.service';
+import { LogtoProfileSync } from '../auth/logto-profile-sync';
 import { updateSelfParticulars } from './particulars';
 
 class CreateStudentProfileDto extends createZodDto(createStudentProfileSchema) {}
@@ -45,6 +46,7 @@ export class ProfileController {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly listings: ListingsService,
+    private readonly logtoSync: LogtoProfileSync,
   ) {}
 
   @Get('me')
@@ -117,7 +119,7 @@ export class ProfileController {
   @Patch('particulars')
   @Roles('student')
   updateParticulars(@Req() req: AuthenticatedRequest, @Body() body: UpdateSelfParticularsDto) {
-    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body);
+    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body, this.logtoSync);
   }
 
   @Get('saved-listings')
