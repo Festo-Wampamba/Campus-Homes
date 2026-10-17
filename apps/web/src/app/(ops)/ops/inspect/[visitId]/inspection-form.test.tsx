@@ -163,6 +163,32 @@ describe("InspectionForm", () => {
     expect(container.textContent).toContain("Fix or clear the Coordinates box before submitting.");
   });
 
+  it("keeps Submit disabled and says why until a photo is added", async () => {
+    await putDraft({ ...failedDraft("visit-no-photo"), syncStatus: "draft", completedAt: null });
+    act(() => {
+      root.render(<InspectionForm visitId="visit-no-photo" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Submit checklist") === true);
+
+    expect(container.textContent).toContain("Add at least one photo");
+  });
+
+  it("enables Submit once a photo is attached", async () => {
+    await putDraft({
+      ...failedDraft("visit-with-photo"),
+      syncStatus: "draft",
+      completedAt: null,
+      photoStorageKeys: [{ storageKey: "uploaded", category: "bedroom" }],
+    });
+    act(() => {
+      root.render(<InspectionForm visitId="visit-with-photo" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Submit checklist") === true);
+
+    const submit = [...container.querySelectorAll("button")].find((b) => b.textContent === "Submit checklist");
+    expect(submit?.disabled).toBe(false);
+  });
+
   it("retries a failed draft when 'Try again' is clicked", async () => {
     await putDraft(failedDraft("visit-retry"));
     const fetchMock = jest.fn().mockResolvedValue({
@@ -188,6 +214,25 @@ describe("InspectionForm", () => {
 
     expect(fetchMock).toHaveBeenCalled();
     expect(container.textContent).not.toContain("Couldn't submit this checklist");
+  });
+
+  it("sends a new idempotency key when a failed draft is retried", async () => {
+    await putDraft({ ...failedDraft("visit-retry-key"), photoStorageKeys: [{ storageKey: "added", category: "bedroom" }] });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "visit-retry-key" }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    act(() => {
+      root.render(<InspectionForm visitId="visit-retry-key" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Try again") === true);
+    act(() => [...container.querySelectorAll("button")].find((b) => b.textContent === "Try again")?.click());
+    await waitFor(() => fetchMock.mock.calls.length > 0);
+
+    // The failed sync may already have been stored under the old key (a
+    // response lost before a later 400); reusing it would replay that row and
+    // drop the photo just added.
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(sent.clientIdempotencyKey).not.toBe("key-visit-retry-key");
   });
 
   it("mints a new idempotency key when a submitted checklist is reopened", async () => {

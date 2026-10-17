@@ -457,7 +457,10 @@ export function InspectionForm({
   // while the box shows an error. An empty box keeps the captured location.
   const manualCoordinates = coordinatesText.trim() ? parseCoordinates(coordinatesText) : null;
   const manualCoordinatesInvalid = coordinatesText.trim() !== "" && !(manualCoordinates && isInUganda(manualCoordinates));
-  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid;
+  // Queued photos (still on this device) count too: sync uploads them before
+  // the checklist POST, which the API rejects without at least one photo.
+  const hasPhoto = draft.photos.length + draft.photoStorageKeys.length > 0;
+  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid && hasPhoto;
 
   async function submit() {
     // Cancel any pending debounced autosave first — otherwise it can fire
@@ -469,6 +472,8 @@ export function InspectionForm({
     }
     const completed: InspectionDraft = {
       ...currentDraft,
+      // See retrySync: a resend after a failed sync needs its own key.
+      ...(currentDraft.syncStatus === "failed" ? { clientIdempotencyKey: crypto.randomUUID() } : {}),
       completedAt: new Date().toISOString(),
       syncStatus: "queued",
     };
@@ -481,12 +486,23 @@ export function InspectionForm({
 
   async function retrySync() {
     setRetrying(true);
+    // Same as submit: a pending debounced autosave would overwrite the requeue below.
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     // syncQueuedDrafts() deliberately skips "failed" drafts on its own
     // (they're terminal for the automatic 30s loop) — requeue this one
     // explicitly so the manual "Try again" button actually retries it
     // instead of silently re-reading the same failed draft back.
+    //
+    // It also gets a new idempotency key. The failed attempt may have been
+    // stored under the old key (a response lost before a later 400), and
+    // syncVisit replays a known key untouched, which would drop anything
+    // the inspector added since (e.g. the photo now required). A new key
+    // lands as an edit, the same path reopenForEdit uses.
     if (currentDraft.syncStatus === "failed") {
-      await putDraft({ ...currentDraft, syncStatus: "queued" });
+      await putDraft({ ...currentDraft, syncStatus: "queued", clientIdempotencyKey: crypto.randomUUID() });
     }
     await syncQueuedDrafts();
     const refreshed = await getDraft(visitId);
@@ -768,6 +784,9 @@ export function InspectionForm({
       </Button>
       {manualCoordinatesInvalid && (
         <p className="text-sm text-destructive">Fix or clear the Coordinates box before submitting.</p>
+      )}
+      {!hasPhoto && (
+        <p className="text-sm text-destructive">Add at least one photo before submitting.</p>
       )}
       {draft.syncStatus === "queued" && !online && (
         <p role="status" className="text-sm text-warning">
