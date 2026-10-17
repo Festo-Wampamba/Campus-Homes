@@ -16,7 +16,7 @@ import {
 import {
   GENDER_ARRANGEMENTS,
   listingSearchResultSchema,
-  ROOM_CATEGORIES,
+  SELECTABLE_ROOM_CATEGORIES,
   type ListingSearchResult,
   type University,
 } from "@campushomes/shared";
@@ -61,7 +61,7 @@ const BATHROOM_OPTIONS = [
 const ROOM_TYPE_OPTIONS = [
   { value: "", label: "Any room type" },
   // The bathroom select filters self-contained separately.
-  ...ROOM_CATEGORIES.filter((c) => c !== "other" && c !== "self_contained").map((category) => ({
+  ...SELECTABLE_ROOM_CATEGORIES.filter((c) => c !== "other" && c !== "self_contained").map((category) => ({
     value: category,
     label: humanizeKey(category),
   })),

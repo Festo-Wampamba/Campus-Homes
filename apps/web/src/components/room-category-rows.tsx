@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ImagePlus, Plus, Trash2, X } from "lucide-react";
-import { ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
+import { SELECTABLE_ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,7 +152,7 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { category: e.target.value as RoomCategory })}
               className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10"
             >
-              {ROOM_CATEGORIES.filter(
+              {[...SELECTABLE_ROOM_CATEGORIES, ...(row.category === "bedsitter" ? ["bedsitter" as const] : [])].filter(
                 // The self-contained checkbox already covers this; keep the
                 // option only for a legacy row that already uses it.
                 (category) => !showSelfContained || category !== "self_contained" || category === row.category,

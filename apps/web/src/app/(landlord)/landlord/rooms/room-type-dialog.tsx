@@ -3,6 +3,7 @@
 import NextImage from "next/image";
 import { useState } from "react";
 import { Camera, Check, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
+import { roomCategoryLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +22,7 @@ import {
   type RoomType,
   type RoomTypePhoto,
 } from "@/lib/room-management";
-import { ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
+import { SELECTABLE_ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
 
 interface RoomTypeDialogProps {
   open: boolean;
@@ -252,9 +253,9 @@ export function RoomTypeDialog({
               >
                 {/* Bathroom arrangement below covers self-contained; keep the
                     option only for a room type that already uses it. */}
-                {ROOM_CATEGORIES.filter((cat) => cat !== "self_contained" || cat === category).map((cat) => (
+                {[...SELECTABLE_ROOM_CATEGORIES, ...(category === "bedsitter" ? ["bedsitter" as const] : [])].filter((cat) => cat !== "self_contained" || cat === category).map((cat) => (
                   <option key={cat} value={cat}>
-                    {cat.replace("_", " ").toUpperCase()}
+                    {roomCategoryLabel(cat)}
                   </option>
                 ))}
               </select>

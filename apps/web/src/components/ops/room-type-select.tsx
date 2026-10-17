@@ -1,4 +1,4 @@
-import { ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
+import { SELECTABLE_ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
 
 import { roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils";
 /** Which room type a verification photo belongs to, whatever it shows: an
  * en-suite bathroom photo can belong to the single self-contained rooms.
  * Empty = a photo of the whole property. */
+// Self-contained has its own checkbox beside each photo; bedsitter is retired.
+const PHOTO_ROOM_TYPES: readonly RoomCategory[] = SELECTABLE_ROOM_CATEGORIES.filter((c) => c !== "self_contained");
+
 export function RoomTypeSelect({
   value,
   onChange,
@@ -23,7 +26,9 @@ export function RoomTypeSelect({
       className={cn("w-full rounded border border-input bg-background text-xs", className)}
     >
       <option value="">Whole property</option>
-      {ROOM_CATEGORIES.map((c) => (
+      {/* A value outside PHOTO_ROOM_TYPES (legacy self_contained or bedsitter)
+          stays listed only on a photo that already has it. */}
+      {[...PHOTO_ROOM_TYPES, ...(value && !PHOTO_ROOM_TYPES.includes(value) ? [value] : [])].map((c) => (
         <option key={c} value={c}>{roomCategoryLabel(c)} room</option>
       ))}
     </select>
