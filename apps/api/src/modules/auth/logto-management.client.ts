@@ -126,6 +126,20 @@ export class LogtoManagementClient {
     if (!res.ok) throw new Error(`Logto Management API PATCH user failed: HTTP ${res.status}`);
   }
 
+  /** Copies a user's details into Logto so the console shows them. Profile
+   * and custom data use Logto's partial-update endpoints, so keys set
+   * elsewhere (in the console or by Logto itself) are kept. Never touches
+   * primaryPhone/username: those are sign-in identities. */
+  async updateUserDetails(
+    logtoUserId: string,
+    details: { name: string | null; profile: Record<string, unknown>; customData: Record<string, unknown> },
+  ): Promise<void> {
+    const user = `/api/users/${encodeURIComponent(logtoUserId)}`;
+    await this.request(user, { method: 'PATCH', body: JSON.stringify({ name: details.name }) });
+    await this.request(`${user}/profile`, { method: 'PATCH', body: JSON.stringify({ profile: details.profile }) });
+    await this.request(`${user}/custom-data`, { method: 'PATCH', body: JSON.stringify({ customData: details.customData }) });
+  }
+
   async setPassword(logtoUserId: string, password: string): Promise<void> {
     await this.request(`/api/users/${logtoUserId}/password`, {
       method: 'PATCH',

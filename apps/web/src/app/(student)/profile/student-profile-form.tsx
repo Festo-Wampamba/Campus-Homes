@@ -149,9 +149,9 @@ export function StudentProfileForm({
               <input id="dateOfBirth" type="date" max={new Date().toISOString().slice(0, 10)} className={inputClass} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="gender">Gender</Label>
-              <select id="gender" className={selectClass} value={gender} onChange={(e) => setGender(e.target.value)}>
-                <option value="">Prefer not to say</option>
+              <Label htmlFor="gender" required>Gender</Label>
+              <select id="gender" required className={selectClass} value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="" disabled>Choose…</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
               </select>

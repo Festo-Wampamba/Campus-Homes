@@ -13,6 +13,7 @@ import { AuthTransactions } from './auth-transactions';
 import { LogtoClientFactory } from './logto-client.factory';
 import { LogtoEmailWebhookController } from './logto-email-webhook.controller';
 import { LogtoManagementClient } from './logto-management.client';
+import { LogtoProfileSync } from './logto-profile-sync';
 import { LogtoSmsWebhookController } from './logto-sms-webhook.controller';
 import { MESSAGING } from './auth.tokens';
 import { ProvisioningService } from './provisioning.service';
@@ -38,12 +39,13 @@ import { PhoneOtpDelivery } from './otp-delivery';
       provide: LogtoManagementClient,
       useFactory: () => new LogtoManagementClient(loadEnv()),
     },
+    LogtoProfileSync,
     ProvisioningService,
     SessionStore,
     AuthGuard,
     AuthTransactions,
     LogtoClientFactory,
   ],
-  exports: [MESSAGING, LogtoManagementClient, ProvisioningService, SessionStore, AuthGuard],
+  exports: [MESSAGING, LogtoManagementClient, LogtoProfileSync, ProvisioningService, SessionStore, AuthGuard],
 })
 export class AuthModule {}

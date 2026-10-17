@@ -113,9 +113,9 @@ export function PersonalDetailsForm({ particulars }: { particulars: Particulars 
           <input id="profile-dob" type="date" className={inputClass} value={fields.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="profile-gender">Gender</Label>
-          <select id="profile-gender" className={selectClass} value={fields.gender} onChange={(e) => setField("gender", e.target.value)}>
-            <option value="">Prefer not to say</option>
+          <Label htmlFor="profile-gender" required>Gender</Label>
+          <select id="profile-gender" required className={selectClass} value={fields.gender} onChange={(e) => setField("gender", e.target.value)}>
+            <option value="" disabled>Choose…</option>
             <option value="male">Male</option>
             <option value="female">Female</option>
           </select>

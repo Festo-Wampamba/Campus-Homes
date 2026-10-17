@@ -26,6 +26,8 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
         initialName={session.user.name ?? ""}
         initialUsername={session.user.username ?? ""}
         initialPhone={session.user.contactPhone ?? session.user.phoneNumber ?? ""}
+        askGender={session.user.role === "student" || session.user.role === "landlord"}
+        initialGender={session.user.gender ?? ""}
         next={next}
       />
       <SignOutButton />
