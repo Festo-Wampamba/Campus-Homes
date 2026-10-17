@@ -125,8 +125,12 @@ describe('invitationContent', () => {
     expect(invitationContent(invite).text).toContain('Sunday, 18 October 2026 at 12:00 pm EAT');
   });
 
+  it('tells staff the authenticator is set up at a second sign-in', () => {
+    expect(invitationContent(invite).text).toContain('sign in a second time');
+  });
+
   it('tells staff the authenticator app step is required', () => {
-    expect(invitationContent(invite).text).toContain('Set up an authenticator app');
+    expect(invitationContent(invite).text).toContain('set up an authenticator app');
   });
 
   it('includes the one-time link as a fallback the reader can paste', () => {

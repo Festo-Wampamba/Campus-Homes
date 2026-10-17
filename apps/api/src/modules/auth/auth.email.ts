@@ -141,10 +141,13 @@ export function invitationContent(input: StaffInvitationEmailInput): EmailMessag
   const greeting = `Hi ${input.name?.trim() || 'there'},`;
   const inviter = input.inviterName?.trim() || 'A CampusHomes administrator';
   const subject = `You have been invited to join CampusHomes as ${role}`;
+  // A brand-new staff account only joins Logto's MFA-required organization
+  // once that first sign-in has created it, so authenticator setup always
+  // happens on the second sign-in (see addToStaffMfaOrganization).
   const steps = [
     'Open the secure link below. It signs you in with this email address; no password is needed yet.',
-    'Confirm your details when asked.',
-    'Set up an authenticator app (such as Google Authenticator or Microsoft Authenticator). Every staff account needs this second step; it cannot be skipped.',
+    'Confirm your details when asked. CampusHomes then tells you that staff accounts need 2-step verification.',
+    'Choose Administration or Operations and sign in a second time with the same email. This time you are asked to set up an authenticator app (such as Google Authenticator or Microsoft Authenticator). Every staff account needs it; it cannot be skipped.',
     'You land in your CampusHomes workspace, ready to work.',
   ];
   const row = (label: string, value: string) =>

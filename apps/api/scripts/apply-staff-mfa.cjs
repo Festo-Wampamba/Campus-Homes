@@ -28,7 +28,7 @@ async function staffLogtoIds(env) {
        FROM user_role_assignments a
        JOIN roles r ON r.id = a.role_id
        JOIN users u ON u.id = a.user_id
-       WHERE r.key = ANY($1) AND a.revoked_at IS NULL
+       WHERE r.key = ANY($1) AND a.revoked_at IS NULL AND a.valid_from <= now()
          AND (a.valid_until IS NULL OR a.valid_until > now())
          AND u.logto_user_id IS NOT NULL AND u.deleted_at IS NULL`,
       [STAFF_ROLE_KEYS],
