@@ -25,6 +25,7 @@ import { users } from '../../db/schema';
 import { sendVerificationCodeEmail } from '../auth/auth.email';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { LogtoEmailConflictError, LogtoManagementClient } from '../auth/logto-management.client';
+import { LogtoProfileSync } from '../auth/logto-profile-sync';
 import { rlsCtx } from '../auth/roles';
 import { updateSelfParticulars } from './particulars';
 
@@ -66,6 +67,7 @@ export class MeController {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly logtoManagement: LogtoManagementClient,
+    private readonly logtoSync: LogtoProfileSync,
   ) {}
 
   @Get('particulars')
@@ -94,7 +96,7 @@ export class MeController {
 
   @Patch('particulars')
   updateParticulars(@Req() req: AuthenticatedRequest, @Body() body: UpdateSelfParticularsDto) {
-    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body);
+    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body, this.logtoSync);
   }
 
   /**
@@ -111,11 +113,22 @@ export class MeController {
     const ctx = rlsCtx(req);
     const svcCtx: RlsContext = { userId: ctx.userId, role: 'service_role' };
     const username = body.username.toLowerCase();
-    return this.rlsDb.run(svcCtx, async (db) => {
+    const saved = await this.rlsDb.run(svcCtx, async (db) => {
+      // Students and landlords must give a gender (hostels are often
+      // single-gender); staff skip it. One already saved from a profile page
+      // counts, so an existing user is only asked for what's missing.
+      const [current] = await db
+        .select({ role: users.role, gender: users.gender })
+        .from(users)
+        .where(eq(users.id, ctx.userId));
+      const gender = body.gender ?? current?.gender ?? null;
+      if (!gender && (current?.role === 'student' || current?.role === 'landlord')) {
+        throw new BadRequestException('Choose your gender');
+      }
       try {
         const [row] = await db
           .update(users)
-          .set({ name: body.name.trim(), username, contactPhone: body.contactPhone, updatedAt: new Date() })
+          .set({ name: body.name.trim(), username, contactPhone: body.contactPhone, gender, updatedAt: new Date() })
           .where(eq(users.id, ctx.userId))
           .returning({ id: users.id, name: users.name, username: users.username });
         return row;
@@ -127,6 +140,8 @@ export class MeController {
         throw err;
       }
     });
+    this.logtoSync.push(ctx.userId);
+    return saved;
   }
 
   /**

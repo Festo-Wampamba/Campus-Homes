@@ -10,6 +10,7 @@ import { Pool } from 'pg';
 
 import { RlsDb } from '../../src/db/db.module';
 import { LogtoEmailConflictError, LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
+import type { LogtoProfileSync } from '../../src/modules/auth/logto-profile-sync';
 import { MeController } from '../../src/modules/profile/me.controller';
 import type { AuthenticatedRequest } from '../../src/modules/auth/auth.guard';
 import { testDatabaseUrl } from '../test-database-url';
@@ -18,6 +19,7 @@ const TEST_DATABASE_URL = testDatabaseUrl();
 
 const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 5 });
 const rlsDb = new RlsDb(pool);
+const logtoSync = { push: jest.fn() } as unknown as LogtoProfileSync;
 
 function hashCode(code: string): string {
   return createHash('sha256').update(code).digest('hex');
@@ -62,7 +64,7 @@ afterAll(async () => {
 describe('MeController.confirmEmailChange', () => {
   it('applies the change at Logto and locally when the code matches', async () => {
     const updatePrimaryEmail = jest.fn().mockResolvedValue(undefined);
-    const controller = new MeController(rlsDb, { updatePrimaryEmail } as unknown as LogtoManagementClient);
+    const controller = new MeController(rlsDb, { updatePrimaryEmail } as unknown as LogtoManagementClient, logtoSync);
     const userId = await seedUser('before1@example.com');
     await seedRequest(userId, 'after1@example.com', '123456');
 
@@ -75,7 +77,7 @@ describe('MeController.confirmEmailChange', () => {
   });
 
   it('consumes the request so the same code cannot be replayed', async () => {
-    const controller = new MeController(rlsDb, { updatePrimaryEmail: jest.fn().mockResolvedValue(undefined) } as unknown as LogtoManagementClient);
+    const controller = new MeController(rlsDb, { updatePrimaryEmail: jest.fn().mockResolvedValue(undefined) } as unknown as LogtoManagementClient, logtoSync);
     const userId = await seedUser('before2@example.com');
     await seedRequest(userId, 'after2@example.com', '654321');
     await controller.confirmEmailChange(reqFor(userId), { email: 'after2@example.com', code: '654321' });
@@ -87,7 +89,7 @@ describe('MeController.confirmEmailChange', () => {
 
   it('rejects a wrong code and counts the attempt without touching Logto', async () => {
     const updatePrimaryEmail = jest.fn();
-    const controller = new MeController(rlsDb, { updatePrimaryEmail } as unknown as LogtoManagementClient);
+    const controller = new MeController(rlsDb, { updatePrimaryEmail } as unknown as LogtoManagementClient, logtoSync);
     const userId = await seedUser('before3@example.com');
     await seedRequest(userId, 'after3@example.com', '111111');
 
@@ -103,7 +105,7 @@ describe('MeController.confirmEmailChange', () => {
   it('maps a Logto duplicate-email rejection to a conflict', async () => {
     const controller = new MeController(rlsDb, {
       updatePrimaryEmail: jest.fn().mockRejectedValue(new LogtoEmailConflictError()),
-    } as unknown as LogtoManagementClient);
+    } as unknown as LogtoManagementClient, logtoSync);
     const userId = await seedUser('before4@example.com');
     await seedRequest(userId, 'after4@example.com', '222222');
 

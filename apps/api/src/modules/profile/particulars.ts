@@ -5,18 +5,21 @@ import type { UpdateSelfParticularsInput } from '@campushomes/shared';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { users } from '../../db/schema';
+import type { LogtoProfileSync } from '../auth/logto-profile-sync';
 
 // `users` has no self-UPDATE RLS policy — a client-editable row could escalate
 // role/status. This runs as service_role and hand-picks only the identity
 // fields that carry no privilege; role, status, email, and the sign-in phone never pass
 // through here. Shared by both the student and landlord "my profile" routes
-// so the allowlist can't drift between the two.
-export function updateSelfParticulars(
+// so the allowlist can't drift between the two. Each save is copied to Logto
+// (best-effort) so the Logto console shows the same details.
+export async function updateSelfParticulars(
   rlsDb: RlsDb,
   ctx: RlsContext,
   input: UpdateSelfParticularsInput,
+  logtoSync: LogtoProfileSync,
 ) {
-  return rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+  const saved = await rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
     const [row] = await db
       .update(users)
       .set({
@@ -44,4 +47,6 @@ export function updateSelfParticulars(
       });
     return row;
   });
+  logtoSync.push(ctx.userId);
+  return saved;
 }

@@ -23,6 +23,7 @@ export interface SessionUser {
   phoneNumber: string | null;
   // undefined = an older API that doesn't send it yet (see needsProfileSetup).
   contactPhone?: string | null;
+  gender?: string | null;
 }
 
 // First-sign-in identity gate: every account needs a full name, an @handle
@@ -30,8 +31,11 @@ export interface SessionUser {
 // a username. Only an explicit null counts as a missing phone: if this web
 // build goes live before the API that sends contactPhone, undefined must not
 // bounce every user between onboarding and their workspace.
+// Students and landlords also need a gender (staff don't); same explicit-null
+// rule, so an API without the field never loops anyone.
 export function needsProfileSetup(user: SessionUser): boolean {
-  return !user.name?.trim() || !user.username || user.contactPhone === null;
+  const needsGender = (user.role === "student" || user.role === "landlord") && user.gender === null;
+  return !user.name?.trim() || !user.username || user.contactPhone === null || needsGender;
 }
 
 function onboardingUrl(next: string): string {
@@ -44,7 +48,7 @@ export interface Session {
 }
 
 type RawSessionResponse = {
-  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; username: string | null; email: string | null; phone: string | null; contactPhone?: string | null };
+  user: { id: string; role: UserRole; status: SessionUser["status"]; name: string; username: string | null; email: string | null; phone: string | null; contactPhone?: string | null; gender?: string | null };
   access: AccountAccess;
 } | null;
 

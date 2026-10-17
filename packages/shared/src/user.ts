@@ -130,9 +130,12 @@ export type Username = z.infer<typeof usernameSchema>;
 
 // First-sign-in identity gate: every account (email, phone, or Google) sets a
 // full name, a username and a contact phone before reaching a portal.
+// Gender is optional here because staff skip it; the API requires it for
+// students and landlords (decided 2026-10-17).
 export const profileOnboardingSchema = z.object({
   name: z.string().trim().min(1, "Enter your full name").max(200),
   username: usernameSchema,
   contactPhone: africanPhone,
+  gender: z.enum(['male', 'female'], { error: "Choose male or female" }).optional(),
 });
 export type ProfileOnboardingInput = z.infer<typeof profileOnboardingSchema>;

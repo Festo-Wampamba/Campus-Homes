@@ -3,6 +3,7 @@ import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/comm
 import { RlsDb } from '../../db/db.module';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
+import { LogtoProfileSync } from '../auth/logto-profile-sync';
 import { updateSelfParticulars } from '../profile/particulars';
 import { UpdateSelfParticularsDto, UpsertLandlordProfileDto } from './landlords.dto';
 import { LandlordsService } from './landlords.service';
@@ -13,6 +14,7 @@ export class LandlordsController {
   constructor(
     private readonly landlords: LandlordsService,
     private readonly rlsDb: RlsDb,
+    private readonly logtoSync: LogtoProfileSync,
   ) {}
 
   @Post('enroll')
@@ -37,6 +39,6 @@ export class LandlordsController {
   @Patch('particulars')
   @Roles('landlord')
   updateParticulars(@Req() req: AuthenticatedRequest, @Body() body: UpdateSelfParticularsDto) {
-    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body);
+    return updateSelfParticulars(this.rlsDb, rlsCtx(req), body, this.logtoSync);
   }
 }
