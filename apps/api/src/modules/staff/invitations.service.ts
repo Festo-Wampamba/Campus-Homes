@@ -6,6 +6,9 @@ import { loadEnv } from '../../config/env';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import type { RoleAssignment } from '../auth/permissions';
+import type { StaffRoleKey } from '@campushomes/shared';
+
+import { sendStaffInvitationEmail } from '../auth/auth.email';
 import { LogtoManagementClient } from '../auth/logto-management.client';
 import {
   assertGrantAllowed, assignRoleInTransaction, recordAccessAudit, SERVICE_CTX, STAFF_ROLE_KEYS,
@@ -164,7 +167,10 @@ export async function acceptInvitationsInTransaction(
 export class InvitationDeliveryService {
   constructor(private readonly logto: LogtoManagementClient) {}
 
-  async send(invitation: Pick<Invitation, 'email' | 'expiresAt' | 'validUntil'>): Promise<void> {
+  async send(
+    invitation: Pick<Invitation, 'email' | 'expiresAt' | 'validUntil' | 'name' | 'roleKey' | 'scopeType' | 'scopeId'>,
+    inviterName: string | null = null,
+  ): Promise<void> {
     const env = loadEnv();
     if (!invitation.email) throw new Error('Staff invitations require email; create a new email invitation');
     const expiresAt = Math.min(new Date(invitation.expiresAt).getTime(),
@@ -175,15 +181,16 @@ export class InvitationDeliveryService {
     const { token } = await this.logto.createOneTimeToken(invitation.email, 'SignIn', expiresIn);
     const url = new URL('/api/auth/logto/sign-in', env.WEB_ORIGIN);
     url.search = new URLSearchParams({ portal: 'staff', intent: 'staff', token, email: invitation.email }).toString();
-    const message = `You have been invited to CampusHomes staff. Open this one-time link to verify your email and complete staff sign-in: ${url.toString()}. This link expires at ${new Date(expiresAt).toISOString()}. Staff access also requires authenticator verification.`;
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [invitation.email],
-        subject: 'Your CampusHomes staff invitation', text: message }),
-    });
-    if (!response.ok) throw new Error('Invitation email delivery failed');
+    // Provider responses never reach the caller; the invite row only records a generic failure.
+    await sendStaffInvitationEmail(env, invitation.email, {
+      name: invitation.name,
+      roleKey: invitation.roleKey as StaffRoleKey,
+      scopeType: invitation.scopeType,
+      scopeId: invitation.scopeId ?? null,
+      inviterName,
+      url: url.toString(),
+      expiresAt: new Date(expiresAt),
+    }).catch(() => { throw new Error('Invitation email delivery failed'); });
   }
 }
 
@@ -209,9 +216,10 @@ export class InvitationsService {
     return this.deliver(invitation.id);
   }
 
-  /** Edits a pending (or expired) invitation. Renews the 24h window; a changed
-   * contact or an expired link gets a fresh email, since the old one-time link
-   * verifies the old contact and can no longer match this invitation. */
+  /** Edits a pending (or expired) invitation and renews its 24h window. Every
+   * edit sends a fresh email: the invitation email states the role, scope and
+   * expiry, so the old one would be stale, and after a contact change the old
+   * one-time link verifies the old contact and can no longer match. */
   async update(actor: RlsContext, permissions: Set<string>, scopes: RoleAssignment[], id: string, input: StaffInvitationInput) {
     const { email, phone } = validateInvitation(permissions, scopes, input);
     const { updated, resend } = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
@@ -222,7 +230,7 @@ export class InvitationsService {
       if (current.status !== 'pending') throw new ConflictException('Only pending or expired invitations can be edited');
       await assertContactAvailable(client, actor, email, phone, id);
       const contactChanged = current.email !== email || current.phone !== phone;
-      const resend = contactChanged || new Date(current.expiresAt).getTime() <= Date.now();
+      const resend = true;
       const updated = (await client.query<Invitation>(`UPDATE auth_invitations SET name = $2, email = $3, phone = $4,
           role_key = $5, scope_type = $6, scope_id = $7, valid_until = $8, reason = $9, target_user_id = NULL,
           expires_at = now() + ${INVITATION_TTL}, updated_at = now(),
@@ -294,15 +302,21 @@ export class InvitationsService {
   }
 
   private async deliver(id: string) {
-    const row = await this.rlsDb.run(SERVICE_CTX, async (_db, client) =>
-      (await client.query<Invitation>(`UPDATE auth_invitations SET delivery_attempts = delivery_attempts + 1,
+    const claimed = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const invitation = (await client.query<Invitation>(`UPDATE auth_invitations SET delivery_attempts = delivery_attempts + 1,
         last_delivery_attempt_at = now() WHERE id = $1 AND status = 'pending' AND expires_at > now()
           AND (valid_until IS NULL OR valid_until > now())
           AND (last_delivery_attempt_at IS NULL OR last_delivery_attempt_at < now() - interval '1 minute')
-        RETURNING ${INVITATION_COLUMNS}`, [id])).rows[0]);
-    if (!row) return { id, delivery: 'not_sent' };
+        RETURNING ${INVITATION_COLUMNS}`, [id])).rows[0];
+      if (!invitation) return null;
+      const inviter = (await client.query<{ name: string | null }>('SELECT name FROM users WHERE id = $1',
+        [invitation.invitedBy])).rows[0];
+      return { invitation, inviterName: inviter?.name ?? null };
+    });
+    if (!claimed) return { id, delivery: 'not_sent' };
+    const row = claimed.invitation;
     let failed = false;
-    try { await this.delivery.send(row); } catch { failed = true; }
+    try { await this.delivery.send(row, claimed.inviterName); } catch { failed = true; }
     await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await client.query(`UPDATE auth_invitations SET last_delivery_error = $2,
         delivered_at = CASE WHEN $2::text IS NULL THEN now() ELSE delivered_at END, updated_at = now()

@@ -12,7 +12,10 @@ describe('staff invitation email delivery', () => {
   const delivery = new InvitationDeliveryService({ createOneTimeToken } as unknown as LogtoManagementClient);
   const originalFetch = global.fetch;
   const now = new Date('2026-09-10T10:00:00Z');
-  const invitation = { email: 'staff+invite@example.com', expiresAt: new Date('2026-09-17T10:00:00Z') };
+  const invitation = {
+    email: 'staff+invite@example.com', expiresAt: new Date('2026-09-17T10:00:00Z'),
+    name: 'Jane Okello', roleKey: 'ops_lead', scopeType: 'platform_wide', scopeId: null,
+  };
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(now);
@@ -30,7 +33,7 @@ describe('staff invitation email delivery', () => {
     expect(url.pathname).toBe('/api/auth/logto/sign-in');
     expect(Object.fromEntries(url.searchParams)).toEqual({ portal: 'staff', intent: 'staff', token: 'one-time-value', email: invitation.email });
     expect(body.to).toEqual([invitation.email]);
-    expect(body.text).toContain('authenticator verification');
+    expect(body.text).toContain('Set up an authenticator app');
   });
 
   it('requests a fresh token for every delivery attempt', async () => {

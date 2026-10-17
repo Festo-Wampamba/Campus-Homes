@@ -1,4 +1,4 @@
-import { sendAuthEmail, sendVerificationCodeEmail, verificationContent } from './auth.email';
+import { sendAuthEmail, sendVerificationCodeEmail, verificationContent, invitationContent } from './auth.email';
 import type { Env } from '../../config/env';
 
 const baseEnv = {
@@ -77,12 +77,63 @@ describe('verificationContent', () => {
     expect(verificationContent('register', '641334', issuedAt).text).toContain('Requesting a new code cancels this one');
   });
 
-  it('shows each digit in its own box', () => {
-    const { html } = verificationContent('sign-in', '641334', issuedAt);
-    expect(html.match(/border:2px solid #087f80/g)).toHaveLength(6);
+  // Gmail's "Copy code" chip is Gmail's own detection: it needs one clear,
+  // unbroken code, so the body never splits it into per-digit boxes.
+  it('never splits the code into per-digit boxes', () => {
+    expect(verificationContent('sign-in', '641334', issuedAt).html).not.toMatch(/border:2px solid #087f80/);
   });
 
-  it('keeps the whole code on one copyable line', () => {
-    expect(verificationContent('forgot-password', '641334', issuedAt).html).toContain('user-select:all">641334</span>');
+  it('shows the code once in the body as unbroken text', () => {
+    const { html } = verificationContent('sign-in', '641334', issuedAt);
+    const body = html.slice(html.indexOf('<table'));
+    expect(body.match(/641334/g)).toHaveLength(1);
+  });
+
+  it('states the code in a plain sentence mail apps can detect', () => {
+    expect(verificationContent('register', '641334', issuedAt).text).toContain('Your verification code is 641334');
+  });
+});
+
+describe('invitationContent', () => {
+  const invite = {
+    name: 'Jane Okello',
+    roleKey: 'ops_lead' as const,
+    scopeType: 'catchment',
+    scopeId: 'MUK',
+    inviterName: 'Festo Muwanguzi',
+    url: 'https://staging.campushomes.co.ug/api/auth/logto/sign-in?portal=staff&token=t1',
+    expiresAt: new Date('2026-10-18T09:00:00Z'),
+  };
+
+  it('names the role in the subject', () => {
+    expect(invitationContent(invite).subject).toBe('You have been invited to join CampusHomes as Ops Lead');
+  });
+
+  it('greets the invitee by name', () => {
+    expect(invitationContent(invite).html).toContain('Hi Jane Okello,');
+  });
+
+  it('says who sent the invitation', () => {
+    expect(invitationContent(invite).text).toContain('Festo Muwanguzi invited you');
+  });
+
+  it('shows the access scope', () => {
+    expect(invitationContent(invite).text).toContain('Access: MUK catchment');
+  });
+
+  it('gives the expiry in Kampala time', () => {
+    expect(invitationContent(invite).text).toContain('Sunday, 18 October 2026 at 12:00 pm EAT');
+  });
+
+  it('tells staff the authenticator app step is required', () => {
+    expect(invitationContent(invite).text).toContain('Set up an authenticator app');
+  });
+
+  it('includes the one-time link as a fallback the reader can paste', () => {
+    expect(invitationContent(invite).text).toContain(invite.url);
+  });
+
+  it('escapes the link inside the HTML button', () => {
+    expect(invitationContent(invite).html).toContain('portal=staff&amp;token=t1');
   });
 });
