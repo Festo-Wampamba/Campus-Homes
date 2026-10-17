@@ -19,8 +19,10 @@ describe("notificationsSeenOn", () => {
     expect(notificationsSeenOn([unread("n1", "/ops/room-changes")], "/ops/queue", nav)).toEqual([]);
   });
 
-  // A chat notification points at one thread; opening Messages must not mark every thread read.
+  // Chat notifications link to the inbox and name their thread separately;
+  // opening Messages must not mark every thread read.
   it("leaves thread-specific message notifications alone", () => {
-    expect(notificationsSeenOn([unread("n1", "/messages?thread=t1")], "/messages", nav)).toEqual([]);
+    const chat = { ...unread("n1", "/messages"), payload: { href: "/messages", threadId: "t1" } };
+    expect(notificationsSeenOn([chat], "/messages", nav)).toEqual([]);
   });
 });

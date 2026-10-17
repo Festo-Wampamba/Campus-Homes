@@ -64,11 +64,13 @@ function activeHref(pathname: string, nav: AppNavItem[]) {
 
 /** Unread notifications behind the open page's sidebar badge (same exact-href
  * rule the badge uses). Opening that page counts as seeing them, so they are
- * marked read on the server and the dot stays gone after a reload. A thread
- * link (e.g. /messages?thread=…) never badges a nav item, so it's left alone. */
+ * marked read on the server and the dot stays gone after a reload. Chat
+ * notifications link to the inbox but belong to one thread (payload.threadId);
+ * opening the inbox doesn't mean every thread was read, so they're skipped. */
 export function notificationsSeenOn(unread: NotificationRow[], pathname: string, nav: AppNavItem[]): string[] {
   const active = activeHref(pathname, nav);
-  return active ? unread.filter((item) => item.payload?.href === active).map((item) => item.id) : [];
+  if (!active) return [];
+  return unread.filter((item) => item.payload?.href === active && !item.payload?.threadId).map((item) => item.id);
 }
 
 function Sidebar({
