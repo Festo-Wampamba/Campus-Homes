@@ -457,7 +457,10 @@ export function InspectionForm({
   // while the box shows an error. An empty box keeps the captured location.
   const manualCoordinates = coordinatesText.trim() ? parseCoordinates(coordinatesText) : null;
   const manualCoordinatesInvalid = coordinatesText.trim() !== "" && !(manualCoordinates && isInUganda(manualCoordinates));
-  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid;
+  // Queued photos (still on this device) count too: sync uploads them before
+  // the checklist POST, which the API rejects without at least one photo.
+  const hasPhoto = draft.photos.length + draft.photoStorageKeys.length > 0;
+  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid && hasPhoto;
 
   async function submit() {
     // Cancel any pending debounced autosave first — otherwise it can fire
@@ -768,6 +771,9 @@ export function InspectionForm({
       </Button>
       {manualCoordinatesInvalid && (
         <p className="text-sm text-destructive">Fix or clear the Coordinates box before submitting.</p>
+      )}
+      {!hasPhoto && (
+        <p className="text-sm text-destructive">Add at least one photo before submitting.</p>
       )}
       {draft.syncStatus === "queued" && !online && (
         <p role="status" className="text-sm text-warning">

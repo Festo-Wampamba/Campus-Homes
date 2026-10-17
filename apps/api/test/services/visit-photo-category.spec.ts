@@ -56,6 +56,14 @@ describe('syncVisitSchema photo staging', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('rejects a sync with no photos', () => {
+    expect(syncVisitSchema.safeParse({ ...base, photoStorageKeys: [] }).success).toBe(false);
+  });
+
+  it('rejects a sync that omits photos entirely', () => {
+    expect(syncVisitSchema.safeParse(base).error?.issues[0]?.message).toBe('Add at least one photo');
+  });
+
   it('rejects a category outside the catalogue', () => {
     const parsed = syncVisitSchema.safeParse({
       ...base,

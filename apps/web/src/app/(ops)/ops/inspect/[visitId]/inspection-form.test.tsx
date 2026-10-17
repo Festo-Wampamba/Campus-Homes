@@ -163,6 +163,32 @@ describe("InspectionForm", () => {
     expect(container.textContent).toContain("Fix or clear the Coordinates box before submitting.");
   });
 
+  it("keeps Submit disabled and says why until a photo is added", async () => {
+    await putDraft({ ...failedDraft("visit-no-photo"), syncStatus: "draft", completedAt: null });
+    act(() => {
+      root.render(<InspectionForm visitId="visit-no-photo" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Submit checklist") === true);
+
+    expect(container.textContent).toContain("Add at least one photo");
+  });
+
+  it("enables Submit once a photo is attached", async () => {
+    await putDraft({
+      ...failedDraft("visit-with-photo"),
+      syncStatus: "draft",
+      completedAt: null,
+      photoStorageKeys: [{ storageKey: "uploaded", category: "bedroom" }],
+    });
+    act(() => {
+      root.render(<InspectionForm visitId="visit-with-photo" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Submit checklist") === true);
+
+    const submit = [...container.querySelectorAll("button")].find((b) => b.textContent === "Submit checklist");
+    expect(submit?.disabled).toBe(false);
+  });
+
   it("retries a failed draft when 'Try again' is clicked", async () => {
     await putDraft(failedDraft("visit-retry"));
     const fetchMock = jest.fn().mockResolvedValue({
