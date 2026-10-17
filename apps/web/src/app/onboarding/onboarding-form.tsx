@@ -32,14 +32,15 @@ export function OnboardingForm({
   const [error, setError] = useState<string | null>(null);
 
   const usernameValid = USERNAME_PATTERN.test(username);
-  const phoneValid = africanPhone.safeParse(phone).success;
+  const phoneCheck = africanPhone.safeParse(phone);
+  const phoneError = phone && !phoneCheck.success ? phoneCheck.error.issues[0]?.message : undefined;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     if (!name.trim()) return setError("Enter your full name.");
     if (!usernameValid) return setError("Username must be 3–20 letters, numbers or underscores.");
-    if (!phoneValid) return setError("Enter a valid mobile number, e.g. 772 123 456.");
+    if (!phoneCheck.success) return setError(phoneCheck.error.issues[0]?.message ?? "Enter a valid mobile number.");
     setPending(true);
     try {
       await api("/me/onboarding", {
@@ -85,12 +86,12 @@ export function OnboardingForm({
         value={phone}
         onChange={setPhone}
         placeholder="e.g. 772 123 456"
-        hint="So landlords and our team can reach you."
+        hint={phoneError ?? "So landlords and our team can reach you."}
         labelClassName="text-sm font-semibold"
-        hintClassName="text-xs"
+        hintClassName={phoneError ? "text-xs text-destructive" : "text-xs"}
       />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" disabled={pending || !name.trim() || !usernameValid || !phoneValid} className="w-full">
+      <Button type="submit" disabled={pending || !name.trim() || !usernameValid || !phoneCheck.success} className="w-full">
         {pending ? "Saving…" : "Continue"}
       </Button>
     </form>
