@@ -5,8 +5,8 @@ below. Tick an item and move it to **Done** when it ships.
 
 _Last updated: 2026-10-17._
 
-**Where things stand:** production, staging, `main` and `development` all run
-`93941a1` (schema 67/67). Flow: feature branch → PR to `development` →
+**Where things stand:** production, staging and `main` run `c46f9df`
+(schema 68/68); `development` (`685540b`) has the same code. Flow: feature branch → PR to `development` →
 release PR to `main` (deploys staging) → production by hand with
 `gh workflow run CI --ref main`.
 
