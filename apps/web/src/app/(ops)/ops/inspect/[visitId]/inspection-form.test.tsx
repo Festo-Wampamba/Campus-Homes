@@ -216,6 +216,25 @@ describe("InspectionForm", () => {
     expect(container.textContent).not.toContain("Couldn't submit this checklist");
   });
 
+  it("sends a new idempotency key when a failed draft is retried", async () => {
+    await putDraft({ ...failedDraft("visit-retry-key"), photoStorageKeys: [{ storageKey: "added", category: "bedroom" }] });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "visit-retry-key" }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    act(() => {
+      root.render(<InspectionForm visitId="visit-retry-key" serverVisit={null} />);
+    });
+    await waitFor(() => container.textContent?.includes("Try again") === true);
+    act(() => [...container.querySelectorAll("button")].find((b) => b.textContent === "Try again")?.click());
+    await waitFor(() => fetchMock.mock.calls.length > 0);
+
+    // The failed sync may already have been stored under the old key (a
+    // response lost before a later 400); reusing it would replay that row and
+    // drop the photo just added.
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(sent.clientIdempotencyKey).not.toBe("key-visit-retry-key");
+  });
+
   it("mints a new idempotency key when a submitted checklist is reopened", async () => {
     const draft: InspectionDraft = {
       ...failedDraft("visit-reopen"),
