@@ -148,6 +148,27 @@ export class AuthController {
       // policy only for a user who has a factor enrolled, which Logto always
       // verifies at sign-in. A failed lookup throws and fails closed below.
       const staffFlow = transaction.portal === 'staff';
+      // Staff belong to Logto's MFA-required organization, so Logto makes them
+      // set up an authenticator with no Skip (see addToStaffMfaOrganization).
+      // Added on every staff sign-in, before the check below: one that's
+      // refused now is made to enrol at the next sign-in. Best-effort; our
+      // own check still refuses staff without a factor either way.
+      if (staffFlow) {
+        await this.management.addToStaffMfaOrganization(claims.sub).catch((error: unknown) => this.logger.warn(JSON.stringify({
+          event: 'auth.callback.staff_mfa_org_failed', requestId,
+          error: redactSecrets(error instanceof Error ? error.message : String(error)),
+        })));
+      } else {
+        // Revoked or expired staff roles have no event of their own; a later
+        // consumer sign-in takes the account out of the staff organization so
+        // it stops getting staff-only mandatory MFA. Fire-and-forget.
+        void this.provisioning.hasActiveStaffRole(provisioned.id)
+          .then((isStaff) => (isStaff ? undefined : this.management.removeFromStaffMfaOrganization(claims.sub)))
+          .catch((error: unknown) => this.logger.warn(JSON.stringify({
+            event: 'auth.callback.staff_mfa_org_cleanup_failed', requestId,
+            error: redactSecrets(error instanceof Error ? error.message : String(error)),
+          })));
+      }
       const mfaEnrolled = staffFlow && env.LOGTO_MFA_POLICY_VERIFIED ? await this.management.hasMfaFactor(claims.sub) : false;
       const mfaPolicyHolds = env.LOGTO_MFA_POLICY_VERIFIED && mfaEnrolled;
       const assurance = providerAssurance(claims, transaction.startedAt, staffFlow, mfaPolicyHolds);

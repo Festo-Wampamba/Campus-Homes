@@ -3,6 +3,8 @@ import type { Env } from '../../config/env';
 /** Logto rejected a primary-email update because the address is already in
  * use by another Logto identity (HTTP 422). Kept Nest-free so the client
  * stays framework-agnostic; callers map it to a ConflictException. */
+export const STAFF_MFA_ORGANIZATION = 'CampusHomes Staff';
+
 export class LogtoEmailConflictError extends Error {
   constructor() {
     super('That email is already in use by another account');
@@ -96,6 +98,78 @@ export class LogtoManagementClient {
       method: 'PATCH',
       body: JSON.stringify({ mfa: { skipped: true } }),
     });
+  }
+
+  /** Staff are members of one Logto organization with MFA required. Paired
+   * with the tenant's mfa.organizationRequiredMfaPolicy = 'Mandatory' (set by
+   * scripts/apply-staff-mfa.cjs), Logto makes staff set up an authenticator
+   * at sign-in with no Skip, while everyone else (policy 'NoPrompt') is never
+   * asked. Membership only takes effect at the user's next sign-in. */
+  async addToStaffMfaOrganization(logtoUserId: string): Promise<void> {
+    const orgId = await this.staffOrganizationId();
+    const token = await this.getToken();
+    const res = await fetch(`${this.env.LOGTO_ENDPOINT}/api/organizations/${encodeURIComponent(orgId)}/users`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: [logtoUserId] }),
+    });
+    // 422 = already a member; adding is idempotent from our side.
+    if (!res.ok && res.status !== 422) {
+      throw new Error(`Logto Management API POST organization users failed: HTTP ${res.status}`);
+    }
+  }
+
+  /** For an account that no longer holds any staff role, so it stops getting
+   * staff-only mandatory MFA. 404 = not a member; nothing to do. */
+  async removeFromStaffMfaOrganization(logtoUserId: string): Promise<void> {
+    const orgId = await this.staffOrganizationId();
+    const token = await this.getToken();
+    const res = await fetch(
+      `${this.env.LOGTO_ENDPOINT}/api/organizations/${encodeURIComponent(orgId)}/users/${encodeURIComponent(logtoUserId)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`Logto Management API DELETE organization user failed: HTTP ${res.status}`);
+    }
+  }
+
+  /** Logto user ids currently in the staff organization (for reconciling). */
+  async listStaffMfaOrganizationMembers(): Promise<string[]> {
+    const orgId = await this.staffOrganizationId();
+    const ids: string[] = [];
+    for (let page = 1; ; page += 1) {
+      const users = await this.request<Array<{ id: string }>>(
+        `/api/organizations/${encodeURIComponent(orgId)}/users?page=${page}&page_size=100`,
+      );
+      ids.push(...users.map((user) => user.id));
+      if (users.length < 100) return ids;
+    }
+  }
+
+  private staffOrgId: string | null = null;
+
+  private async staffOrganizationId(): Promise<string> {
+    if (this.staffOrgId) return this.staffOrgId;
+    const found = await this.request<Array<{ id: string; name: string; isMfaRequired?: boolean }>>(
+      `/api/organizations?q=${encodeURIComponent(STAFF_MFA_ORGANIZATION)}`,
+    );
+    const existing = found.find((org) => org.name === STAFF_MFA_ORGANIZATION);
+    if (existing && !existing.isMfaRequired) {
+      // Created by hand or drifted: without this flag Logto never makes staff enrol.
+      await this.request(`/api/organizations/${encodeURIComponent(existing.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isMfaRequired: true }),
+      });
+    }
+    this.staffOrgId = existing?.id ?? (await this.request<{ id: string }>('/api/organizations', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: STAFF_MFA_ORGANIZATION,
+        description: 'CampusHomes staff. Members must use 2-step verification.',
+        isMfaRequired: true,
+      }),
+    })).id;
+    return this.staffOrgId;
   }
 
   async createUser(input: {
