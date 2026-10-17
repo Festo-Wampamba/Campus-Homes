@@ -85,10 +85,11 @@ export function normalizePhoneForCountry(dialCode: string, value: string): strin
 
 // Deliberately loose on national-number length (6-10 digits) — this only
 // confirms the number belongs to a real African dial code, it does not
-// re-impose a single country's exact format on everyone else. Strips
-// spacing/punctuation the same way normalizeUgPhone always did, so a
-// human-typed "+256 767 648 490" still validates and stores as one
-// canonical E.164 string even when a caller bypasses the PhoneField UI.
+// re-impose a single country's exact format on everyone else. Uganda is the
+// one exception (2026-10-17): exactly 9 digits after +256, i.e. 10 in local
+// 07XXXXXXXX form. Strips spacing/punctuation the same way normalizeUgPhone
+// always did, so a human-typed "+256 767 648 490" still validates and stores
+// as one canonical E.164 string even when a caller bypasses the PhoneField UI.
 export const africanPhone = z.preprocess(
   (value) => (typeof value === 'string' ? value.trim().replace(/[\s().-]/g, '') : value),
   z
@@ -96,5 +97,8 @@ export const africanPhone = z.preprocess(
     .regex(
       new RegExp(`^\\+(?:${DIAL_ALTERNATION})\\d{6,10}$`),
       'Enter a valid African mobile number, e.g. +256 771 234 567',
-    ),
+    )
+    .refine((value) => !value.startsWith('+256') || /^\+256\d{9}$/.test(value), {
+      message: 'Ugandan numbers have 10 digits, e.g. 0771 234 567',
+    }),
 );
