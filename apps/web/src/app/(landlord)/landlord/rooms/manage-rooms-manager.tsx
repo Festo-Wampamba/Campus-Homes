@@ -37,6 +37,8 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Lifted from the rooms table so the stat cards above can filter it.
+  const [roomStatusFilter, setRoomStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"types" | "rooms">(
     (searchParams.get("tab") as "types" | "rooms") || "rooms",
   );
@@ -342,12 +344,12 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
       {/* Summary Metric Cards (6 Cards) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {([
-          { label: "Total Rooms", value: metrics.totalRooms, caption: "Physical units", Icon: DoorClosed, tone: "muted", title: "Every physical room on this property for the selected semester. Click to see the full list." },
-          { label: "Total Beds", value: metrics.totalBeds, caption: "Total capacity", Icon: Bed, tone: "muted", title: "Total bedspaces across all rooms. The maximum students you can house. Click to see the list." },
-          { label: "Available Beds", value: metrics.availableBeds, caption: "Ready to reserve", Icon: CheckCircle2, tone: "teal", title: "Bedspaces that are free and not blocked. Students can reserve these now. Click to see the list." },
-          { label: "Partially Full", value: metrics.partiallyOccupiedRooms, caption: "Has free beds", Icon: Clock, tone: "amber", title: "Rooms with some beds taken and some still free. Click to see the list." },
-          { label: "Fully Booked", value: metrics.fullyOccupiedRooms, caption: "100% occupied", Icon: Layers, tone: "muted", title: "Rooms where every bed is occupied. Click to see the list." },
-          { label: "Maintenance", value: metrics.blockedRooms, caption: "Offline blocks", Icon: Wrench, tone: "destructive", title: "Rooms taken offline by a maintenance block. Not reservable until cleared. Click to see the list." },
+          { label: "Total Rooms", value: metrics.totalRooms, caption: "Physical units", Icon: DoorClosed, tone: "muted", filter: "all", title: "Every physical room on this property for the selected semester. Click to see the full list." },
+          { label: "Total Beds", value: metrics.totalBeds, caption: "Total capacity", Icon: Bed, tone: "muted", filter: "all", title: "Total bedspaces across all rooms. The maximum students you can house. Click to see the list." },
+          { label: "Available Beds", value: metrics.availableBeds, caption: "Ready to reserve", Icon: CheckCircle2, tone: "teal", filter: "has_free_beds", title: "Bedspaces that are free and not blocked. Students can reserve these now. Click to see the rooms with free beds." },
+          { label: "Partially Full", value: metrics.partiallyOccupiedRooms, caption: "Has free beds", Icon: Clock, tone: "amber", filter: "partially_occupied", title: "Rooms with some beds taken and some still free. Click to see them." },
+          { label: "Fully Booked", value: metrics.fullyOccupiedRooms, caption: "100% occupied", Icon: Layers, tone: "muted", filter: "fully_occupied", title: "Rooms where every bed is occupied. Click to see them." },
+          { label: "Maintenance", value: metrics.blockedRooms, caption: "Offline blocks", Icon: Wrench, tone: "destructive", filter: "blocked", title: "Rooms taken offline by a maintenance block. Not reservable until cleared. Click to see them." },
         ] as const).map((card) => {
           const tone = {
             muted: { box: "border-border bg-card", head: "text-muted-foreground", value: "text-foreground", caption: "text-muted-foreground" },
@@ -360,8 +362,13 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               key={card.label}
               type="button"
               title={card.title}
-              onClick={() => handleTabChange("rooms")}
-              className={`rounded-xl border ${tone.box} p-4 text-left shadow-xs transition-colors hover:border-teal-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600`}
+              aria-pressed={card.filter !== "all" && roomStatusFilter === card.filter}
+              onClick={() => {
+                handleTabChange("rooms");
+                setRoomStatusFilter(card.filter);
+                requestAnimationFrame(() => document.getElementById("rooms-inventory")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+              }}
+              className={`rounded-xl border ${tone.box} p-4 text-left shadow-xs transition-[border-color,transform] duration-150 hover:border-teal-400/70 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${card.filter !== "all" && roomStatusFilter === card.filter ? "ring-2 ring-teal-600" : ""}`}
             >
               <div className={`flex items-center justify-between ${tone.head}`}>
                 <span className="text-xs font-semibold">{card.label}</span>
@@ -437,6 +444,8 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               onRoomUpdated={onRoomUpdated}
               onRoomsAdded={onRoomsAdded}
               onRoomArchived={onRoomArchived}
+              filterStatus={roomStatusFilter}
+              onFilterStatusChange={setRoomStatusFilter}
             />
           )}
         </div>
