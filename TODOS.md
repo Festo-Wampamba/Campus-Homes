@@ -22,11 +22,10 @@ release PR to `main` (deploys staging) → production by hand with
 | 13 | [Production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Festo → Claude | ☐ Open (needs correct price, furnishing, title) |
 | 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
 | 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo + Claude | ☐ Open |
-| 20 | [Room-change approve fails: `permission denied for table units`](#20-room-change-approve-fails-permission-denied-for-table-units) | Claude | 🔜 Next (bug, blocks room edits) |
 | 21 | [Phone numbers: exactly 10 digits](#21-phone-numbers-exactly-10-digits) | Claude | 🔜 Queued |
 | 22 | [Student registration link clickable, opens in a new tab](#22-student-registration-link-clickable-opens-in-a-new-tab) | Claude | 🔜 Queued |
 | 23 | [Inspection submit requires at least one photo](#23-inspection-submit-requires-at-least-one-photo) | Claude | 🔜 Queued |
-| 24 | [Staging tests: chat + booking tracker](#24-staging-tests-chat--booking-tracker) | Festo | ☐ Open (paused by item 20) |
+| 24 | [Staging tests: chat + booking tracker](#24-staging-tests-chat--booking-tracker) | Festo | ☐ Open (item 20 fixed; room-change part passed) |
 | 25 | [Code backlog](#25-code-backlog) | Claude | 💤 Later |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
@@ -128,23 +127,6 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 - **When:** before any real data goes on the shared staging/production
   Postgres, Redis or Logto.
 
-## 20. Room-change approve fails: `permission denied for table units`
-
-- **Seen:** 2026-10-17 on staging. Landlord Joel Mikes (Naguru Hieghts)
-  renamed room "Double 1" → "A08" and submitted it for Ops review; Ops lead
-  Approve showed "Internal server error".
-- **Cause (staging API log, 10/16 22:36 and 22:42 UTC):**
-  `error: permission denied for table units` (`aclcheck_error`). It's a
-  missing **grant** on `units` for `app_user` (UPDATE, or the renamed
-  column), not an RLS policy denial.
-- **Fix:** find the statement the approve path runs
-  (`RoomManagementOpsController` → `/ops/room-change-requests/:id/approve`).
-  Add a new migration granting the narrowest privilege it needs (or run that
-  write under the service path already used for unit writes). Add an RLS test
-  for the grant. Existing migrations stay untouched.
-- *Pass:* approve that same pending change on staging, and A08 shows on the
-  landlord's Manage Rooms without "Staged".
-
 ## 21. Phone numbers: exactly 10 digits
 
 - **What:** "Complete your profile" accepted `0778398` (7 digits). Uganda
@@ -210,6 +192,7 @@ Two browsers on staging: normal window = landlord, Incognito = student.
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-17 | Room-change approve 500 (`permission denied for table units`): migration 0068 grants `units` label/capacity/room_category/building_name/floor_label to `app_user`, plus a `units_guard_room_details` trigger so only `operational_status` can change outside the approve path (also closes landlord/ops writes to `room_type_id`/`archived_at`). 4 RLS tests; Festo confirmed approve on staging (was item 20) | [#202](https://github.com/Festo-Wampamba/Campus-Homes/pull/202), [#203](https://github.com/Festo-Wampamba/Campus-Homes/pull/203) | Staging + production (`c46f9df`, schema 68) |
 | 2026-10-17 | Admin → Settings save creates missing rows and shows the real API error; migration 0067 restores `support_contact` (WhatsApp +256768561023) on production, where the row was missing | [#199](https://github.com/Festo-Wampamba/Campus-Homes/pull/199), [#200](https://github.com/Festo-Wampamba/Campus-Homes/pull/200) | Staging + production (`93941a1`, schema 67) |
 | 2026-10-17 | Production deploy `3847c51` → `93941a1`, schema 66 → 67 | workflow run `38968508854` | Production |
 | 2026-10-17 | Festo, dashboards: old Zoho DKIM record deleted (Zoho verified); Cloudflare Email Address Obfuscation off + cache purged (was item 15); sitemap submitted to Google (Success, 17 pages) and Bing (Success, 17 URLs); Logto MFA prompt set to one-time skippable on staging + production; production sign-up "Create your password" on (was item 3) | — | Production |
