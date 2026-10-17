@@ -5,8 +5,8 @@ below. Tick an item and move it to **Done** when it ships.
 
 _Last updated: 2026-10-17._
 
-**Where things stand:** production, staging and `main` run `c46f9df`
-(schema 68/68); `development` (`685540b`) has the same code. Flow: feature branch → PR to `development` →
+**Where things stand:** production, staging and `main` run `0b3e604`
+(schema 68/68). Flow: feature branch → PR to `development` →
 release PR to `main` (deploys staging) → production by hand with
 `gh workflow run CI --ref main`.
 
@@ -22,7 +22,6 @@ release PR to `main` (deploys staging) → production by hand with
 | 13 | [Production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Festo → Claude | ☐ Open (needs correct price, furnishing, title) |
 | 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
 | 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo + Claude | ☐ Open |
-| 21 | [Phone numbers: exactly 10 digits](#21-phone-numbers-exactly-10-digits) | Claude | 🔜 Queued |
 | 22 | [Student registration link clickable, opens in a new tab](#22-student-registration-link-clickable-opens-in-a-new-tab) | Claude | 🔜 Queued |
 | 23 | [Inspection submit requires at least one photo](#23-inspection-submit-requires-at-least-one-photo) | Claude | 🔜 Queued |
 | 24 | [Staging tests: chat + booking tracker](#24-staging-tests-chat--booking-tracker) | Festo | ☐ Open (item 20 fixed; room-change part passed) |
@@ -127,18 +126,6 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 - **When:** before any real data goes on the shared staging/production
   Postgres, Redis or Logto.
 
-## 21. Phone numbers: exactly 10 digits
-
-- **What:** "Complete your profile" accepted `0778398` (7 digits). Uganda
-  numbers must be exactly 10 digits in local form (`07XXXXXXXX`), i.e. 9
-  after `+256`.
-- **Where:** `packages/shared/src/phone.ts` (`africanPhone` allows 6–10
-  national digits) and the `PhoneField` used by onboarding, profile, admin
-  user editor and staff invite. Decide whether the rule is Uganda-only or
-  per-country lengths before changing the shared schema.
-- *Pass:* 7, 9 and 11 digits are rejected with a clear message; `0778398xxx`
-  and `+256 778 398 xxx` save.
-
 ## 22. Student registration link clickable, opens in a new tab
 
 - **What:** in the landlord property dialog ("Student registration form QR
@@ -192,6 +179,7 @@ Two browsers on staging: normal window = landlord, Incognito = student.
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-17 | Ugandan phone numbers must be exactly 10 digits (9 after `+256`) in the shared `africanPhone` schema; other African countries keep the loose rule. Onboarding shows the message in red under the phone field. Festo confirmed on staging (was item 21) | [#205](https://github.com/Festo-Wampamba/Campus-Homes/pull/205), [#206](https://github.com/Festo-Wampamba/Campus-Homes/pull/206) | Staging + production (`0b3e604`) |
 | 2026-10-17 | Room-change approve 500 (`permission denied for table units`): migration 0068 grants `units` label/capacity/room_category/building_name/floor_label to `app_user`, plus a `units_guard_room_details` trigger so only `operational_status` can change outside the approve path (also closes landlord/ops writes to `room_type_id`/`archived_at`). 4 RLS tests; Festo confirmed approve on staging (was item 20) | [#202](https://github.com/Festo-Wampamba/Campus-Homes/pull/202), [#203](https://github.com/Festo-Wampamba/Campus-Homes/pull/203) | Staging + production (`c46f9df`, schema 68) |
 | 2026-10-17 | Admin → Settings save creates missing rows and shows the real API error; migration 0067 restores `support_contact` (WhatsApp +256768561023) on production, where the row was missing | [#199](https://github.com/Festo-Wampamba/Campus-Homes/pull/199), [#200](https://github.com/Festo-Wampamba/Campus-Homes/pull/200) | Staging + production (`93941a1`, schema 67) |
 | 2026-10-17 | Production deploy `3847c51` → `93941a1`, schema 66 → 67 | workflow run `38968508854` | Production |
