@@ -5,7 +5,7 @@ import type { LandlordReservationView } from "@campushomes/shared";
 import { CheckCircle2, Search } from "lucide-react";
 
 import { api, ApiError } from "@/lib/api";
-import type { BookingStage } from "@/lib/booking-stage";
+import { bookingStage, type BookingStage } from "@/lib/booking-stage";
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -155,6 +155,19 @@ function ReleaseButton({
   );
 }
 
+/** Applies a local status change; a row whose new status belongs to the other
+ * page (e.g. a booking just released) leaves this list right away. */
+export function applyStatusChange(
+  rows: LandlordReservationView[],
+  id: string,
+  status: LandlordReservationView["status"],
+  stage: BookingStage,
+): LandlordReservationView[] {
+  return rows
+    .map((r) => (r.id === id ? { ...r, status } : r))
+    .filter((r) => bookingStage(r.status) === stage);
+}
+
 export function LandlordReservationsList({
   reservations,
   roomsByBedId,
@@ -200,7 +213,7 @@ export function LandlordReservationsList({
     setConfirming((prev) => new Set(prev).add(id));
     try {
       await api(`/reservations/${id}/move-in`, { method: "POST" });
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "occupied" } : r)));
+      setRows((prev) => applyStatusChange(prev, id, "occupied", stage));
     } finally {
       setConfirming((prev) => {
         const next = new Set(prev);
@@ -211,7 +224,7 @@ export function LandlordReservationsList({
   }
 
   function onReleased(id: string) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "released" } : r)));
+    setRows((prev) => applyStatusChange(prev, id, "released", stage));
   }
 
   return (
