@@ -216,9 +216,10 @@ export class InvitationsService {
     return this.deliver(invitation.id);
   }
 
-  /** Edits a pending (or expired) invitation. Renews the 24h window; a changed
-   * contact or an expired link gets a fresh email, since the old one-time link
-   * verifies the old contact and can no longer match this invitation. */
+  /** Edits a pending (or expired) invitation and renews its 24h window. Every
+   * edit sends a fresh email: the invitation email states the role, scope and
+   * expiry, so the old one would be stale, and after a contact change the old
+   * one-time link verifies the old contact and can no longer match. */
   async update(actor: RlsContext, permissions: Set<string>, scopes: RoleAssignment[], id: string, input: StaffInvitationInput) {
     const { email, phone } = validateInvitation(permissions, scopes, input);
     const { updated, resend } = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
@@ -229,7 +230,7 @@ export class InvitationsService {
       if (current.status !== 'pending') throw new ConflictException('Only pending or expired invitations can be edited');
       await assertContactAvailable(client, actor, email, phone, id);
       const contactChanged = current.email !== email || current.phone !== phone;
-      const resend = contactChanged || new Date(current.expiresAt).getTime() <= Date.now();
+      const resend = true;
       const updated = (await client.query<Invitation>(`UPDATE auth_invitations SET name = $2, email = $3, phone = $4,
           role_key = $5, scope_type = $6, scope_id = $7, valid_until = $8, reason = $9, target_user_id = NULL,
           expires_at = now() + ${INVITATION_TTL}, updated_at = now(),
