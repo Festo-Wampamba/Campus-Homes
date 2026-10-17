@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BedDouble, Building2, CalendarCheck, Percent, Wallet } from "lucide-react";
+import { BedDouble, Building2, CalendarCheck, CalendarClock, Percent, Wallet } from "lucide-react";
 
 import { getLandlordReservations, getMyProperties, getPropertyDetail } from "@/lib/landlord";
 import { formatUgx } from "@/lib/format";
@@ -34,9 +34,8 @@ export default async function LandlordReportsPage() {
   const totalRooms = beds.length;
   const occupiedRooms = beds.filter((b) => b.status === "occupied").length;
   const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : null;
-  const activeBookings = reservations.filter(
-    (r) => r.status === "reserved" || r.status === "booked",
-  ).length;
+  const activeHolds = reservations.filter((r) => r.status === "reserved").length;
+  const confirmedBookings = reservations.filter((r) => r.status === "booked").length;
 
   const statusData = roomStatusBreakdown(rooms);
   const occupancyByProperty = propertyOccupancy(details);
@@ -52,7 +51,7 @@ export default async function LandlordReportsPage() {
       <h1 className="text-2xl">Reports & Analytics</h1>
       <p className="mt-1 text-sm text-muted-foreground">A live snapshot of how your properties are doing.</p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-5">
         <StatCard label="Properties" value={String(properties.length)} icon={Building2} tone="teal" href="/landlord/properties" />
         <StatCard label="Total beds" value={String(totalRooms)} icon={BedDouble} tone="teal" href="/landlord/rooms" />
         <StatCard
@@ -62,7 +61,8 @@ export default async function LandlordReportsPage() {
           icon={Percent}
           tone="coral"
         />
-        <StatCard label="Active bookings" value={String(activeBookings)} icon={CalendarCheck} tone="teal" href="/landlord/bookings" />
+        <StatCard label="Active reservations" value={String(activeHolds)} icon={CalendarClock} tone="coral" href="/landlord/reservations?status=reserved" />
+        <StatCard label="Confirmed bookings" value={String(confirmedBookings)} icon={CalendarCheck} tone="teal" href="/landlord/bookings?status=booked" />
       </div>
 
       <div className="mt-4">
