@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
@@ -17,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { api, apiErrorMessage } from "@/lib/api";
 import type {
   RoomInventoryChangeSet,
@@ -70,6 +71,11 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
     setRoomTypes(initialData.roomTypes);
     setRooms(initialData.rooms);
   }
+
+  // While Ops is reviewing, keep re-fetching so an approval (or rejection)
+  // shows up here within seconds, with no manual reload.
+  const refreshRooms = useCallback(() => router.refresh(), [router]);
+  useRefreshWhile(changeSet?.status === "pending_review" || changeSet?.status === "visit_required", refreshRooms, 10_000);
 
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [cancellingChangeSet, setCancellingChangeSet] = useState(false);
