@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getLandlordProfile, getMyProperties } from "@/lib/landlord";
@@ -6,6 +7,7 @@ import { apiServer } from "@/lib/server-api";
 import { KycBanner } from "@/components/kyc-banner";
 import { fetchRoomManagementData } from "@/lib/room-management-server";
 import { ManageRoomsManager } from "./manage-rooms-manager";
+import { ROOMS_PROPERTY_COOKIE } from "./rooms-property-cookie";
 
 export const metadata: Metadata = {
   title: "Manage Rooms | CampusHomes",
@@ -28,8 +30,12 @@ export default async function ManageRoomsPage({ searchParams }: PageProps) {
   }
 
   const params = await searchParams;
+  // A link from a property wins; otherwise reopen the property last managed.
+  const remembered = (await cookies()).get(ROOMS_PROPERTY_COOKIE)?.value;
   const selectedProperty =
-    properties.find((p) => p.id === params.propertyId) ?? properties[0];
+    properties.find((p) => p.id === params.propertyId) ??
+    properties.find((p) => p.id === remembered) ??
+    properties[0];
 
   // Fetch available semesters for this property's catchment
   const rawSemesters = await apiServer<{ id: string; name: string }[]>(

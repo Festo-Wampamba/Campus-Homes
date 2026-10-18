@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
@@ -28,6 +28,7 @@ import type {
 import { ChangeSetSubmitDialog } from "./change-set-submit-dialog";
 import { RoomTypesTab } from "./room-types-tab";
 import { RoomsInventoryTab } from "./rooms-inventory-tab";
+import { ROOMS_PROPERTY_COOKIE } from "./rooms-property-cookie";
 
 interface ManageRoomsManagerProps {
   initialData: RoomManagementOverview;
@@ -115,6 +116,11 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
       blockedRooms,
     };
   }, [rooms]);
+
+  // Remember the property, so Manage Rooms opens on it next time (page.tsx).
+  useEffect(() => {
+    document.cookie = `${ROOMS_PROPERTY_COOKIE}=${property.id}; path=/landlord; max-age=31536000; samesite=lax`;
+  }, [property.id]);
 
   // URL synchronization for property and semester selection
   function handlePropertyChange(newPropertyId: string) {
@@ -217,18 +223,22 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
             {/* Property Selector */}
             <div className="flex items-center gap-1.5 rounded-lg border border-input bg-card px-3 py-1.5 shadow-xs">
               <Building2 className="size-4 text-teal-700 dark:text-teal-400 shrink-0" />
-              <select
-                value={property.id}
-                onChange={(e) => handlePropertyChange(e.target.value)}
-                aria-label="Select Property"
-                className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer"
-              >
-                {properties.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              {properties.length > 1 ? (
+                <select
+                  value={property.id}
+                  onChange={(e) => handlePropertyChange(e.target.value)}
+                  aria-label="Select Property"
+                  className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer"
+                >
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-xs font-bold text-foreground">{property.name}</span>
+              )}
             </div>
 
             {/* Semester Selector */}

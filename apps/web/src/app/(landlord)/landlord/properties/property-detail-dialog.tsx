@@ -1152,6 +1152,20 @@ export function PropertyDetailDialog({
             <CoverPhoto property={property} />
             <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
+                <p className="text-sm font-semibold text-foreground">Rooms and room types</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add rooms one by one, in bulk or from an Excel sheet, and change room types.
+                </p>
+              </div>
+              <Link
+                href={`/landlord/rooms?propertyId=${property.id}`}
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-semibold hover:bg-muted"
+              >
+                Manage rooms
+              </Link>
+            </div>
+            <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
                 <p className="text-sm font-semibold text-foreground">Student registration form</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Design the form students fill out and sign after scanning this property&apos;s QR code below.
