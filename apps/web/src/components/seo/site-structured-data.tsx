@@ -113,7 +113,8 @@ export async function ListingStructuredData({ listing }: { listing: ListingSeo }
         "@id": `${base}/listings/${listing.id}#hostel`,
         name: listing.name,
         url: `${base}/listings/${listing.id}`,
-        description: `Student hostel near Makerere University, inspected in person by CampusHomes. Reserving a room is free.`,
+        // Kampala, not a university: listings span four catchments, all in Kampala.
+        description: "Student hostel in Kampala, inspected in person by CampusHomes. Reserving a room is free.",
         image: listing.photoKeys.slice(0, 6).map((key) => listingPhotoUrl(key, 1200)).filter(Boolean),
         priceRange,
         currenciesAccepted: "UGX",

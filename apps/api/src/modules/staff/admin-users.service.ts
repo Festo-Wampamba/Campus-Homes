@@ -530,11 +530,19 @@ export class AdminUsersService {
   async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string, confirmEmail?: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
     const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      const target = (await client.query<{ id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean }>(`
+      const target = (await client.query<{
+        id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean; isActiveSuperAdmin: boolean;
+      }>(`
         SELECT u.id, u.email, u.logto_user_id AS "logtoUserId", EXISTS (
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
           WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
-        ) AS "isSuperAdmin"
+        ) AS "isSuperAdmin", EXISTS (
+          -- Same validity window the Users list uses, so the dialog asks for
+          -- the typed email exactly when the API requires it.
+          SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
+          WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
+            AND ura.valid_from <= now() AND (ura.valid_until IS NULL OR ura.valid_until > now())
+        ) AS "isActiveSuperAdmin"
         FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
       `, [userId])).rows[0];
       if (!target) throw new NotFoundException('User not found');
@@ -548,7 +556,7 @@ export class AdminUsersService {
           WHERE r.key = 'super_admin' AND ura.revoked_at IS NULL AND u.deleted_at IS NULL AND u.status = 'active'
         `)).rows[0]?.count ?? 0);
         if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
-        if (!target.email || confirmEmail?.trim().toLowerCase() !== target.email.toLowerCase()) {
+        if (target.isActiveSuperAdmin && (!target.email || confirmEmail?.trim().toLowerCase() !== target.email.toLowerCase())) {
           throw new BadRequestException("Type the Super Admin's email address exactly to confirm");
         }
       }

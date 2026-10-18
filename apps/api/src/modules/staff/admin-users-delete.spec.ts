@@ -11,14 +11,14 @@ const actor: RlsContext = { userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', role
 const target = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 /** superAdminCount is only consulted when the target is a super admin. */
-function make(targetRow: { isSuperAdmin: boolean } | null, superAdminCount = 2) {
+function make(targetRow: { isSuperAdmin: boolean; isActiveSuperAdmin?: boolean } | null, superAdminCount = 2) {
   const logto = { deleteUser: jest.fn(async () => undefined) };
   const queries: string[] = [];
   const client = {
     query: jest.fn(async (text: string) => {
       queries.push(text.replace(/\s+/g, ' ').trim());
       if (text.includes('AND u.deleted_at IS NULL FOR UPDATE')) {
-        return { rows: targetRow ? [{ id: target, email: 'Boss@CampusHomes.co.ug', logtoUserId: 'logto-boss', ...targetRow }] : [] };
+        return { rows: targetRow ? [{ id: target, email: 'Boss@CampusHomes.co.ug', logtoUserId: 'logto-boss', isActiveSuperAdmin: targetRow.isSuperAdmin, ...targetRow }] : [] };
       }
       if (text.includes('count(DISTINCT ura.user_id)')) {
         return { rows: [{ count: String(superAdminCount) }] };
@@ -76,6 +76,12 @@ describe('AdminUsersService.deleteUser', () => {
     const { service } = make({ isSuperAdmin: true }, 2);
     await expect(service.deleteUser(actor, new Set(['roles.manage_super_admin']), target, 'x', 'other@campushomes.co.ug'))
       .rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('needs no typed email when the Super Admin assignment is not active yet', async () => {
+    const { service } = make({ isSuperAdmin: true, isActiveSuperAdmin: false }, 2);
+    await expect(service.deleteUser(actor, new Set(['roles.manage_super_admin']), target, 'x'))
+      .resolves.toEqual({ id: target, deleted: true });
   });
 
   it('removes the Logto identity so a new account cannot inherit its 2-step setup', async () => {
