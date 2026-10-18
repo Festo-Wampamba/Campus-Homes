@@ -67,6 +67,11 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
   builds a preview on every PR (seen on PRs #152–#155).
 - **Before:** confirm Dokploy's web service is current at the real domain.
   Checked 2026-10-18: `campushomes.co.ug` serves `a42b74a` from Dokploy.
+- **Vercel state (2026-10-18):** project `campus-homes-web` (team
+  "Festo's projects") has only `*.vercel.app` domains, no custom domain.
+  Its last build was 2026-10-15 (`7e698e0`); no Vercel check appears on
+  PRs since #220, so it has stopped building on pushes. Deployments are
+  behind Vercel SSO, so nothing is publicly exposed.
 - **Note:** the GitHub "Preview" environment is Vercel's (all its
   deployments come from `vercel[bot]`, last on 2026-10-15). Nothing of ours
   deploys the `preview` branch, so retiring Vercel also retires that
