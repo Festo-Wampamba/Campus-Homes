@@ -542,8 +542,15 @@ export class ListingsService {
       // search result must never advertise rooms that are already
       // held/paid/occupied, and a listing with nothing left to reserve is
       // excluded entirely below.
-      const res = await client.query(
-        `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
+      // RLS policies on these tables expand into ~200 sub-plans, so planning
+      // cost ~100 ms vs ~40 ms to execute (staging EXPLAIN, 2026-10-18), and
+      // Postgres kept choosing a fresh custom plan every call. A named
+      // statement with a forced generic plan is planned once per pooled
+      // connection (planning drops to <1 ms, same rows).
+      await client.query('SET LOCAL plan_cache_mode = force_generic_plan');
+      const res = await client.query({
+        name: 'listings_search',
+        text: `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
                 lv.id AS version_id, lv.price_per_term_ugx, lv.amenities, lv.description,
                 p.name, p.street_address, p.gps_lat, p.gps_lon, p.catchment AS university,
                 p.gender_arrangement,
@@ -658,7 +665,7 @@ export class ListingsService {
             AND COALESCE(u.unit_count, 0) > 0
           ORDER BY lv.price_per_term_ugx ASC
           LIMIT $9`,
-        [
+        values: [
           input.minLon,
           input.minLat,
           input.maxLon,
@@ -675,7 +682,7 @@ export class ListingsService {
           input.genderArrangement ?? null,
           input.selfContained ?? null,
         ],
-      );
+      });
       // Pilot-funnel backstop (0032) — best-effort: a logging failure must
       // never break a search response. Same client/transaction, so no
       // nested-rlsDb.run risk.
