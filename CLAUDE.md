@@ -1332,3 +1332,87 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     ownership-checked on submit/update). At first publish the Ops photo
     editor preloads them linked to that room type; `confirmedPhotoRows`
     accepts them as known photos with `captured_by` null.
+
+- **Logto profile sync, gender at registration, feedback slices A–G
+  (2026-10-17, PRs #213 → #214, #215–#221 → #222):**
+  - `LogtoProfileSync` (`modules/auth/logto-profile-sync.ts`) copies our
+    `users` row to Logto (our DB stays the source of truth): name →
+    `name`; gender/DOB/address → `profile.*`; contact phone, nationality,
+    emergency contact, account type → `customData`. **Contact phone never
+    goes to `primaryPhone`** — Logto treats that as a trusted sign-in
+    identity and ours is unverified (SMS verification first, TODOS item 8).
+    Partial-update endpoints only; fire-and-forget after onboarding, every
+    `updateSelfParticulars` save and admin edits. Backfill:
+    `scripts/backfill-logto-profiles.cjs` (re-runnable).
+  - Gender (Male/Female) required at onboarding for students and landlords,
+    never staff; API enforces by role. Session carries `gender`;
+    `needsProfileSetup` re-asks only on an explicit `null`.
+  - A: verification email shows the code once as plain text (Gmail's "Copy
+    code" chip is Gmail's call, nothing more to do); staff invitation is a
+    full branded HTML email. Staff role labels live in `packages/shared`.
+  - B: **staff MFA via a Logto organization.** "CampusHomes Staff" org has
+    `isMfaRequired: true`; tenant policy `NoPrompt` +
+    `organizationRequiredMfaPolicy: "Mandatory"`. Staff can't skip; students
+    and landlords are never asked. Every staff-portal sign-in adds the user
+    to the org (after `provision()`); our callback check still refuses
+    staff without a factor. A brand-new staff account joins the org on its
+    first sign-in, so setup always happens on the **second** sign-in (the
+    invitation steps say so). Run `node scripts/apply-staff-mfa.cjs` in the
+    API container after any deploy that changes it; it only counts grants
+    with `valid_from <= now()`.
+  - C: Bedsitter retired from every picker (`SELECTABLE_ROOM_CATEGORIES`;
+    DB value kept, legacy rows still show it). Labels via `roomCategoryLabel`.
+  - D: opening a page marks its badge notifications read on the server
+    (`notificationsSeenOn`, exact-link rule). Thread links never badge.
+  - E: Manage Rooms stat cards filter the room table.
+  - F: `bookingStage()` — Reserved/Released/Expired/Cancelled/Refunded are
+    reservations; Booked/Moved in are bookings. Separate
+    `/landlord/reservations` and `/landlord/bookings` pages.
+  - G: `useRefreshWhile` refreshes Manage Rooms every 10s while a change
+    set is under review.
+
+- **Staging feedback round, booking requests, spreadsheet rooms, calendar
+  reminders (2026-10-18, PRs #224/#225 → #226, #227 → #228, #229 → #230;
+  production `a42b74a`, schema 70):**
+  - Super Admin: never invitable (`inviteStaffSchema` excludes it;
+    `pendingInvitationsForIdentity` skips it) — granted from Users to an
+    existing account only. Deleting an **active** Super Admin requires
+    typing their email (`confirmEmail`, paste blocked).
+  - **Deleting/purging a user deletes their Logto identity** (after commit,
+    before the audit write, best effort). Otherwise a new account with the
+    same email re-linked to the old identity and its MFA.
+  - Username synced to Logto's Username (skipped if it starts with a digit;
+    422 tolerated). Staff 2-step = authenticator app **or passkey**
+    (WebAuthn). Email codes rejected: both factors would share one inbox.
+  - Signed-out favourites heart opens a sign-up prompt that returns to the
+    listing. `Hostel` JSON-LD per listing; "Campass/Kampus Homes" in
+    `alternateName`.
+  - **Booking requests live on the landlord Reservations page** ("Booking
+    requested" chip/filter/stat; Confirm booking via
+    `components/landlord/confirm-booking-dialog.tsx`; student gets
+    `reservation.booked`).
+  - **One chat per student–landlord pair** across all reservations:
+    `ensureThread` returns the pair's thread; migration 0069 merged
+    duplicates and made `(student_id, landlord_id)` unique (prod: 15/15).
+  - **Spreadsheet room import:** template `GET
+    /room-management/properties/:id/rooms/import/template`, upload `POST
+    /room-management/rooms/import/parse` as raw `application/octet-stream`
+    (2 MB raw parser in main.ts — Nest's JSON limit is 100 kB), parsed with
+    `exceljs` (cell text only, ≤500 rows). **Never imports tenant/student
+    columns.** Browser matching in `lib/room-import.ts`; staging goes through
+    the existing `rooms/bulk` endpoint in batches of 200. Manage Rooms stays
+    one page with a picker plus per-property links (cookie
+    `ch_rooms_property`); a full per-property tabbed page is deferred.
+  - **Calendar reminders:** BullMQ `calendar_reminders` every minute
+    (`modules/calendar/calendar-reminders.ts`); migration 0070 adds
+    `remind` + `reminders_sent int[]`. Offsets 1d/10h/5h/30/15/5/1 min; each
+    send claimed atomically; only the closest overdue offset sends; a
+    failed email releases the claim; sent offsets reset only when the start
+    time changes. Calendar date keys are **local**, not UTC (events showed a
+    day late before).
+  - **iOS Safari:** forms inside the shared `Dialog` use `min-h-0 flex-auto`,
+    never `flex-1` (collapses on iOS). All dialog forms now follow this.
+  - Repo branches are only `main`, `development`, `preview`; the 59 merged
+    branches were deleted 2026-10-18. The GitHub "Preview" environment is
+    **Vercel's** (bot deployments), not ours — no CI/Dokploy target deploys
+    the `preview` branch.

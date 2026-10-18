@@ -210,7 +210,7 @@ function PropertyForm({
   }
 
   return (
-    <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+    <form onSubmit={submit} className="flex min-h-0 flex-auto flex-col">
       <DialogHeader
         title={isEdit ? "Edit property" : "Add a property"}
         description={
