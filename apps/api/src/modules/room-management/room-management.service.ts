@@ -574,8 +574,9 @@ export class RoomManagementService {
 
   /** Spreadsheet template for this property, listing its own room type names:
    * each live type's approved title, plus a renamed title still in an open
-   * change set. Versions from a cancelled draft are left out. */
-  async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv') {
+   * change set for the semester on screen (what the importer can match).
+   * Versions from a cancelled draft are left out. */
+  async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv', semesterId?: string) {
     const titles = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
       const { rows } = await client.query<{ title: string }>(
@@ -584,7 +585,8 @@ export class RoomManagementService {
          LEFT JOIN room_inventory_change_sets cs ON cs.id = v.change_set_id
          WHERE rt.property_id = $1 AND rt.archived_at IS NULL
            AND (v.id = rt.current_version_id
-                OR cs.status IN ('draft','pending_review','visit_required','rejected'))`, [propertyId],
+                OR (cs.semester_id = $2 AND cs.status IN ('draft','pending_review','visit_required','rejected')))`,
+        [propertyId, semesterId ?? null],
       );
       return [...new Set(rows.map((row) => row.title))].sort();
     });

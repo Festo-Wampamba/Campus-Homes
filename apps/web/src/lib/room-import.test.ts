@@ -71,3 +71,15 @@ describe("planRoomImport", () => {
     expect(plan(rows).batches.map((b) => b.roomCodes.length)).toEqual([200, 200, 50]);
   });
 });
+
+describe("planRoomImport batches", () => {
+  it("keeps groups apart when a building or floor contains the separator", () => {
+    const { batches } = planRoomImport(
+      [{ rowNumber: 2, roomCode: "X1", roomType: "Single Room", buildingName: "A|B", floorLabel: "C" },
+        { rowNumber: 3, roomCode: "X2", roomType: "Single Room", buildingName: "A", floorLabel: "B|C" }],
+      [{ id: "t", currentVersion: { title: "Single Room", category: "single" }, pendingVersion: null } as unknown as RoomType],
+      [],
+    );
+    expect(batches).toHaveLength(2);
+  });
+});

@@ -63,9 +63,10 @@ export class RoomManagementController {
     @Req() req: AuthenticatedRequest,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Query('format') format: string | undefined,
+    @Query('semesterId', new ParseUUIDPipe({ optional: true })) semesterId: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const file = await this.rooms.importTemplate(rlsCtx(req), propertyId, format === 'csv' ? 'csv' : 'xlsx');
+    const file = await this.rooms.importTemplate(rlsCtx(req), propertyId, format === 'csv' ? 'csv' : 'xlsx', semesterId);
     response.setHeader('Content-Type', file.mimeType);
     response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
     return new StreamableFile(file.buffer);

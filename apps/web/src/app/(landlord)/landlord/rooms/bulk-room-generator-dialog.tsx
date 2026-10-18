@@ -22,6 +22,8 @@ interface BulkRoomGeneratorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   propertyId: string;
+  /** Semester on screen: the template lists that semester's pending room type names. */
+  semesterId: string;
   roomTypes: RoomType[];
   existingRooms: RoomUnit[];
   onGenerated: (newRooms: RoomUnit[]) => void;
@@ -31,6 +33,7 @@ export function BulkRoomGeneratorDialog({
   open,
   onOpenChange,
   propertyId,
+  semesterId,
   roomTypes,
   existingRooms,
   onGenerated,
@@ -283,13 +286,13 @@ export function BulkRoomGeneratorDialog({
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <a
-                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=xlsx`}
+                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=xlsx&semesterId=${semesterId}`}
                     className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted"
                   >
                     <Download aria-hidden className="size-3.5" /> Excel template
                   </a>
                   <a
-                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=csv`}
+                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=csv&semesterId=${semesterId}`}
                     className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted"
                   >
                     <Download aria-hidden className="size-3.5" /> CSV template

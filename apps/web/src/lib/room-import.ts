@@ -77,7 +77,8 @@ export function planRoomImport(rows: ImportedRoomRow[], roomTypes: RoomType[], e
     if (row.error || !row.roomTypeId) continue;
     const buildingName = row.buildingName || null;
     const floorLabel = row.floorLabel || null;
-    const groupKey = `${row.roomTypeId}|${buildingName ?? ""}|${floorLabel ?? ""}`;
+    // JSON, not a joined string: building or floor may contain any character.
+    const groupKey = JSON.stringify([row.roomTypeId, buildingName, floorLabel]);
     const group = groups.get(groupKey) ?? { roomTypeId: row.roomTypeId, buildingName, floorLabel, roomCodes: [] };
     group.roomCodes.push(row.roomCode);
     groups.set(groupKey, group);

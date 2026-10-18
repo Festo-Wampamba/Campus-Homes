@@ -460,6 +460,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
             <RoomsInventoryTab
               key={inventoryResetKey}
               propertyId={property.id}
+              semesterId={currentSemester.id}
               roomTypes={roomTypes}
               rooms={rooms}
               onRoomUpdated={onRoomUpdated}

@@ -26,6 +26,7 @@ import { UnitBlockDialog } from "./unit-block-dialog";
 
 interface RoomsInventoryTabProps {
   propertyId: string;
+  semesterId: string;
   roomTypes: RoomType[];
   rooms: RoomUnit[];
   onRoomUpdated: (updatedRoom: RoomUnit) => void;
@@ -46,6 +47,7 @@ export function roomMatchesStatus(derivedStatus: string, filter: string): boolea
 
 export function RoomsInventoryTab({
   propertyId,
+  semesterId,
   roomTypes,
   rooms,
   onRoomUpdated,
@@ -694,6 +696,7 @@ export function RoomsInventoryTab({
         open={bulkDialogOpen}
         onOpenChange={setBulkDialogOpen}
         propertyId={propertyId}
+        semesterId={semesterId}
         roomTypes={roomTypes}
         existingRooms={rooms}
         onGenerated={onRoomsAdded}
