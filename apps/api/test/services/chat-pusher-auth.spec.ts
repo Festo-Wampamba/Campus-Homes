@@ -174,3 +174,15 @@ describe('ChatService.authorizeChannel', () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });
+
+describe('ChatService.ensureThread', () => {
+  it('keeps one conversation per student and landlord across reservations', async () => {
+    const second = (await pool.query(
+      `INSERT INTO reservations (student_id, bed_id, listing_version_id, idempotency_key, price_per_term_ugx, status)
+       SELECT student_id, bed_id, listing_version_id, 'chat-test-res-0002', price_per_term_ugx, 'cancelled'
+       FROM reservations WHERE idempotency_key = 'chat-test-res-0001' RETURNING id`,
+    )).rows[0].id as string;
+    const thread = await chat.ensureThread(participantCtx(), second);
+    expect((thread as { id: string }).id).toBe(threadId);
+  });
+});

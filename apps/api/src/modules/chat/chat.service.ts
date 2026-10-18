@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
+import type { PoolClient } from 'pg';
 
 import type { RealtimeAdapter } from '../../adapters/realtime.adapter';
 import type { RlsContext } from '../../db/rls-context';
@@ -26,19 +27,12 @@ export class ChatService {
     @Optional() private readonly presence?: PresenceService,
   ) {}
 
-  /** Thread provisioning is service-side (§6): scoped to one reservation,
-   * participants derived from the reservation — never client-supplied. */
+  /** Thread provisioning is service-side (§6): participants are derived from
+   * the reservation, never client-supplied. A student and a landlord share
+   * one conversation however many reservations they have (0069), so this
+   * returns the pair's thread rather than one per reservation. */
   async ensureThread(ctx: RlsContext, reservationId: string) {
-    return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db, client) => {
-      const existing = await db.query.chatThreads.findFirst({
-        where: eq(chatThreads.reservationId, reservationId),
-      });
-      if (existing) {
-        if (existing.studentId !== ctx.userId && existing.landlordId !== ctx.userId) {
-          throw new ForbiddenException('Not a participant');
-        }
-        return existing;
-      }
+    return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) => {
       const partiesRes = await client.query(
         `SELECT r.student_id, p.landlord_id
          FROM reservations r
@@ -58,17 +52,7 @@ export class ChatService {
       if (ctx.userId !== student_id && ctx.userId !== landlord_id) {
         throw new ForbiddenException('Not a party to this reservation');
       }
-      const [thread] = await db
-        .insert(chatThreads)
-        .values({ reservationId, studentId: student_id, landlordId: landlord_id })
-        .onConflictDoNothing()
-        .returning();
-      return (
-        thread ??
-        (await db.query.chatThreads.findFirst({
-          where: eq(chatThreads.reservationId, reservationId),
-        }))
-      );
+      return pairThread(client, student_id, landlord_id);
     });
   }
 
@@ -204,15 +188,7 @@ export class ChatService {
       );
       const party = parties.rows[0];
       if (!party) throw new ForbiddenException('This conversation is not available');
-      const result = await client.query(
-        `INSERT INTO chat_threads (reservation_id, student_id, landlord_id)
-         VALUES (NULL, $1, $2)
-         ON CONFLICT (student_id, landlord_id) WHERE reservation_id IS NULL
-         DO UPDATE SET student_id=EXCLUDED.student_id
-         RETURNING id, reservation_id AS "reservationId", student_id AS "studentId",
-                   landlord_id AS "landlordId", last_message_at AS "lastMessageAt"`, [party.student_id, party.landlord_id],
-      );
-      return { ...result.rows[0], counterpartName: null };
+      return { ...(await pairThread(client, party.student_id, party.landlord_id)), counterpartName: null };
     });
   }
 
@@ -328,4 +304,19 @@ export class ChatService {
       return auth;
     });
   }
+}
+
+/** The one conversation between a student and a landlord, created on first use. */
+async function pairThread(client: PoolClient, studentId: string, landlordId: string) {
+  const result = await client.query(
+    `INSERT INTO chat_threads (reservation_id, student_id, landlord_id)
+     VALUES (NULL, $1, $2)
+     ON CONFLICT (student_id, landlord_id)
+     DO UPDATE SET student_id = EXCLUDED.student_id
+     RETURNING id, reservation_id AS "reservationId", student_id AS "studentId",
+               landlord_id AS "landlordId", last_message_at AS "lastMessageAt"`, [studentId, landlordId],
+  );
+  return result.rows[0] as {
+    id: string; reservationId: string | null; studentId: string; landlordId: string; lastMessageAt: Date | null;
+  };
 }

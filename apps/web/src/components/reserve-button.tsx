@@ -104,11 +104,20 @@ export function ReserveButton({
       <Button type="button" size="sm" disabled={pending} onClick={reserve}>
         {pending ? "Starting…" : "Reserve"}
       </Button>
-      {error && (
-        <p role="status" className="max-w-40 text-right text-xs text-destructive">
-          {error}
-        </p>
-      )}
+      {/* A popup, not a line squeezed under the button: the message (e.g. the
+          5-reservation limit) is long. Errors from the university step stay
+          inside that dialog instead. */}
+      <Dialog open={!!error && !showProfileStep} onOpenChange={(open) => !open && setError(null)} size="sm">
+        <DialogHeader title="Couldn't reserve this room" onClose={() => setError(null)} />
+        <DialogBody>
+          <p role="alert" className="text-sm text-foreground">{error}</p>
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" onClick={() => setError(null)}>
+            OK
+          </Button>
+        </DialogFooter>
+      </Dialog>
       <Dialog open={showProfileStep} onOpenChange={setShowProfileStep}>
         <DialogHeader
           title="Just one thing first"
