@@ -17,7 +17,6 @@ release PR to `main` (deploys staging) → production by hand with
 |---|---|---|---|
 | 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
-| 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
 | 13 | [Production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Festo → Claude | ☐ Open (needs correct price, furnishing, title) |
@@ -59,25 +58,6 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
   the server. Kasubi Horizon did sync.
 - **If it still fails:** the reason now shows under the Retry button.
   Screenshot it for Claude.
-
-## 6. Retire the Vercel project
-
-- **What:** delete or disconnect the `campus-homes-web` Vercel project.
-- **Why:** you chose Dokploy for web hosting (2026-08-31), but Vercel still
-  builds a preview on every PR (seen on PRs #152–#155).
-- **Before:** confirm Dokploy's web service is current at the real domain.
-  Checked 2026-10-18: `campushomes.co.ug` serves `a42b74a` from Dokploy.
-- **Vercel state (2026-10-18):** project `campus-homes-web` (team
-  "Festo's projects") has only `*.vercel.app` domains, no custom domain.
-  Its last build was 2026-10-15 (`7e698e0`); no Vercel check appears on
-  PRs since #220, so it has stopped building on pushes. Deployments are
-  behind Vercel SSO, so nothing is publicly exposed.
-- **Note:** the GitHub "Preview" environment is Vercel's (all its
-  deployments come from `vercel[bot]`, last on 2026-10-15). Nothing of ours
-  deploys the `preview` branch, so retiring Vercel also retires that
-  environment.
-- **Plan:** disconnect the Git integration now; delete the project after a
-  quiet week.
 
 ## 7. Fix flaky `IssueStrikeForm` test
 
@@ -213,6 +193,7 @@ Sitemaps are already submitted to Google and Bing (2026-10-17). Left:
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-19 | Vercel project `campus-homes-web` deleted by Festo (Vercel API confirms no project linked to the repo). Web hosting is Dokploy only; the GitHub "Preview" environment was Vercel's and is now unused. Optional: remove the Vercel GitHub app's repo access (GitHub → Settings → Applications) and the stale "Preview" environment (was item 6) | — | — |
 | 2026-10-18 | iOS dialog sizing: property form and invite-staff dialogs use `min-h-0 flex-auto` like the room dialogs; no `flex-1` dialog forms remain. Security review of `a5394fd` (missed by a 429): no issue | this PR | `development` |
 | 2026-10-18 | Calendar: colours per type, edit dialog, Today, "Starts in …", phone agenda, local date keys (was a day late). Email + in-app reminders at 1d/10h/5h/30/15/5/1 min (BullMQ `calendar_reminders`, migration 0070). Scrollable Manage Rooms dialogs; am/pm chat times | [#229](https://github.com/Festo-Wampamba/Campus-Homes/pull/229), [#230](https://github.com/Festo-Wampamba/Campus-Homes/pull/230) | Staging + production (`a42b74a`, schema 70) |
 | 2026-10-18 | Rooms from Excel/CSV (template, `exceljs` parse, ≤500 rows, no tenant data) + Manage rooms links on every property | [#227](https://github.com/Festo-Wampamba/Campus-Homes/pull/227), [#228](https://github.com/Festo-Wampamba/Campus-Homes/pull/228) | Staging + production |
