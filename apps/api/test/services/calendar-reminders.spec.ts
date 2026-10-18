@@ -41,6 +41,28 @@ it('sends nothing on the next run in the same minute', async () => {
   expect(await service.run(now)).toBe(0);
 });
 
+describe('when the email fails', () => {
+  let failingId: string;
+
+  beforeAll(async () => {
+    const user = (await pool.query('SELECT id FROM users LIMIT 1')).rows[0].id;
+    failingId = (await pool.query(`INSERT INTO calendar_events (user_id, title, event_type, starts_at)
+      VALUES ($1, 'Rent due', 'task', $2) RETURNING id`, [user, new Date(now.getTime() + 4 * 60_000)])).rows[0].id;
+    const { sendCalendarReminderEmail } = jest.requireMock('../../src/modules/auth/auth.email');
+    (sendCalendarReminderEmail as jest.Mock).mockRejectedValueOnce(new Error('Resend down'));
+  });
+
+  it('gives the reminder back so the next run retries it', async () => {
+    await service.run(now);
+    const { rows } = await pool.query('SELECT reminders_sent FROM calendar_events WHERE id = $1', [failingId]);
+    expect(rows[0].reminders_sent).toEqual([]);
+  });
+
+  it('sends it on the next run', async () => {
+    expect(await service.run(now)).toBe(1);
+  });
+});
+
 it('links the in-app reminder to the student calendar', () => {
   expect(notify).toHaveBeenCalledWith(expect.any(String), 'calendar.reminder', 'in_app',
     expect.objectContaining({ href: '/calendar', message: 'Reminder: "Move in" starts in 20 minutes.' }));

@@ -82,28 +82,52 @@ export class CalendarReminderService {
         )).rowCount,
       );
       if (!claimed) continue;
-      await this.deliver(row, now).catch((err: unknown) =>
-        this.logger.warn(`Calendar reminder ${row.id} failed: ${err instanceof Error ? err.message : String(err)}`),
-      );
-      sent += 1;
+      if (await this.deliver(row, now)) {
+        sent += 1;
+      } else {
+        // Email failed before anything reached the user: hand the offsets
+        // back so the next minute's run tries again.
+        await this.rlsDb.run({ userId: NIL_UUID, role: 'service_role' }, async (_db, client) =>
+          client.query(
+            `UPDATE calendar_events SET reminders_sent = ARRAY(
+               SELECT o FROM unnest(reminders_sent) AS o WHERE o <> ALL($2::integer[]))
+             WHERE id = $1`,
+            [row.id, due.markSent],
+          ),
+        );
+      }
     }
     return sent;
   }
 
-  private async deliver(row: DueRow, now: Date) {
+  /** Email first, then the in-app notification. Returns false only when the
+   * email failed (nothing delivered yet, so the caller releases the claim).
+   * An in-app failure after a delivered email is logged, not retried: the
+   * reminder already reached the user and a retry would email them twice. */
+  private async deliver(row: DueRow, now: Date): Promise<boolean> {
     const when = startsInLabel(row.startsAt, now);
     const href = CALENDAR_HREF[row.role] ?? null;
-    await this.notifications.notify(row.userId, 'calendar.reminder', 'in_app', {
-      eventId: row.id,
-      message: `Reminder: "${row.title}" starts ${when}.`,
-      ...(href ? { href } : {}),
-    });
     if (row.email) {
-      const env = loadEnv();
-      await sendCalendarReminderEmail(env, row.email, {
-        name: row.name, title: row.title, eventType: row.eventType, startsAt: row.startsAt, allDay: row.allDay, startsIn: when,
-        calendarUrl: href ? `${env.WEB_ORIGIN}${href}` : null,
-      });
+      try {
+        const env = loadEnv();
+        await sendCalendarReminderEmail(env, row.email, {
+          name: row.name, title: row.title, eventType: row.eventType, startsAt: row.startsAt, allDay: row.allDay, startsIn: when,
+          calendarUrl: href ? `${env.WEB_ORIGIN}${href}` : null,
+        });
+      } catch (err) {
+        this.logger.warn(`Calendar reminder email ${row.id} failed, will retry: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
+      }
     }
+    await this.notifications
+      .notify(row.userId, 'calendar.reminder', 'in_app', {
+        eventId: row.id,
+        message: `Reminder: "${row.title}" starts ${when}.`,
+        ...(href ? { href } : {}),
+      })
+      .catch((err: unknown) =>
+        this.logger.warn(`Calendar reminder notification ${row.id} failed: ${err instanceof Error ? err.message : String(err)}`),
+      );
+    return true;
   }
 }
