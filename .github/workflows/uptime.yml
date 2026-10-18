@@ -16,8 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # /health returns 503 when the database or Redis is down.
+      # /health returns 503 when the database or Redis is down. Exact 200 is
+      # required: curl -f lets a 3xx (bad redirect) through as success.
       - name: API health
-        run: curl -fsS --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://api.campushomes.co.ug/api/v1/health
+        run: curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://api.campushomes.co.ug/api/v1/health | grep -qx 200
       - name: Homepage
-        run: curl -fsS -o /dev/null --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://campushomes.co.ug/
+        run: curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://campushomes.co.ug/ | grep -qx 200
