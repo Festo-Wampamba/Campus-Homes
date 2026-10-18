@@ -91,6 +91,14 @@ describe('AdminUsersService.deleteUser', () => {
     expect(logto.deleteUser).toHaveBeenCalledWith('logto-boss');
   });
 
+  it('removes the Logto identity even when the audit write fails', async () => {
+    const { service, logto, audit } = make({ isSuperAdmin: false });
+    (audit.record as jest.Mock).mockRejectedValueOnce(new Error('audit down'));
+    await service.deleteUser(actor, new Set(), target, 'left').catch(() => undefined);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(logto.deleteUser).toHaveBeenCalledWith('logto-boss');
+  });
+
   it('still reports the delete when Logto is unreachable', async () => {
     const { service, logto } = make({ isSuperAdmin: false });
     logto.deleteUser.mockRejectedValueOnce(new Error('down'));

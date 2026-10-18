@@ -563,8 +563,10 @@ export class AdminUsersService {
       await this.runPurgeCascade(client, userId);
       return target.logtoUserId;
     });
-    await this.audit.record(actor, 'users.delete', 'user', userId, { reason });
+    // Before the audit write: the user row is already gone, so a failed audit
+    // must not leave the Logto identity behind for the next same-email signup.
     this.deleteLogtoIdentity(userId, logtoUserId);
+    await this.audit.record(actor, 'users.delete', 'user', userId, { reason });
     return { id: userId, deleted: true };
   }
 
@@ -603,8 +605,8 @@ export class AdminUsersService {
       await this.runPurgeCascade(client, userId);
       return target.logtoUserId;
     });
+    this.deleteLogtoIdentity(userId, logtoUserId); // before audit, as in deleteUser
     await this.audit.record(actor, 'users.purge', 'user', userId, {});
-    this.deleteLogtoIdentity(userId, logtoUserId);
     return { id: userId, purged: true };
   }
 
