@@ -26,6 +26,22 @@ describe("planRoomImport", () => {
     expect(plan([row("A02", "Double")]).rows[0]!.error).toBe('"Double" fits several room types; use the exact name');
   });
 
+  it("refuses to guess when two room types share a name", () => {
+    const twin = type("t-single-2", "Single Room", "single");
+    expect(plan([row("A02", "Single Room")], [single, twin]).rows[0]!.error).toBe(
+      '"Single Room" fits several room types; rename them so each name is different',
+    );
+  });
+
+  it("matches a room type by its pending new name", () => {
+    const renamed = { ...single, pendingVersion: { title: "Single Deluxe", category: "single" } } as unknown as RoomType;
+    expect(plan([row("A02", "Single Deluxe")], [renamed]).rows[0]!.roomTypeId).toBe("t-single");
+  });
+
+  it("flags a building name longer than 120 characters instead of cutting it", () => {
+    expect(plan([row("A02", "Single Room", "B".repeat(121))]).rows[0]!.error).toBe("Building is too long (120 characters at most)");
+  });
+
   it("uses the only room type when the sheet leaves it blank", () => {
     expect(plan([row("A02", "")], [single]).rows[0]!.roomTypeId).toBe("t-single");
   });

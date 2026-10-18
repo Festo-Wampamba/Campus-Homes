@@ -572,16 +572,19 @@ export class RoomManagementService {
     return room;
   }
 
-  /** Spreadsheet template for this property, listing its own room type names
-   * (latest version of each live room type). */
+  /** Spreadsheet template for this property, listing its own room type names:
+   * each live type's approved title, plus a renamed title still in an open
+   * change set. Versions from a cancelled draft are left out. */
   async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv') {
     const titles = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
       const { rows } = await client.query<{ title: string }>(
-        `SELECT DISTINCT ON (rt.id) v.title FROM room_types rt
+        `SELECT v.title FROM room_types rt
          JOIN room_type_versions v ON v.room_type_id = rt.id
+         LEFT JOIN room_inventory_change_sets cs ON cs.id = v.change_set_id
          WHERE rt.property_id = $1 AND rt.archived_at IS NULL
-         ORDER BY rt.id, v.version_number DESC`, [propertyId],
+           AND (v.id = rt.current_version_id
+                OR cs.status IN ('draft','pending_review','visit_required','rejected'))`, [propertyId],
       );
       return [...new Set(rows.map((row) => row.title))].sort();
     });
