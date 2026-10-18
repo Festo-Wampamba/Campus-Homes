@@ -36,7 +36,8 @@ function relativeTime(iso: string | null) {
 }
 
 function messageTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-UG", { hour: "numeric", minute: "2-digit" });
+  // en-UG defaults to a 24-hour clock; show am/pm like the rest of the app.
+  return new Date(iso).toLocaleTimeString("en-UG", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 function dayLabel(iso: string) {

@@ -15,6 +15,7 @@ import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
 import { reservations } from '../../db/schema';
 import { AuthModule } from '../auth/auth.module';
+import { CalendarReminderService } from '../calendar/calendar-reminders';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE_NAME } from '../reservations/reservations.tokens';
@@ -32,6 +33,7 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly notifications: NotificationsService,
+    private readonly calendarReminders: CalendarReminderService,
     @Optional() @Inject(REDIS) private readonly redis: Redis | null,
   ) {}
 
@@ -64,6 +66,11 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
     await this.maintenanceQueue.upsertJobScheduler('reservation_expiry_sweep', {
       every: 60_000,
     });
+    // Calendar reminders go out at 1 day, 10 h, 5 h, 30, 15, 5 and 1 minute
+    // before an event, so the check has to run every minute.
+    await this.maintenanceQueue.upsertJobScheduler('calendar_reminders', {
+      every: 60_000,
+    });
     this.workers.push(
       new Worker(
         MAINTENANCE_QUEUE,
@@ -71,6 +78,7 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
           if (job.name === 'verification_sla_alert') return this.slaAlert();
           if (job.name === 'semester_reverify_rollover') return this.reverifyRollover();
           if (job.name === 'reservation_expiry_sweep') return this.expireOverdueHolds();
+          if (job.name === 'calendar_reminders') return this.calendarReminders.run();
         },
         { connection },
       ),
@@ -160,6 +168,6 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
 
 @Module({
   imports: [AuthModule, NotificationsModule],
-  providers: [JobsRunner],
+  providers: [JobsRunner, CalendarReminderService],
 })
 export class JobsModule {}

@@ -1,4 +1,5 @@
-import { boolean, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { boolean, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { users } from './identity';
 
@@ -20,6 +21,10 @@ export const calendarEvents = pgTable('calendar_events', {
   endsAt: timestamp('ends_at', { withTimezone: true }),
   allDay: boolean('all_day').notNull().default(false),
   done: boolean('done').notNull().default(false),
+  remind: boolean('remind').notNull().default(true),
+  // Reminder offsets (minutes before start) already sent; reset when the
+  // start time moves. See CALENDAR_REMINDER_OFFSETS_MINUTES.
+  remindersSent: integer('reminders_sent').array().notNull().default(sql`'{}'::integer[]`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

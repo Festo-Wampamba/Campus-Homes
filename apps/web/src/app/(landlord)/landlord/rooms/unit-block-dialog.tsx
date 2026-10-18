@@ -128,7 +128,7 @@ export function UnitBlockDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="md">
-      <form onSubmit={handleApplyBlock} className="flex flex-col h-full">
+      <form onSubmit={handleApplyBlock} className="flex min-h-0 flex-auto flex-col">
         <DialogHeader
           title={
             isBlocked
