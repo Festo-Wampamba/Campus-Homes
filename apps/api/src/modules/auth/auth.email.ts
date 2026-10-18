@@ -196,6 +196,60 @@ CampusHomes Uganda · hello@campushomes.co.ug`;
   return { subject, html, text };
 }
 
+export type CalendarReminderEmailInput = {
+  name: string | null;
+  title: string;
+  eventType: string;
+  startsAt: Date;
+  allDay: boolean;
+  /** "in 30 minutes", from calendar-reminders.ts. */
+  startsIn: string;
+  calendarUrl?: string | null;
+};
+
+const EVENT_TYPE_LABEL: Record<string, string> = { task: 'Task', event: 'Event', reminder: 'Reminder', activity: 'Activity' };
+
+/** Exported for tests. Times are shown in East Africa Time with am/pm. */
+export function calendarReminderContent(input: CalendarReminderEmailInput): EmailMessage {
+  const day = input.startsAt.toLocaleDateString('en-GB', { timeZone: 'Africa/Kampala', weekday: 'long', day: 'numeric', month: 'long' });
+  const time = input.allDay
+    ? 'all day'
+    : `${input.startsAt.toLocaleTimeString('en-GB', { timeZone: 'Africa/Kampala', hour: 'numeric', minute: '2-digit', hour12: true })} EAT`;
+  const kind = EVENT_TYPE_LABEL[input.eventType] ?? 'Event';
+  const subject = `Reminder: ${input.title} starts ${input.startsIn}`;
+  const greeting = input.name ? `Hi ${input.name},` : 'Hi,';
+  const when = `${day}, ${time}`;
+  const button = input.calendarUrl
+    ? `<p style="margin:24px 0 0"><a href="${escapeHtml(input.calendarUrl)}" style="display:inline-block;background:#087f80;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:10px">Open my calendar</a></p>`
+    : '';
+  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:0;background:#f4f8f7;font-family:Arial,Helvetica,sans-serif;color:#173b3b">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f7;padding:24px 8px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #dce9e7;border-radius:18px;overflow:hidden">
+<tr><td style="background:#087f80;padding:20px 24px"><div style="font-size:22px;font-weight:700;color:#ffffff">CampusHomes</div><div style="font-size:14px;font-style:italic;color:#fcb177;margin-top:2px">Live, Learn, Succeed.</div></td></tr>
+<tr><td style="padding:28px 24px">
+<p style="margin:0 0 8px;font-size:15px;color:#3d5c5c">${escapeHtml(greeting)}</p>
+<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#173b3b">${escapeHtml(input.title)} starts ${escapeHtml(input.startsIn)}</h1>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef7f6;border:1px solid #cfe5e2;border-radius:14px"><tr><td style="padding:16px;font-size:14px;line-height:1.8;color:#173b3b">
+<strong>${escapeHtml(kind)}</strong><br>${escapeHtml(when)}</td></tr></table>${button}
+<p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#627979">You set this reminder in your CampusHomes calendar. To stop reminders for it, open the event and turn off "Email me reminders".</p>
+</td></tr>
+<tr><td style="padding:20px 24px 24px;border-top:1px solid #edf3f2;font-size:12px;line-height:1.6;color:#91a3a3">CampusHomes Uganda · hello@campushomes.co.ug</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = `${greeting}
+
+${input.title} starts ${input.startsIn}.
+${kind} · ${when}
+${input.calendarUrl ? `\nOpen my calendar: ${input.calendarUrl}\n` : ''}
+You set this reminder in your CampusHomes calendar. To stop reminders for it, open the event and turn off "Email me reminders".
+
+CampusHomes Uganda · hello@campushomes.co.ug`;
+  return { subject, html, text };
+}
+
+export async function sendCalendarReminderEmail(env: Env, to: string, input: CalendarReminderEmailInput): Promise<void> {
+  await deliver(env, to, calendarReminderContent(input));
+}
+
 async function deliver(env: Env, to: string, message: EmailMessage): Promise<void> {
   if (!env.RESEND_API_KEY) {
     if (env.NODE_ENV === 'production') throw new Error('Email delivery unavailable');

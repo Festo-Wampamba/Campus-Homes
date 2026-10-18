@@ -209,8 +209,10 @@ export function RoomTypeDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="xl">
-      <form onSubmit={handleSubmit} className="flex flex-col h-full">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" resizable>
+      {/* min-h-0 + flex-1 let DialogBody scroll inside the dialog's max height,
+          so the photos section and Save button are always reachable. */}
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <DialogHeader
           title={roomType ? "Edit Room Type Specification" : "Create Room Type"}
           description="Define the room category, bathroom type, sleeping capacity, amenities, and price per bedspace per semester."

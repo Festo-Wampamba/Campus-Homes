@@ -222,7 +222,7 @@ export function BulkRoomGeneratorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="lg">
-      <form onSubmit={handleGenerate} className="flex flex-col h-full">
+      <form onSubmit={handleGenerate} className="flex min-h-0 flex-1 flex-col">
         <DialogHeader
           title="Bulk Generate Physical Rooms"
           description="Quickly generate sequential or custom room codes and assign them to a room type. Added rooms are staged into your draft change set."
