@@ -725,7 +725,7 @@ export function RoomsInventoryTab({
 
       {/* Single Room Add/Edit Dialog */}
       <Dialog open={singleRoomDialogOpen} onOpenChange={setSingleRoomDialogOpen} size="sm">
-        <form onSubmit={handleSingleRoomSubmit} className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={handleSingleRoomSubmit} className="flex min-h-0 flex-auto flex-col">
           <DialogHeader
             title={editingRoom ? `Edit Room ${editingRoom.roomCode}` : "Add Room"}
             description="Create or modify a physical room code and associate it with a room type specification."

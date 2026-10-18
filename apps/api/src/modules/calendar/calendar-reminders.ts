@@ -77,7 +77,11 @@ export class CalendarReminderService {
       const claimed = await this.rlsDb.run({ userId: NIL_UUID, role: 'service_role' }, async (_db, client) =>
         (await client.query(
           `UPDATE calendar_events SET reminders_sent = reminders_sent || $2::integer[]
-           WHERE id = $1 AND NOT (reminders_sent && $2::integer[]) AND starts_at = $3`,
+           WHERE id = $1 AND NOT (reminders_sent && $2::integer[]) AND starts_at = $3
+             -- Re-check eligibility at claim time: an opt-out, a done tick or
+             -- a deactivated account since the SELECT must win.
+             AND remind AND NOT done
+             AND EXISTS (SELECT 1 FROM users u WHERE u.id = user_id AND u.deleted_at IS NULL AND u.status = 'active')`,
           [row.id, due.markSent, row.startsAt],
         )).rowCount,
       );

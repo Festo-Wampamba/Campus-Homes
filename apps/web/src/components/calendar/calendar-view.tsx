@@ -80,6 +80,8 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Phones show events as dots, so tapping a busy day lists its events first.
+  const [agendaDay, setAgendaDay] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,8 +128,15 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
   }
 
   function open(next: Draft) {
+    setAgendaDay(null);
     setDraft(next);
     setError(null);
+  }
+
+  function openDay(key: string, count: number) {
+    const chipsVisible = window.matchMedia("(min-width: 640px)").matches;
+    if (!chipsVisible && count > 0) setAgendaDay(key);
+    else open(newDraft(key));
   }
 
   async function save(e: React.FormEvent) {
@@ -232,11 +241,11 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
                 role="button"
                 tabIndex={0}
                 aria-label={`Add to ${date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}`}
-                onClick={() => open(newDraft(key))}
+                onClick={() => openDay(key, dayEvents.length)}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter" && e.key !== " ") return;
                   e.preventDefault();
-                  open(newDraft(key));
+                  openDay(key, dayEvents.length);
                 }}
                 className={cn(
                   "flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 border-b border-r border-border p-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring sm:min-h-24 sm:p-1.5",
@@ -334,6 +343,43 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
         )}
       </div>
 
+      <Dialog open={agendaDay !== null} onOpenChange={(isOpen) => !isOpen && setAgendaDay(null)} size="sm">
+        {agendaDay && (
+          <>
+            <DialogHeader
+              title={new Date(`${agendaDay}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+              onClose={() => setAgendaDay(null)}
+            />
+            <DialogBody>
+              <ul className="space-y-2">
+                {(eventsByDay.get(agendaDay) ?? []).map((event) => (
+                  <li key={event.id}>
+                    <button
+                      type="button"
+                      onClick={() => open(draftFrom(event))}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md border-l-4 px-3 py-2.5 text-left text-sm font-semibold",
+                        TYPE_STYLE[event.eventType].chip,
+                        event.done && "line-through opacity-60",
+                      )}
+                    >
+                      <span className="shrink-0 text-xs font-medium opacity-80">{event.allDay ? "All day" : timeLabel(event.startsAt)}</span>
+                      <span className="min-w-0 truncate">{event.title}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </DialogBody>
+            <DialogFooter>
+              <Button type="button" onClick={() => open(newDraft(agendaDay))}>
+                <Plus aria-hidden className="size-4" />
+                Add to this day
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </Dialog>
+
       <Dialog open={draft !== null} onOpenChange={(isOpen) => !isOpen && setDraft(null)} dismissible={false}>
         {draft && (
           <>
@@ -342,7 +388,7 @@ export function CalendarView({ initialEvents }: { initialEvents: CalendarEvent[]
               description={new Date(`${draft.date}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               onClose={() => setDraft(null)}
             />
-            <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
+            <form onSubmit={save} className="flex min-h-0 flex-auto flex-col">
               <DialogBody className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="event-title" required>Title</Label>

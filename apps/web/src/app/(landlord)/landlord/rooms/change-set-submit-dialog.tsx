@@ -58,7 +58,7 @@ export function ChangeSetSubmitDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="md">
-      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-auto flex-col">
         <DialogHeader
           title="Submit Inventory Changes for Operations Review"
           description="Review your staged modifications before submitting to the CampusHomes Operations team."
