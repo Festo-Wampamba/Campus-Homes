@@ -121,5 +121,7 @@ export const landlordReservationViewSchema = reservationSchema
     createdAt: z.iso.datetime(),
     bedLabel: z.string(),
     moveInConfirmedAt: z.iso.datetime().nullable(),
+    // Set once the student asked to book; the landlord confirms it from there.
+    bookingRequestedAt: z.iso.datetime().nullable().optional(),
   });
 export type LandlordReservationView = z.infer<typeof landlordReservationViewSchema>;

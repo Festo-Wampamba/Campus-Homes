@@ -477,6 +477,13 @@
       "when": 1791900000000,
       "tag": "0068_units_room_change_grant",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0069_one_chat_per_pair",
+      "breakpoints": true
     }
   ]
 }

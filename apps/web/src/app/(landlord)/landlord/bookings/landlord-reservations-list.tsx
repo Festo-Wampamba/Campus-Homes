@@ -14,6 +14,7 @@ import { StatusChip } from "@/components/status-chip";
 import { PaginationControls } from "@/components/pagination-controls";
 import { usePagination } from "@/lib/use-pagination";
 import { MessageButton } from "@/components/chat/message-button";
+import { ConfirmBookingDialog } from "@/components/landlord/confirm-booking-dialog";
 
 import type { RoomInfo } from "./room-lookup";
 
@@ -40,12 +41,16 @@ const STATUS_TONE: Record<
   expired: "neutral",
 };
 
-type FilterKey = "all" | LandlordReservationView["status"];
+// "requested" = still Reserved, but the student asked to book it.
+type FilterKey = "all" | "requested" | LandlordReservationView["status"];
+
+const isBookingRequest = (r: LandlordReservationView) => r.status === "reserved" && !!r.bookingRequestedAt;
 
 // Each page lists only its own stage (see lib/booking-stage.ts).
 const FILTERS: Record<BookingStage, { key: FilterKey; label: string }[]> = {
   reservation: [
     { key: "all", label: "All" },
+    { key: "requested", label: "Booking requests" },
     { key: "reserved", label: "Active holds" },
     { key: "released", label: "Released" },
     { key: "expired", label: "Expired" },
@@ -188,17 +193,21 @@ export function LandlordReservationsList({
 
   const [query, setQuery] = useState("");
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
+  const [booking, setBooking] = useState<LandlordReservationView | null>(null);
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of rows) map.set(r.status, (map.get(r.status) ?? 0) + 1);
+    for (const r of rows) {
+      map.set(r.status, (map.get(r.status) ?? 0) + 1);
+      if (isBookingRequest(r)) map.set("requested", (map.get("requested") ?? 0) + 1);
+    }
     return map;
   }, [rows]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (filter !== "all" && r.status !== filter) return false;
+      if (filter === "requested" ? !isBookingRequest(r) : filter !== "all" && r.status !== filter) return false;
       if (!q) return true;
       const room = roomsByBedId.get(r.bedId);
       return (
@@ -289,7 +298,7 @@ export function LandlordReservationsList({
                     </td>
                     <td className="px-3 py-2.5">
                       <StatusChip tone={STATUS_TONE[reservation.status]}>
-                        {STATUS_LABEL[reservation.status]}
+                        {isBookingRequest(reservation) ? "Booking requested" : STATUS_LABEL[reservation.status]}
                       </StatusChip>
                       {reservation.status === "reserved" && reservation.reservedExpiresAt && (
                         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -303,6 +312,16 @@ export function LandlordReservationsList({
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-2">
+                        {reservation.status === "reserved" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isBookingRequest(reservation) ? "primary" : "secondary"}
+                            onClick={() => setBooking(reservation)}
+                          >
+                            Confirm booking
+                          </Button>
+                        )}
                         {reservation.status === "booked" && (
                           <Button
                             type="button"
@@ -336,6 +355,16 @@ export function LandlordReservationsList({
           </table>
           <PaginationControls page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
         </div>
+      )}
+      {booking && (
+        <ConfirmBookingDialog
+          reservationId={booking.id}
+          bedLabel={roomsByBedId.get(booking.bedId)?.label ?? booking.bedLabel}
+          open
+          onOpenChange={(open) => !open && setBooking(null)}
+          // Booked moves the row to the Bookings page.
+          onBooked={() => setRows((prev) => applyStatusChange(prev, booking.id, "booked", stage))}
+        />
       )}
     </div>
   );

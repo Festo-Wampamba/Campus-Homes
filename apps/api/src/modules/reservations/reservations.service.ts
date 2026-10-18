@@ -386,6 +386,14 @@ export class ReservationsService {
       bedId: result!.bedId,
       walkIn: !input.reservationId,
     });
+    // The student's booking tracker moves to "Landlord confirmed"; tell them.
+    this.notifications
+      ?.notify(result!.studentId, 'reservation.booked', 'in_app', {
+        reservationId: result!.id,
+        message: 'Your landlord confirmed your booking. Move in and confirm it in My reservations.',
+        href: '/reservations',
+      })
+      .catch((err: unknown) => console.error('[reservations] booking confirmed notify failed:', err));
     return result;
   }
 
@@ -529,14 +537,14 @@ export class ReservationsService {
     if (result.newlyRequested) {
       await this.audit.record(ctx, 'reservation.request_booking', 'reservation', reservationId, {});
       const room = result.row.room_category.replace(/_/g, ' ');
-      // Best-effort: the request is stored and shows on the landlord's property
-      // page either way.
+      // Best-effort: the request is stored and shows on the landlord's
+      // Reservations page either way.
       for (const channel of ['in_app', 'sms'] as const) {
         this.notifications
           ?.notify(result.row.landlord_id, 'reservation.booking_requested', channel, {
             reservationId,
-            message: `A student asked to book a ${room} room at ${result.row.property_name}. Confirm it from the property's rooms.`,
-            href: '/landlord/properties',
+            message: `A student asked to book a ${room} room at ${result.row.property_name}. Confirm it under Reservations.`,
+            href: '/landlord/reservations',
           })
           .catch((err: unknown) => console.error('[reservations] booking request notify failed:', err));
       }
@@ -630,7 +638,8 @@ export class ReservationsService {
            r.id, r.bed_id AS "bedId", r.status, r.reserved_expires_at AS "reservedExpiresAt",
            r.booked_at AS "bookedAt", r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
-           r.created_at AS "createdAt", b.label AS "bedLabel", m.confirmed_at AS "moveInConfirmedAt"
+           r.created_at AS "createdAt", b.label AS "bedLabel", m.confirmed_at AS "moveInConfirmedAt",
+           r.booking_requested_at AS "bookingRequestedAt"
          FROM reservations r
          JOIN beds b ON b.id = r.bed_id
          LEFT JOIN move_ins m ON m.reservation_id = r.id
