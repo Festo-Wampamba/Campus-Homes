@@ -21,6 +21,7 @@ import { assertStaffScope } from '../auth/staff-scope';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isOwnedStorageKey } from '../uploads/storage-key';
+import { roomImportTemplate } from './room-import';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -569,6 +570,27 @@ export class RoomManagementService {
     const room = overview.rooms.find((candidate: { id: string }) => candidate.id === id);
     if (!room) throw new NotFoundException('Pending room change not found');
     return room;
+  }
+
+  /** Spreadsheet template for this property, listing its own room type names:
+   * each live type's approved title, plus a renamed title still in an open
+   * change set for the semester on screen (what the importer can match).
+   * Versions from a cancelled draft are left out. */
+  async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv', semesterId?: string) {
+    const titles = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await this.assertPropertyOwner(client, propertyId, ctx.userId);
+      const { rows } = await client.query<{ title: string }>(
+        `SELECT v.title FROM room_types rt
+         JOIN room_type_versions v ON v.room_type_id = rt.id
+         LEFT JOIN room_inventory_change_sets cs ON cs.id = v.change_set_id
+         WHERE rt.property_id = $1 AND rt.archived_at IS NULL
+           AND (v.id = rt.current_version_id
+                OR (cs.semester_id = $2 AND cs.status IN ('draft','pending_review','visit_required','rejected')))`,
+        [propertyId, semesterId ?? null],
+      );
+      return [...new Set(rows.map((row) => row.title))].sort();
+    });
+    return roomImportTemplate(format, titles);
   }
 
   private async assertPropertyOwner(client: PoolClient, propertyId: string, userId: string) {

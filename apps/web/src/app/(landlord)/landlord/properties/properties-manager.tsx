@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search } from "lucide-react";
+import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search } from "lucide-react";
 import type { Property } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,21 @@ import { cn } from "@/lib/utils";
 import { PropertyDetailDialog } from "./property-detail-dialog";
 import { PropertyFormDialog } from "./property-form-dialog";
 import { propertyStatusPresentation } from "./property-status";
+
+/** Opens Manage Rooms already set to this property. */
+function ManageRoomsLink({ property }: { property: Property }) {
+  return (
+    <Link
+      href={`/landlord/rooms?propertyId=${property.id}`}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={`Manage rooms at ${property.name}`}
+      title="Manage rooms"
+      className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <BedDouble aria-hidden className="size-4" />
+    </Link>
+  );
+}
 
 const PAGE_SIZE = 12;
 
@@ -172,15 +188,18 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                         <PropertyStatusChip status={property.status} />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Edit ${property.name}`}
-                          onClick={(e) => openEdit(property, e)}
-                        >
-                          <Pencil aria-hidden className="size-4" />
-                        </Button>
+                        <div className="flex justify-end">
+                          <ManageRoomsLink property={property} />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Edit ${property.name}`}
+                            onClick={(e) => openEdit(property, e)}
+                          >
+                            <Pencil aria-hidden className="size-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -203,6 +222,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                     </p>
                   </div>
                   <PropertyStatusChip status={property.status} />
+                  <ManageRoomsLink property={property} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -234,6 +254,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                         <PropertyStatusChip status={property.status} />
                       </div>
                     </div>
+                    <ManageRoomsLink property={property} />
                     <Button
                       type="button"
                       variant="ghost"

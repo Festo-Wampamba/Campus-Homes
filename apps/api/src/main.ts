@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { RequestMethod } from '@nestjs/common';
-import type { Request, Response, NextFunction } from 'express';
+import { raw, type Request, type Response, type NextFunction } from 'express';
 
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
@@ -33,6 +33,9 @@ async function bootstrap() {
   const http = app.getHttpAdapter().getInstance();
   http.set('trust proxy', env.TRUSTED_PROXY_CIDRS);
   http.use(cookieOriginGuard(env.WEB_ORIGIN));
+  // Landlords upload room spreadsheets as raw bytes; the JSON parser's 100 kB
+  // limit doesn't apply to this one route.
+  http.use('/api/v1/room-management/rooms/import/parse', raw({ type: 'application/octet-stream', limit: '2mb' }));
   // This API had no security headers at all, while the Logto instance it
   // redirects into sets the full set — an audit of the live staging response
   // headers found HSTS/nosniff/referrer/frame/CSP all absent here, plus an

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,11 +14,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiErrorMessage } from "@/lib/api";
 import type { RoomType, RoomUnit } from "@/lib/room-management";
+import { planRoomImport, type ImportedRoomRow } from "@/lib/room-import";
+
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
 interface BulkRoomGeneratorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   propertyId: string;
+  /** Semester on screen: the template lists that semester's pending room type names. */
+  semesterId: string;
   roomTypes: RoomType[];
   existingRooms: RoomUnit[];
   onGenerated: (newRooms: RoomUnit[]) => void;
@@ -28,11 +33,12 @@ export function BulkRoomGeneratorDialog({
   open,
   onOpenChange,
   propertyId,
+  semesterId,
   roomTypes,
   existingRooms,
   onGenerated,
 }: BulkRoomGeneratorDialogProps) {
-  const [mode, setMode] = useState<"range" | "custom">("range");
+  const [mode, setMode] = useState<"range" | "custom" | "upload">("range");
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string>(
     roomTypes[0]?.id ?? "",
   );
@@ -48,8 +54,73 @@ export function BulkRoomGeneratorDialog({
   // Custom mode fields
   const [customInput, setCustomInput] = useState("");
 
+  // Upload mode: rows parsed by the API from the landlord's spreadsheet.
+  const [importRows, setImportRows] = useState<ImportedRoomRow[] | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [parsing, setParsing] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const importPlan = useMemo(
+    () => (importRows ? planRoomImport(importRows, roomTypes, existingRooms) : null),
+    [importRows, roomTypes, existingRooms],
+  );
+
+  async function readFile(file: File | undefined) {
+    setImportRows(null);
+    setError(null);
+    if (!file) return;
+    setFileName(file.name);
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError("The file is larger than 2 MB. Split it into smaller files.");
+      return;
+    }
+    setParsing(true);
+    try {
+      const result = await api<{ rows: ImportedRoomRow[] }>("/room-management/rooms/import/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+      });
+      setImportRows(result.rows);
+      if (!result.rows.length) setError("The file has a header row but no rooms.");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Could not read the file. Upload an Excel (.xlsx) or CSV file."));
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  /** Stages the valid rows through the same bulk endpoint as the other tabs,
+   * one call per room type, building and floor. Rows with problems are skipped. */
+  async function handleImport() {
+    if (!importPlan?.batches.length) return;
+    setSubmitting(true);
+    setError(null);
+    const added: RoomUnit[] = [];
+    const stamp = Date.now();
+    try {
+      for (const [index, batch] of importPlan.batches.entries()) {
+        added.push(
+          ...(await api<RoomUnit[]>(`/room-management/properties/${propertyId}/rooms/bulk`, {
+            method: "POST",
+            body: JSON.stringify({ ...batch, idempotencyKey: `import-${propertyId}-${stamp}-${index}` }),
+          })),
+        );
+      }
+      onGenerated(added);
+      onOpenChange(false);
+    } catch (err) {
+      if (added.length) onGenerated(added);
+      setError(
+        `${added.length ? `Added ${added.length} of ${importPlan.validCount} rooms. ` : ""}${apiErrorMessage(err, "Failed to add the rooms.")}`,
+      );
+      setImportRows(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const existingCodesSet = useMemo(() => {
     return new Set(
@@ -100,6 +171,7 @@ export function BulkRoomGeneratorDialog({
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
+    if (mode === "upload") return handleImport();
     if (!selectedRoomTypeId) {
       setError("Please select a Room Type specification for these rooms.");
       return;
@@ -191,8 +263,103 @@ export function BulkRoomGeneratorDialog({
             >
               Custom Codes (CSV or Newline)
             </button>
+            <button
+              type="button"
+              onClick={() => setMode("upload")}
+              className={`flex-1 rounded-md py-2 text-xs font-semibold transition-colors ${
+                mode === "upload"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Upload Spreadsheet (Excel or CSV)
+            </button>
           </div>
 
+          {mode === "upload" ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm">
+                <p className="font-semibold text-foreground">Already keep your rooms in Excel?</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Upload it with a <strong>Room code</strong> column, and optionally Room type, Building and Floor.
+                  Other columns (tenants, payments) are ignored. Start from the template for this property:
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a
+                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=xlsx&semesterId=${semesterId}`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted"
+                  >
+                    <Download aria-hidden className="size-3.5" /> Excel template
+                  </a>
+                  <a
+                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=csv&semesterId=${semesterId}`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted"
+                  >
+                    <Download aria-hidden className="size-3.5" /> CSV template
+                  </a>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="bg-file">Spreadsheet (.xlsx or .csv, up to 2 MB, 500 rooms)</Label>
+                <label
+                  htmlFor="bg-file"
+                  className="mt-1.5 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-input bg-card px-4 py-4 text-sm hover:bg-muted/40"
+                >
+                  {parsing ? <Loader2 aria-hidden className="size-5 animate-spin text-teal-700" /> : <FileSpreadsheet aria-hidden className="size-5 text-teal-700" />}
+                  <span className="min-w-0 truncate">{parsing ? "Reading…" : fileName || "Choose a file"}</span>
+                </label>
+                <input
+                  id="bg-file"
+                  type="file"
+                  accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="sr-only"
+                  onChange={(e) => {
+                    void readFile(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+
+              {importPlan && importPlan.rows.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    {importPlan.validCount} of {importPlan.rows.length} rooms ready
+                    {importPlan.validCount < importPlan.rows.length && " · rows with a problem are skipped"}
+                  </p>
+                  <div className="max-h-64 overflow-auto rounded-lg border border-border">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-muted text-muted-foreground">
+                        <tr>
+                          <th className="px-2 py-1.5">Row</th>
+                          <th className="px-2 py-1.5">Room code</th>
+                          <th className="px-2 py-1.5">Room type</th>
+                          <th className="px-2 py-1.5">Building</th>
+                          <th className="px-2 py-1.5">Floor</th>
+                          <th className="px-2 py-1.5">Check</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {importPlan.rows.map((row) => (
+                          <tr key={row.rowNumber} className={row.error ? "bg-destructive/5" : undefined}>
+                            <td className="px-2 py-1.5 text-muted-foreground">{row.rowNumber}</td>
+                            <td className="px-2 py-1.5 font-mono">{row.roomCode}</td>
+                            <td className="px-2 py-1.5">{row.roomType}</td>
+                            <td className="px-2 py-1.5">{row.buildingName}</td>
+                            <td className="px-2 py-1.5">{row.floorLabel}</td>
+                            <td className={`px-2 py-1.5 font-semibold ${row.error ? "text-destructive" : "text-success"}`}>
+                              {row.error ?? "OK"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="bg-room-type">Room Type Specification</Label>
@@ -338,6 +505,8 @@ export function BulkRoomGeneratorDialog({
               )}
             </div>
           </div>
+          </>
+          )}
         </DialogBody>
 
         <DialogFooter>
@@ -349,18 +518,25 @@ export function BulkRoomGeneratorDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            disabled={
-              submitting ||
-              previewCodes.length === 0 ||
-              conflicts.length > 0 ||
-              previewCodes.length > 200
-            }
-          >
-            {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Generate {previewCodes.length} Room{previewCodes.length === 1 ? "" : "s"}
-          </Button>
+          {mode === "upload" ? (
+            <Button type="submit" disabled={submitting || parsing || !importPlan?.validCount}>
+              {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Add {importPlan?.validCount ?? 0} Room{importPlan?.validCount === 1 ? "" : "s"}
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              disabled={
+                submitting ||
+                previewCodes.length === 0 ||
+                conflicts.length > 0 ||
+                previewCodes.length > 200
+              }
+            >
+              {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Generate {previewCodes.length} Room{previewCodes.length === 1 ? "" : "s"}
+            </Button>
+          )}
         </DialogFooter>
       </form>
     </Dialog>

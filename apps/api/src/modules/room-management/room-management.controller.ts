@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../auth/permissions';
@@ -14,6 +15,7 @@ import {
   SubmitRoomChangeSetDto,
   UnitBlockInputDto,
 } from './room-management.dto';
+import { parseRoomSheet } from './room-import';
 import { RoomManagementService } from './room-management.service';
 
 @Controller('room-management')
@@ -45,6 +47,29 @@ export class RoomManagementController {
   @Post('properties/:propertyId/rooms/bulk')
   bulkRooms(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: BulkRoomInputDto) {
     return this.rooms.bulkCreateRooms(rlsCtx(req), propertyId, body);
+  }
+
+  /** Spreadsheet upload: the raw file (Excel or CSV) arrives as
+   * application/octet-stream (see main.ts). Returns its rows for the
+   * landlord to review; staging still goes through rooms/bulk. */
+  @Post('rooms/import/parse')
+  async parseImport(@Body() body: unknown) {
+    if (!Buffer.isBuffer(body)) throw new BadRequestException('Send the file as application/octet-stream');
+    return { rows: await parseRoomSheet(body) };
+  }
+
+  @Get('properties/:propertyId/rooms/import/template')
+  async importTemplate(
+    @Req() req: AuthenticatedRequest,
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('format') format: string | undefined,
+    @Query('semesterId', new ParseUUIDPipe({ optional: true })) semesterId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.rooms.importTemplate(rlsCtx(req), propertyId, format === 'csv' ? 'csv' : 'xlsx', semesterId);
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    return new StreamableFile(file.buffer);
   }
 
   @Patch('rooms/:roomId')
