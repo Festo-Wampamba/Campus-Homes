@@ -1,0 +1,23 @@
+# Free uptime check: GitHub emails a failed scheduled run to whoever last
+# edited this schedule. Scheduled runs can start a few minutes late, so this
+# catches outages (domain expiry, VPS suspension, crash loops), not blips.
+# ponytail: GitHub cron; move to an uptime service if minute-level alerts matter.
+name: Uptime
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # /health returns 503 when the database or Redis is down.
+      - name: API health
+        run: curl -fsS --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://api.campushomes.co.ug/api/v1/health
+      - name: Homepage
+        run: curl -fsS -o /dev/null --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://campushomes.co.ug/
