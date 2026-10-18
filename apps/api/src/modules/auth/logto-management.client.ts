@@ -203,15 +203,39 @@ export class LogtoManagementClient {
   /** Copies a user's details into Logto so the console shows them. Profile
    * and custom data use Logto's partial-update endpoints, so keys set
    * elsewhere (in the console or by Logto itself) are kept. Never touches
-   * primaryPhone/username: those are sign-in identities. */
+   * primaryPhone: our contact phone is unverified, and Logto would treat it
+   * as a trusted sign-in identity. */
   async updateUserDetails(
     logtoUserId: string,
-    details: { name: string | null; profile: Record<string, unknown>; customData: Record<string, unknown> },
+    details: { name: string | null; username?: string | null; profile: Record<string, unknown>; customData: Record<string, unknown> },
   ): Promise<void> {
     const user = `/api/users/${encodeURIComponent(logtoUserId)}`;
     await this.request(user, { method: 'PATCH', body: JSON.stringify({ name: details.name }) });
     await this.request(`${user}/profile`, { method: 'PATCH', body: JSON.stringify({ profile: details.profile }) });
     await this.request(`${user}/custom-data`, { method: 'PATCH', body: JSON.stringify({ customData: details.customData }) });
+    if (details.username) {
+      // Last and on its own: Logto answers 422 when another identity holds the
+      // name (ours is unique case-insensitively, Logto's per exact spelling).
+      // That must not lose the details above, so only other failures throw.
+      const token = await this.getToken();
+      const res = await fetch(`${this.env.LOGTO_ENDPOINT}${user}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: details.username }),
+      });
+      if (!res.ok && res.status !== 422) throw new Error(`Logto Management API PATCH username failed: HTTP ${res.status}`);
+    }
+  }
+
+  /** Removes the identity entirely (password, 2-step factors, sessions).
+   * 404 = already gone. */
+  async deleteUser(logtoUserId: string): Promise<void> {
+    const token = await this.getToken();
+    const res = await fetch(`${this.env.LOGTO_ENDPOINT}/api/users/${encodeURIComponent(logtoUserId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok && res.status !== 404) throw new Error(`Logto Management API DELETE user failed: HTTP ${res.status}`);
   }
 
   async setPassword(logtoUserId: string, password: string): Promise<void> {

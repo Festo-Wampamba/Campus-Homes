@@ -15,6 +15,10 @@ const AMENITY_ICONS: Record<string, LucideIcon> = {
 
 const LABELS = new Map(AMENITY_OPTIONS.map((o) => [o.key, o.label]));
 
+export function amenityLabel(key: string): string {
+  return LABELS.get(key) ?? humanizeKey(key);
+}
+
 /** Confirmed amenities, each with an icon that says what it is. Custom
  * (free-form) amenities fall back to a check mark. */
 export function AmenityList({ keys }: { keys: string[] }) {
@@ -27,7 +31,7 @@ export function AmenityList({ keys }: { keys: string[] }) {
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
               <Icon aria-hidden className="size-4" />
             </span>
-            {LABELS.get(key) ?? humanizeKey(key)}
+            {amenityLabel(key)}
           </li>
         );
       })}

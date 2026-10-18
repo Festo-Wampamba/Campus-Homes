@@ -15,7 +15,8 @@ import { getServerSession } from "@/lib/session";
 import { getMyReservations } from "@/lib/reservations";
 import { getStudentProfile } from "@/lib/student";
 import { cn } from "@/lib/utils";
-import { AmenityList } from "@/components/listing/amenity-list";
+import { AmenityList, amenityLabel } from "@/components/listing/amenity-list";
+import { ListingStructuredData } from "@/components/seo/site-structured-data";
 import { AskLandlordDialog } from "@/components/listing/ask-landlord-dialog";
 import { ListingGallery } from "@/components/listing/listing-gallery";
 import { BackButton } from "@/components/back-button";
@@ -114,6 +115,19 @@ export default async function ListingDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+      <ListingStructuredData
+        listing={{
+          id: listingId,
+          name: property.name,
+          streetAddress: property.street_address,
+          lat: property.gps_lat,
+          lon: property.gps_lon,
+          minPriceUgx,
+          maxPriceUgx,
+          photoKeys: galleryPhotos.map((p) => p.storageKey),
+          amenities: amenityKeys.map(amenityLabel),
+        }}
+      />
       <TrackRecentlyViewed
         id={listingId}
         name={property.name}
@@ -156,9 +170,12 @@ export default async function ListingDetailPage({
             </Link>
           </div>
         </div>
-        {isStudent && (
+        {/* Signed-out visitors see the heart too; pressing it asks them to
+            create the free account that keeps favourites. Landlord and staff
+            sessions can't save, so they don't get it. */}
+        {(isStudent || !session) && (
           <div className="shrink-0 pt-0.5">
-            <SaveButton listingId={listingId} initialSaved={isSaved} />
+            <SaveButton listingId={listingId} initialSaved={isSaved} signedOut={!session} />
           </div>
         )}
       </header>

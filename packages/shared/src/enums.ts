@@ -26,6 +26,11 @@ export const STAFF_ROLE_KEYS = [
   'auditor',
 ] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
+// Super Admin is never handed out by invitation link: grant it to an existing,
+// already-verified staff account from Users (step-up gated).
+export const INVITABLE_STAFF_ROLE_KEYS = STAFF_ROLE_KEYS.filter(
+  (key): key is Exclude<StaffRoleKey, 'super_admin'> => key !== 'super_admin',
+);
 export const STAFF_ROLE_LABELS: Record<StaffRoleKey, string> = {
   super_admin: 'Super Admin',
   platform_admin: 'Platform Admin',

@@ -33,7 +33,7 @@ describe('staff invitation email delivery', () => {
     expect(url.pathname).toBe('/api/auth/logto/sign-in');
     expect(Object.fromEntries(url.searchParams)).toEqual({ portal: 'staff', intent: 'staff', token: 'one-time-value', email: invitation.email });
     expect(body.to).toEqual([invitation.email]);
-    expect(body.text).toContain('set up an authenticator app');
+    expect(body.text).toContain('an authenticator app');
   });
 
   it('requests a fresh token for every delivery attempt', async () => {
@@ -63,6 +63,11 @@ describe('staff invitation email delivery', () => {
     const base = { name: 'Staff', roleKey: 'support_admin', scopeType: 'platform_wide', reason: 'Hire' };
     expect(inviteStaffSchema.safeParse({ ...base, phone: '+256700000001' }).success).toBe(false);
     expect(inviteStaffSchema.safeParse({ ...base, email: invitation.email }).success).toBe(true);
+  });
+
+  it('never accepts Super Admin as an invited role', () => {
+    const invite = { name: 'Staff', roleKey: 'super_admin', scopeType: 'platform_wide', reason: 'Hire', email: invitation.email };
+    expect(inviteStaffSchema.safeParse(invite).success).toBe(false);
   });
 
   it('rejects invitation acceptance by a different linked account', async () => {

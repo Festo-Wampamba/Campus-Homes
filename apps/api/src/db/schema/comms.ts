@@ -8,7 +8,6 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
 
 import { notificationChannel, notificationStatus } from './enums';
 import { landlords, students, users } from './identity';
@@ -31,9 +30,8 @@ export const chatThreads = pgTable(
   },
   (t) => [
     uniqueIndex('chat_threads_reservation_uk').on(t.reservationId),
-    uniqueIndex('chat_threads_direct_parties_uk')
-      .on(t.studentId, t.landlordId)
-      .where(sql`reservation_id IS NULL`),
+    // One conversation per student-landlord pair (0069).
+    uniqueIndex('chat_threads_parties_uk').on(t.studentId, t.landlordId),
   ],
 );
 

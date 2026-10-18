@@ -132,6 +132,9 @@ export async function pendingInvitationsForIdentity(client: PoolClient, claims: 
   return (await client.query<Invitation>(`SELECT ${INVITATION_COLUMNS} FROM auth_invitations
     WHERE status = 'pending' AND expires_at > now()
       AND (valid_until IS NULL OR valid_until > now())
+      -- Super Admin is no longer invitable; a link issued before that rule
+      -- must not grant it either.
+      AND role_key <> 'super_admin'
       AND (
         (email IS NOT NULL AND email = $1) OR
         (email IS NULL AND phone IS NOT NULL AND phone = $2)
