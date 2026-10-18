@@ -21,6 +21,7 @@ import { assertStaffScope } from '../auth/staff-scope';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isOwnedStorageKey } from '../uploads/storage-key';
+import { roomImportTemplate } from './room-import';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -569,6 +570,22 @@ export class RoomManagementService {
     const room = overview.rooms.find((candidate: { id: string }) => candidate.id === id);
     if (!room) throw new NotFoundException('Pending room change not found');
     return room;
+  }
+
+  /** Spreadsheet template for this property, listing its own room type names
+   * (latest version of each live room type). */
+  async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv') {
+    const titles = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await this.assertPropertyOwner(client, propertyId, ctx.userId);
+      const { rows } = await client.query<{ title: string }>(
+        `SELECT DISTINCT ON (rt.id) v.title FROM room_types rt
+         JOIN room_type_versions v ON v.room_type_id = rt.id
+         WHERE rt.property_id = $1 AND rt.archived_at IS NULL
+         ORDER BY rt.id, v.version_number DESC`, [propertyId],
+      );
+      return [...new Set(rows.map((row) => row.title))].sort();
+    });
+    return roomImportTemplate(format, titles);
   }
 
   private async assertPropertyOwner(client: PoolClient, propertyId: string, userId: string) {
