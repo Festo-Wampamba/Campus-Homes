@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, gte, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
 
 import type { CreateCalendarEventInput, UpdateCalendarEventInput } from '@campushomes/shared';
 
@@ -42,6 +42,7 @@ export class CalendarService {
           startsAt: new Date(input.startsAt),
           endsAt: input.endsAt ? new Date(input.endsAt) : null,
           allDay: input.allDay,
+          remind: input.remind,
         })
         .returning();
       return row;
@@ -56,10 +57,21 @@ export class CalendarService {
           ...(input.title !== undefined ? { title: input.title } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.eventType !== undefined ? { eventType: input.eventType } : {}),
-          ...(input.startsAt !== undefined ? { startsAt: new Date(input.startsAt) } : {}),
+          // A moved start time gets a fresh set of reminders. The edit form
+          // always sends startsAt, so compare with the stored value (the
+          // CASE reads the row's old starts_at) rather than resetting on
+          // every save, which would resend reminders already delivered.
+          ...(input.startsAt !== undefined
+            ? {
+                startsAt: new Date(input.startsAt),
+                remindersSent: sql<number[]>`CASE WHEN ${calendarEvents.startsAt} = ${new Date(input.startsAt)}
+                  THEN ${calendarEvents.remindersSent} ELSE '{}'::integer[] END`,
+              }
+            : {}),
           ...(input.endsAt !== undefined ? { endsAt: input.endsAt ? new Date(input.endsAt) : null } : {}),
           ...(input.allDay !== undefined ? { allDay: input.allDay } : {}),
           ...(input.done !== undefined ? { done: input.done } : {}),
+          ...(input.remind !== undefined ? { remind: input.remind } : {}),
           updatedAt: new Date(),
         })
         .where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, ctx.userId)))
