@@ -3,7 +3,7 @@
 import { UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CATCHMENTS, STAFF_ROLE_KEYS, STAFF_ROLE_LABELS, type StaffRoleKey } from "@campushomes/shared";
+import { CATCHMENTS, INVITABLE_STAFF_ROLE_KEYS, STAFF_ROLE_LABELS, type StaffRoleKey } from "@campushomes/shared";
 
 import { api, ApiError, apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -146,7 +146,7 @@ export function InviteStaffForm({ invitation }: { invitation?: EditableInvitatio
                   value={roleKey}
                   onChange={(e) => setRoleKey(e.target.value as StaffRoleKey)}
                 >
-                  {STAFF_ROLE_KEYS.map((key) => (
+                  {INVITABLE_STAFF_ROLE_KEYS.map((key) => (
                     <option key={key} value={key}>
                       {STAFF_ROLE_LABELS[key]}
                     </option>

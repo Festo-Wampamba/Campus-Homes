@@ -132,7 +132,7 @@ function scopeLabel(scopeType: string, scopeId: string | null): string {
 
 /** Exported for tests. A full, branded staff invitation: who invited them, to
  * which role and scope, when the link expires, and exactly what happens next
- * (including the mandatory authenticator app). */
+ * (including the mandatory second step: authenticator app or passkey). */
 export function invitationContent(input: StaffInvitationEmailInput): EmailMessage {
   const role = STAFF_ROLE_LABELS[input.roleKey];
   const scope = scopeLabel(input.scopeType, input.scopeId);
@@ -147,7 +147,7 @@ export function invitationContent(input: StaffInvitationEmailInput): EmailMessag
   const steps = [
     'Open the secure link below. It signs you in with this email address; no password is needed yet.',
     'Confirm your details when asked. CampusHomes then tells you that staff accounts need 2-step verification.',
-    'Choose Administration or Operations and sign in a second time with the same email. This time you are asked to set up an authenticator app (such as Google Authenticator or Microsoft Authenticator). Every staff account needs it; it cannot be skipped.',
+    'Choose Administration or Operations and sign in a second time with the same email. This time you set up your second step: an authenticator app (such as Google Authenticator or Microsoft Authenticator) or a passkey (the fingerprint, face or screen lock on your phone or laptop). Every staff account needs one; it cannot be skipped.',
     'You land in your CampusHomes workspace, ready to work.',
   ];
   const row = (label: string, value: string) =>

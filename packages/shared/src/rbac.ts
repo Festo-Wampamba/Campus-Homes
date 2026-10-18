@@ -20,6 +20,8 @@ export type GrantRoleInput = z.infer<typeof grantRoleSchema>;
 
 export const inviteStaffSchema = grantRoleFieldsSchema
   .extend({
+    // Super Admin is never invited; see INVITABLE_STAFF_ROLE_KEYS.
+    roleKey: z.enum(STAFF_ROLE_KEYS).exclude(['super_admin']),
     name: z.string().min(1).max(200),
     email: z.email(),
     phone: africanPhone.optional(),

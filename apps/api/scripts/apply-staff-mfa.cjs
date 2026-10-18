@@ -4,7 +4,8 @@
 //      organizationRequiredMfaPolicy -> 'Mandatory'.
 //   2. The "CampusHomes Staff" organization (isMfaRequired) exists, and every
 //      current staff member with a Logto identity is a member, so Logto makes
-//      them set up an authenticator at their next sign-in, with no Skip.
+//      them set up an authenticator app or a passkey at their next sign-in,
+//      with no Skip.
 // New staff join the organization automatically on staff sign-in (auth callback).
 //
 //   local:      pnpm --filter @campushomes/api build && pnpm --filter @campushomes/api auth:staff-mfa
@@ -46,7 +47,7 @@ async function main() {
   const logto = new LogtoManagementClient(env);
 
   const { mfa } = await logto.getSignInExperience();
-  const factors = Array.from(new Set([...(mfa?.factors ?? []), 'Totp', 'BackupCode']));
+  const factors = Array.from(new Set([...(mfa?.factors ?? []), 'Totp', 'WebAuthn', 'BackupCode']));
   await logto.updateSignInExperience({ mfa: { factors, policy: 'NoPrompt', organizationRequiredMfaPolicy: 'Mandatory' } });
   console.log(`MFA policy set: NoPrompt for everyone, Mandatory for staff organization members (factors: ${factors.join(', ')}).`);
 

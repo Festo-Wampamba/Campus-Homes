@@ -60,7 +60,7 @@ export class AdminUsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: DeleteAdminUserDto,
   ) {
-    return this.users.deleteUser(rlsCtx(req), req.permissions, id, body.reason);
+    return this.users.deleteUser(rlsCtx(req), req.permissions, id, body.reason, body.confirmEmail);
   }
 
   @Post(':id/purge')

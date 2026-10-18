@@ -4,7 +4,7 @@
  */
 import { Pool } from 'pg';
 
-import type { StaffRoleKey } from '@campushomes/shared';
+import type { InviteStaffInput } from '@campushomes/shared';
 
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
@@ -28,7 +28,7 @@ const PLATFORM = [{ scopeType: 'platform_wide', scopeId: null }];
 let admin: string;
 const ctx = (): RlsContext => ({ userId: admin, role: 'admin' });
 
-function invite(email: string, roleKey: StaffRoleKey = 'ops_inspector') {
+function invite(email: string, roleKey: InviteStaffInput['roleKey'] = 'ops_inspector') {
   return staff.invite(ctx(), PERMS, PLATFORM, {
     name: 'Invitee', email, roleKey, scopeType: 'platform_wide', reason: 'test',
   });

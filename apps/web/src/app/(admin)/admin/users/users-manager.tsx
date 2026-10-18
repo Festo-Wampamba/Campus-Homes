@@ -38,7 +38,11 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
   const [mode, setMode] = useState<"create" | "edit" | "access" | "delete" | null>(null);
+  // Deleting a Super Admin needs their email typed back (pasting is blocked).
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [selected, setSelected] = useState<UserRow | null>(null);
+  const deletingSuperAdmin = mode === "delete" && (selected?.assignments ?? []).some((a) => (a.key ?? a.roleKey) === "super_admin");
+  const confirmEmailMatches = !!selected?.email && confirmEmail.trim().toLowerCase() === selected.email.toLowerCase();
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [form, setForm] = useState<Record<string, string>>(emptyUser);
   const [pending, setPending] = useState(false);
@@ -142,7 +146,7 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
     if (!window.confirm(`PERMANENTLY delete ${selected.name || "this user"} and everything they own (properties, listings, reservations, roles)? This is irreversible and cannot be undone.`)) return;
     setPending(true); setNotice(null);
     const id = selected.id;
-    try { await api(`/admin/users/${id}`, { method: "DELETE", body: JSON.stringify({ reason: String(data.get("reason")) }) }); setList((current) => current.filter((r) => r.id !== id)); setNotice(`${selected.name || "Account"} permanently deleted.`); router.refresh(); setTimeout(() => close(), 700); }
+    try { await api(`/admin/users/${id}`, { method: "DELETE", body: JSON.stringify({ reason: String(data.get("reason")), ...(deletingSuperAdmin ? { confirmEmail } : {}) }) }); setList((current) => current.filter((r) => r.id !== id)); setNotice(`${selected.name || "Account"} permanently deleted.`); router.refresh(); setTimeout(() => close(), 700); }
     catch (error) { setNotice(apiErrorMessage(error, "The user could not be deleted.")); } finally { setPending(false); }
   }
 
@@ -169,7 +173,7 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
     return <div className="flex gap-1">
       <button aria-label="Edit user" title="Edit particulars" onClick={() => startDetail(row, "edit")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><Pencil className="size-4" /></button>
       <button aria-label="Manage access" title="Roles and permissions" onClick={() => startDetail(row, "access")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><KeyRound className="size-4" /></button>
-      {canMutate && <button aria-label="Delete user" title="Delete user permanently" onClick={() => { setSelected(row); setMode("delete"); setNotice(null); setFormError(null); }} className="grid size-10 place-items-center rounded-lg border border-red-200 text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950 dark:hover:text-red-200"><Trash2 className="size-4" /></button>}
+      {canMutate && <button aria-label="Delete user" title="Delete user permanently" onClick={() => { setSelected(row); setMode("delete"); setConfirmEmail(""); setNotice(null); setFormError(null); }} className="grid size-10 place-items-center rounded-lg border border-red-200 text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950 dark:hover:text-red-200"><Trash2 className="size-4" /></button>}
     </div>;
   }
 
@@ -293,6 +297,6 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
       </div>
     </AdminModal>
 
-    <AdminModal open={mode === "delete"} onClose={close} title={`Delete ${selected?.name ?? "user"}?`} description="Permanent hard-delete: the account and everything they own (properties, listings, reservations, roles, chat) are removed immediately and cannot be recovered. Audit entries are kept but anonymized."><form onSubmit={removeUser} className="space-y-4 p-5"><AdminField label="Deletion reason" required><textarea required minLength={3} name="reason" className={adminTextareaClass} placeholder="Why is this account being removed?" /></AdminField>{notice && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">{notice}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={close} className={buttonClass()}>Cancel</button><button disabled={pending} className={buttonClass("danger")}><Trash2 className="size-4" />{pending ? "Deleting…" : "Delete permanently"}</button></div></form></AdminModal>
+    <AdminModal open={mode === "delete"} onClose={close} title={`Delete ${selected?.name ?? "user"}?`} description="Permanent hard-delete: the account and everything they own (properties, listings, reservations, roles, chat) are removed immediately and cannot be recovered. Audit entries are kept but anonymized."><form onSubmit={removeUser} className="space-y-4 p-5"><AdminField label="Deletion reason" required><textarea required minLength={3} name="reason" className={adminTextareaClass} placeholder="Why is this account being removed?" /></AdminField>{deletingSuperAdmin && <AdminField label={`This is a Super Admin. Type ${selected?.email ?? "their email"} to confirm`} required><input required autoComplete="off" spellCheck={false} value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} onPaste={(e) => e.preventDefault()} onDrop={(e) => e.preventDefault()} aria-describedby="confirm-email-hint" className={adminFieldClass} placeholder="Type the email address" /><p id="confirm-email-hint" className="mt-1 text-[11px] text-slate-500">Pasting is turned off. Type it letter by letter.</p></AdminField>}{notice && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">{notice}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={close} className={buttonClass()}>Cancel</button><button disabled={pending || (deletingSuperAdmin && !confirmEmailMatches)} className={buttonClass("danger")}><Trash2 className="size-4" />{pending ? "Deleting…" : "Delete permanently"}</button></div></form></AdminModal>
   </>;
 }
