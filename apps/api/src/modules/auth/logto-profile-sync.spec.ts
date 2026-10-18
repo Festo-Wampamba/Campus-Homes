@@ -3,6 +3,7 @@ import { toLogtoUserDetails, type LogtoProfileRow } from './logto-profile-sync';
 const row: LogtoProfileRow = {
   logtoUserId: 'logto-1',
   name: 'Jane Doe',
+  username: 'jane_doe',
   role: 'student',
   gender: 'female',
   dateOfBirth: '2004-02-01',
@@ -28,6 +29,14 @@ describe('toLogtoUserDetails', () => {
 
   it('carries the account type so the Logto console shows who the user is', () => {
     expect(toLogtoUserDetails(row).customData.accountType).toBe('student');
+  });
+
+  it('copies the username into Logto', () => {
+    expect(toLogtoUserDetails(row).username).toBe('jane_doe');
+  });
+
+  it('skips a username Logto would reject for starting with a digit', () => {
+    expect(toLogtoUserDetails({ ...row, username: '2jane' }).username).toBeNull();
   });
 
   it('caps the name at the 128 characters Logto accepts', () => {

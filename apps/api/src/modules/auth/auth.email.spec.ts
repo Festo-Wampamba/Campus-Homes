@@ -129,8 +129,8 @@ describe('invitationContent', () => {
     expect(invitationContent(invite).text).toContain('sign in a second time');
   });
 
-  it('tells staff the authenticator app step is required', () => {
-    expect(invitationContent(invite).text).toContain('set up an authenticator app');
+  it('tells staff the second step is required: authenticator app or passkey', () => {
+    expect(invitationContent(invite).text).toContain('an authenticator app (such as Google Authenticator or Microsoft Authenticator) or a passkey');
   });
 
   it('includes the one-time link as a fallback the reader can paste', () => {

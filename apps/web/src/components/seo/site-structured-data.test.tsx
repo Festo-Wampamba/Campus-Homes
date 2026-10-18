@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { SiteStructuredData } from "./site-structured-data";
+import { ListingStructuredData, SiteStructuredData } from "./site-structured-data";
 
 jest.mock("../../lib/server-api", () => ({
   apiServerPublic: jest.fn(async () => ({ email: "hello@campushomes.co.ug", phone: "+256768561023" })),
@@ -37,4 +37,28 @@ it("lists the support WhatsApp number as the contact point", async () => {
 
 it("publishes the homepage FAQ for answer engines", async () => {
   expect(((await node("FAQPage")).mainEntity as unknown[]).length).toBeGreaterThan(0);
+});
+
+async function hostel(): Promise<Node> {
+  const html = renderToStaticMarkup(
+    await ListingStructuredData({
+      listing: {
+        id: "l1", name: "Mirembe Student Courts", streetAddress: "Kikoni", lat: 0.33, lon: 32.56,
+        minPriceUgx: 400000, maxPriceUgx: 750000, photoKeys: [], amenities: ["Wi-Fi"],
+      },
+    }),
+  );
+  return JSON.parse(html.replace(/^<script[^>]*>/, "").replace(/<\/script>$/, ""));
+}
+
+it("describes a listing as a Hostel linked to its own page", async () => {
+  expect((await hostel()).url).toBe("https://campushomes.co.ug/listings/l1");
+});
+
+it("gives a listing its price range in shillings per bed per semester", async () => {
+  expect((await hostel()).priceRange).toBe("UGX 400,000 to 750,000 per bed per semester");
+});
+
+it("knows the common misspelling Campass Homes is this brand", async () => {
+  expect((await node("Organization")).alternateName).toContain("Campass Homes");
 });

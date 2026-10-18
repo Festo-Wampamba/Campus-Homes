@@ -146,7 +146,7 @@ export default async function HomePage() {
         <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="max-w-[46rem]">
             <p className="mb-5 text-xs font-bold tracking-[0.13em] text-white/85 uppercase sm:text-sm">
-              Student hostels in Kampala
+              Campus Homes · Student hostels in Kampala
             </p>
             <h1 className="max-w-[19ch] font-display text-4xl font-bold leading-[1.12] tracking-[-0.035em] text-white sm:text-5xl">
               Hostels near Makerere, inspected before they are listed.

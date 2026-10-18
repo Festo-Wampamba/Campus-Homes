@@ -4,12 +4,13 @@
  */
 import { Pool } from 'pg';
 
-import type { StaffRoleKey } from '@campushomes/shared';
+import type { InviteStaffInput } from '@campushomes/shared';
 
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
 import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
 import { AuditService } from '../../src/modules/ops/audit.service';
+import { pendingInvitationsForIdentity } from '../../src/modules/staff/invitations.service';
 import { StaffService } from '../../src/modules/staff/staff.service';
 import { testDatabaseUrl } from '../test-database-url';
 
@@ -28,7 +29,7 @@ const PLATFORM = [{ scopeType: 'platform_wide', scopeId: null }];
 let admin: string;
 const ctx = (): RlsContext => ({ userId: admin, role: 'admin' });
 
-function invite(email: string, roleKey: StaffRoleKey = 'ops_inspector') {
+function invite(email: string, roleKey: InviteStaffInput['roleKey'] = 'ops_inspector') {
   return staff.invite(ctx(), PERMS, PLATFORM, {
     name: 'Invitee', email, roleKey, scopeType: 'platform_wide', reason: 'test',
   });
@@ -128,5 +129,21 @@ describe('grantRole — one staff role per account', () => {
     await expect(staff.grantRole(ctx(), PERMS, PLATFORM, lead, {
       roleKey: 'ops_inspector', scopeType: 'platform_wide', reason: 'second role',
     })).rejects.toThrow(/already holds the "ops_lead" role/);
+  });
+});
+
+describe('accepting a stored invitation', () => {
+  it('never grants Super Admin from a link issued before invitations dropped it', async () => {
+    const created = await invite('legacy-super@campushomes.ug');
+    await pool.query(`UPDATE auth_invitations SET role_key = 'super_admin' WHERE id = $1`, [created.id]);
+    const client = await pool.connect();
+    try {
+      const pending = await pendingInvitationsForIdentity(client, {
+        sub: 'logto-legacy', email: 'legacy-super@campushomes.ug', emailVerified: true,
+      });
+      expect(pending.map((row) => row.id)).not.toContain(created.id);
+    } finally {
+      client.release();
+    }
   });
 });

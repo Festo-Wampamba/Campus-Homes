@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
@@ -72,10 +73,12 @@ function readPermissionForAccountType(accountType: string): string | null {
 
 @Injectable()
 export class AdminUsersService {
+  private readonly logger = new Logger(AdminUsersService.name);
+
   constructor(
     private readonly rlsDb: RlsDb,
     private readonly audit: AuditService,
-    _logtoManagement: LogtoManagementClient,
+    private readonly logtoManagement: LogtoManagementClient,
     private readonly roleAssignments: RoleAssignmentService = new RoleAssignmentService(rlsDb),
     // Optional so unit tests that build the service by hand needn't stub it.
     private readonly logtoSync?: LogtoProfileSync,
@@ -522,15 +525,24 @@ export class AdminUsersService {
    * recoverable soft-delete stage, so the account (and its inflated dashboard
    * counts) disappears immediately. Runs the same footprint cascade as
    * purgeUser. Keeps the self-delete, super-admin tier, and last-active-
-   * super-admin guards so an admin can't lock everyone out. */
-  async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string) {
+   * super-admin guards so an admin can't lock everyone out. A super-admin
+   * target also needs its email typed back (confirmEmail) as a last check. */
+  async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string, confirmEmail?: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
-    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      const target = (await client.query<{ id: string; isSuperAdmin: boolean }>(`
-        SELECT u.id, EXISTS (
+    const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const target = (await client.query<{
+        id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean; isActiveSuperAdmin: boolean;
+      }>(`
+        SELECT u.id, u.email, u.logto_user_id AS "logtoUserId", EXISTS (
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
           WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
-        ) AS "isSuperAdmin"
+        ) AS "isSuperAdmin", EXISTS (
+          -- Same validity window the Users list uses, so the dialog asks for
+          -- the typed email exactly when the API requires it.
+          SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
+          WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
+            AND ura.valid_from <= now() AND (ura.valid_until IS NULL OR ura.valid_until > now())
+        ) AS "isActiveSuperAdmin"
         FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
       `, [userId])).rows[0];
       if (!target) throw new NotFoundException('User not found');
@@ -544,11 +556,29 @@ export class AdminUsersService {
           WHERE r.key = 'super_admin' AND ura.revoked_at IS NULL AND u.deleted_at IS NULL AND u.status = 'active'
         `)).rows[0]?.count ?? 0);
         if (count <= 1) throw new ForbiddenException('The last active Super Admin cannot be deleted');
+        if (target.isActiveSuperAdmin && (!target.email || confirmEmail?.trim().toLowerCase() !== target.email.toLowerCase())) {
+          throw new BadRequestException("Type the Super Admin's email address exactly to confirm");
+        }
       }
       await this.runPurgeCascade(client, userId);
+      return target.logtoUserId;
     });
     await this.audit.record(actor, 'users.delete', 'user', userId, { reason });
+    this.deleteLogtoIdentity(userId, logtoUserId);
     return { id: userId, deleted: true };
+  }
+
+  /** After our row is gone, the Logto identity must go too: otherwise a new
+   * account with the same email re-links to it and inherits its password and
+   * 2-step setup. Best effort, after commit: a Logto outage must not undo a
+   * completed delete, so a failure is logged for manual cleanup. */
+  private deleteLogtoIdentity(userId: string, logtoUserId: string | null) {
+    if (!logtoUserId) return;
+    void Promise.resolve()
+      .then(() => this.logtoManagement.deleteUser(logtoUserId))
+      .catch((err: unknown) => {
+        this.logger.warn(`Logto identity ${logtoUserId} for deleted user ${userId} was not removed: ${err instanceof Error ? err.message : String(err)}`);
+      });
   }
 
   /** Cleanup path for accounts already soft-deleted by the legacy two-step
@@ -557,9 +587,9 @@ export class AdminUsersService {
    * targets need the super-admin tier permission. */
   async purgeUser(actor: RlsContext, actorPermissions: Set<string>, userId: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot purge your own account');
-    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      const target = (await client.query<{ id: string; deletedAt: Date | null; isSuperAdmin: boolean }>(`
-        SELECT u.id, u.deleted_at AS "deletedAt", EXISTS (
+    const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const target = (await client.query<{ id: string; deletedAt: Date | null; logtoUserId: string | null; isSuperAdmin: boolean }>(`
+        SELECT u.id, u.deleted_at AS "deletedAt", u.logto_user_id AS "logtoUserId", EXISTS (
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
           WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
         ) AS "isSuperAdmin"
@@ -571,8 +601,10 @@ export class AdminUsersService {
         throw new ForbiddenException('Only a Super Admin can purge a Super Admin');
       }
       await this.runPurgeCascade(client, userId);
+      return target.logtoUserId;
     });
     await this.audit.record(actor, 'users.purge', 'user', userId, {});
+    this.deleteLogtoIdentity(userId, logtoUserId);
     return { id: userId, purged: true };
   }
 

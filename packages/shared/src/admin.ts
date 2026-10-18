@@ -91,6 +91,8 @@ export type UpdateAdminUserInput = z.infer<typeof updateAdminUserSchema>;
 
 export const deleteAdminUserSchema = z.object({
   reason: z.string().trim().min(3).max(500),
+  // Required (server-side) only when the target is a Super Admin.
+  confirmEmail: z.string().trim().max(320).optional(),
 });
 export type DeleteAdminUserInput = z.infer<typeof deleteAdminUserSchema>;
 

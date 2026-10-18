@@ -204,6 +204,28 @@ describe('self-hosted Logto Management API', () => {
         expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ customData: details.customData }) }),
       ]);
     });
+
+    it('sets the username last, on the user record', async () => {
+      const fetcher = calls();
+      await client().updateUserDetails('user-1', { ...details, username: 'jane_doe' });
+      expect(fetcher.mock.calls[4]).toEqual([
+        'https://auth.example.test/api/users/user-1',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ username: 'jane_doe' }) }),
+      ]);
+    });
+
+    it('tolerates a username another Logto identity already holds', async () => {
+      calls().mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response('{}', { status: 422 }));
+      await expect(client().updateUserDetails('user-1', { ...details, username: 'jane_doe' })).resolves.toBeUndefined();
+    });
+  });
+
+  it('treats deleting an already-removed identity as done', async () => {
+    jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+      .mockResolvedValueOnce(new Response('', { status: 404 }));
+    await expect(client().deleteUser('user-1')).resolves.toBeUndefined();
   });
 
   it('marks a student as having skipped the MFA prompt', async () => {
