@@ -1416,3 +1416,39 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     branches were deleted 2026-10-18. The GitHub "Preview" environment is
     **Vercel's** (bot deployments), not ours — no CI/Dokploy target deploys
     the `preview` branch.
+
+- **Secret rotation, Dokploy env handling, production image-tag outage
+  (2026-10-19):**
+  - **Dokploy v0.30.8 encrypts app env at rest** (`application.env` isn't
+    plain text). UI saves sometimes silently didn't persist this session.
+    Reliable path: the Dokploy API (`application.one` /
+    `application.saveEnvironment`, `compose.one` / `compose.update`) with
+    an `x-api-key`, run **on the VPS** with keys/passwords read from
+    `~/.secrets/*` (never through chat), re-read afterwards and compare
+    fingerprints. Send all other fields (`buildArgs`, `buildSecrets`,
+    `createEnvFile`) back unchanged. Cloudflare blocks Python's default
+    User-Agent (error 1010); send a plain custom one. Stored env lines
+    for `REDIS_URL`/`DATABASE_URL` carry two leading spaces; Dokploy trims
+    them. A one-day API key per task, shredded and revoked afterwards.
+  - Generating keys in Dokploy: a prefix with a space fails ("Failed to
+    generate API key"); leave the prefix empty and rate limiting off.
+  - **Production Redis is not in Dokploy:** host compose at
+    `/home/festo/campushomes-redis-production/` (password in `command`
+    and the healthcheck). Staging Redis/Postgres/Logto are Dokploy composes.
+  - **Outage 04:30–04:50 UTC:** a live `docker service update --env-add` on
+    the production API needed a new task, and its image tag was gone.
+    Cause (investigated): Dokploy's nightly Docker Cleanup runs
+    `image prune --all`; when production is promoted to staging's commit,
+    the cached build gives both API tags the **same image ID**, and prune
+    strips the alphabetically-first tag (production's). Dokploy cleanup is
+    now **off** (TODOS 30 for a safe replacement). A Dokploy deploy whose
+    new task crashes is **rolled back by Swarm** while the deploy job still
+    reports success — check `docker service ps` / `UpdateStatus`, not just
+    the job.
+  - `docker service update --env-add` is a temporary patch: the next
+    Dokploy deploy applies the stored env. Always update the stored value
+    too.
+  - Postgres: `ALTER ROLE … PASSWORD` fed on stdin (`printf … | docker exec
+    -i <pg> psql`) so the value never shows in a process list; staging
+    `pg_hba` trusts local/127.0.0.1, so Dokploy's backup (`databaseUser`
+    only) isn't affected by password changes.

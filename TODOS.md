@@ -3,7 +3,7 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-18._
+_Last updated: 2026-10-19._
 
 **Where things stand:** production, staging and `main` run `a42b74a`
 (schema 70/70). GitHub branches are only `main`, `development` and
@@ -21,12 +21,14 @@ release PR to `main` (deploys staging) → production by hand with
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
 | 13 | [Production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Festo → Claude | ☐ Open (needs correct price, furnishing, title) |
 | 17 | [Deferred backlog items](#17-deferred-backlog-items) | — | 💤 Later |
-| 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo + Claude | ☐ Open |
+| 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo + Claude | 🚧 Redis + staging Postgres rotated 2026-10-19; confirm nothing else was pasted |
 | 24 | [Staging tests: chat + booking tracker](#24-staging-tests-chat--booking-tracker) | Festo | ☐ Open (item 20 fixed; room-change part passed) |
 | 25 | [Code backlog](#25-code-backlog) | Claude | 💤 Later |
 | 26 | [Production checks for the 2026-10-18 release](#26-production-checks-for-the-2026-10-18-release) | Festo | ☐ Open (server-side checks passed) |
 | 27 | [Off-site SEO](#27-off-site-seo) | Festo | ☐ Open (sitemaps already submitted) |
 | 28 | [Decide: unique room codes per property?](#28-decide-unique-room-codes-per-property) | Festo | ☐ Open |
+| 29 | [Plaintext env copy on the VPS](#29-plaintext-env-copy-on-the-vps) | Festo → Claude | ☐ Open (decide: shred) |
+| 30 | [Safe Docker cleanup to replace Dokploy's](#30-safe-docker-cleanup-to-replace-dokploys) | Claude | ☐ Open (needs OK) |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -118,10 +120,15 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 
 ## 19. Rotate exposed staging secrets
 
-- **What:** rotate the staging passwords/keys that were pasted in chat
-  during the 2026-08 infra rescue.
-- **When:** before any real data goes on the shared staging/production
-  Postgres, Redis or Logto.
+- **Done 2026-10-19:**
+  - Redis, staging and production (the production password was also
+    printed in chat on 10-19 by a redaction slip, so it was rotated too).
+  - Staging Postgres `campushomes` (owner) and `campushomes_app`.
+  - Every value is updated live and in Dokploy's stored env/compose,
+    verified by read-back fingerprints. Nothing was pasted in chat.
+- **Left:** Festo to confirm no other key (Logto app secrets, B2, Resend,
+  Groq, Google) was pasted during the 2026-08 rescue. If one was, rotate
+  it the same way.
 
 ## 24. Staging tests: chat + booking tracker
 
@@ -187,12 +194,32 @@ Sitemaps are already submitted to Google and Bing (2026-10-17). Left:
   means a migration (unique index) after cleaning up existing duplicates,
   plus the same check in the spreadsheet import.
 
+## 29. Plaintext env copy on the VPS
+
+- `/home/festo/campushomes-api-env-source.txt` (2026-09-01, mode 664) holds
+  plaintext copies of most API secrets: Google, Resend, Logto, Africa's
+  Talking, Cloudinary, plus old DB/Redis URLs.
+- **Decide:** shred it (Dokploy holds the real env). At minimum `chmod 600`.
+  The `.dump` files in the same folder are full database copies; move them
+  to the private backup bucket or delete them.
+
+## 30. Safe Docker cleanup to replace Dokploy's
+
+- Dokploy's "Daily Docker Cleanup" is **off** since 2026-10-19 (see
+  CLAUDE.md, 2026-10-19). Disk use will grow from old images and build cache.
+- **Plan:** host cron that never removes tags: `docker image prune --force`
+  (untagged only), `docker container prune --force`,
+  `docker builder prune --force --filter until=72h`.
+- Optional: a per-environment build `ARG`/`LABEL` in `apps/api/Dockerfile`
+  so production and staging can never share an image ID.
+
 ---
 
 ## Done
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-19 | Secret rotation (item 19, part): Redis staging + production and staging Postgres `campushomes`/`campushomes_app`, live and in Dokploy's stored config (via Dokploy API, read-back verified). Dokploy Daily Docker Cleanup turned off and Dokploy restarted. Production API outage 04:30–04:50 UTC (image tag missing after the nightly prune); recovered by retagging the same-commit staging image | — | Staging + production |
 | 2026-10-19 | Vercel project `campus-homes-web` deleted by Festo (Vercel API confirms no project linked to the repo). Web hosting is Dokploy only; the GitHub "Preview" environment was Vercel's and is now unused. Optional: remove the Vercel GitHub app's repo access (GitHub → Settings → Applications) and the stale "Preview" environment (was item 6) | — | — |
 | 2026-10-18 | iOS dialog sizing: property form and invite-staff dialogs use `min-h-0 flex-auto` like the room dialogs; no `flex-1` dialog forms remain. Security review of `a5394fd` (missed by a 429): no issue | this PR | `development` |
 | 2026-10-18 | Calendar: colours per type, edit dialog, Today, "Starts in …", phone agenda, local date keys (was a day late). Email + in-app reminders at 1d/10h/5h/30/15/5/1 min (BullMQ `calendar_reminders`, migration 0070). Scrollable Manage Rooms dialogs; am/pm chat times | [#229](https://github.com/Festo-Wampamba/Campus-Homes/pull/229), [#230](https://github.com/Festo-Wampamba/Campus-Homes/pull/230) | Staging + production (`a42b74a`, schema 70) |
