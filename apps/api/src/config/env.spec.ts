@@ -50,3 +50,19 @@ describe('security configuration', () => {
     });
   });
 });
+
+describe('SENTRY_DSN', () => {
+  const base = { DATABASE_URL: 'postgresql://example.invalid/test', SENTRY_DSN: 'https://key@o1.ingest.sentry.io/1' };
+  it('refuses a DSN without an explicit SENTRY_ENVIRONMENT', () => {
+    expect(() => loadEnv(base)).toThrow(/^Invalid environment configuration: SENTRY_ENVIRONMENT$/);
+  });
+  it('treats a blank SENTRY_ENVIRONMENT as missing', () => {
+    expect(() => loadEnv({ ...base, SENTRY_ENVIRONMENT: '' })).toThrow('SENTRY_ENVIRONMENT');
+  });
+  it('accepts a DSN with an environment', () => {
+    expect(loadEnv({ ...base, SENTRY_ENVIRONMENT: 'staging' }).SENTRY_ENVIRONMENT).toBe('staging');
+  });
+  it('rejects a malformed DSN without echoing it', () => {
+    expect(() => loadEnv({ ...base, SENTRY_DSN: 'not-a-url', SENTRY_ENVIRONMENT: 'staging' })).toThrow(/^Invalid environment configuration: SENTRY_DSN$/);
+  });
+});
