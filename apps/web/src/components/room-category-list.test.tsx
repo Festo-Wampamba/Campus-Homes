@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import { RoomCategoryList } from "./room-category-list";
+import { RoomCategoryList, availabilityLabel } from "./room-category-list";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
@@ -130,18 +130,18 @@ describe("RoomCategoryList", () => {
     expect(container.textContent).not.toMatch(/\broom/);
   });
 
-  it("hides public inventory totals while retaining truthful room state", async () => {
+  // Festo, 2026-10-22: show how many rooms and beds are free. Hiding the totals
+  // made 30 listed rooms look like 2 room types.
+  it("shows how many rooms and beds of each room type are free", async () => {
     await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
 
     expect(container.textContent).toContain("Shared rooms");
-    expect(container.textContent).toContain("Available now");
+    expect(container.textContent).toContain("1 room · 1 bed free");
     expect(container.textContent).toContain("Double");
     expect(container.textContent).toContain("Shared bathroom");
     expect(container.textContent).toContain("View details");
     expect(container.textContent).toContain("No room photo provided");
     expect(container.querySelectorAll("[data-room-category]")).toHaveLength(1);
-    expect(container.textContent).not.toMatch(/\d+ beds?\b/);
-    expect(container.textContent).not.toMatch(/\d+ rooms?\b/);
   });
 
   it("opens room details with only supplied room amenities", async () => {
@@ -177,5 +177,19 @@ describe("RoomCategoryList", () => {
 
     const labels = [...container.querySelectorAll("a, button")].map((el) => el.textContent?.trim());
     expect(labels).toEqual(["Reserved", "Reserved"]);
+  });
+});
+
+describe("availabilityLabel", () => {
+  it("counts free single rooms", () => {
+    expect(availabilityLabel({ freeRoomCount: 10, availableCount: 10, capacity: 1 })).toBe("10 rooms available");
+  });
+
+  it("counts rooms and free beds for shared rooms", () => {
+    expect(availabilityLabel({ freeRoomCount: 20, availableCount: 40, capacity: 2 })).toBe("20 rooms · 40 beds free");
+  });
+
+  it("says when nothing is free", () => {
+    expect(availabilityLabel({ freeRoomCount: 0, availableCount: 0, capacity: 2 })).toBe("Currently unavailable");
   });
 });

@@ -54,6 +54,14 @@ export function roomDisplayLabel(group: Pick<CategoryGroup, "category" | "selfCo
   return group.selfContained && !base.toLowerCase().includes("self-contained") ? `${base} self-contained` : base;
 }
 
+/** How much of this room type is free, so 30 rooms never read as "2 rooms". */
+export function availabilityLabel(group: Pick<CategoryGroup, "freeRoomCount" | "availableCount" | "capacity">): string {
+  if (group.availableCount === 0) return "Currently unavailable";
+  const rooms = `${group.freeRoomCount} ${group.freeRoomCount === 1 ? "room" : "rooms"}`;
+  if (group.capacity <= 1) return `${rooms} available`;
+  return `${rooms} · ${group.availableCount} ${group.availableCount === 1 ? "bed" : "beds"} free`;
+}
+
 export function roomBathroomLabel(group: Pick<CategoryGroup, "selfContained">): string {
   return group.selfContained ? "Private bathroom" : "Shared bathroom";
 }
@@ -282,7 +290,7 @@ function RoomDetailsDialog({
 
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip className="shrink-0 whitespace-nowrap" tone={available ? "success" : "warning"}>
-            {available ? "Available now" : "Currently unavailable"}
+            {availabilityLabel(group)}
           </StatusChip>
           <span className="text-sm text-muted-foreground">Availability can change before reservation.</span>
         </div>
@@ -355,7 +363,7 @@ function PublicRoomCard(props: RoomCardProps) {
           <div>
             <p className="font-display text-lg font-semibold">{label}</p>
           </div>
-          <StatusChip tone={available ? "success" : "warning"}>{available ? "Available now" : "Currently unavailable"}</StatusChip>
+          <StatusChip tone={available ? "success" : "warning"}>{availabilityLabel(group)}</StatusChip>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <FeatureIcon icon={Users} label={`Sleeps ${group.capacity}`} />
