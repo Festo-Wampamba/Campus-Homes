@@ -30,6 +30,7 @@ import { SignOutButton } from "@/components/shell/sign-out-button";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { IdleTimeout } from "@/components/shell/idle-timeout";
 
 export type NotificationRow = {
   id: string;
@@ -194,6 +195,7 @@ export function AppShell({
   headerExtra?: React.ReactNode;
 }) {
   const canSwitchWorkspace = new Set(access.workspaces).size > 1;
+  const isStaff = access.workspaces.includes("ops") || access.workspaces.includes("admin");
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeSidebarCollapsed, getSidebarCollapsed, getSidebarCollapsedServerSnapshot);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -305,6 +307,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <PresenceHeartbeat />
+      <IdleTimeout signInPath={isStaff ? "/staff" : "/sign-in"} />
       <aside className={cn("fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 lg:block", collapsed ? "w-16" : "w-62")}>
         <Sidebar nav={nav} pathname={pathname} collapsed={collapsed} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
       </aside>

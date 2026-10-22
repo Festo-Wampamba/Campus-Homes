@@ -1416,3 +1416,31 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     branches were deleted 2026-10-18. The GitHub "Preview" environment is
     **Vercel's** (bot deployments), not ours — no CI/Dokploy target deploys
     the `preview` branch.
+
+- **5-minute inactivity sign-out, all roles (2026-10-22):** `IDLE_TIMEOUT_MS`
+  (`packages/shared/src/auth-access.ts`) is the single value for API + web.
+  - Server-enforced: migration `0071` adds `sessions.last_activity_at`.
+    `SessionStore.find()` (every AuthGuard request + `/api/auth/session`)
+    rejects **and deletes** a session idle ≥ the window, and never moves the
+    timestamp. Only `POST /api/auth/activity` (`recordActivity`, a single
+    conditional UPDATE that refuses to revive an idle row) counts as activity.
+    New auth routes must be added to `AUTH_ROUTES` in `main.ts`, or the
+    `api/v1` global prefix silently remaps them (this one 404'd until added).
+  - So polling can never keep a session alive (bell, chat thread/inbox/
+    presence, presence heartbeat, reservations, approval page, rooms, ops
+    sync): nothing but the explicit signal writes. Covered by
+    `test/services/session-idle.spec.ts` (fake clock, real DB).
+  - Web: `components/shell/idle-timeout.tsx` in `AppShell` (student/landlord/
+    ops/admin) and the `(landlord-setup)` layout; hook in `lib/idle-timeout.ts`.
+    Counts pointerdown/keydown/wheel/touchstart, **not `scroll`** (chat
+    auto-scroll on a poll would count). Signal throttled to one per 30 s with a
+    trailing send; page load counts. Tabs share activity and sign-out over
+    `BroadcastChannel('campushomes-idle')`. Warning dialog in the last 60 s;
+    then API sign-out (our session only) and redirect to `/sign-in` or
+    `/staff` with `error=idle_timeout&next=<page>`. Re-auth is never silent
+    even though the Logto session survives: consumer sign-in sends
+    `prompt=login`, staff `prompt=login` + `max_age=0` (verified live).
+  - Work kept: ops sync treats 401 as retryable (draft stays `queued` in
+    IndexedDB). The landlord onboarding property step is saved to this tab's
+    sessionStorage only at idle sign-out (`useIdleDraft`, per-user key) and
+    offered back (Restore/Discard); the cover photo must be re-picked.
