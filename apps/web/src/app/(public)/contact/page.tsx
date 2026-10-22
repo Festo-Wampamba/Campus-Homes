@@ -21,6 +21,7 @@ import { SupportDesk } from "@/components/support/support-desk";
 import { getServerSession } from "@/lib/session";
 import { apiServerStrict } from "@/lib/server-api";
 import { CAMPUSHOMES_CONTACT } from "@/lib/contact-details";
+import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 import { getMyReservations } from "@/lib/reservations";
 
 import "./contact.css";
@@ -136,7 +137,7 @@ export default async function ContactPage({
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="ch-contact-channel__icon"><MessageCircle aria-hidden /></span>
+              <span className="ch-contact-channel__icon"><WhatsAppIcon /></span>
               <span className="ch-contact-channel__label">WhatsApp</span>
               <strong>{CAMPUSHOMES_CONTACT.whatsappPhoneLabel}</strong>
               <span className="ch-contact-channel__hint">Send a quick message to the CampusHomes team.</span>

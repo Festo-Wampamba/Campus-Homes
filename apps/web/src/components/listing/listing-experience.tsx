@@ -249,7 +249,7 @@ export function ListingExperience({
 
   const mapMarkers = coordinatesAvailable && campus ? [
     { id: listing.id, lat: property.gps_lat!, lon: property.gps_lon!, label: property.name },
-    { id: `campus-${campus.code}`, lat: campus.lat, lon: campus.lon, label: campus.name },
+    { id: `campus-${campus.code}`, lat: campus.lat, lon: campus.lon, label: campus.name, kind: "campus" as const },
   ] : [];
 
   return (

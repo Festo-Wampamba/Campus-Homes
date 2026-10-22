@@ -43,6 +43,9 @@ const selectClass = cn(
 export type PropertyExtendedFieldsValue = {
   alternativeName: string;
   locationDetails: string;
+  description: string;
+  // One rule per line in the textarea; an array on the wire.
+  houseRules: string;
   genderArrangement: GenderArrangement | "";
   // Free text, not the University enum — see NEARBY_INSTITUTIONS' comment in
   // packages/shared/src/property.ts for why this stays separate from the
@@ -70,6 +73,8 @@ export function emptyPropertyExtendedFields(): PropertyExtendedFieldsValue {
   return {
     alternativeName: "",
     locationDetails: "",
+    description: "",
+    houseRules: "",
     genderArrangement: "",
     otherCatchments: [],
     authorityRole: "",
@@ -181,6 +186,39 @@ export function PropertyExtendedFields({
           rows={2}
           className="min-h-16 max-h-60 resize-y"
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-description`}>About the hostel (optional)</Label>
+        <Textarea
+          id={`${idPrefix}-description`}
+          value={value.description}
+          onChange={(e) => onChange({ description: e.target.value })}
+          placeholder="e.g. A quiet hostel 10 minutes' walk from the main gate, with a study room and 24-hour security."
+          rows={4}
+          maxLength={2000}
+          aria-describedby={`${idPrefix}-description-hint`}
+          className="min-h-24 max-h-80 resize-y"
+        />
+        <p id={`${idPrefix}-description-hint`} className="text-xs text-muted-foreground">
+          Students see this on your listing after our team checks it during the inspection.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-houseRules`}>House rules (optional)</Label>
+        <Textarea
+          id={`${idPrefix}-houseRules`}
+          value={value.houseRules}
+          onChange={(e) => onChange({ houseRules: e.target.value })}
+          placeholder={"One rule per line, e.g.\nVisitors leave by 9 pm\nNo cooking in the rooms"}
+          rows={4}
+          aria-describedby={`${idPrefix}-houseRules-hint`}
+          className="min-h-24 max-h-80 resize-y"
+        />
+        <p id={`${idPrefix}-houseRules-hint`} className="text-xs text-muted-foreground">
+          One rule per line, up to 50. Shown to students on your listing.
+        </p>
       </div>
 
       <div className="space-y-1.5">
@@ -409,6 +447,8 @@ export function serializePropertyExtendedFields(v: PropertyExtendedFieldsValue) 
   return {
     alternativeName: v.alternativeName.trim() || null,
     locationDetails: v.locationDetails.trim() || null,
+    description: v.description.trim() || null,
+    houseRules: v.houseRules.split("\n").map((rule) => rule.trim()).filter(Boolean).slice(0, 50),
     genderArrangement: v.genderArrangement || null,
     otherCatchments: v.otherCatchments,
     authorityRole: v.authorityRole || undefined,
@@ -433,6 +473,8 @@ export function serializePropertyExtendedFields(v: PropertyExtendedFieldsValue) 
 export function propertyExtendedFieldsFromProperty(p: {
   alternativeName: string | null;
   locationDetails: string | null;
+  description?: string | null;
+  houseRules?: string[];
   genderArrangement: string | null;
   otherCatchments: string[];
   authorityRole: string | null;
@@ -452,6 +494,8 @@ export function propertyExtendedFieldsFromProperty(p: {
   return {
     alternativeName: p.alternativeName ?? "",
     locationDetails: p.locationDetails ?? "",
+    description: p.description ?? "",
+    houseRules: (p.houseRules ?? []).join("\n"),
     genderArrangement: (p.genderArrangement ?? "") as GenderArrangement | "",
     otherCatchments: p.otherCatchments ?? [],
     authorityRole: (p.authorityRole ?? "") as PropertyAuthorityRole | "",
