@@ -47,7 +47,7 @@ beforeEach(async () => {
       />,
     ),
   );
-  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Reserve")!.click());
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Reserve for free")!.click());
 });
 
 afterEach(() => {
@@ -58,6 +58,11 @@ afterEach(() => {
 });
 
 describe("ReserveButton after a successful reservation", () => {
+  beforeEach(async () => {
+    expect(mockApi).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Review your free reservation");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Confirm free reservation")!.click());
+  });
   it("names the hostel and room that were reserved", () => {
     expect(container.textContent).toContain("Kikoni Rise · Double");
   });

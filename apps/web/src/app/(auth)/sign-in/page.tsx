@@ -23,23 +23,15 @@ export default async function SignInPage({
   if (session && !params.error) redirect(authDestination(session, next));
 
   return (
-    // The gradient/clock backdrop is fixed to the viewport (overflow-hidden)
-    // so it never moves — only the inner flex region scrolls, and only if
-    // the card genuinely can't fit (very short viewports). This keeps the
-    // page itself scroll-free in the normal case while guaranteeing content
-    // is never clipped/unreachable the way a blanket overflow-hidden would.
-    <div className="relative h-dvh w-full overflow-hidden bg-gradient-to-br from-teal-700 via-teal-800 to-teal-950">
-      {/* pointer-events-none here (not just inside LiveClock) matters: this
-          wrapper is `absolute`, so CSS paints it above the normal-flow card
-          below regardless of DOM order. On a viewport short enough that the
-          card's lower buttons fall inside this bottom-anchored padded band,
-          an intercepting click here would silently swallow the click — the
-          button looks normal but does nothing. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden p-8 sm:block sm:p-10">
-        <LiveClock />
-      </div>
-      <div className="flex h-full w-full items-center justify-center overflow-y-auto p-4 py-8 sm:p-8">
-        <SignInForm next={next} error={params.error ?? null} />
+    // Keep the decorative gradient fixed to the viewport while the auth
+    // content can scroll when the form and clock cannot fit on short screens.
+    <div className="relative min-h-dvh w-full overflow-hidden bg-[#eef5f3]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(252,177,119,0.32),transparent_32%),linear-gradient(135deg,#edf6f4_0%,#dcece8_52%,#c3ded9_100%)]" />
+      <div className="relative flex min-h-dvh w-full items-center justify-center overflow-y-auto p-4 py-8 sm:p-8">
+        <div className="flex w-full max-w-md flex-col gap-4">
+          <LiveClock />
+          <SignInForm next={next} error={params.error ?? null} />
+        </div>
       </div>
     </div>
   );

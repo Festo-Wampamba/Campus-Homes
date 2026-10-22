@@ -1,71 +1,24 @@
 "use client";
-
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
-import { Building2, Clock, MapPin } from "lucide-react";
-
+import { useQuery } from "@tanstack/react-query";
+import { listingDetailResponseSchema } from "@campushomes/shared";
+import { Clock } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatUgx } from "@/lib/format";
-import { getRecentlyViewed } from "@/lib/recently-viewed";
-
-// localStorage doesn't exist during SSR — useSyncExternalStore is the
-// primitive built for exactly this (server snapshot = null, matching what
-// the server rendered, then the real client value right after hydration).
-function subscribe() {
-  return () => {};
+import { HostelCard } from "@/components/hostel-card";
+import { getRecentlyViewed, type RecentlyViewedEntry } from "@/lib/recently-viewed";
+import { listingCardData } from "@/lib/listing-card-data";
+import { api } from "@/lib/api";
+function subscribe() { return () => {}; }
+export function RecentlyViewedClient({savedIds = []}:{savedIds?:string[]}) {
+  const entries=useSyncExternalStore(subscribe,getRecentlyViewed,()=>null);
+  if(entries === null) return null;
+  if(!entries.length) return <div className="mt-6"><EmptyState icon={Clock} title="Nothing viewed yet" body="Hostels you open appear here. This list lives in this browser; favourites stay in your account."/></div>;
+  return <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">{entries.map(entry => <RecentCard key={entry.id} entry={entry} saved={savedIds.includes(entry.id)}/>)}</div>;
 }
-
-export function RecentlyViewedClient() {
-  const entries = useSyncExternalStore(subscribe, getRecentlyViewed, () => null);
-
-  if (entries === null) return null;
-
-  if (entries.length === 0) {
-    return (
-      <div className="mt-6">
-        <EmptyState
-          icon={Clock}
-          title="Nothing viewed yet"
-          body="Listings you open show up here. This list lives in your browser, not your account."
-        />
-      </div>
-    );
-  }
-
-  return (
-    <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {entries.map((entry) => {
-        const photoUrl = entry.photoStorageKey ? listingPhotoUrl(entry.photoStorageKey, 500) : null;
-        return (
-          <li key={entry.id}>
-            <Link
-              href={`/listings/${entry.id}`}
-              className="group block h-full overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 to-teal-900">
-                {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a card thumbnail
-                  <img src={photoUrl} alt={entry.name} className="size-full object-cover" loading="lazy" />
-                ) : (
-                  <Building2 aria-hidden className="absolute size-8 text-white/70" strokeWidth={1.5} />
-                )}
-              </div>
-              <div className="p-4">
-                <h3 className="text-lg leading-snug group-hover:text-teal-700">{entry.name}</h3>
-                <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-                  <MapPin aria-hidden className="size-3.5 shrink-0" />
-                  {entry.streetAddress}
-                </p>
-                <p className="tabular mt-3 font-display text-lg font-semibold text-foreground">
-                  {formatUgx(entry.priceUgx)}
-                  <span className="text-sm font-normal text-muted-foreground"> / semester</span>
-                </p>
-              </div>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
-  );
+function RecentCard({entry,saved}:{entry:RecentlyViewedEntry;saved:boolean}) {
+  const query=useQuery({queryKey:["recent-listing",entry.id],queryFn:async()=>listingDetailResponseSchema.parse(await api(`/listings/${entry.id}`)),retry:false,staleTime:60_000});
+  const listing=query.data ? listingCardData(query.data) : null;
+  if(listing) return <HostelCard listing={listing} canSave saved={saved}/>;
+  return <article className="rounded-2xl border border-border bg-card p-6"><h2 className="text-xl">{entry.name}</h2><p className="mt-3 text-muted-foreground">{query.isPending ? "Checking current availability…" : query.isError ? "We couldn’t check this hostel. It may be unavailable." : "No available rooms to show right now."}</p><Link className="mt-4 inline-flex min-h-11 items-center font-semibold text-primary" href={`/listings/${entry.id}`}>View hostel</Link></article>;
 }

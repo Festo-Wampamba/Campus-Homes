@@ -1,499 +1,121 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Building2,
-  Map as MapIcon,
-  MapPin,
-  RefreshCw,
-  Search as SearchIcon,
-  X,
-} from "lucide-react";
-import {
-  GENDER_ARRANGEMENTS,
-  listingSearchResultSchema,
-  SELECTABLE_ROOM_CATEGORIES,
-  type ListingSearchResult,
-  type University,
-} from "@campushomes/shared";
-
-import { api } from "@/lib/api";
-import { CAMPUS_LOCATIONS, UGANDA_BOUNDS } from "@/lib/campuses";
-import { listingPhotoUrl } from "@/lib/cloudinary";
-import {
-  formatAddress,
-  formatPriceRange,
-  formatUgx,
-  GENDER_ARRANGEMENT_LABELS,
-  humanizeKey,
-  roomSizeLabel,
-} from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/empty-state";
-import {
-  ListingsMap,
-  type MapBounds,
-} from "@/components/map/listings-map";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { SlidersHorizontal, Map, List, X, SearchX } from "lucide-react";
+import { GENDER_ARRANGEMENTS, SELECTABLE_ROOM_CATEGORIES, listingSearchPageResponseSchema } from "@campushomes/shared";
+import { HostelCard } from "@/components/hostel-card";
+import { DiscoverySearch } from "@/components/discovery-search";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { VerifiedBadge } from "@/components/verified-badge";
+import { api } from "@/lib/api";
+import { budgetError, DEFAULT_DISCOVERY, discoveryApiParams, discoveryFromParams, discoveryParams, FILTER_KEYS, type DiscoveryFilters } from "@/lib/discovery";
+import { ENABLED_CAMPUSES } from "@/lib/campuses";
+import { formatUgx, GENDER_ARRANGEMENT_LABELS, roomCategoryLabel } from "@/lib/format";
+import type { MapBounds } from "@/components/map/listings-map";
+import { MapFallbackBoundary } from "@/components/map/map-fallback-boundary";
+import { cn } from "@/lib/utils";
 
-const searchResponse = listingSearchResultSchema.array();
+const ListingsMap = dynamic(() => import("@/components/map/listings-map").then(m => m.ListingsMap), { ssr: false, loading: () => <div className="h-full animate-pulse bg-muted" aria-label="Loading map" /> });
+const desktopQuery = "(min-width: 1280px)";
+function subscribeViewport(callback: () => void) { const media=window.matchMedia(desktopQuery); media.addEventListener("change",callback); return () => media.removeEventListener("change",callback); }
+function viewportSnapshot() { return window.matchMedia(desktopQuery).matches; }
 
-const GENDER_OPTIONS = [
-  { value: "", label: "Any gender" },
-  ...GENDER_ARRANGEMENTS.map((value) => ({
-    value,
-    label: GENDER_ARRANGEMENT_LABELS[value],
-  })),
-];
-
-const BATHROOM_OPTIONS = [
-  { value: "true", label: "Self-contained" },
-  { value: "false", label: "Not self-contained" },
-];
-
-const ROOM_TYPE_OPTIONS = [
-  { value: "", label: "Any room type" },
-  // The bathroom select filters self-contained separately.
-  ...SELECTABLE_ROOM_CATEGORIES.filter((c) => c !== "other" && c !== "self_contained").map((category) => ({
-    value: category,
-    label: humanizeKey(category),
-  })),
-];
-
-// Round so panning a few metres doesn't bust the query cache key
-function roundBounds(b: MapBounds): MapBounds {
-  const r = (n: number) => Math.round(n * 1e4) / 1e4;
-  return { minLat: r(b.minLat), minLon: r(b.minLon), maxLat: r(b.maxLat), maxLon: r(b.maxLon) };
-}
-
-// Only MUK is live for now (2026-09) — the rest of the launch catchments
-// are hidden platform-wide while MUK is the sole pilot university, per
-// CAMPUS_LOCATIONS (lib/campuses.ts). Hardcoding it here (rather than a
-// dropdown with one option) keeps results MUK-only even if the map is
-// panned elsewhere; re-enable the picker when more catchments go live.
-const UNIVERSITY: University = "MUK";
-
-export function SearchClient() {
-  const searchParams = useSearchParams();
-  const campus = CAMPUS_LOCATIONS[searchParams.get("campus") as University];
-
-  // null until the user pans/zooms: search the whole catchment first, so a
-  // verified listing outside the opening viewport is never hidden.
-  const [bounds, setBounds] = useState<MapBounds | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mapOpen, setMapOpen] = useState(true);
-  const cardRefs = useRef(new Map<string, HTMLElement>());
-
-  const initialQ = searchParams.get("q") ?? "";
-  const [q, setQ] = useState(initialQ);
-  const [debouncedQ, setDebouncedQ] = useState(initialQ);
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [genderArrangement, setGenderArrangement] = useState("");
-  const [roomCategory, setRoomCategory] = useState("");
-  // "" = any, "true" = self-contained only, "false" = non-self-contained only.
-  const [selfContained, setSelfContained] = useState("");
-  const hasFilters = Boolean(minPrice || maxPrice || genderArrangement || roomCategory || selfContained);
-
-  // Search text is a separate intent from the filters, so it stays.
-  function clearFilters() {
-    setMinPrice("");
-    setMaxPrice("");
-    setGenderArrangement("");
-    setRoomCategory("");
-    setSelfContained("");
-  }
-
-  // Debounced so typing a name doesn't fire a request per keystroke.
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(q.trim()), 350);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["listings-search", bounds, debouncedQ, minPrice, maxPrice, genderArrangement, roomCategory, selfContained],
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const b = bounds ?? UGANDA_BOUNDS;
-      const qs = new URLSearchParams({
-        minLat: String(b.minLat),
-        minLon: String(b.minLon),
-        maxLat: String(b.maxLat),
-        maxLon: String(b.maxLon),
-        limit: "50",
-        university: UNIVERSITY,
-      });
-      if (debouncedQ) qs.set("q", debouncedQ);
-      if (minPrice) qs.set("minPriceUgx", minPrice);
-      if (maxPrice) qs.set("maxPriceUgx", maxPrice);
-      if (genderArrangement) qs.set("genderArrangement", genderArrangement);
-      if (roomCategory) qs.set("roomCategory", roomCategory);
-      if (selfContained) qs.set("selfContained", selfContained);
-      return searchResponse.parse(await api<unknown>(`/listings/search?${qs}`));
-    },
+export function SearchClient({ canSave = false, savedIds = [] }: { canSave?: boolean; savedIds?: string[] }) {
+  const params = useSearchParams(); const router=useRouter(); const pathname=usePathname(); const raw=params.toString();
+  const searchKey = useMemo(() => { const value = new URLSearchParams(raw); value.delete("view"); return value.toString(); }, [raw]);
+  const applied=useMemo(() => discoveryFromParams(new URLSearchParams(raw)),[raw]);
+  const [draft,setDraft]=useState(applied); const [filtersOpen,setFiltersOpen]=useState(false);
+  const [hideMap,setHideMap]=useState(false);
+  const [selected,setSelected]=useState<string|null>(null); const [pendingBounds,setPendingBounds]=useState<MapBounds|null>(null);
+  const desktop=useSyncExternalStore(subscribeViewport,viewportSnapshot,()=>false);
+  const mapOpen=desktop ? !hideMap : params.get("view")==="map";
+  const explicitBounds = ["minLat","minLon","maxLat","maxLon"].every(key => params.has(key) && Number.isFinite(Number(params.get(key))))
+    ? {minLat:Number(params.get("minLat")),minLon:Number(params.get("minLon")),maxLat:Number(params.get("maxLat")),maxLon:Number(params.get("maxLon"))} : undefined;
+  const query=useInfiniteQuery({queryKey:["discovery-page",searchKey],initialPageParam:1, staleTime:30_000,
+    queryFn:async ({pageParam}) => listingSearchPageResponseSchema.parse(await api(`/listings/search-page?${discoveryApiParams(new URLSearchParams(raw),pageParam)}`)),
+    getNextPageParam:(last) => last.hasMore ? last.page+1 : undefined,
   });
-
-  const markers = useMemo(
-    () =>
-      (data ?? []).map((row) => ({
-        id: row.id,
-        lat: row.gps_lat,
-        lon: row.gps_lon,
-        label: formatUgx(row.price_per_term_ugx),
-      })),
-    [data],
-  );
-
-  function selectFromMap(id: string) {
-    setSelectedId(id);
-    cardRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
-
-  return (
-    <div
-      className={cn(
-        "flex flex-col bg-background lg:grid",
-        mapOpen ? "lg:grid-cols-[minmax(0,32rem)_1fr]" : "lg:grid-cols-[1fr_0]",
-      )}
-    >
-      <div
-        className={cn(
-          "relative w-full shrink-0 overflow-hidden transition-[height] duration-300 ease-out lg:order-2 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:transition-[width]",
-          mapOpen ? "h-[42vh] lg:w-auto" : "h-0 lg:w-0",
-        )}
-      >
-        <div className="absolute inset-0 overflow-hidden rounded-b-2xl border-b border-border shadow-sm lg:inset-3 lg:rounded-2xl lg:border">
-          <ListingsMap
-            markers={markers}
-            selectedId={selectedId}
-            onSelect={selectFromMap}
-            onBoundsChange={(b) => setBounds(roundBounds(b))}
-            fitToMarkers={bounds === null}
-            className="size-full"
-            initialCenter={campus ? [campus.lon, campus.lat] : undefined}
-          />
+  const rows=useMemo(() => { const seen=new Set<string>(); return query.data?.pages.flatMap(p=>p.items).filter(r => !seen.has(r.id) && Boolean(seen.add(r.id))) ?? []; },[query.data]);
+  const total=query.data?.pages[0]?.total ?? 0; const filterCount=FILTER_KEYS.filter(k=>applied[k]).length;
+  const focusResult = useRef<string | null>(null);
+  const restore=useRef<{pages:number;y:number}|null>(null); const restoreKey=`campushomes:search:${searchKey}`;
+  useEffect(() => {
+    try {
+      const value = sessionStorage.getItem(restoreKey);
+      sessionStorage.removeItem(restoreKey);
+      const parsed = value ? JSON.parse(value) : null;
+      restore.current = parsed && Number.isInteger(parsed.pages) && parsed.pages > 0 && Number.isFinite(parsed.y) ? parsed : null;
+    } catch { restore.current = null; }
+  }, [restoreKey]);
+  const {data: pageData, hasNextPage, isFetchingNextPage, fetchNextPage} = query;
+  useEffect(() => {
+    const target = restore.current;
+    if (!target || !pageData) return;
+    if (pageData.pages.length < target.pages && hasNextPage && !isFetchingNextPage) { void fetchNextPage(); return; }
+    if (!isFetchingNextPage) {
+      const frame = requestAnimationFrame(() => window.scrollTo(0,target.y));
+      restore.current = null;
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [pageData,hasNextPage,isFetchingNextPage,fetchNextPage]);
+  useEffect(() => {
+    if (!focusResult.current || (!desktop && mapOpen)) return;
+    const id = focusResult.current;
+    const frame = requestAnimationFrame(() => document.getElementById(`hostel-${id}`)?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"center"}));
+    focusResult.current = null;
+    return () => cancelAnimationFrame(frame);
+  }, [selected,mapOpen,desktop]);
+  function navigate(next:URLSearchParams) { router.push(`${pathname}?${next}`,{scroll:false}); }
+  function apply() { if(budgetError(draft))return; navigate(discoveryParams(draft,new URLSearchParams(raw))); setFiltersOpen(false); }
+  function remember() { try { sessionStorage.setItem(restoreKey,JSON.stringify({pages:query.data?.pages.length ?? 1,y:window.scrollY})); } catch {} }
+  const markers=rows.map(r=>({id:r.id,lat:r.gps_lat,lon:r.gps_lon,label:formatUgx(r.price_per_term_ugx),displayLabel:new Intl.NumberFormat("en-UG",{notation:"compact",maximumFractionDigits:1}).format(r.price_per_term_ugx)}));
+  const campus=ENABLED_CAMPUSES.find(c=>c.code===applied.campus) ?? ENABLED_CAMPUSES[0];
+  return <div className="ch-search-page">
+    <div className={cn("ch-search-layout",desktop && mapOpen && "ch-search-layout--map")}>
+      <section aria-label="Search results" className={cn("ch-search-results",!desktop && mapOpen && "hidden")}>
+        <nav aria-label="Breadcrumb" className="mb-4 text-sm text-muted-foreground"><Link href="/" className="hover:underline">Home</Link> <span aria-hidden> / </span> {campus.name}</nav>
+        <h1 className="text-2xl font-semibold sm:text-3xl">{applied.q ? `Hostels matching “${applied.q}”` : "Student hostels near Makerere"}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Inspected in person. Priced per bed, per semester.</p>
+        <div className="mt-5"><DiscoverySearch key={applied.q} initialQuery={applied.q} /></div>
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-border pb-5">
+          <Button variant="secondary" onClick={()=>{setDraft(applied);setFiltersOpen(true);}}><SlidersHorizontal aria-hidden className="size-4" />All filters{filterCount ? ` (${filterCount})` : ""}</Button>
+          <span className="rounded-full border border-border px-4 py-3 text-sm">Makerere</span>
+          <Button variant="ghost" onClick={()=>navigate(discoveryParams({...DEFAULT_DISCOVERY,q:applied.q},new URLSearchParams(raw)))} disabled={!filterCount}>Clear filters</Button>
+          <Button variant="secondary" className={cn(desktop && mapOpen && "hidden")} onClick={()=>{if(desktop){setHideMap(false);return;}const next=new URLSearchParams(raw);next.set("view","map");navigate(next);}}><Map aria-hidden className="size-4" />Map</Button>
         </div>
-        {mapOpen && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setMapOpen(false)}
-            className="absolute top-4 left-4 gap-1.5 shadow-md lg:top-7 lg:left-7"
-          >
-            <X aria-hidden className="size-4" />
-            Hide map
-          </Button>
-        )}
-      </div>
-      <section
-        aria-label="Search results"
-        className="flex flex-col gap-4 border-r border-border px-4 py-6 sm:px-6 lg:order-1 lg:h-[calc(100vh-4rem)] lg:overflow-y-auto lg:px-7"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 self-start rounded-md border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-300 hover:border-teal-700 hover:text-teal-700"
-          >
-            <ArrowLeft aria-hidden className="size-4" />
-            Home
-          </Link>
-          {!mapOpen && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setMapOpen(true)}
-              className="gap-1.5"
-            >
-              <MapIcon aria-hidden className="size-4" />
-              Show map
-            </Button>
-          )}
+        {filterCount > 0 && <div className="mt-4 flex flex-wrap gap-2" aria-label="Applied filters">
+          {FILTER_KEYS.filter(key => applied[key]).map(key => {
+            const label = key === "minPriceUgx" ? `From ${formatUgx(Number(applied[key]))}` : key === "maxPriceUgx" ? `Up to ${formatUgx(Number(applied[key]))}` : key === "genderArrangement" ? GENDER_ARRANGEMENT_LABELS[applied[key]] : key === "roomCategory" ? roomCategoryLabel(applied[key]) : applied[key] === "true" ? "Self-contained" : "Shared bathroom";
+            return <Button key={key} variant="secondary" size="sm" aria-label={`Remove filter: ${label}`} onClick={() => navigate(discoveryParams({...applied,[key]:""},new URLSearchParams(raw)))}>{label}<X aria-hidden className="size-4"/></Button>;
+          })}
+        </div>}
+        <div className="flex flex-wrap items-center justify-between gap-3 py-5">
+          <p aria-live="polite" className="text-sm text-muted-foreground">{query.isPending ? "Finding available hostels…" : query.isError ? "Results unavailable" : `${total} ${total===1?"hostel":"hostels"} found`}</p>
+          <label className="flex items-center gap-2 text-sm">Sort by<select aria-label="Sort hostels" value={applied.sort} onChange={e=>navigate(discoveryParams({...applied,sort:e.target.value as DiscoveryFilters["sort"]},new URLSearchParams(raw)))} className="min-h-11 max-w-48 rounded-xl border border-border bg-card px-3"><option value="price_asc">Lowest price</option><option value="price_desc">Highest price</option><option value="distance_asc">Nearest campus</option></select></label>
         </div>
-        <div className="flex items-baseline justify-between gap-3">
-          <h1 className="font-display text-xl leading-tight tracking-tight sm:text-2xl">
-            {campus ? `Near ${campus.name}` : "Verified places here"}
-          </h1>
-          <p aria-live="polite" className="shrink-0 text-xs font-semibold tracking-wide text-muted-foreground">
-            {isError ? "Not loaded" : data ? `${data.length} found` : "Searching…"}
-          </p>
-        </div>
-        <p className="max-w-[42ch] text-sm leading-6 text-muted-foreground">
-          Move the map to search a different area. Every result passed a
-          physical inspection.
-        </p>
-
-        <div className="@container flex flex-col gap-2 rounded-xl border border-border bg-teal-50 p-3 shadow-xs">
-          <div className="relative">
-            <SearchIcon
-              aria-hidden
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by hostel name or area (e.g. Kikoni)"
-              aria-label="Search by hostel name or area"
-              className="pl-9"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-              placeholder="Min UGX"
-              aria-label="Minimum price per bed per semester"
-            />
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              placeholder="Max UGX"
-              aria-label="Maximum price per bed per semester"
-            />
-          </div>
-          {/* Container query, not a viewport one: next to the map this panel is
-              only ~27rem wide, where three selects side by side clip their text. */}
-          <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
-            <select
-              value={genderArrangement}
-              onChange={(e) => setGenderArrangement(e.target.value)}
-              aria-label="Gender"
-              className={cn(
-                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10",
-                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
-            >
-              {GENDER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={roomCategory}
-              onChange={(e) => setRoomCategory(e.target.value)}
-              aria-label="Room type"
-              className={cn(
-                "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 sm:h-10",
-                "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              )}
-            >
-              {ROOM_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {/* Two toggles, not a select: a select needs a third "Bathroom"
-                placeholder entry. Tapping the active one clears it. */}
-            <div role="group" aria-label="Bathroom" className="col-span-2 grid grid-cols-2 gap-2 @lg:col-span-3">
-              {BATHROOM_OPTIONS.map((opt) => {
-                const isActive = selfContained === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => setSelfContained(isActive ? "" : opt.value)}
-                    className={cn(
-                      "h-11 rounded-md border px-3 text-sm font-semibold shadow-xs transition-colors duration-150 sm:h-10",
-                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                      isActive
-                        ? "border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-300 dark:bg-teal-900/40 dark:text-teal-50"
-                        : "border-input bg-background text-foreground hover:bg-muted",
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <Button variant="secondary" size="sm" className="self-end" disabled={!hasFilters} onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
-
-        {isPending && bounds !== null && (
-          <div
-            className={cn("flex flex-col gap-3", !mapOpen && "lg:grid lg:grid-cols-2 xl:grid-cols-3")}
-            aria-hidden
-          >
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-32 w-full rounded-xl" />
-            ))}
-          </div>
-        )}
-
-        {isError && (
-          <EmptyState
-            icon={RefreshCw}
-            title="Search didn't load"
-            body="Check your connection and try again. Your map position is kept."
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                Try again
-              </Button>
-            }
-          />
-        )}
-
-        {/* keepPreviousData keeps the last good rows during an error; showing
-            them (or "0 found") under "Search didn't load" would be wrong. */}
-        {!isError && data && data.length === 0 && (
-          hasFilters ? (
-            <EmptyState
-              icon={MapPin}
-              title="No hostels match your filters"
-              body="Try a wider price range or fewer filters."
-              action={
-                <Button variant="secondary" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              }
-            />
-          ) : debouncedQ ? (
-            <EmptyState
-              icon={MapPin}
-              title={`No hostels match “${debouncedQ}”`}
-              body="Check the spelling, or search for a nearby area or hostel name."
-            />
-          ) : (
-            <EmptyState
-              icon={MapPin}
-              title="No verified places in this area yet"
-              body="Pan or zoom the map toward your campus. New hostels go live as our inspectors verify them."
-            />
-          )
-        )}
-
-        {/* On a wide screen with the map hidden, the results column has the
-            whole page to fill — a single stretched-out list column looks
-            broken there, so it becomes a real grid instead. With the map
-            open the column is narrow (~32rem) and stays a list. */}
-        {!isError && data && data.length > 0 && (
-          <div className={cn("flex flex-col gap-4", !mapOpen && "lg:grid lg:grid-cols-2 xl:grid-cols-3")}>
-            {data.map((row) => (
-              <ResultCard
-                key={row.id}
-                row={row}
-                selected={row.id === selectedId}
-                onHover={() => setSelectedId(row.id)}
-                ref={(el) => {
-                  if (el) cardRefs.current.set(row.id, el);
-                  else cardRefs.current.delete(row.id);
-                }}
-              />
-            ))}
-          </div>
-        )}
+        {query.isPending && <div className="space-y-5" aria-label="Loading hostels">{[1,2,3].map(i=><div key={i} className="h-72 animate-pulse rounded-2xl bg-muted" />)}</div>}
+        {query.isError && <div role="alert" className="rounded-2xl border border-border p-8"><h2 className="text-xl">We couldn&apos;t load the hostels</h2><p className="mt-2 text-muted-foreground">Your search is still here. Check your connection and try again.</p><Button className="mt-4" onClick={()=>void query.refetch()}>Try again</Button></div>}
+        {!query.isPending && !query.isError && rows.length===0 && <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center"><SearchX aria-hidden className="mx-auto size-9 text-primary" /><h2 className="mt-4 text-xl">{filterCount || applied.q ? "No hostels match this search" : "No available inspected hostels here yet"}</h2><p className="mx-auto mt-3 max-w-md text-muted-foreground">{filterCount || applied.q ? "Try a wider budget, a different room type or another area near Makerere." : "New hostels appear after inspection. You can check another area or ask our team for help."}</p><div className="mt-5 flex flex-wrap justify-center gap-3"><Button variant="secondary" onClick={()=>navigate(new URLSearchParams({campus:"MUK"}))}>Reset search</Button><Link href="/support" className="inline-flex min-h-11 items-center rounded-lg px-4 font-semibold text-primary">Get help</Link></div></div>}
+        <div className="space-y-5" onClickCapture={(e)=>{if((e.target as HTMLElement).closest('a[href^="/listings/"]'))remember();}}>{rows.map((row,index)=><div key={row.id} id={`hostel-${row.id}`} className={cn("rounded-2xl scroll-mt-24",selected===row.id&&"ring-2 ring-primary ring-offset-2")} onMouseEnter={()=>setSelected(row.id)}><HostelCard listing={row} priority={index===0} layout="vertical" canSave={canSave} saved={savedIds.includes(row.id)} /></div>)}</div>
+        {rows.length>0 && <div className="mt-7 text-center"><p className="mb-3 text-sm text-muted-foreground">Showing {rows.length} of {total} hostels</p>{query.hasNextPage && <Button variant="secondary" disabled={query.isFetchingNextPage} onClick={()=>void query.fetchNextPage()}>{query.isFetchingNextPage?"Loading more…":"Load more hostels"}</Button>}</div>}
       </section>
+      {mapOpen && <aside className="ch-search-map" aria-label="Hostel map">
+        <div className="absolute inset-x-3 top-3 z-1 flex flex-wrap gap-2"><Button variant="secondary" onClick={()=>{if(desktop){setHideMap(true);return;}const next=new URLSearchParams(raw);next.delete("view");navigate(next);}}>{desktop ? <><X aria-hidden className="size-4"/>Hide map</> : <><List aria-hidden className="size-4"/>List</>}</Button>{pendingBounds && <Button className="shadow-md" onClick={()=>{const next=new URLSearchParams(raw);for(const[k,v]of Object.entries(pendingBounds))next.set(k,String(v));navigate(next);setPendingBounds(null);}}>Search this area</Button>}</div>
+        <MapFallbackBoundary><ListingsMap markers={markers} selectedId={selected} onSelect={id=>{focusResult.current=id;setSelected(id); if(!desktop){const next=new URLSearchParams(raw);next.delete("view");navigate(next);}}} onBoundsChange={setPendingBounds} className="h-full" initialCenter={[campus.lon,campus.lat]} initialBounds={explicitBounds} /></MapFallbackBoundary>
+        <p className="absolute bottom-8 left-3 rounded-md bg-card/95 p-2 text-xs text-muted-foreground">Pins show loaded results. Prices in UGX per bed, per semester.</p>
+      </aside>}
     </div>
-  );
-}
-
-function ResultCard({
-  row,
-  selected,
-  onHover,
-  ref,
-}: {
-  row: ListingSearchResult;
-  selected: boolean;
-  onHover: () => void;
-  ref: React.Ref<HTMLElement>;
-}) {
-  const amenities = Object.entries(row.amenities)
-    .filter(([, has]) => has)
-    .map(([key]) => humanizeKey(key))
-    .slice(0, 3);
-  const photoUrl = row.photo_storage_key ? listingPhotoUrl(row.photo_storage_key, 300) : null;
-  const rooms = roomSizeLabel(row);
-
-  return (
-    <article
-      ref={ref}
-      onMouseEnter={onHover}
-      className={cn(
-        "min-w-0 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xs transition duration-300 hover:-translate-y-0.5 hover:border-teal-700/40 hover:shadow-md",
-        selected && "border-teal-600 ring-1 ring-teal-600",
-      )}
-    >
-      <Link href={`/listings/${row.id}`} className="group flex h-full min-w-0 gap-3">
-        <div className="relative size-24 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-teal-700 to-teal-900 sm:size-28">
-          {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- unpredictable/hotlinked seed hosts, not worth next/image's remote-pattern allowlist churn for a thumbnail
-            <img
-              src={photoUrl}
-              alt={row.name}
-              className="size-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <Building2 aria-hidden className="absolute inset-0 m-auto size-6 text-white/70" />
-          )}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col py-0.5">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 line-clamp-2 font-display text-base font-semibold leading-5 group-hover:text-teal-700 sm:text-lg sm:leading-snug">
-              {row.name}
-            </h3>
-            <VerifiedBadge size="sm" className="shrink-0" />
-          </div>
-          <p className="mt-0.5 flex min-w-0 items-center gap-1 text-sm leading-5 text-muted-foreground">
-            <MapPin aria-hidden className="size-3.5 shrink-0" />
-            <span className="truncate">{formatAddress(row.street_address)}</span>
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {rooms && <span className="text-sm text-muted-foreground">{rooms}</span>}
-            {row.gender_arrangement && (
-              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                {GENDER_ARRANGEMENT_LABELS[row.gender_arrangement]}
-              </span>
-            )}
-            {row.has_self_contained && (
-              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                Self-contained
-              </span>
-            )}
-          </div>
-          {amenities.length > 0 && (
-            <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-              {amenities.join(" · ")}
-            </p>
-          )}
-          <p className="tabular mt-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 pt-2 font-display text-base font-semibold text-foreground sm:text-lg">
-            <span className="shrink-0 whitespace-nowrap">
-              {row.room_categories.length > 1 && (
-                <span className="mr-1 text-sm font-normal text-muted-foreground">From</span>
-              )}
-              {formatPriceRange(row.price_per_term_ugx, row.max_price_per_term_ugx)}
-            </span>
-            <span className="shrink-0 whitespace-nowrap text-xs font-normal text-muted-foreground sm:text-sm">
-              per bed, per semester
-            </span>
-          </p>
-          {row.room_categories.length > 1 && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {row.room_categories.length} room types
-            </p>
-          )}
-        </div>
-      </Link>
-    </article>
-  );
+    <Dialog open={filtersOpen} onOpenChange={setFiltersOpen} aria-label="Filter hostels" className="max-xl:m-0 max-xl:h-dvh max-xl:max-h-dvh max-xl:w-screen max-xl:max-w-none max-xl:rounded-none"><DialogHeader title="Filter hostels" description="Find the room arrangement and semester budget that suit you." onClose={()=>setFiltersOpen(false)} /><DialogBody>
+      <div className="space-y-6"><label className="block text-sm font-semibold">University<select value={draft.campus} onChange={e=>setDraft({...draft,campus:e.target.value})} className="mt-2 min-h-12 w-full rounded-xl border border-border bg-card px-3">{ENABLED_CAMPUSES.map(c=><option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
+        <fieldset><legend className="font-semibold">Semester budget · UGX per bed</legend><div className="mt-3 grid grid-cols-2 gap-3">{([['minPriceUgx','Minimum price'],['maxPriceUgx','Maximum price']] as const).map(([key,label])=><label key={key} className="text-sm">{label}<input aria-label={`${label} per bed per semester`} type="number" min="1" step="10000" value={draft[key]} onChange={e=>setDraft({...draft,[key]:e.target.value})} className="mt-2 min-h-12 w-full rounded-xl border border-border bg-card px-3 text-[16px]" /></label>)}</div><label className="mt-4 block text-sm">Maximum budget range<input aria-label="Maximum semester budget range" type="range" min="100000" max="5000000" step="50000" value={draft.maxPriceUgx||5000000} onChange={e=>setDraft({...draft,maxPriceUgx:e.target.value})} className="mt-2 min-h-11 w-full accent-teal-700" /></label>{budgetError(draft)&&<p role="alert" className="text-sm text-destructive">{budgetError(draft)}</p>}</fieldset>
+        <label className="block text-sm font-semibold">Gender arrangement<select aria-label="Gender" value={draft.genderArrangement} onChange={e=>setDraft({...draft,genderArrangement:e.target.value})} className="mt-2 min-h-12 w-full rounded-xl border border-border bg-card px-3"><option value="">Any gender</option>{GENDER_ARRANGEMENTS.map(g=><option key={g} value={g}>{GENDER_ARRANGEMENT_LABELS[g]}</option>)}</select></label>
+        <label className="block text-sm font-semibold">Room type<select aria-label="Room type" value={draft.roomCategory} onChange={e=>setDraft({...draft,roomCategory:e.target.value})} className="mt-2 min-h-12 w-full rounded-xl border border-border bg-card px-3"><option value="">Any room type</option>{SELECTABLE_ROOM_CATEGORIES.map(c=><option key={c} value={c}>{roomCategoryLabel(c)}</option>)}</select></label>
+        <fieldset><legend className="font-semibold">Bathroom</legend><div className="mt-3 space-y-2">{[['','Any bathroom'],['true','Self-contained'],['false','Shared bathroom']].map(([value,label])=><label key={value} className="flex min-h-11 items-center gap-3"><input type="radio" name="bathroom" value={value} checked={draft.selfContained===value} onChange={()=>setDraft({...draft,selfContained:value})} className="size-5 accent-teal-700" />{label}</label>)}</div></fieldset>
+      </div>
+    </DialogBody><DialogFooter><Button variant="ghost" onClick={()=>setDraft({...DEFAULT_DISCOVERY,q:applied.q})}>Clear filters</Button><Button disabled={Boolean(budgetError(draft))} onClick={apply}>Apply filters</Button></DialogFooter></Dialog>
+  </div>;
 }

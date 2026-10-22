@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@campushomes/config": "workspace:*",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^30.0.0",
     "@types/node": "^24",

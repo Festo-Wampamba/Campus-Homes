@@ -7,7 +7,7 @@ import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
-const STATIC_PATHS = ["/", "/search", "/landlords", "/support", "/privacy", "/terms"];
+const STATIC_PATHS = ["/", "/search", "/landlords", "/how-it-works", "/support", "/contact", "/privacy", "/terms"];
 
 async function listingIds(): Promise<string[]> {
   try {
