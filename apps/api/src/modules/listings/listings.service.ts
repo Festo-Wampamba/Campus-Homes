@@ -98,6 +98,8 @@ export class ListingsService {
           alternativeName: input.alternativeName,
           streetAddress: input.streetAddress,
           locationDetails: input.locationDetails,
+          description: input.description ?? null,
+          houseRules: input.houseRules,
           type: input.type,
           genderArrangement: input.genderArrangement,
           catchment: input.catchment,

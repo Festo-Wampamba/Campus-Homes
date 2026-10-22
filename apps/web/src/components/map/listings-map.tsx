@@ -13,12 +13,20 @@ export interface MapBounds {
   maxLon: number;
 }
 
+// Static markup only (no data interpolated), so insertAdjacentHTML is safe.
+const PIN_SVG =
+  '<svg class="map-marker__pin" viewBox="0 0 24 34" aria-hidden="true" focusable="false">' +
+  '<path fill="currentColor" stroke="#fff" stroke-width="1.5" d="M12 1C6 1 1.5 5.4 1.5 11.2c0 7.6 9.1 19.7 9.5 20.2a1.3 1.3 0 0 0 2 0c.4-.5 9.5-12.6 9.5-20.2C22.5 5.4 18 1 12 1z"/>' +
+  '<circle cx="12" cy="11.2" r="4" fill="#fff"/></svg>';
+
 export interface MapMarker {
   id: string;
   lat: number;
   lon: number;
   label: string;
   displayLabel?: string;
+  // A campus gets a teal pin; listings get the red pin people know from Google Maps.
+  kind?: "listing" | "campus";
 }
 
 // §20 resolved: MapLibre + OSM raster tiles. Attribution is mandatory under
@@ -180,13 +188,19 @@ export function ListingsMap({
     for (const marker of markers) {
       const el = document.createElement("button");
       el.type = "button";
-      el.setAttribute("aria-label", `Show listing: ${marker.label}`);
-      el.className =
-        "map-pin tabular cursor-pointer min-h-11 min-w-11 rounded-full px-2.5 py-1 text-xs font-semibold shadow-md transition-colors duration-150";
-      el.textContent = marker.displayLabel ?? marker.label;
+      el.setAttribute("aria-label", marker.kind === "campus" ? marker.label : `Show listing: ${marker.label}`);
+      el.className = "map-marker";
+      el.dataset.kind = marker.kind ?? "listing";
       el.title = marker.label;
+      const label = document.createElement("span");
+      label.className = "map-marker__label tabular";
+      // textContent, never innerHTML: names come from landlord input.
+      label.textContent = marker.displayLabel ?? marker.label;
+      el.append(label);
+      el.insertAdjacentHTML("beforeend", PIN_SVG);
       el.addEventListener("click", () => onSelectRef.current(marker.id));
-      const m = new maplibregl.Marker({ element: el })
+      // anchor "bottom": the pin's tip, not its centre, sits on the coordinate.
+      const m = new maplibregl.Marker({ element: el, anchor: "bottom" })
         .setLngLat([marker.lon, marker.lat])
         .addTo(map);
       markerRefs.current.set(marker.id, m);

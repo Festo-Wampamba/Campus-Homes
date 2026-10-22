@@ -40,6 +40,7 @@ const submitInput = (name: string) => ({
   catchment: 'MUK' as const,
   proposedRoomCategories: [],
   proposedAmenities: {},
+  houseRules: [],
   coverPhotoKey: undefined,
   otherCatchments: [],
   furnishingItems: {},
@@ -375,5 +376,23 @@ describe('decideKyc property-status release', () => {
       await pool.query<{ status: string }>(`SELECT status FROM properties WHERE id = $1`, [propertyId])
     ).rows;
     expect(row!.status).toBe('active');
+  });
+});
+
+describe('submitProperty landlord description and house rules', () => {
+  it('stores the landlord description and house rules on the property', async () => {
+    const property = await listings.submitProperty(ctxFor(landlordVerified), {
+      ...submitInput('Rules Hostel'),
+      description: 'Quiet, ten minutes from the main gate.',
+      houseRules: ['Visitors leave by 9 pm', 'No cooking in the rooms'],
+    });
+
+    const [row] = (
+      await pool.query(`SELECT description, house_rules FROM properties WHERE id = $1`, [property!.id])
+    ).rows;
+    expect(row).toEqual({
+      description: 'Quiet, ten minutes from the main gate.',
+      house_rules: ['Visitors leave by 9 pm', 'No cooking in the rooms'],
+    });
   });
 });
