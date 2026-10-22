@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { ViewDocumentButton } from "@/components/view-document-button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AccountSettingsNav } from "./account-settings-nav";
+import { ACCOUNT_SECTIONS, AccountSettingsNav } from "./account-settings-nav";
 import { errorMessage, useParticulars, type Particulars } from "./use-particulars";
 
 const inputClass = cn(
@@ -176,28 +176,45 @@ export function LandlordAccountSettings({
 }) {
   const particulars = useParticulars(profile);
   return (
-    <div className="grid gap-10 lg:grid-cols-[12rem_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
       <AccountSettingsNav />
-      <div className="max-w-2xl space-y-12">
-        <section id="personal" aria-labelledby="personal-h" className="scroll-mt-6 space-y-4">
-          <h2 id="personal-h" className="font-display text-lg font-bold">Personal details</h2>
+      <div className="max-w-3xl space-y-6">
+        <SettingsCard id="personal">
           <PersonalDetailsForm particulars={particulars} />
-        </section>
-        <section id="identity" aria-labelledby="identity-h" className="scroll-mt-6 space-y-4">
-          <h2 id="identity-h" className="font-display text-lg font-bold">Identity &amp; verification</h2>
+        </SettingsCard>
+        <SettingsCard id="identity">
           <KycBanner status={profile.kycStatus} hasLiveListing={hasLiveListing} />
           <IdentityForm profile={profile} />
-        </section>
-        <section id="contact" aria-labelledby="contact-h" className="scroll-mt-6 space-y-4">
-          <h2 id="contact-h" className="font-display text-lg font-bold">Contact &amp; emergency</h2>
+        </SettingsCard>
+        <SettingsCard id="contact">
           <ContactDetailsForm particulars={particulars} />
-        </section>
-        <section id="security" aria-labelledby="security-h" className="scroll-mt-6 space-y-6">
-          <h2 id="security-h" className="font-display text-lg font-bold">Sign-in &amp; security</h2>
-          <ChangeEmailForm currentEmail={email} />
-          <ChangePasswordForm />
-        </section>
+        </SettingsCard>
+        <SettingsCard id="security">
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Sign-in email</h3>
+            <ChangeEmailForm currentEmail={email} />
+          </div>
+          <hr className="border-border" />
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Password</h3>
+            <ChangePasswordForm />
+          </div>
+        </SettingsCard>
       </div>
     </div>
+  );
+}
+
+/** One settings section: titled card with a one-line purpose, then its form. */
+function SettingsCard({ id, children }: { id: (typeof ACCOUNT_SECTIONS)[number]["id"]; children: React.ReactNode }) {
+  const section = ACCOUNT_SECTIONS.find((s) => s.id === id)!;
+  return (
+    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <header className="border-b border-border px-5 py-4 sm:px-6">
+        <h2 id={`${id}-h`} className="font-display text-lg font-semibold">{section.label}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{section.description}</p>
+      </header>
+      <div className="space-y-5 p-5 sm:p-6">{children}</div>
+    </section>
   );
 }
