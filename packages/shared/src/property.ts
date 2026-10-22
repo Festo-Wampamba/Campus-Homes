@@ -91,6 +91,10 @@ export const submitPropertySchema = z
     // Combined "Country, District, Village/Zone, Nearest Landmark" free
     // text — the Google Form asks this as one field, on top of streetAddress.
     locationDetails: z.string().trim().max(500).nullable().optional(),
+    // Landlord's own words (properties.description / house_rules). Ops reviews
+    // the description at publish; house rules show on the public listing.
+    description: z.string().trim().max(2000).nullable().optional(),
+    houseRules: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
     type: z.enum(PROPERTY_TYPES).default('hostel'),
     genderArrangement: z.enum(GENDER_ARRANGEMENTS).nullable().optional(),
     // Which university this property serves — drives "browse by university"
@@ -152,6 +156,8 @@ export const updatePropertySchema = z.object({
   alternativeName: z.string().trim().max(200).nullable().optional(),
   streetAddress: z.string().min(3).max(300).optional(),
   locationDetails: z.string().trim().max(500).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  houseRules: z.array(z.string().trim().min(1).max(300)).max(50).optional(),
   genderArrangement: z.enum(GENDER_ARRANGEMENTS).nullable().optional(),
   catchment: z.enum(UNIVERSITIES).optional(),
   otherCatchments: z.array(z.string().trim().min(2).max(150)).max(10).optional(),
@@ -184,6 +190,8 @@ export const propertySchema = z.object({
   alternativeName: z.string().nullable(),
   streetAddress: z.string(),
   locationDetails: z.string().nullable(),
+  description: z.string().nullable().optional(),
+  houseRules: z.array(z.string()).optional(),
   // GPS is set by Ops during verification, never by the landlord.
   gpsLat: z.number().nullable(),
   gpsLon: z.number().nullable(),

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { Check, Link2, Mail, MessageCircle } from "lucide-react";
+import { Check, Link2, Mail } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 function subscribe(callback: () => void) {
@@ -34,7 +35,7 @@ export function ListingShare({ propertyName }: { propertyName: string }) {
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="text-sm font-semibold">Share this hostel</h2>
       <div className="flex items-center gap-1">
-        <a className={iconClass} aria-label="Share on WhatsApp" title="WhatsApp" href={url ? `https://wa.me/?text=${encodeURIComponent(text)}` : undefined} target="_blank" rel="noopener noreferrer"><MessageCircle aria-hidden /></a>
+        <a className={iconClass} aria-label="Share on WhatsApp" title="WhatsApp" href={url ? `https://wa.me/?text=${encodeURIComponent(text)}` : undefined} target="_blank" rel="noopener noreferrer"><WhatsAppIcon /></a>
         <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={state === "copied" ? "Link copied" : "Copy hostel link"} title="Copy link" disabled={!url} onClick={copy}>{state === "copied" ? <Check aria-hidden /> : <Link2 aria-hidden />}</Button>
         <a className={iconClass} aria-label="Share by email" title="Email" href={url ? `mailto:?subject=${encodeURIComponent(`${propertyName} | CampusHomes`)}&body=${encodeURIComponent(text)}` : undefined}><Mail aria-hidden /></a>
       </div>

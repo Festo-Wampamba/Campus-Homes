@@ -115,6 +115,8 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         // anything the visit didn't confirm. A live listing keeps its own
         // confirmed set (below).
         setAmenities(declaredAmenityState(property));
+        // First publish starts from the landlord's own description; the lead edits it.
+        setDescription(property.description ?? "");
         setPhotos([...visitPhotos, ...landlordRoomTypePhotos(property, visitPhotos)]);
         if (listing.status === "verified" && version) {
           // Re-opening a live listing to edit it: keep the published snapshot
