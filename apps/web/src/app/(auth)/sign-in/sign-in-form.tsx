@@ -7,8 +7,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Wordmark } from "@/components/shell/wordmark";
-import { IDLE_TIMEOUT_MS } from "@campushomes/shared";
-
 import { signInUrl } from "@/lib/auth";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -19,7 +17,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   identity_conflict: "Your verified contact matches conflicting CampusHomes records. Contact support and quote the request ID in the address bar.",
   mfa_required: "Staff accounts need 2-step verification. Sign in again: you will be asked to set up an authenticator app (such as Google Authenticator) or a passkey before you can continue.",
   sso_logout_failed: "Your CampusHomes session ended, but provider sign-out could not be confirmed.",
-  idle_timeout: `You were signed out after ${IDLE_TIMEOUT_MS / 60_000} minutes of inactivity. Sign in again to continue.`,
+  // Never state the timeout length (Festo, 2026-10-22: security).
+  idle_timeout: "You were signed out due to inactivity. Sign in again to continue.",
   session_ended: "Your session has ended. Sign in again to continue.",
 };
 

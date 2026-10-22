@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import { IDLE_TIMEOUT_MS } from "@campushomes/shared";
 
 import { signOut } from "@/lib/auth";
 import { IDLE_SIGN_OUT_EVENT, idleSignInUrl, useIdleTimeout, type IdleExpiry } from "@/lib/idle-timeout";
@@ -28,7 +27,7 @@ export function IdleTimeout({ signInPath }: { signInPath: "/sign-in" | "/staff" 
           You&apos;ll be signed out in {secondsLeft} s
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          For your security, CampusHomes signs you out after {IDLE_TIMEOUT_MS / 60_000} minutes without activity.
+          For your security, CampusHomes signs you out after a period of inactivity.
         </p>
       </DialogBody>
       <DialogFooter>
