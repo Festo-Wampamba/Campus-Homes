@@ -68,7 +68,7 @@ export function PhotoLightbox({
         type="button"
         aria-label="Close photo viewer"
         onClick={onClose}
-        className="absolute top-4 right-4 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+        className="absolute top-4 right-4 min-h-11 min-w-11 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
       >
         <X aria-hidden className="size-6" />
       </button>
@@ -82,7 +82,7 @@ export function PhotoLightbox({
               e.stopPropagation();
               onNavigate(-1);
             }}
-            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white sm:left-4"
+            className="absolute left-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white sm:left-4"
           >
             <ChevronLeft aria-hidden className="size-7" />
           </button>
@@ -93,7 +93,7 @@ export function PhotoLightbox({
               e.stopPropagation();
               onNavigate(1);
             }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white sm:right-4"
+            className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 rounded-full p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white sm:right-4"
           >
             <ChevronRight aria-hidden className="size-7" />
           </button>
@@ -118,21 +118,24 @@ export function PhotoLightbox({
 }
 
 function LightboxImage({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   return (
     <>
-      {!loaded && (
+      {!loaded && !failed && (
         <div
           aria-hidden
           className="size-16 animate-spin rounded-full border-4 border-white/20 border-t-white/80"
         />
       )}
+      {failed && <p role="status" className="text-white">This photo couldn’t load. Try another photo.</p>}
       {/* eslint-disable-next-line @next/next/no-img-element -- full-viewport lightbox of an arbitrary-origin storage URL, next/image's fixed-layout modes don't fit this */}
       <img
         src={url}
         alt={alt}
         className={cn("max-h-[80vh] max-w-full rounded-md object-contain", !loaded && "hidden")}
         onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
         onClick={(e) => e.stopPropagation()}
       />
     </>

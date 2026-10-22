@@ -18,6 +18,7 @@ export interface MapMarker {
   lat: number;
   lon: number;
   label: string;
+  displayLabel?: string;
 }
 
 // §20 resolved: MapLibre + OSM raster tiles. Attribution is mandatory under
@@ -74,6 +75,7 @@ export function ListingsMap({
   className,
   initialCenter = INITIAL_CENTER,
   initialZoom = INITIAL_ZOOM,
+  initialBounds,
 }: {
   markers: MapMarker[];
   selectedId: string | null;
@@ -89,6 +91,7 @@ export function ListingsMap({
   // university) instead of the Makerere default — read once, at mount.
   initialCenter?: [number, number];
   initialZoom?: number;
+  initialBounds?: MapBounds;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -104,6 +107,7 @@ export function ListingsMap({
   // re-center out from under a user who has already panned it.
   const initialCenterRef = useRef(initialCenter);
   const initialZoomRef = useRef(initialZoom);
+  const initialBoundsRef = useRef(initialBounds);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -122,6 +126,10 @@ export function ListingsMap({
       // through to the page as normal.
       cooperativeGestures: true,
     });
+    if (initialBoundsRef.current) {
+      const bounds = initialBoundsRef.current;
+      map.fitBounds([[bounds.minLon, bounds.minLat], [bounds.maxLon, bounds.maxLat]], {padding: 32, duration: 0});
+    }
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.AttributionControl({ compact: false }));
 
@@ -174,8 +182,9 @@ export function ListingsMap({
       el.type = "button";
       el.setAttribute("aria-label", `Show listing: ${marker.label}`);
       el.className =
-        "map-pin tabular cursor-pointer rounded-full px-2.5 py-1 text-xs font-semibold shadow-md transition-colors duration-150";
-      el.textContent = marker.label;
+        "map-pin tabular cursor-pointer min-h-11 min-w-11 rounded-full px-2.5 py-1 text-xs font-semibold shadow-md transition-colors duration-150";
+      el.textContent = marker.displayLabel ?? marker.label;
+      el.title = marker.label;
       el.addEventListener("click", () => onSelectRef.current(marker.id));
       const m = new maplibregl.Marker({ element: el })
         .setLngLat([marker.lon, marker.lat])

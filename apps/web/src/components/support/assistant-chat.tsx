@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SendHorizonal, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 import { supportAskResponseSchema } from "@campushomes/shared";
 
@@ -50,7 +51,7 @@ export function AssistantChat() {
       );
       setMessages([...next, { role: "assistant", content: reply }]);
     } catch (err) {
-      setError(apiErrorMessage(err, "CampusHomes AI couldn't answer just now. Try again, or use the manual or Contact tab."));
+      setError(apiErrorMessage(err, "CampusHomes AI couldn't answer just now. Try again, or use the manual or Contact Us page."));
     } finally {
       setIsSending(false);
     }
@@ -62,30 +63,35 @@ export function AssistantChat() {
   }
 
   return (
-    <section aria-label="CampusHomes AI" className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-4">
-        <span className="grid size-10 place-items-center rounded-full bg-teal-50 text-teal-700">
+    <section aria-label="CampusHomes AI" className="ch-support-chat flex flex-col overflow-hidden rounded-xl border border-border bg-card">
+      <header className="ch-support-chat-header flex items-start gap-3 border-b border-border px-4 py-4 sm:px-6 sm:py-5">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
           <Sparkles aria-hidden className="size-5" />
         </span>
-        <div>
-          <p className="font-display font-semibold">CampusHomes AI</p>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span aria-hidden className="size-2 rounded-full bg-success" />
+        <div className="min-w-0 pt-0.5">
+          <p className="font-display text-base font-semibold leading-6 text-foreground sm:text-lg">CampusHomes AI</p>
+          <p className="ch-support-chat-disclosure text-xs leading-5 text-muted-foreground">
             AI support assistant · answers come from our user manual
           </p>
         </div>
       </header>
 
-      <div ref={logRef} role="log" aria-live="polite" className="max-h-[28rem] min-h-72 space-y-3 overflow-y-auto p-4 sm:p-5">
+      <div
+        ref={logRef}
+        role="log"
+        aria-live="polite"
+        className="ch-support-chat-log max-h-[26.25rem] min-h-[13.75rem] space-y-3 overflow-y-auto p-5 sm:space-y-4 sm:p-6"
+      >
         <Bubble role="assistant">{GREETING}</Bubble>
         {messages.length === 0 && (
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="ch-support-chat-suggestions flex flex-wrap gap-2 pt-1">
             {SUGGESTIONS.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
                 onClick={() => void ask(suggestion)}
-                className="rounded-full border border-border px-3 py-1.5 text-left text-sm text-teal-700 transition-colors hover:bg-teal-50 dark:text-teal-300"
+                disabled={isSending}
+                className="ch-support-chat-suggestion inline-flex min-h-11 items-center rounded-full border border-border bg-card px-3 text-left text-sm text-primary transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50"
               >
                 {suggestion}
               </button>
@@ -105,7 +111,7 @@ export function AssistantChat() {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 border-t border-border p-3 sm:p-4">
+      <form onSubmit={handleSubmit} className="ch-support-chat-composer flex items-end gap-2 border-t border-border p-4 sm:p-5">
         <Textarea
           aria-label="Ask CampusHomes AI"
           placeholder="Ask a question…"
@@ -119,15 +125,15 @@ export function AssistantChat() {
               void ask(draft);
             }
           }}
-          className="max-h-36 min-h-11 flex-1 resize-none field-sizing-content"
+          className="max-h-36 min-h-11 flex-1 resize-none field-sizing-content text-base sm:text-sm"
         />
-        <Button type="submit" disabled={isSending || !draft.trim()} aria-label="Send">
+        <Button type="submit" disabled={isSending || !draft.trim()} aria-label="Send" className="min-h-11 min-w-11 shrink-0">
+          <span className="hidden sm:inline">Send</span>
           <SendHorizonal aria-hidden />
         </Button>
       </form>
-      <p className="px-4 pb-3 text-xs text-muted-foreground sm:px-5">
-        CampusHomes AI can make mistakes and can&apos;t see your account. For anything about a specific
-        reservation, use the Contact tab.
+      <p className="ch-support-chat-disclosure px-4 pb-4 text-xs leading-5 text-muted-foreground sm:px-5 sm:pb-5">
+        AI answers may be wrong and can&apos;t access your account. For reservation help, visit <Link href="/contact" className="font-semibold text-primary underline underline-offset-4">Contact Us</Link>.
       </p>
     </section>
   );
@@ -137,8 +143,8 @@ function Bubble({ role, children }: { role: Message["role"]; children: React.Rea
   return (
     <p
       className={cn(
-        "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-6",
-        role === "user" ? "ml-auto bg-teal-900 text-white" : "bg-muted text-foreground",
+        "ch-support-chat-bubble max-w-[90%] break-words whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 shadow-xs sm:max-w-[82%]",
+        role === "user" ? "ml-auto bg-primary text-primary-foreground" : "ch-support-chat-bubble--assistant border border-border bg-muted text-foreground",
       )}
     >
       {children}

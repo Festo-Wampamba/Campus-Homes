@@ -48,3 +48,15 @@ it("sends the chosen reservation with the inquiry", async () => {
 
   expect(JSON.parse(mockApi.mock.calls[0][1].body)).toMatchObject({ reservationId: RESERVATION_ID });
 });
+
+it("keeps a listing report as an explicit inquiry to Ops, without landlord routing", async () => {
+  await act(async () => root.render(<SupportDesk initialInquiries={[]} reservations={[]} reportContext={{listingId:RESERVATION_ID,subject:"Report listing: Hunter Hostel"}}/>));
+  expect(mockApi).not.toHaveBeenCalled();
+  expect(document.querySelector<HTMLInputElement>("#inquiry-subject")!.value).toBe("Report listing: Hunter Hostel");
+  await act(async()=>setValue(document.querySelector<HTMLTextAreaElement>("#inquiry-message")!,"Please review the property information."));
+  await act(async()=>document.querySelector<HTMLButtonElement>('button[type="submit"]')!.click());
+  const payload=JSON.parse(mockApi.mock.calls[0][1].body);
+  expect(payload.category).toBe("safety");
+  expect(payload.message).toContain(RESERVATION_ID);
+  expect(payload.listingId).toBeUndefined();
+});

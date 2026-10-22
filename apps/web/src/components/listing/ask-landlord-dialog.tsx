@@ -75,7 +75,7 @@ export function AskLandlordDialog({
         )}
         {viewing ? "Request a viewing" : "Ask about this place"}
       </Button>
-      <Dialog open={open} onOpenChange={close}>
+      <Dialog aria-label={sent ? "Request sent" : wantsViewing ? "Request a viewing" : "Ask the landlord"} open={open} onOpenChange={close}>
         <DialogHeader
           title={sent ? "Sent" : wantsViewing ? "Request a viewing" : "Ask the landlord"}
           description={sent ? undefined : `Goes directly to ${propertyName}'s landlord. No reservation needed.`}
@@ -87,7 +87,7 @@ export function AskLandlordDialog({
               <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0" />
               <p>
                 Sent. The landlord has been notified. You&apos;ll see their reply under
-                &ldquo;Your inquiries&rdquo; on the <a href="/support" className="underline">Support page</a>.
+                &ldquo;Your inquiries&rdquo; on the <a href="/contact#your-inquiries" className="underline">Contact Us page</a>.
               </p>
             </div>
           ) : (

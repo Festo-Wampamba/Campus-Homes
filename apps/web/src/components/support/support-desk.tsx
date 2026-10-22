@@ -29,12 +29,17 @@ const reservationRef = (id: string) => id.slice(0, 8).toUpperCase();
 export function SupportDesk({
   initialInquiries,
   reservations,
+  reportContext,
 }: {
   initialInquiries: Inquiry[];
   reservations: StudentReservationView[];
+  reportContext?: { listingId: string; subject: string };
 }) {
   const [rows, setRows] = useState<Inquiry[]>(initialInquiries);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => reportContext ? {...EMPTY_FORM, category: "safety" as InquiryCategory, subject: reportContext.subject} : EMPTY_FORM);
+  // Reports go to Ops, not the property's landlord inbox. Keep the listing
+  // reference in the message rather than setting the landlord-routing field.
+  const reportPrefix = reportContext ? `Listing reference: ${reportContext.listingId}\n\n` : "";
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +55,7 @@ export function SupportDesk({
         body: JSON.stringify({
           category: form.category,
           subject: form.subject.trim(),
-          message: form.message.trim(),
+          message: reportPrefix + form.message.trim(),
           reservationId: form.reservationId || undefined,
         }),
       });
@@ -74,6 +79,7 @@ export function SupportDesk({
         <p className="mt-1 text-sm text-muted-foreground">
           Goes straight to our Ops team and admins. You&apos;ll see the reply here.
         </p>
+        {reportContext && <p className="mt-3 rounded-lg bg-muted p-3 text-sm">Reporting listing reference <strong>{reportContext.listingId}</strong>. Describe the concern below; the CampusHomes team will review it.</p>}
 
         {submitted && (
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950 dark:text-teal-100">
@@ -146,7 +152,7 @@ export function SupportDesk({
             <textarea
               id="inquiry-message"
               rows={5}
-              maxLength={4000}
+              maxLength={4000 - reportPrefix.length}
               value={form.message}
               onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
               placeholder="Include the property name and reservation details if relevant."
@@ -169,7 +175,7 @@ export function SupportDesk({
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="text-base font-bold">Your inquiries</h2>
+        <h2 id="your-inquiries" className="scroll-mt-24 text-base font-bold">Your inquiries</h2>
         {rows.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">
             Nothing yet. Anything you send shows up here with the team&apos;s response.
