@@ -331,8 +331,10 @@ export function AppShell({
           >
             {collapsed ? <PanelLeftOpen aria-hidden className="size-4.5" /> : <PanelLeftClose aria-hidden className="size-4.5" />}
           </button>
-          <button type="button" onClick={() => setSearchOpen(true)} className="flex h-10 min-w-0 max-w-md flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-500 transition-colors hover:border-slate-300 sm:flex-none sm:w-80 dark:border-border dark:bg-muted dark:text-muted-foreground">
-            <Search aria-hidden className="size-4" /><span className="truncate">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-[10px] sm:inline">/</kbd>
+          {/* Phone: a clear square search button (the squeezed field read as an
+              empty box). Tablet and up: the full search field. */}
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search the workspace" className="flex size-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 transition-colors hover:border-slate-300 sm:h-10 sm:w-80 sm:justify-start sm:px-3 sm:text-left sm:text-slate-500 dark:border-border dark:bg-muted dark:text-muted-foreground">
+            <Search aria-hidden className="size-5 sm:size-4" /><span className="hidden truncate sm:inline">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-[10px] sm:inline">/</kbd>
           </button>
           <div className="ml-auto flex items-center gap-2">
             {headerExtra}

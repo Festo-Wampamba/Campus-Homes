@@ -29,6 +29,7 @@ import {
   userRoleAssignments,
 } from '../../db/schema';
 import { PUBLIC_LANDLORD_SUMMARY_SQL } from './public-landlord-summary';
+import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 import {
@@ -66,6 +67,7 @@ export class ListingsService {
   constructor(
     private readonly rlsDb: RlsDb,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly routes?: PropertyRoutes,
   ) {}
 
   // ── landlord paths ─────────────────────────────────────────────────────────
@@ -807,8 +809,21 @@ export class ListingsService {
         },
       );
       const amenitiesByUnit = new Map(roomAmenities.map(room => [room.id, room.amenities]));
+      // Road distance to the hostel's campus (Google's fastest driving route),
+      // looked up after the transaction closes so a slow provider never holds
+      // a pooled connection. Straight-line is only for the student estimator.
+      const campusCenter = property?.catchment
+        ? UNIVERSITY_CENTERS[property.catchment as keyof typeof UNIVERSITY_CENTERS]
+        : undefined;
+      const lat = Number(property?.gps_lat);
+      const lon = Number(property?.gps_lon);
+      const drive = this.routes && campusCenter && property?.gps_lat != null && property?.gps_lon != null
+        && Number.isFinite(lat) && Number.isFinite(lon)
+        ? await this.routes.forProperty(property.id, property.catchment!, { lat, lon }, campusCenter)
+        : null;
       return {
         ...detail, property, availability, propertyMedia, landlord,
+        route: drive ? { mode: 'drive' as const, ...drive } : null,
         units: detail.units.map(unit => ({ ...unit, amenities: amenitiesByUnit.get(unit.id) ?? [] })),
         unitPhotos: [...detail.unitPhotos, ...roomTypePhotos],
       };

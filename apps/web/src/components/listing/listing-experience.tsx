@@ -16,7 +16,6 @@ import { Flag, MapPin, Star } from "lucide-react";
 
 import { MapFallbackBoundary } from "@/components/map/map-fallback-boundary";
 import { api } from "@/lib/api";
-import { approximateCampusDistance } from "@/lib/discovery";
 import { CAMPUS_LOCATIONS, ENABLED_CAMPUSES, UGANDA_BOUNDS } from "@/lib/campuses";
 import { formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
 import { RoomCategoryList, groupByCategory, roomDisplayLabel, type CategoryGroup } from "@/components/room-category-list";
@@ -28,6 +27,7 @@ import { LandlordSummary } from "@/components/listing/landlord-summary";
 import { HouseRuleList } from "@/components/listing/house-rule-list";
 import { AmenityList } from "@/components/listing/amenity-list";
 import { DistanceEstimator } from "@/components/listing/distance-estimator";
+import { formatRoadTrip } from "@/lib/distance";
 import { InquirySafetyTips } from "@/components/listing/inquiry-safety-tips";
 import { HostelCard } from "@/components/hostel-card";
 
@@ -177,7 +177,6 @@ export function ListingExperience({
   const amenities = Object.entries(version.amenities).filter(([, has]) => has).map(([key]) => key);
 
   const campus = (studentUniversity ? CAMPUS_LOCATIONS[studentUniversity] : undefined) ?? ENABLED_CAMPUSES[0];
-  const distance = campus ? approximateCampusDistance(property.gps_lat, property.gps_lon, campus.code) : null;
   const coordinatesAvailable = property.gps_lat != null && property.gps_lon != null && Number.isFinite(property.gps_lat) && Number.isFinite(property.gps_lon);
   const supportHref = `/contact?${new URLSearchParams({ listingId: listing.id, subject: `Report listing: ${property.name}` })}`;
   const reportHref = signedIn ? supportHref : `/sign-in?next=${encodeURIComponent(supportHref)}`;
@@ -264,7 +263,7 @@ export function ListingExperience({
           <section id="location" className="scroll-mt-24" aria-labelledby="location-heading">
             <h2 id="location-heading" className="text-2xl">Location</h2>
             <p className="mt-3 flex items-start gap-2 text-muted-foreground"><MapPin aria-hidden className="size-5 shrink-0" />{property.street_address}</p>
-            {distance !== null ? <p className="mt-2 text-sm text-muted-foreground">Approximately {(distance / 1000).toFixed(1)} km in a straight line from {campus?.name ?? "the selected campus"}. Road distance can differ.</p> : <p className="mt-2 text-sm text-muted-foreground">Campus distance is unavailable for the selected campus.</p>}
+            {detail.route ? <p className="mt-2 text-sm text-muted-foreground">{formatRoadTrip(detail.route.distanceMeters, detail.route.durationSeconds)} to {campus?.name ?? "campus"}, by the fastest driving route.</p> : null}
             <div className="mt-4 h-80 overflow-hidden rounded-2xl border border-border bg-muted" aria-label={`Map showing ${property.name} and ${campus?.name ?? "the selected campus"}`}>
               {mapMarkers.length ? <MapFallbackBoundary><ListingsMap className="h-full" markers={mapMarkers} selectedId={listing.id} onSelect={() => {}} onBoundsChange={() => {}} fitToMarkers initialCenter={[property.gps_lon!, property.gps_lat!]} /></MapFallbackBoundary> : <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">A map is unavailable because this property has no verified coordinates.</div>}
             </div>

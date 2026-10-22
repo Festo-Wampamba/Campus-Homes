@@ -1450,3 +1450,41 @@ describe('FORCE ROW LEVEL SECURITY (0057): the table owner cannot bypass any pol
     expect(rows.map((r) => r.relname)).toEqual([]);
   });
 });
+
+describe('property_campus_routes (0072): cached road routes are service-only', () => {
+  beforeAll(async () => {
+    await pool.query(
+      `INSERT INTO property_campus_routes
+         (property_id, university, origin_lat, origin_lon, dest_lat, dest_lon, distance_m, duration_s)
+       VALUES ($1, 'MUK', 0.33, 32.56, 0.3345, 32.5687, 10000, 1500)`,
+      [property1],
+    );
+  });
+
+  it('a student cannot read cached routes', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM property_campus_routes').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord cannot write a route for their own property', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+        c.query(
+          `INSERT INTO property_campus_routes
+             (property_id, university, origin_lat, origin_lon, dest_lat, dest_lon, distance_m, duration_s)
+           VALUES ($1, 'MUBS', 0, 0, 0, 0, 1, 1)`,
+          [property1],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('service_role reads cached routes', async () => {
+    const rows = await asIdentity({ role: 'service_role' }, async (c) =>
+      c.query('SELECT distance_m FROM property_campus_routes WHERE property_id = $1', [property1]).then((r) => r.rows),
+    );
+    expect(rows).toEqual([{ distance_m: 10000 }]);
+  });
+});

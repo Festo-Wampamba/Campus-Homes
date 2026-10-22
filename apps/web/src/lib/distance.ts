@@ -50,3 +50,10 @@ export function formatDistance(metres: number | null): { kilometres: string; met
     metres: rounded.toLocaleString("en-UG"),
   };
 }
+
+/** "10.0 km by road · about 25 min drive" (Google's fastest driving route). */
+export function formatRoadTrip(distanceMeters: number, durationSeconds: number): string {
+  const minutes = Math.max(1, Math.round(durationSeconds / 60));
+  const time = minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+  return `${(distanceMeters / 1000).toFixed(1)} km by road · about ${time} drive`;
+}

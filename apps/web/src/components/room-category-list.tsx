@@ -223,18 +223,19 @@ function RoomActions({ group, listingId, propertyName, canReserve, needsProfile,
           {group.myStatus === "booked" ? "Booked" : "Reserved"}
         </Link>
       )}
-      {onSelect && (
+      {/* Signed out (or not a student): "Reserve" picks the room and the
+          summary panel asks them to sign in. A student reserves right here. */}
+      {onSelect && !canReserve && (
         <Button
           type="button"
           className="min-h-11"
-          aria-label={selectedKey === group.key ? "Selected" : "Select room"}
-          disabled={!group.firstAvailableBedId || !!group.myStatus}
+          disabled={!group.firstAvailableBedId}
           onClick={() => onSelect(group)}
         >
-          {selectedKey === group.key ? "Selected" : "Select room"}
+          {selectedKey === group.key ? "Selected" : "Reserve"}
         </Button>
       )}
-      {!onSelect && canReserve && !group.myStatus && group.firstAvailableBedId && (
+      {canReserve && !group.myStatus && group.firstAvailableBedId && (
         <ReserveButton
           bedId={group.firstAvailableBedId}
           listingId={listingId}

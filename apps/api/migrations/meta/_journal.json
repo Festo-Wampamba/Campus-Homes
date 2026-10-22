@@ -498,6 +498,13 @@
       "when": 1792200000000,
       "tag": "0071_session_last_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0072_property_campus_routes",
+      "breakpoints": true
     }
   ]
 }

@@ -200,6 +200,9 @@ export const listingSearchResultSchema = z.object({
   // search grows distance/rating metadata.
   verified_at: z.string().nullable().optional(),
   distance_m: z.coerce.number().nullable().optional(),
+  // Road route to the campus when it has been computed (0072); else null.
+  road_distance_m: z.coerce.number().nullable().optional(),
+  road_duration_s: z.coerce.number().nullable().optional(),
   rating_average: z.coerce.number().nullable().optional(),
   rating_count: z.coerce.number().int().nonnegative().optional(),
 });
@@ -268,6 +271,13 @@ export const publicLandlordSummarySchema = z.object({
 
 export const listingDetailResponseSchema = z.object({
   landlord: publicLandlordSummarySchema.nullable().optional(),
+  // Road route from the hostel to its campus (Google's fastest driving route).
+  // null when unknown; the straight-line figure is only for the estimator.
+  route: z.object({
+    mode: z.literal('drive'),
+    distanceMeters: z.number().int().nonnegative(),
+    durationSeconds: z.number().int().nonnegative(),
+  }).nullable().optional(),
   listing: listingSchema.extend({
     expiresAt: z.string().nullable(),
     // Surfaced so students can see WHEN the physical inspection happened,
