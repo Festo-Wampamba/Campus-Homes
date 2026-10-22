@@ -182,6 +182,8 @@ WITH available_beds AS (
          ${availableSelfContained} AS has_self_contained,
          COALESCE(categories.categories, '[]'::jsonb) AS room_categories,
          ${distanceExpression} AS distance_m,
+         road.distance_m AS road_distance_m,
+         road.duration_s AS road_duration_s,
          rating.rating_average,
          rating.rating_count
   FROM listings l
@@ -190,6 +192,13 @@ WITH available_beds AS (
     ON lv.id = l.current_version_id
   JOIN properties p
     ON p.id = l.property_id
+  -- Cached road route to the campus (0072), only while it still matches the
+  -- hostel's current GPS, so a moved pin never shows a stale road distance.
+  LEFT JOIN property_campus_routes road
+    ON road.property_id = p.id
+   AND road.university = p.catchment
+   AND abs(road.origin_lat - p.gps_lat::double precision) < 1e-6
+   AND abs(road.origin_lon - p.gps_lon::double precision) < 1e-6
   ${availableJoin}
   LEFT JOIN available_categories categories
     ON categories.listing_id = l.id
@@ -259,7 +268,8 @@ WITH available_beds AS (
   const orderBy = {
     price_asc: 'price_per_term_ugx ASC, id ASC',
     price_desc: 'price_per_term_ugx DESC, id ASC',
-    distance_asc: 'distance_m ASC NULLS LAST, id ASC',
+    // Road distance where known (the real trip), straight-line otherwise.
+    distance_asc: 'COALESCE(road_distance_m, distance_m) ASC NULLS LAST, id ASC',
   }[options.sort];
   const savedOrder = saved ? 'saved_at DESC, id ASC' : orderBy;
   const offsetPlaceholder = saved ? '$19' : '$18';
