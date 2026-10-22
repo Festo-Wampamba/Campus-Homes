@@ -418,13 +418,15 @@ export function OnboardingWizard({
                   showPhotos
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Amenities (optional)</Label>
-                <p className="text-xs text-muted-foreground">
-                  What the property offers. Ops confirms these during verification.
-                </p>
+
+              <PropertyExtendedFields
+                value={extended}
+                onChange={(patch) => setExtended((prev) => ({ ...prev, ...patch }))}
+                idPrefix="onboarding-property"
+                amenitiesExtra={(
+                  <>
                 <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
-                  {AMENITY_OPTIONS.map((option) => (
+                  {AMENITY_OPTIONS.filter((option) => option.key !== "security").map((option) => (
                     <label key={option.key} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -469,12 +471,8 @@ export function OnboardingWizard({
                     Add
                   </Button>
                 </div>
-              </div>
-
-              <PropertyExtendedFields
-                value={extended}
-                onChange={(patch) => setExtended((prev) => ({ ...prev, ...patch }))}
-                idPrefix="onboarding-property"
+                  </>
+                )}
               />
 
               <PropertyDeclarationFields

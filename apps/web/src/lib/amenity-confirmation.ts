@@ -1,5 +1,4 @@
 import {
-  ACCESSIBILITY_FEATURE_OPTIONS,
   AMENITY_OPTIONS,
   humanizeKey,
   SECURITY_FEATURE_OPTIONS,
@@ -29,7 +28,6 @@ const GROUPS: Array<{ title: string; source: keyof DeclaredChecklists; options: 
   { title: "Amenities", source: "proposedAmenities", options: AMENITY_OPTIONS },
   { title: "Furnishing", source: "furnishingItems", options: UTILITY_OPTIONS },
   { title: "Safety", source: "securityFeatures", options: SECURITY_FEATURE_OPTIONS },
-  { title: "Accessibility", source: "accessibilityFeatures", options: ACCESSIBILITY_FEATURE_OPTIONS },
 ];
 
 /** The landlord's four onboarding checklists, regrouped for the Ops publish

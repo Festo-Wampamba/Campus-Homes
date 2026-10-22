@@ -124,7 +124,8 @@ function Composer({ threadId, editing, onCancelEdit, onMessage, onSend }: {
         }} />
         <Button type="button" size="icon" aria-label={editing ? "Save edited message" : "Send message"} onClick={() => void submit()} disabled={pending || !body.trim()}>{editing ? <CheckCheck aria-hidden className="size-4" /> : <Send aria-hidden className="size-4" />}</Button>
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">Enter to send · Shift + Enter for a new line</p>
+      {/* Phones have no Shift key worth explaining; the send button is enough. */}
+      <p className="mt-1.5 hidden text-[11px] text-muted-foreground sm:block">Enter to send · Shift + Enter for a new line</p>
     </div>
   );
 }
