@@ -12,6 +12,10 @@ export function authIntent(value: unknown, portal?: unknown, next?: unknown): Au
     ? 'landlord' : 'student';
 }
 
+/** Every signed-in session (all roles) ends after this long without real user
+ * interaction. The API enforces it; the web shell's timer only mirrors it. */
+export const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
 export interface AuthenticationAssurance {
   /** Provider-verified authentication time, never application session creation. */
   authenticatedAt: string | null;
