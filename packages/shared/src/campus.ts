@@ -8,6 +8,7 @@ export const campusSchema = z.object({
   university: z.enum(UNIVERSITIES),
   photo_storage_key: z.string().nullable(),
   hostel_count: z.coerce.number().int(),
+  available_hostel_count: z.coerce.number().int().optional(),
 });
 export type Campus = z.infer<typeof campusSchema>;
 
