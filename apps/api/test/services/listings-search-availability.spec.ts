@@ -225,6 +225,13 @@ describe('detail() room-type photos', () => {
     const detail = await listings.detail(listingId);
 
     expect(detail.unitPhotos).toContainEqual({ unitId: unitCancelled, storageKey: 'uploads/landlord/single-room.jpg' });
+    await pool.query(`UPDATE room_type_versions SET amenities = '["bed", "study_desk"]'::jsonb WHERE id = $1`, [versionId]);
+    const withAmenities = await listings.detail(listingId);
+    expect(withAmenities.units.find(unit => unit.id === unitCancelled)?.amenities).toEqual(['bed', 'study_desk']);
+    await pool.query(`UPDATE room_type_versions SET status = 'draft' WHERE id = $1`, [versionId]);
+    const unpublished = await listings.detail(listingId);
+    expect(unpublished.units.find(unit => unit.id === unitCancelled)?.amenities).toEqual([]);
+    await pool.query(`UPDATE room_type_versions SET status = 'approved' WHERE id = $1`, [versionId]);
   });
 });
 
@@ -299,5 +306,41 @@ describe('search() availability', () => {
       limit: 50,
     } as never)) as { id: string }[];
     expect(rows.find((r) => r.id === listingId)).toBeUndefined();
+  });
+});
+
+
+describe('detail() public landlord summary', () => {
+  it('keeps sparse response history unknown and publishes no contact fields', async () => {
+    const detail = await listings.detail(listingId);
+    expect(detail.landlord).toEqual({
+      displayName: 'Property landlord', joinedAt: expect.any(Date), responseRate: null, within24HoursRate: null,
+    });
+  });
+
+  it('aggregates only mature, recent listing inquiries and includes unanswered inquiries', async () => {
+    const { rows: [owner] } = await pool.query(
+      `SELECT p.landlord_id FROM properties p JOIN listings l ON l.property_id = p.id WHERE l.id = $1`, [listingId],
+    );
+    // Five eligible inquiries: 2 within a day, 1 late, 2 unanswered.
+    for (const hours of [2, 24, 25, null, null]) {
+      await pool.query(
+        `INSERT INTO inquiries (student_id, landlord_id, listing_id, subject, message, created_at, landlord_responded_at)
+         VALUES ($1, $2, $3, 'Local test inquiry', 'Private test content', now() - interval '3 days',
+           CASE WHEN $4::int IS NULL THEN NULL ELSE now() - interval '3 days' + $4 * interval '1 hour' END)`,
+        [studentId, owner.landlord_id, listingId, hours],
+      );
+    }
+    // Too new, too old, and Ops-only rows must not influence percentages.
+    for (const [age, linked] of [[0, true], [100, true], [3, false]] as const) {
+      await pool.query(
+        `INSERT INTO inquiries (student_id, landlord_id, listing_id, subject, message, created_at, landlord_responded_at)
+         VALUES ($1, $2, $3, 'Excluded test inquiry', 'Private test content', now() - $4 * interval '1 day', now() - $4 * interval '1 day')`,
+        [studentId, owner.landlord_id, linked ? listingId : null, age],
+      );
+    }
+    const detail = await listings.detail(listingId);
+    expect(detail.landlord).toMatchObject({ responseRate: 60, within24HoursRate: 40 });
+    expect(Object.keys(detail.landlord ?? {}).sort()).toEqual(['displayName', 'joinedAt', 'responseRate', 'within24HoursRate']);
   });
 });

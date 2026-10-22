@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
@@ -8,11 +8,16 @@ import {
   AddUnitPhotoDto,
   CreateDraftListingDto,
   ListingSearchDto,
+  ListingReviewsQueryDto,
+  ListingSearchPageDto,
   SubmitPropertyDto,
   UpdatePropertyDto,
   UpdateUnitOperationalStatusDto,
 } from './listings.dto';
 import { ListingsService } from './listings.service';
+
+// k6 (scripts/load) identifies itself; skipping its searches only affects analytics.
+const isLoadTest = (userAgent?: string) => userAgent?.startsWith('k6/') ?? false;
 
 @Controller('listings')
 export class ListingsController {
@@ -21,8 +26,13 @@ export class ListingsController {
   // ── public ─────────────────────────────────────────────────────────────────
 
   @Get('search')
-  search(@Query() query: ListingSearchDto) {
-    return this.listings.search(query);
+  search(@Query() query: ListingSearchDto, @Headers('user-agent') userAgent?: string) {
+    return this.listings.search(query, { logEvent: !isLoadTest(userAgent) });
+  }
+
+  @Get('search-page')
+  searchPage(@Query() query: ListingSearchPageDto, @Headers('user-agent') userAgent?: string) {
+    return this.listings.searchPage(query, { logEvent: !isLoadTest(userAgent) });
   }
 
   // Declared before the ':id' catch-all below — route order matters in Nest.
@@ -34,6 +44,14 @@ export class ListingsController {
   @Get('reviews')
   reviews() {
     return this.listings.reviews(6);
+  }
+
+  @Get(':id/reviews')
+  listingReviews(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ListingReviewsQueryDto,
+  ) {
+    return this.listings.listingReviews(id, query.page, query.limit);
   }
 
   // Support contact lives in the admin-only platform_settings table, but
