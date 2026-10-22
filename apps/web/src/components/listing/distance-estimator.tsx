@@ -209,7 +209,7 @@ export function DistanceEstimator({
         <div className="mt-5 rounded-xl bg-muted p-4" aria-live="polite">
           <p className="text-sm text-muted-foreground">{endpointLabel(origin)} to {destinationKind === "campus" ? campus.name : destinationHostel?.name}</p>
           <p className="mt-1 font-display text-3xl font-semibold tabular">{formattedDistance.kilometres} km <span className="text-lg font-normal text-muted-foreground">({formattedDistance.metres} m)</span></p>
-          <p className="mt-1 text-sm font-semibold text-foreground">Approximate straight-line distance</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Straight-line (shortcut) distance</p>
           <p className="mt-1 text-xs text-muted-foreground">This estimate uses published map coordinates. It is not a route or travel-time estimate.</p>
         </div>
       )}

@@ -140,6 +140,9 @@ const envSchema = z.object({
   // documents; reads go through presigned GETs from /uploads/document-url.
   // Production refuses document uploads while it is unset.
   B2_PRIVATE_BUCKET: z.string().min(1).optional(),
+  // Server-side only (never sent to browsers): road distance from each hostel
+  // to its campus. Restrict the key to the Routes API and the server's IP.
+  GOOGLE_ROUTES_API_KEY: z.string().min(1).optional(),
   SENTRY_DSN: z.string().url().optional(),
   // Required with SENTRY_DSN (checked in loadEnv): staging and production both
   // run NODE_ENV=production, so NODE_ENV can't tell their errors apart.

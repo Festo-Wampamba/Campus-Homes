@@ -48,7 +48,7 @@ afterEach(() => {
 
 describe("DistanceEstimator", () => {
   it("shows a straight-line result and keeps the comparison map opt-in", async () => {
-    expect(container.textContent).toContain("Approximate straight-line distance");
+    expect(container.textContent).toContain("Straight-line (shortcut) distance");
     expect(container.textContent).toContain("km");
     expect(container.textContent).toContain("m)");
     expect(container.querySelector("#distance-comparison-map")).toBeNull();
@@ -69,7 +69,7 @@ describe("DistanceEstimator", () => {
     await act(async () => destination.dispatchEvent(new Event("change", { bubbles: true })));
 
     expect(container.textContent).toContain("Other published hostel");
-    expect(container.textContent).toContain("Approximate straight-line distance");
+    expect(container.textContent).toContain("Straight-line (shortcut) distance");
     const originOption = container.querySelector(`#distance-origin option[value="${OTHER_HOSTEL.id}"]`) as HTMLOptionElement;
     expect(originOption.disabled).toBe(true);
   });

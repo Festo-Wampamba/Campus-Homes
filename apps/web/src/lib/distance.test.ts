@@ -1,4 +1,4 @@
-import { formatDistance, haversineDistanceMeters, validCoordinates } from "./distance";
+import { formatDistance, haversineDistanceMeters, validCoordinates, formatRoadTrip } from "./distance";
 
 describe("distance helpers", () => {
   it("calculates a known equatorial distance", () => {
@@ -18,5 +18,15 @@ describe("distance helpers", () => {
   it("formats both kilometres and metres", () => {
     expect(formatDistance(1_234)).toEqual({ kilometres: "1.2", metres: "1,234" });
     expect(formatDistance(null)).toBeNull();
+  });
+});
+
+describe("formatRoadTrip", () => {
+  it("states road distance and drive time", () => {
+    expect(formatRoadTrip(10032, 1500)).toBe("10.0 km by road · about 25 min drive");
+  });
+
+  it("switches to hours for long drives", () => {
+    expect(formatRoadTrip(52000, 3900)).toBe("52.0 km by road · about 1 h 5 min drive");
   });
 });
