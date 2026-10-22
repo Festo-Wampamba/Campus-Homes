@@ -20,6 +20,7 @@ const AUTH_ROUTES = [
   'api/auth/logto/sms-webhook',
   'api/auth/logto/email-webhook',
   'api/auth/session',
+  'api/auth/activity',
 ];
 
 async function bootstrap() {

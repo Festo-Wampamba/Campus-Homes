@@ -1,3 +1,5 @@
+import { UnauthorizedException } from '@nestjs/common';
+
 import { SessionController } from './auth.controller';
 import type { SessionStore } from './session.store';
 
@@ -34,5 +36,23 @@ describe('SessionController', () => {
     await controller.session({ headers: { cookie: 'campushomes-session-v1=real-token' } } as never, res as never);
 
     expect(res.json).toHaveBeenCalledWith(session);
+  });
+
+  it('records activity for a live session', async () => {
+    const recordActivity = jest.fn().mockResolvedValue(true);
+    const controller = new SessionController({ recordActivity } as unknown as SessionStore);
+
+    await controller.activity({ headers: { cookie: 'campushomes-session-v1=live-token' } } as never, response() as never);
+
+    expect(recordActivity).toHaveBeenCalledWith('live-token');
+  });
+
+  it('answers 401 when the session is already idle or gone', async () => {
+    const recordActivity = jest.fn().mockResolvedValue(false);
+    const controller = new SessionController({ recordActivity } as unknown as SessionStore);
+    const res = { ...response(), clearCookie: jest.fn() };
+
+    await expect(controller.activity({ headers: { cookie: 'campushomes-session-v1=idle-token' } } as never, res as never))
+      .rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

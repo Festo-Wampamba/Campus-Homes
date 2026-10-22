@@ -1,9 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
 
-import type { AccountAccess, AuthenticationAssurance, UserRole, UserStatus } from '@campushomes/shared';
+import { IDLE_TIMEOUT_MS, type AccountAccess, type AuthenticationAssurance, type UserRole, type UserStatus } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
@@ -64,6 +64,8 @@ export class SessionStore {
         userAgent,
         authenticatedAt: verified.authenticatedAt ? new Date(verified.authenticatedAt) : null,
         mfaVerified: verified.mfaVerified,
+        // App clock, not the column's DB default, so idle checks compare like with like.
+        lastActivityAt: now,
       }),
     );
     return { token };
@@ -79,6 +81,7 @@ export class SessionStore {
           expiresAt: sessions.expiresAt,
           authenticatedAt: sessions.authenticatedAt,
           mfaVerified: sessions.mfaVerified,
+          lastActivityAt: sessions.lastActivityAt,
           userId: users.id,
           role: users.role,
           status: users.status,
@@ -94,7 +97,14 @@ export class SessionStore {
         .innerJoin(users, eq(users.id, sessions.userId))
         .where(eq(sessions.token, token)),
     );
-    if (!row || row.expiresAt.getTime() <= Date.now() || row.deletedAt || row.status !== 'active') return null;
+    if (!row) return null;
+    // Reading a session never counts as activity: background polls go through
+    // here too, so only recordActivity() moves lastActivityAt.
+    if (Date.now() - row.lastActivityAt.getTime() >= IDLE_TIMEOUT_MS) {
+      await this.destroy(token);
+      return null;
+    }
+    if (row.expiresAt.getTime() <= Date.now() || row.deletedAt || row.status !== 'active') return null;
     const access = await resolveAccountAccess(this.rlsDb, row.userId, {
       authenticatedAt: row.authenticatedAt?.toISOString() ?? null,
       mfaVerified: row.mfaVerified,
@@ -111,6 +121,27 @@ export class SessionStore {
         expiresAt: row.expiresAt.toISOString(),
       },
     };
+  }
+
+  /** The client's explicit "the user interacted" signal. Refuses (and deletes)
+   * a session that is already idle or expired, so it can't be revived. */
+  async recordActivity(token: string): Promise<boolean> {
+    if (!token) return false;
+    const now = new Date();
+    const updated = await this.rlsDb.run(SERVICE_CTX, (db) =>
+      db
+        .update(sessions)
+        .set({ lastActivityAt: now })
+        .where(and(
+          eq(sessions.token, token),
+          gt(sessions.expiresAt, now),
+          gt(sessions.lastActivityAt, new Date(now.getTime() - IDLE_TIMEOUT_MS)),
+        ))
+        .returning({ id: sessions.id }),
+    );
+    if (updated.length) return true;
+    await this.destroy(token);
+    return false;
   }
 
   async destroy(token: string): Promise<void> {
