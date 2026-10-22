@@ -50,7 +50,7 @@ export const listingSchema = z.object({
 export type Listing = z.infer<typeof listingSchema>;
 
 // PostGIS bounding-box search — the student-facing search endpoint's query shape.
-export const listingSearchSchema = z.object({
+const listingSearchBaseSchema = z.object({
   minLat: z.coerce.number().min(-90).max(90),
   minLon: z.coerce.number().min(-180).max(180),
   maxLat: z.coerce.number().min(-90).max(90),
@@ -83,7 +83,70 @@ export const listingSearchSchema = z.object({
     .preprocess((v) => (v === 'true' ? true : v === 'false' ? false : v), z.boolean().optional()),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+function validateListingSearchRanges(
+  input: {
+    minLat: number;
+    maxLat: number;
+    minLon: number;
+    maxLon: number;
+    minPriceUgx?: number;
+    maxPriceUgx?: number;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (input.minLat > input.maxLat) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxLat'],
+      message: 'maxLat must be greater than or equal to minLat',
+    });
+  }
+  if (input.minLon > input.maxLon) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxLon'],
+      message: 'maxLon must be greater than or equal to minLon',
+    });
+  }
+  if (input.minPriceUgx != null && input.maxPriceUgx != null && input.minPriceUgx > input.maxPriceUgx) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxPriceUgx'],
+      message: 'maxPriceUgx must be greater than or equal to minPriceUgx',
+    });
+  }
+}
+
+export const listingSearchSchema = listingSearchBaseSchema.superRefine(validateListingSearchRanges);
 export type ListingSearchInput = z.infer<typeof listingSearchSchema>;
+
+export const LISTING_SEARCH_PAGE_SORTS = ['price_asc', 'price_desc', 'distance_asc'] as const;
+export const listingSearchPageSortSchema = z.enum(LISTING_SEARCH_PAGE_SORTS);
+export type ListingSearchPageSort = z.infer<typeof listingSearchPageSortSchema>;
+
+// The paged public search defaults to the first supported campus so a request
+// with only a bounding box remains useful. Explicit coordinates are accepted
+// for future campus catchments and are required as a pair.
+export const listingSearchPageSchema = listingSearchBaseSchema
+  .extend({
+    university: z.enum(['MUK', 'MUBS', 'KIU', 'KYU']).default('MUK'),
+    sort: listingSearchPageSortSchema.default('price_asc'),
+    // A huge OFFSET still costs Postgres a scan; nobody pages past 500.
+    page: z.coerce.number().int().min(1).max(500).default(1),
+    campusLat: z.coerce.number().min(-90).max(90).optional(),
+    campusLon: z.coerce.number().min(-180).max(180).optional(),
+  })
+  .superRefine((input, ctx) => {
+    validateListingSearchRanges(input, ctx);
+    if ((input.campusLat == null) !== (input.campusLon == null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['campusLat'],
+        message: 'campusLat and campusLon must be provided together',
+      });
+    }
+  });
+export type ListingSearchPageInput = z.infer<typeof listingSearchPageSchema>;
 
 // One room type's pricing within a listing — a hostel prices singles, doubles,
 // triples etc. independently, each backed by any number of individual units.
@@ -133,8 +196,23 @@ export const listingSearchResultSchema = z.object({
   // True when at least one unit in the listing is self-contained (0053) —
   // drives the "Self-contained" badge on a search card.
   has_self_contained: z.boolean(),
+  // Optional fields allow older clients to parse responses while the public
+  // search grows distance/rating metadata.
+  verified_at: z.string().nullable().optional(),
+  distance_m: z.coerce.number().nullable().optional(),
+  rating_average: z.coerce.number().nullable().optional(),
+  rating_count: z.coerce.number().int().nonnegative().optional(),
 });
 export type ListingSearchResult = z.infer<typeof listingSearchResultSchema>;
+
+export const listingSearchPageResponseSchema = z.object({
+  items: z.array(listingSearchResultSchema),
+  total: z.coerce.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
+});
+export type ListingSearchPageResponse = z.infer<typeof listingSearchPageResponseSchema>;
 
 // Detail response — GET /listings/:id (version snapshot + photos + units +
 // per-unit availability booleans).
@@ -165,6 +243,7 @@ export const unitSchema = z.object({
   selfContained: z.boolean(),
   pricePerTermUgx: z.number().int(),
   depositUgx: z.number().int().nullable(),
+  amenities: z.array(z.string()).optional(),
 });
 export type Unit = z.infer<typeof unitSchema>;
 
@@ -179,7 +258,16 @@ export const updateUnitOperationalStatusSchema = z.object({
 });
 export type UpdateUnitOperationalStatusInput = z.infer<typeof updateUnitOperationalStatusSchema>;
 
+export const publicLandlordSummarySchema = z.object({
+  displayName: z.string(),
+  joinedAt: z.string().nullable(),
+  // Aggregate recorded listing inquiries only; never student/contact data.
+  responseRate: z.number().int().min(0).max(100).nullable(),
+  within24HoursRate: z.number().int().min(0).max(100).nullable(),
+});
+
 export const listingDetailResponseSchema = z.object({
+  landlord: publicLandlordSummarySchema.nullable().optional(),
   listing: listingSchema.extend({
     expiresAt: z.string().nullable(),
     // Surfaced so students can see WHEN the physical inspection happened,
@@ -192,6 +280,7 @@ export const listingDetailResponseSchema = z.object({
     id: uuid,
     name: z.string(),
     street_address: z.string(),
+    catchment: z.enum(UNIVERSITIES).optional(),
     gps_lat: z.coerce.number().nullable(),
     gps_lon: z.coerce.number().nullable(),
     // Other charges captured at submission (PropertyExtendedFields) — null
