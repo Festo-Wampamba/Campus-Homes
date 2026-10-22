@@ -17,7 +17,9 @@ export default async function ReservationsPage({
 
   return (
     <>
-      <h1 className="text-2xl">My reservations</h1>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ae5528]">Your room holds</p>
+      <h1 className="ch-student-page__title mt-3">My reservations</h1>
+      <p className="ch-student-page__lede">A reservation is free and holds an available bed while you view the room and agree terms with the landlord.</p>
       {reservations.length === 0 ? (
         <div className="mt-6">
           <EmptyState

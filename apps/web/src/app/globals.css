@@ -1,6 +1,46 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* WhatsApp uses its familiar green; public/student brand tokens stay intact. */
+.ch-whatsapp-float {
+  position: fixed;
+  inset-inline-end: max(20px, env(safe-area-inset-right));
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #128c4a;
+  box-shadow: 0 6px 20px rgb(0 40 30 / 20%);
+  transition: background-color 180ms ease;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.ch-whatsapp-float:hover { background: #0d6b38; }
+.ch-whatsapp-float:focus-visible { outline: 3px solid var(--ring); outline-offset: 4px; }
+.ch-whatsapp-float[data-dragging="true"] { cursor: grabbing; }
+.ch-whatsapp-float__instruction {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 1023px) {
+  .ch-whatsapp-float--listing { --ch-whatsapp-room-offset: calc(104px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ch-whatsapp-float { transition: none; }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*

@@ -21,10 +21,22 @@ const UNIT = {
 const BED_A = "22222222-2222-4222-8222-222222222222";
 const BED_B = "33333333-3333-4333-8333-333333333333";
 
+HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+  this.removeAttribute("open");
+};
+
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(availability: { id: string; unit_id: string; available: boolean }[], units = [UNIT]) {
+async function render(
+  availability: { id: string; unit_id: string; available: boolean }[],
+  units = [UNIT],
+  publicPresentation = false,
+  roomAmenitiesByUnit?: Map<string, unknown>,
+) {
   await act(async () =>
     root.render(
       <RoomCategoryList
@@ -36,6 +48,8 @@ async function render(availability: { id: string; unit_id: string; available: bo
         propertyName="Kikoni Rise"
         canReserve={false}
         needsProfile={false}
+        publicPresentation={publicPresentation}
+        roomAmenitiesByUnit={roomAmenitiesByUnit}
       />,
     ),
   );
@@ -114,6 +128,40 @@ describe("RoomCategoryList", () => {
     ]);
 
     expect(container.textContent).not.toMatch(/\broom/);
+  });
+
+  it("hides public inventory totals while retaining truthful room state", async () => {
+    await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
+
+    expect(container.textContent).toContain("Shared rooms");
+    expect(container.textContent).toContain("Available now");
+    expect(container.textContent).toContain("Double");
+    expect(container.textContent).toContain("Shared bathroom");
+    expect(container.textContent).toContain("View details");
+    expect(container.textContent).toContain("No room photo provided");
+    expect(container.querySelectorAll("[data-room-category]")).toHaveLength(1);
+    expect(container.textContent).not.toMatch(/\d+ beds?\b/);
+    expect(container.textContent).not.toMatch(/\d+ rooms?\b/);
+  });
+
+  it("opens room details with only supplied room amenities", async () => {
+    await render(
+      [{ id: BED_A, unit_id: UNIT.id, available: true }],
+      [UNIT],
+      true,
+      new Map([[UNIT.id, ["study_desk", "wardrobe"]]]),
+    );
+
+    const details = [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "View details");
+    expect(details).toBeDefined();
+    await act(async () => details?.click());
+
+    expect(container.textContent).toContain("Double details");
+    expect(container.textContent).toContain("Room amenities");
+    expect(container.textContent).toContain("Study desk");
+    expect(container.textContent).toContain("Wardrobe");
+    expect(container.textContent).not.toContain("Electricity");
+    expect(container.textContent).toContain("Deposit not stated");
   });
 
   it("shows Reserved instead of Reserve on a room type the student already holds", async () => {

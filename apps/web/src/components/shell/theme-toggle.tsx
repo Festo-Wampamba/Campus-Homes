@@ -2,7 +2,6 @@
 
 import { Moon, Sun } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "theme";
@@ -19,19 +18,17 @@ function toggleTheme() {
 
 export function ThemeToggle({ className }: { className?: string }) {
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
-      size="icon"
       aria-label="Toggle theme"
       className={cn(
-        "text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
+        "inline-flex size-11 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-current transition-opacity duration-150 hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className,
       )}
       onClick={toggleTheme}
     >
       <Sun aria-hidden className="size-4 dark:hidden" />
       <Moon aria-hidden className="hidden size-4 dark:block" />
-    </Button>
+    </button>
   );
 }
