@@ -130,18 +130,24 @@ describe("RoomCategoryList", () => {
     expect(container.textContent).not.toMatch(/\broom/);
   });
 
-  // Festo, 2026-10-22: show how many rooms and beds are free. Hiding the totals
-  // made 30 listed rooms look like 2 room types.
-  it("shows how many rooms and beds of each room type are free", async () => {
+  // Festo, 2026-10-23: one section per room type, each variant named.
+  it("groups room types under their own heading", async () => {
     await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
 
-    expect(container.textContent).toContain("Shared rooms");
-    expect(container.textContent).toContain("1 room · 1 bed free");
-    expect(container.textContent).toContain("Double");
-    expect(container.textContent).toContain("Shared bathroom");
-    expect(container.textContent).toContain("View details");
-    expect(container.textContent).toContain("No room photo provided");
-    expect(container.querySelectorAll("[data-room-category]")).toHaveLength(1);
+    expect(container.querySelector("h3")?.textContent).toBe("Double rooms");
+  });
+
+  it("names whether the room type is self-contained", async () => {
+    await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
+
+    expect(container.textContent).toContain("Double non-self-contained");
+  });
+
+  // Festo, 2026-10-23: room and bed totals stay on the landlord's side.
+  it("says a room type is available without counting rooms or beds", async () => {
+    await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
+
+    expect(container.textContent).not.toMatch(/\d+ (rooms?|beds?)\b/);
   });
 
   it("opens room details with only supplied room amenities", async () => {
@@ -156,7 +162,7 @@ describe("RoomCategoryList", () => {
     expect(details).toBeDefined();
     await act(async () => details?.click());
 
-    expect(container.textContent).toContain("Double details");
+    expect(container.textContent).toContain("Double non-self-contained details");
     expect(container.textContent).toContain("Room amenities");
     expect(container.textContent).toContain("Study desk");
     expect(container.textContent).toContain("Wardrobe");
@@ -181,15 +187,11 @@ describe("RoomCategoryList", () => {
 });
 
 describe("availabilityLabel", () => {
-  it("counts free single rooms", () => {
-    expect(availabilityLabel({ freeRoomCount: 10, availableCount: 10, capacity: 1 })).toBe("10 rooms available");
-  });
-
-  it("counts rooms and free beds for shared rooms", () => {
-    expect(availabilityLabel({ freeRoomCount: 20, availableCount: 40, capacity: 2 })).toBe("20 rooms · 40 beds free");
+  it("says a room type with a free bed is available", () => {
+    expect(availabilityLabel({ availableCount: 40 })).toBe("Available");
   });
 
   it("says when nothing is free", () => {
-    expect(availabilityLabel({ freeRoomCount: 0, availableCount: 0, capacity: 2 })).toBe("Currently unavailable");
+    expect(availabilityLabel({ availableCount: 0 })).toBe("Currently unavailable");
   });
 });

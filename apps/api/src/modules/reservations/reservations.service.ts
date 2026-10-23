@@ -24,7 +24,7 @@ import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
-export const DEFAULT_RESERVE_HOURS = 24;
+export const DEFAULT_RESERVE_HOURS = 6;
 // A student already moved in (occupied) can't reserve a new bed until their
 // current term is within this many days of ending — reserving a second home
 // mid-semester makes no sense; reserving next semester's place as this one
