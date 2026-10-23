@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
@@ -395,6 +395,68 @@ export class ReservationsService {
       })
       .catch((err: unknown) => console.error('[reservations] booking confirmed notify failed:', err));
     return result;
+  }
+
+  /** A student who walked in without CampusHomes (Festo, 2026-10-23): find
+   * their student account by phone or create one, then book() the bed like any
+   * walk-in. They claim the account when they first sign in with this phone
+   * (ProvisioningService links by verified phone). The account is committed
+   * before the booking, so a failed booking can leave an account with no room;
+   * the bed checks run first to keep that rare. */
+  async onboardWalkIn(ctx: RlsContext, input: OnboardWalkInInput) {
+    const account = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      await this.assertCanManageBed(client, ctx, input.bedId);
+      const property = (await client.query<{ name: string }>(
+        `SELECT p.name FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id WHERE b.id = $1`,
+        [input.bedId],
+      )).rows[0];
+      const existing = (await client.query<{ id: string; role: string; has_profile: boolean }>(
+        `SELECT u.id, u.role::text AS role, EXISTS (SELECT 1 FROM students s WHERE s.user_id = u.id) AS has_profile
+         FROM users u WHERE u.phone = $1 AND u.deleted_at IS NULL`,
+        [input.phone],
+      )).rows[0];
+      if (existing && existing.role !== 'student') {
+        throw new ConflictException('This phone number belongs to a landlord or staff account, not a student');
+      }
+      const studentId = existing?.id ?? (await client.query<{ id: string }>(
+        `INSERT INTO users (phone, contact_phone, name, role, status)
+         VALUES ($1, $1, $2, 'student', 'active') RETURNING id`,
+        [input.phone, input.name],
+      )).rows[0]!.id;
+      if (!existing?.has_profile) {
+        await client.query(
+          `INSERT INTO students (user_id, university) VALUES ($1, $2::university) ON CONFLICT (user_id) DO NOTHING`,
+          [studentId, input.university],
+        );
+      }
+      return { studentId, created: !existing, propertyName: property?.name ?? 'Your hostel' };
+    });
+
+    // book() always returns the row it wrote or throws.
+    const booked = (await this.book(ctx, {
+      bedId: input.bedId,
+      studentPhone: input.phone,
+      bookingFeeCollectedUgx: input.bookingFeeCollectedUgx,
+      depositCollectedUgx: input.depositCollectedUgx,
+      paymentMethod: input.paymentMethod,
+    }))!;
+    if (input.movedIn) await this.confirmMoveIn(ctx, booked.id);
+    await this.audit.record(ctx, 'reservation.walk_in_onboard', 'reservation', booked.id, {
+      studentCreated: account.created,
+      movedIn: input.movedIn,
+    });
+    this.notifications
+      ?.notify(account.studentId, 'walk_in.onboarded', 'sms', {
+        message: `CampusHomes: ${account.propertyName} added your room booking. Sign in at campushomes.co.ug with this phone number to see it.`,
+        href: '/reservations',
+      })
+      .catch((err: unknown) => console.error('[reservations] walk-in SMS failed:', err));
+    return {
+      reservationId: booked.id,
+      studentId: account.studentId,
+      studentCreated: account.created,
+      status: input.movedIn ? 'occupied' as const : 'booked' as const,
+    };
   }
 
   /** Landlord/custodian/ops frees up a Reserved or Booked bed the student

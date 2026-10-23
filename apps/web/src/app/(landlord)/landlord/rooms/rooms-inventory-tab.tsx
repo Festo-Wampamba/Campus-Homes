@@ -21,6 +21,7 @@ import {
   type RoomUnit,
 } from "@/lib/room-management";
 import { BedspaceDrawer } from "./bedspace-drawer";
+import { BatchEditRoomsDialog } from "./batch-edit-rooms-dialog";
 import { BulkRoomGeneratorDialog } from "./bulk-room-generator-dialog";
 import { UnitBlockDialog } from "./unit-block-dialog";
 
@@ -71,6 +72,10 @@ export function RoomsInventoryTab({
 
   const [activeBlockRoom, setActiveBlockRoom] = useState<RoomUnit | null>(null);
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+
+  // Rooms ticked for a batch edit (codes, building, floor).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [batchEditOpen, setBatchEditOpen] = useState(false);
 
   // Single Room Form fields
   const [srCode, setSrCode] = useState("");
@@ -127,6 +132,22 @@ export function RoomsInventoryTab({
       return true;
     });
   }, [rooms, searchQuery, filterType, filterBuilding, filterFloor, filterStatus]);
+
+  const selectedRooms = filteredRooms.filter((room) => selectedIds.has(room.id));
+  const allShownSelected = filteredRooms.length > 0 && filteredRooms.every((room) => selectedIds.has(room.id));
+
+  function toggleSelected(roomId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(roomId)) next.delete(roomId);
+      else next.add(roomId);
+      return next;
+    });
+  }
+
+  function toggleAllShown() {
+    setSelectedIds(allShownSelected ? new Set() : new Set(filteredRooms.map((room) => room.id)));
+  }
 
   function openViewBeds(room: RoomUnit) {
     setActiveBedspaceRoom(room);
@@ -298,9 +319,16 @@ export function RoomsInventoryTab({
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Manage individual room numbers, locations, live bedspace occupancy, and maintenance blocks.
+            Tick several rooms to edit their codes together.
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          {selectedRooms.length > 0 && (
+            <Button variant="secondary" onClick={() => setBatchEditOpen(true)} className="gap-1.5">
+              <Edit className="size-4" />
+              Edit selected ({selectedRooms.length})
+            </Button>
+          )}
           <Button variant="secondary" onClick={openAddSingleRoom} className="gap-1.5">
             <Plus className="size-4" />
             Add Room
@@ -450,6 +478,9 @@ export function RoomsInventoryTab({
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-muted/40 font-heading font-semibold text-muted-foreground uppercase tracking-wider">
                 <tr>
+                  <th className="w-10 py-3 pl-4">
+                    <input type="checkbox" aria-label="Select all rooms shown" checked={allShownSelected} onChange={toggleAllShown} className="size-4 accent-teal-700" />
+                  </th>
                   <th className="py-3 px-4">Room Code</th>
                   <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4">Room Type</th>
@@ -471,6 +502,9 @@ export function RoomsInventoryTab({
                       key={room.id}
                       className="hover:bg-muted/30 transition-colors"
                     >
+                      <td className="py-3.5 pl-4">
+                        <input type="checkbox" aria-label={`Select room ${room.roomCode}`} checked={selectedIds.has(room.id)} onChange={() => toggleSelected(room.id)} className="size-4 accent-teal-700" />
+                      </td>
                       {/* Code */}
                       <td className="py-3.5 px-4 font-mono font-bold text-foreground">
                         {room.roomCode}
@@ -618,9 +652,12 @@ export function RoomsInventoryTab({
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="font-mono font-bold text-base text-foreground">
-                        {room.roomCode}
-                      </span>
+                      <label className="flex min-h-11 items-center gap-2">
+                        <input type="checkbox" aria-label={`Select room ${room.roomCode}`} checked={selectedIds.has(room.id)} onChange={() => toggleSelected(room.id)} className="size-5 accent-teal-700" />
+                        <span className="font-mono font-bold text-base text-foreground">
+                          {room.roomCode}
+                        </span>
+                      </label>
                       <p className="text-muted-foreground mt-0.5">
                         {room.roomTypeTitle} · {room.buildingName || "Main building"}
                         {room.floorLabel ? `, ${room.floorLabel}` : ""}
@@ -689,6 +726,18 @@ export function RoomsInventoryTab({
             })}
           </div>
         </>
+      )}
+
+      {batchEditOpen && selectedRooms.length > 0 && (
+        <BatchEditRoomsDialog
+          propertyId={propertyId}
+          rooms={selectedRooms}
+          onClose={() => setBatchEditOpen(false)}
+          onUpdated={(updated) => {
+            updated.forEach(onRoomUpdated);
+            setSelectedIds(new Set());
+          }}
+        />
       )}
 
       {/* Bulk Generator Dialog */}

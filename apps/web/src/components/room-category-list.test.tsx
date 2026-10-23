@@ -137,10 +137,10 @@ describe("RoomCategoryList", () => {
     expect(container.querySelector("h3")?.textContent).toBe("Double rooms");
   });
 
-  it("names whether the room type is self-contained", async () => {
+  it("names a plain room type without a self-contained suffix", async () => {
     await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
 
-    expect(container.textContent).toContain("Double non-self-contained");
+    expect(container.textContent).not.toContain("self-contained");
   });
 
   // Festo, 2026-10-23: room and bed totals stay on the landlord's side.
@@ -162,7 +162,7 @@ describe("RoomCategoryList", () => {
     expect(details).toBeDefined();
     await act(async () => details?.click());
 
-    expect(container.textContent).toContain("Double non-self-contained details");
+    expect(container.textContent).toContain("Double details");
     expect(container.textContent).toContain("Room amenities");
     expect(container.textContent).toContain("Study desk");
     expect(container.textContent).toContain("Wardrobe");
