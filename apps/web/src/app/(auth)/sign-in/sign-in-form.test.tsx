@@ -69,3 +69,14 @@ describe("SignInForm", () => {
     expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain("intent=student&amp;screen=register");
   });
 });
+
+describe("SignInForm inactivity notice", () => {
+  it("explains an inactivity sign-out", () => {
+    expect(renderToStaticMarkup(<SignInForm next={null} error="idle_timeout" />))
+      .toContain("You were signed out due to inactivity. Sign in again to continue.");
+  });
+
+  it("never states how long the timeout is", () => {
+    expect(renderToStaticMarkup(<SignInForm next={null} error="idle_timeout" />)).not.toMatch(/minute/i);
+  });
+});

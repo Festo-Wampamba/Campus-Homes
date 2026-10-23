@@ -94,7 +94,7 @@ export function BedspaceDrawer({
               statusLabel = "Booked (Awaiting Move-in)";
             } else if (bed.status === "reserved") {
               tone = "warning";
-              statusLabel = "Temporary Hold (24h)";
+              statusLabel = "Temporary Hold (6h)";
             }
 
             return (

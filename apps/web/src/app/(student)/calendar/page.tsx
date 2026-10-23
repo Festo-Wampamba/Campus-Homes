@@ -13,8 +13,9 @@ export default async function StudentCalendarPage() {
 
   return (
     <>
-      <h1 className="text-2xl">Calendar</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ae5528]">Plan your move</p>
+      <h1 className="ch-student-page__title mt-3">Calendar</h1>
+      <p className="ch-student-page__lede">
         Reminders, visit days, and deadlines you&apos;ve set for yourself.
       </p>
       <div className="mt-6">

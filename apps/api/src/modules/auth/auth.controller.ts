@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { ConflictException, Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
+import { ConflictException, Controller, Get, HttpCode, Logger, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
 import type { Prompt } from '@logto/node';
@@ -259,5 +259,19 @@ export class SessionController {
     // return — the web app's session.ts calls res.json() on every response
     // and crashes on an empty one, so this must always be real JSON.
     res.json(session);
+  }
+
+  /** Sent by the web shell only on real interaction (pointer, keyboard,
+   * wheel, touch), throttled. Background polls never call this, so they
+   * can't keep an unattended session alive. */
+  @Post('activity')
+  @HttpCode(204)
+  async activity(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    correlationId(res);
+    const token = readSessionCookie(req);
+    if (!token || !(await this.sessionStore.recordActivity(token))) {
+      res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+      throw new UnauthorizedException();
+    }
   }
 }

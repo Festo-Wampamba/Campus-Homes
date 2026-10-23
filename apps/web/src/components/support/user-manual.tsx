@@ -50,8 +50,8 @@ export function UserManual() {
     : SUPPORT_MANUAL;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row print:hidden">
+    <div className="ch-support-manual space-y-5">
+      <div className="ch-support-manual__toolbar flex flex-col gap-3 sm:flex-row print:hidden">
         <label className="relative flex-1">
           <span className="sr-only">Search the manual</span>
           <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -60,26 +60,26 @@ export function UserManual() {
             placeholder="Search the manual…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-9"
+            className="min-h-11 pl-9 text-base"
           />
         </label>
-        <Button type="button" variant="secondary" onClick={() => window.print()}>
+        <Button type="button" variant="secondary" className="min-h-11" onClick={() => window.print()}>
           <Printer aria-hidden />
           Print / Save PDF
         </Button>
       </div>
 
       {!q && (
-        <nav aria-label="Manual contents" className="rounded-xl border border-border bg-card p-5 print:hidden">
+        <nav aria-label="Manual contents" className="ch-support-manual__contents rounded-xl border border-border bg-card p-5 print:hidden">
           <p className="font-display font-semibold">Contents</p>
-          <ul className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
             {SUPPORT_MANUAL.map((section) => {
               const Icon = ICONS[section.id];
               return (
                 <li key={section.id}>
                   <a
                     href={`#manual-${section.id}`}
-                    className="flex items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-muted"
+                    className="flex min-h-11 items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-muted"
                   >
                     <Icon aria-hidden className="size-4 shrink-0 text-teal-700 dark:text-teal-300" />
                     {section.title}
@@ -103,7 +103,7 @@ export function UserManual() {
               key={section.id}
               id={`manual-${section.id}`}
               aria-labelledby={`manual-${section.id}-title`}
-              className="scroll-mt-24 rounded-xl border border-border bg-card p-5 sm:p-6 print:break-inside-avoid print:border-0 print:p-0"
+              className="ch-support-manual__section scroll-mt-24 rounded-xl border border-border bg-card p-5 sm:p-6 print:break-inside-avoid print:border-0 print:p-0"
             >
               <h2 id={`manual-${section.id}-title`} className="flex items-center gap-2.5 text-lg">
                 <Icon aria-hidden className="size-5 text-teal-700 dark:text-teal-300" />

@@ -29,7 +29,7 @@ export default async function StaffAccountsPage() {
     (row.assignments ?? []).some((a) => STAFF_KEYS.has(a.roleKey ?? a.key ?? "")),
   );
   return <><PageHeader eyebrow="Access control" title="Staff accounts" description="Invite internal users and review every active fine-grained role assignment and scope." actions={<><Link href="/admin/users" className={buttonVariants({ variant: "secondary" })}><KeyRound aria-hidden />All users</Link><InviteStaffForm /></>} />
-    <SectionCard title={`${rows.length} staff accounts`} description="Edit details, change access, or remove a staff member. One account holds one staff role."><UsersManager staffOnly rows={rows} roles={roleData?.roles ?? []} permissions={roleData?.permissions ?? []} properties={propertyData?.rows ?? []} canMutate={access?.permissions.includes("users.update") ?? false} /></SectionCard>
+    <SectionCard title={`${rows.length} staff accounts`} description="Edit details, change access, or remove a staff member. One account holds one staff role."><UsersManager staffOnly rows={rows} roles={roleData?.roles ?? []} permissions={roleData?.permissions ?? []} properties={propertyData?.rows ?? []} canMutate={access?.permissions.includes("users.update") ?? false} canResetPasswords={access?.permissions.includes("users.password_reset") ?? false} /></SectionCard>
     <div className="mt-5"><SectionCard title="Invitation lifecycle" description="Invitations expire 24 hours after sending. Pending ones can be edited, resent or cancelled; cancelled or expired ones can be deleted."><StaffInvitations rows={invitations ?? []} /></SectionCard></div>
     {data && <div className="mt-3"><Freshness asOf={data.asOf} /></div>}</>;
 }

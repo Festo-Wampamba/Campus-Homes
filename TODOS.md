@@ -3,10 +3,11 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-17._
+_Last updated: 2026-10-23._
 
-**Where things stand:** production, staging and `main` run `dea4275`
-(schema 68/68). Flow: feature branch → PR to `development` →
+**Where things stand:** production, staging and `main` run `a42b74a`
+(schema 70/70). GitHub branches are only `main`, `development` and
+`preview`. Flow: feature branch → PR to `development` →
 release PR to `main` (deploys staging) → production by hand with
 `gh workflow run CI --ref main`.
 
@@ -14,9 +15,8 @@ release PR to `main` (deploys staging) → production by hand with
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
+| 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork); email used meanwhile |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
-| 6 | [Retire the Vercel project](#6-retire-the-vercel-project) | Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
 | 13 | [Production data fixes](#13-phase-5-data-quality-guards--production-data-fixes) | Festo → Claude | ☐ Open (needs correct price, furnishing, title) |
@@ -24,6 +24,10 @@ release PR to `main` (deploys staging) → production by hand with
 | 19 | [Rotate exposed staging secrets](#19-rotate-exposed-staging-secrets) | Festo + Claude | ☐ Open |
 | 24 | [Staging tests: chat + booking tracker](#24-staging-tests-chat--booking-tracker) | Festo | ☐ Open (item 20 fixed; room-change part passed) |
 | 25 | [Code backlog](#25-code-backlog) | Claude | 💤 Later |
+| 26 | [Production checks for the 2026-10-18 release](#26-production-checks-for-the-2026-10-18-release) | Festo | ☐ Open (server-side checks passed) |
+| 27 | [Off-site SEO](#27-off-site-seo) | Festo | ☐ Open (sitemaps already submitted) |
+| 28 | [Decide: unique room codes per property?](#28-decide-unique-room-codes-per-property) | Festo | ☐ Open |
+| 29 | [Google Routes: billing + API key](#29-google-routes-billing--api-key) | Festo → Claude | ⏸ Paused (card rejected by Google) |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -31,7 +35,14 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 
 ## 1. WhatsApp OTP (official Cloud API)
 
-- **What:** Send sign-in, sign-up and forgot-password codes over WhatsApp.
+- **What:** Send sign-in, sign-up and forgot-password codes over WhatsApp,
+  plus the walk-in student invite ("your landlord booked you a room").
+- **Why it matters now (2026-10-23):** SMS through Africa's Talking doesn't
+  deliver on staging (sandbox), so the walk-in SMS invite never arrived.
+  Until WhatsApp is live, use **email**: the walk-in form takes an optional
+  email (sign-in + receipts go there), and Logto's sign-in experience should
+  offer email codes and "Forgot password" on staging and production (Logto
+  console → Sign-in experience; Festo).
 - **Guide:** [`docs/runbooks/whatsapp-otp-setup.md`](docs/runbooks/whatsapp-otp-setup.md).
   It has its own step checklist (Steps 0–7).
 - **Where we stopped:** Step 0, getting the URSB and URA documents ready.
@@ -55,13 +66,6 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
   the server. Kasubi Horizon did sync.
 - **If it still fails:** the reason now shows under the Retry button.
   Screenshot it for Claude.
-
-## 6. Retire the Vercel project
-
-- **What:** delete or disconnect the `campus-homes-web` Vercel project.
-- **Why:** you chose Dokploy for web hosting (2026-08-31), but Vercel still
-  builds a preview on every PR (seen on PRs #152–#155).
-- **Before:** confirm Dokploy's web service is current at the real domain.
 
 ## 7. Fix flaky `IssueStrikeForm` test
 
@@ -153,6 +157,65 @@ Two browsers on staging: normal window = landlord, Incognito = student.
   Adding them to the ESLint ignores needs Festo's OK (config-protection hook).
 - **Local `drizzle-kit check`** fails with `EISDIR` on this machine. CI doesn't
   run it; find the cause before trusting it again.
+- **Full per-property page with tabs** (Overview, Rooms, Reservations,
+  Bookings): deferred 2026-10-18. Manage Rooms stays one page with a
+  property picker plus per-property links.
+
+## 26. Production checks for the 2026-10-18 release
+
+Claude checked on 2026-10-18: `/health` 200, commit `a42b74a`, schema 70/70
+on production and staging; 15 chat threads for 15 student–landlord pairs;
+no API errors in the last 2 hours. These need real accounts:
+
+- [ ] Calendar: create an event ~20 minutes ahead with "Email me reminders"
+      on; the reminder email and the bell notification arrive. (Production
+      has no calendar events yet, so the job hasn't sent anything.)
+- [ ] Messages shows each person only once.
+- [ ] Landlord: Confirm booking on a booking request; the student is notified.
+- [ ] Excel upload on a real property (template download → fill → upload).
+- [ ] Phone/iPhone: calendar (dots, day agenda) and the Manage Rooms dialogs
+      scroll; property form and invite-staff dialogs on iOS.
+
+## 27. Off-site SEO
+
+Sitemaps are already submitted to Google and Bing (2026-10-17). Left:
+
+- [ ] Google Search Console: request indexing of the homepage.
+- [ ] Create a Google Business Profile.
+- [ ] Social profiles; send Claude the links for JSON-LD `sameAs`.
+- [ ] Backlinks from Makerere student pages and Ugandan directories.
+
+## 28. Decide: unique room codes per property?
+
+- **Now:** a room code must be unique **per building** only, checked in app
+  code (`room-management.service.ts`, "already exists in this building");
+  there is no DB constraint. Staging shows "Double 1" and "Quad 1" more
+  than once in one property, across room types/buildings.
+- **Decide:** keep per-building, or require per-property. Per-property
+  means a migration (unique index) after cleaning up existing duplicates,
+  plus the same check in the spreadsheet import.
+
+## 29. Google Routes: billing + API key
+
+- **What:** turn on road distances (hostel → campus). The code is live on
+  staging (#249), and the daily cap and owner alert are in #253. Without a key,
+  hostels show no distance (never a guess).
+- **Blocked on:** Google Cloud billing. The prepaid card was rejected at the
+  free-trial sign-up (2026-10-23). Try another card (Visa/Mastercard debit or
+  credit that allows international online payments).
+- **Steps once billing works:**
+  1. Project `CampusHomes` → enable **Routes API**.
+  2. Routes API → Quotas → set the **per day** request quota to **300**
+     (≤ the free monthly allowance even if hit every day). If only
+     per-minute quotas exist, tell Claude: add an in-app daily cap instead.
+  3. Billing → Budgets & alerts → $1 budget with email alerts.
+  4. Credentials → API key, restricted to IP `169.58.85.25` and the Routes
+     API only.
+  5. Dokploy → staging API → **Environment** → `GOOGLE_ROUTES_API_KEY` →
+     Save → Deploy. Tell Claude "key added". Claude checks Samuel Courts
+     shows about 10 km.
+- **Fallback if no card works:** OpenRouteService (free key, no card),
+  which needs a small adapter change.
 
 ---
 
@@ -160,6 +223,15 @@ Two browsers on staging: normal window = landlord, Incognito = student.
 
 | Date | Item | PRs | Live on |
 |---|---|---|---|
+| 2026-10-19 | Vercel project `campus-homes-web` deleted by Festo (Vercel API confirms no project linked to the repo). Web hosting is Dokploy only; the GitHub "Preview" environment was Vercel's and is now unused. Optional: remove the Vercel GitHub app's repo access (GitHub → Settings → Applications) and the stale "Preview" environment (was item 6) | — | — |
+| 2026-10-18 | iOS dialog sizing: property form and invite-staff dialogs use `min-h-0 flex-auto` like the room dialogs; no `flex-1` dialog forms remain. Security review of `a5394fd` (missed by a 429): no issue | this PR | `development` |
+| 2026-10-18 | Calendar: colours per type, edit dialog, Today, "Starts in …", phone agenda, local date keys (was a day late). Email + in-app reminders at 1d/10h/5h/30/15/5/1 min (BullMQ `calendar_reminders`, migration 0070). Scrollable Manage Rooms dialogs; am/pm chat times | [#229](https://github.com/Festo-Wampamba/Campus-Homes/pull/229), [#230](https://github.com/Festo-Wampamba/Campus-Homes/pull/230) | Staging + production (`a42b74a`, schema 70) |
+| 2026-10-18 | Rooms from Excel/CSV (template, `exceljs` parse, ≤500 rows, no tenant data) + Manage rooms links on every property | [#227](https://github.com/Festo-Wampamba/Campus-Homes/pull/227), [#228](https://github.com/Festo-Wampamba/Campus-Homes/pull/228) | Staging + production |
+| 2026-10-18 | Booking requests on landlord Reservations + Confirm booking; one chat per student–landlord pair (migration 0069, prod 15/15); reserve error popup | [#225](https://github.com/Festo-Wampamba/Campus-Homes/pull/225), [#226](https://github.com/Festo-Wampamba/Campus-Homes/pull/226) | Staging + production |
+| 2026-10-18 | Super Admin delete needs typed email; Super Admin never invitable; user delete removes the Logto identity; username synced to Logto; staff 2-step = authenticator or passkey (`apply-staff-mfa.cjs` run on staging + production); signed-out favourites prompt; `Hostel` JSON-LD + misspelled names | [#224](https://github.com/Festo-Wampamba/Campus-Homes/pull/224), [#226](https://github.com/Festo-Wampamba/Campus-Homes/pull/226) | Staging + production |
+| 2026-10-18 | Production deploy → `a42b74a`, schema 70/70 (pre-release `pg_dump`, 823 objects, verified). 59 merged remote branches deleted | — | Production |
+| 2026-10-17 | Feedback slices A–G: plain verification code + full invitation email; staff MFA mandatory via Logto organization (students never prompted); Bedsitter retired; page open clears its badge; stat cards filter rooms; separate Reservations and Bookings; Manage Rooms auto-refresh while under review | [#215](https://github.com/Festo-Wampamba/Campus-Homes/pull/215)–[#221](https://github.com/Festo-Wampamba/Campus-Homes/pull/221), [#222](https://github.com/Festo-Wampamba/Campus-Homes/pull/222), [#223](https://github.com/Festo-Wampamba/Campus-Homes/pull/223) | Staging + production |
+| 2026-10-17 | User details synced to Logto (contact phone in `customData`, never `primaryPhone`) + backfill script; gender required at registration for students and landlords | [#213](https://github.com/Festo-Wampamba/Campus-Homes/pull/213), [#214](https://github.com/Festo-Wampamba/Campus-Homes/pull/214) | Staging + production |
 | 2026-10-17 | Inspection submit requires at least one photo: `syncVisitSchema` rejects 0 photos (API 400) and the form keeps Submit disabled with "Add at least one photo before submitting."; queued offline photos count. Codex follow-up: resending a failed draft uses a new idempotency key so an added photo isn't dropped by a replay. Festo confirmed on staging (was item 23) | [#209](https://github.com/Festo-Wampamba/Campus-Homes/pull/209), [#211](https://github.com/Festo-Wampamba/Campus-Homes/pull/211), [#210](https://github.com/Festo-Wampamba/Campus-Homes/pull/210) | Staging + production (`dea4275`) |
 | 2026-10-17 | Student registration link (`/agreement/<propertyId>`) in the landlord property dialog is a link that opens in a new tab; Copy link and Open unchanged. Festo confirmed on staging (was item 22) | [#207](https://github.com/Festo-Wampamba/Campus-Homes/pull/207), [#208](https://github.com/Festo-Wampamba/Campus-Homes/pull/208) | Staging + production (`6141b47`) |
 | 2026-10-17 | Ugandan phone numbers must be exactly 10 digits (9 after `+256`) in the shared `africanPhone` schema; other African countries keep the loose rule. Onboarding shows the message in red under the phone field. Festo confirmed on staging (was item 21) | [#205](https://github.com/Festo-Wampamba/Campus-Homes/pull/205), [#206](https://github.com/Festo-Wampamba/Campus-Homes/pull/206) | Staging + production (`0b3e604`) |

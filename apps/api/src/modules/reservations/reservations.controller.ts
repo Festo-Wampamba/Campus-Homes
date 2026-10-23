@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 
-import { bookReservationSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
+import { bookReservationSchema, onboardWalkInSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
@@ -9,6 +9,7 @@ import { ReservationsService } from './reservations.service';
 
 class ReserveDto extends createZodDto(reserveSchema) {}
 class BookDto extends createZodDto(bookReservationSchema) {}
+class OnboardWalkInDto extends createZodDto(onboardWalkInSchema) {}
 class ReleaseDto extends createZodDto(releaseReservationSchema) {}
 
 @Controller('reservations')
@@ -26,6 +27,24 @@ export class ReservationsController {
   @Roles('landlord', 'custodian', 'ops_lead', 'admin')
   book(@Req() req: AuthenticatedRequest, @Body() body: BookDto) {
     return this.reservationsService.book(rlsCtx(req), body);
+  }
+
+  @Get('receipts')
+  @Roles('student', 'landlord')
+  receipts(@Req() req: AuthenticatedRequest) {
+    return this.reservationsService.receipts(rlsCtx(req));
+  }
+
+  @Get(':id/student')
+  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  studentDetails(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservationsService.studentDetails(rlsCtx(req), id);
+  }
+
+  @Post('walk-in')
+  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  onboardWalkIn(@Req() req: AuthenticatedRequest, @Body() body: OnboardWalkInDto) {
+    return this.reservationsService.onboardWalkIn(rlsCtx(req), body);
   }
 
   @Post(':id/release')

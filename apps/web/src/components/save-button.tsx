@@ -22,6 +22,7 @@ export function SaveButton({
   signedOut?: boolean;
 }) {
   const [saved, setSaved] = useState(initialSaved);
+  const [error, setError] = useState(false);
   const [pending, setPending] = useState(false);
   const [askToSignIn, setAskToSignIn] = useState(false);
 
@@ -30,6 +31,7 @@ export function SaveButton({
       setAskToSignIn(true);
       return;
     }
+    setError(false);
     setPending(true);
     const next = !saved;
     setSaved(next); // optimistic — a failed toggle isn't worth blocking on
@@ -43,6 +45,7 @@ export function SaveButton({
         await api(`/students/saved-listings/${listingId}`, { method: "DELETE" });
       }
     } catch {
+      setError(true);
       setSaved(!next); // roll back on failure
     } finally {
       setPending(false);
@@ -58,7 +61,7 @@ export function SaveButton({
         disabled={pending}
         aria-pressed={signedOut ? undefined : saved}
         aria-label={saved ? "Remove from favourites" : "Save to favourites"}
-        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-semibold text-foreground shadow-xs transition-colors duration-150 hover:bg-muted disabled:opacity-60"
+        className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-semibold text-foreground shadow-xs transition-colors duration-150 hover:bg-muted disabled:opacity-60"
       >
         <Heart
           aria-hidden
@@ -66,8 +69,9 @@ export function SaveButton({
         />
         {saved ? "Saved" : "Save"}
       </button>
+      {error && <span role="alert" className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-border bg-card p-3 text-sm text-destructive">Couldn’t update favourites. Try again.</span>}
       {signedOut && (
-        <Dialog open={askToSignIn} onOpenChange={setAskToSignIn} size="sm">
+        <Dialog aria-label="Sign in to save favourites" open={askToSignIn} onOpenChange={setAskToSignIn} size="sm">
           <DialogHeader
             title="Create an account to save favourites"
             description="Favourite hostels are kept in your free student account, the same account you use to reserve a room. It takes a minute, and you come straight back here."

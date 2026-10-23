@@ -39,9 +39,12 @@ export function LiveClock() {
   const label = date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   return (
-    <div aria-hidden className="pointer-events-none select-none">
-      <p className="font-display text-5xl font-bold text-white/90 sm:text-6xl">{time}</p>
-      <p className="mt-1 text-sm text-white/70 sm:text-base">{label}</p>
+    <div
+      aria-hidden
+      className="pointer-events-none inline-flex select-none flex-col rounded-2xl border border-teal-900/15 bg-white/95 px-4 py-3 shadow-lg shadow-teal-950/10 backdrop-blur-sm dark:border-teal-100/15 dark:bg-slate-950/90 dark:shadow-black/25"
+    >
+      <p className="font-display text-4xl font-bold leading-none tracking-tight text-teal-950 tabular-nums dark:text-white sm:text-5xl">{time}</p>
+      <p className="mt-1 text-xs font-semibold text-teal-800/85 dark:text-white/80 sm:text-sm">{label}</p>
     </div>
   );
 }

@@ -85,8 +85,10 @@ async function syncOne(draft: InspectionDraft): Promise<void> {
     // TypeError on a network failure, a 5xx means the server may recover, and
     // a 429 is a rate limit that clears on its own. Everything else (local
     // validation throws, unexpected errors, other 4xx) is terminal — retrying
-    // it forever would just resend the same bad request.
-    const isRetryable = err instanceof TypeError || (err instanceof ApiError && (err.status >= 500 || err.status === 429));
+    // it forever would just resend the same bad request. A 401 (session
+    // ended, e.g. the inactivity sign-out) clears with the next sign-in, so
+    // the draft stays queued instead of turning terminal.
+    const isRetryable = err instanceof TypeError || (err instanceof ApiError && (err.status >= 500 || err.status === 429 || err.status === 401));
     await putDraft({ ...current, syncStatus: isRetryable ? "queued" : "failed", syncError: syncErrorMessage(err, step) });
     notifyDraftSettled(draft.visitId);
   }

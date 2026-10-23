@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { UniversitySelectField } from "@/components/university-select-field";
 import { api, ApiError } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatUgx } from "@/lib/format";
 
 type Reserved = { id: string; reservedAt: string | null; reservedExpiresAt: string | null };
 
@@ -37,14 +37,20 @@ export function ReserveButton({
   needsProfile,
   propertyName,
   roomLabel,
+  priceUgx,
+  depositUgx,
 }: {
   bedId: string;
   listingId: string;
   needsProfile: boolean;
   propertyName: string;
   roomLabel: string;
+  priceUgx?: number;
+  depositUgx?: number | null;
 }) {
   const router = useRouter();
+  const [review, setReview] = useState(false);
+  const [profileCompleted, setProfileCompleted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProfileStep, setShowProfileStep] = useState(false);
@@ -55,7 +61,7 @@ export function ReserveButton({
     setError(null);
     setPending(true);
     try {
-      // Reserve is a 24h temporary claim (§6) — landlord Books it offline,
+      // Reserve is a temporary claim (§6) — landlord Books it offline,
       // no payment/checkout step here at all.
       // The hold length is read from the response, not assumed: admins can
       // change reservation_hold_hours.
@@ -72,12 +78,12 @@ export function ReserveButton({
   }
 
   function reserve() {
-    if (needsProfile) {
+    if (needsProfile && !profileCompleted) {
       setError(null);
       setShowProfileStep(true);
       return;
     }
-    void startReserve();
+    setReview(true);
   }
 
   async function submitProfileAndReserve(e: React.FormEvent) {
@@ -96,18 +102,30 @@ export function ReserveButton({
       return;
     }
     setShowProfileStep(false);
-    await startReserve();
+    setProfileCompleted(true);
+    setPending(false);
+    setReview(true);
   }
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button type="button" size="sm" disabled={pending} onClick={reserve}>
-        {pending ? "Starting…" : "Reserve"}
+      <Button type="button" className="min-h-11 w-full" disabled={pending} onClick={reserve}>
+        {pending ? "Starting…" : "Reserve for free"}
       </Button>
+      <Dialog aria-label="Review your free reservation" open={review} onOpenChange={setReview}>
+        <DialogHeader title="Review your free reservation" description={`${propertyName} · ${roomLabel}`} onClose={() => setReview(false)} />
+        <DialogBody><div className="space-y-4 text-base">
+          {priceUgx !== undefined && <p className="font-semibold">{formatUgx(priceUgx)} per bed, per semester</p>}
+          <p>Deposit: {depositUgx == null ? "unstated — confirm with the landlord" : formatUgx(depositUgx)}.</p>
+          <p>This temporarily holds an available bed within your selected room category. A specific numbered room is allocated by the landlord.</p>
+          <p className="text-muted-foreground">No payment is taken. Review the property’s charges and house rules, then agree rent, payment timing and tenancy terms directly with the landlord. The confirmation will show your actual expiry.</p>
+        </div></DialogBody>
+        <DialogFooter><Button variant="secondary" onClick={() => setReview(false)}>Go back</Button><Button disabled={pending} onClick={() => { setReview(false); void startReserve(); }}>Confirm free reservation</Button></DialogFooter>
+      </Dialog>
       {/* A popup, not a line squeezed under the button: the message (e.g. the
           5-reservation limit) is long. Errors from the university step stay
           inside that dialog instead. */}
-      <Dialog open={!!error && !showProfileStep} onOpenChange={(open) => !open && setError(null)} size="sm">
+      <Dialog aria-label="Reservation error" open={!!error && !showProfileStep} onOpenChange={(open) => !open && setError(null)} size="sm">
         <DialogHeader title="Couldn't reserve this room" onClose={() => setError(null)} />
         <DialogBody>
           <p role="alert" className="text-sm text-foreground">{error}</p>
@@ -118,7 +136,7 @@ export function ReserveButton({
           </Button>
         </DialogFooter>
       </Dialog>
-      <Dialog open={showProfileStep} onOpenChange={setShowProfileStep}>
+      <Dialog aria-label="Complete your student profile" open={showProfileStep} onOpenChange={setShowProfileStep}>
         <DialogHeader
           title="Just one thing first"
           description="Which university are you at? This finishes setting up your student account. You only need to do it once."
@@ -132,11 +150,12 @@ export function ReserveButton({
         </DialogBody>
         <DialogFooter>
           <Button type="submit" form="reserve-profile-form" disabled={pending || !university}>
-            {pending ? "Reserving…" : "Continue and reserve"}
+            {pending ? "Reserving…" : "Continue to review"}
           </Button>
         </DialogFooter>
       </Dialog>
       <Dialog
+        aria-label="Reservation confirmation"
         open={reserved !== null}
         onOpenChange={(open) => {
           if (open) return;

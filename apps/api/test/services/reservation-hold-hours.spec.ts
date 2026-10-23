@@ -54,3 +54,34 @@ describe('reservation hold hours (migration 0061)', () => {
     expect(await migrateFrom('admin')).toBe(72);
   });
 });
+
+const MIGRATION_6H_SQL = readFileSync(join(__dirname, '../../migrations/0074_reservation_hold_6h.sql'), 'utf8');
+
+// Same rolled-back staging as migrateFrom(), starting from a given hold length.
+async function migrate6hFrom(hours: number): Promise<unknown> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO platform_settings (key, value, description)
+       VALUES ('reservation_hold_hours', $1::jsonb, 'Hold hours')
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [JSON.stringify(hours)],
+    );
+    await client.query(MIGRATION_6H_SQL);
+    return await holdHours(client);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+}
+
+describe('reservation hold hours (migration 0074)', () => {
+  it('shortens a 24h hold to 6', async () => {
+    expect(await migrate6hFrom(24)).toBe(6);
+  });
+
+  it('keeps any other hold length an admin chose', async () => {
+    expect(await migrate6hFrom(12)).toBe(12);
+  });
+});

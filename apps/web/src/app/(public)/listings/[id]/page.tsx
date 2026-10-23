@@ -9,18 +9,16 @@ import {
 
 import { api, ApiError } from "@/lib/api";
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { formatAddress, formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
+import { formatAddress } from "@/lib/format";
 import { getSavedListings } from "@/lib/saved-listings";
 import { getServerSession } from "@/lib/session";
 import { getMyReservations } from "@/lib/reservations";
 import { getStudentProfile } from "@/lib/student";
-import { cn } from "@/lib/utils";
-import { AmenityList, amenityLabel } from "@/components/listing/amenity-list";
+import { amenityLabel } from "@/lib/amenity-label";
 import { ListingStructuredData } from "@/components/seo/site-structured-data";
-import { AskLandlordDialog } from "@/components/listing/ask-landlord-dialog";
+import { ListingExperience } from "@/components/listing/listing-experience";
 import { ListingGallery } from "@/components/listing/listing-gallery";
 import { BackButton } from "@/components/back-button";
-import { RoomCategoryList } from "@/components/room-category-list";
 import { SaveButton } from "@/components/save-button";
 import { TrackRecentlyViewed } from "@/components/track-recently-viewed";
 import { VerifiedBadge } from "@/components/verified-badge";
@@ -62,391 +60,34 @@ export async function generateMetadata({
   };
 }
 
-export default async function ListingDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const listingId = (await params).id;
-  // Signing in from here returns the student to this listing, not the homepage.
-  const signInHref = `/sign-in?next=${encodeURIComponent(`/listings/${listingId}`)}`;
   const [detail, session] = await Promise.all([getDetail(listingId), getServerSession()]);
   if (!detail) notFound();
-  const isStudent = session?.user.status === "active" && session.access.workspaces.includes("student");
-  const [studentProfile, savedListings, myReservations] = await Promise.all([
-    isStudent ? getStudentProfile() : Promise.resolve(null),
-    isStudent ? getSavedListings() : Promise.resolve([]),
-    isStudent ? getMyReservations() : Promise.resolve([]),
+  const isStudent = !!(session?.user.status === "active" && session.access.workspaces.includes("student"));
+  const [profile, saved, reservations] = await Promise.all([
+    isStudent ? getStudentProfile() : null, isStudent ? getSavedListings() : [], isStudent ? getMyReservations() : [],
   ]);
-  // Beds this student already holds, so their room type shows as reserved.
-  const myLiveBeds = new Map(
-    myReservations
-      .filter((r) => r.status === "reserved" || r.status === "booked")
-      .map((r) => [r.bedId, r.status as "reserved" | "booked"]),
-  );
-  // Any signed-in student can reserve immediately — a missing `students` row
-  // (university/year, required by the reservations FK) is collected inline
-  // by ReserveButton's quick-registration dialog on first reserve, not as a
-  // separate blocking page a new signup has to detour through first.
-  const canReserve = isStudent;
-  const needsProfile = isStudent && studentProfile === null;
-  const isSaved = savedListings.some((row) => row.id === listingId);
-
-  const { property, listing, version, photos, units, unitPhotos, availability, propertyMedia } = detail;
-  const unitPrices = units.map((u) => u.pricePerTermUgx);
-  const minPriceUgx = unitPrices.length > 0 ? Math.min(...unitPrices) : version.pricePerTermUgx;
-  const maxPriceUgx = unitPrices.length > 0 ? Math.max(...unitPrices) : version.pricePerTermUgx;
-  const amenityKeys = Object.entries(version.amenities)
-    .filter(([, has]) => has)
-    .map(([key]) => key);
-  const houseRules = property.house_rules ?? [];
-  const orderedPhotos = [...photos].sort(
-    (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder,
-  );
-  // Gallery-only combined list: Ops-verified inspection photos first, then
-  // the landlord's own whole-property shots (property_media, 0026) — kept
-  // separate from orderedPhotos itself since TrackRecentlyViewed and
-  // RoomCategoryList below expect the real ListingPhoto shape, not this
-  // display-only id+storageKey union.
-  const galleryPhotos: { id: string; storageKey: string }[] = [
-    ...orderedPhotos.map((p) => ({ id: p.id, storageKey: p.storageKey })),
-    ...propertyMedia.map((m) => ({ id: m.id, storageKey: m.storage_key })),
-  ];
-
-  return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
-      <ListingStructuredData
-        listing={{
-          id: listingId,
-          name: property.name,
-          streetAddress: property.street_address,
-          lat: property.gps_lat,
-          lon: property.gps_lon,
-          minPriceUgx,
-          maxPriceUgx,
-          photoKeys: galleryPhotos.map((p) => p.storageKey),
-          amenities: amenityKeys.map(amenityLabel),
-        }}
-      />
-      <TrackRecentlyViewed
-        id={listingId}
-        name={property.name}
-        streetAddress={property.street_address}
-        photoStorageKey={galleryPhotos[0]?.storageKey ?? null}
-        priceUgx={minPriceUgx}
-      />
-      <BackButton fallbackHref="/search" label="Back" />
-
-      <header className="mt-6 flex items-start justify-between gap-4 sm:mt-7">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="min-w-0 text-3xl leading-tight tracking-[-0.035em] sm:text-4xl">
-              {property.name}
-            </h1>
-            <VerifiedBadge />
-            {property.gender_arrangement && (
-              <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-                {GENDER_ARRANGEMENT_LABELS[property.gender_arrangement]}
-              </span>
-            )}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <p className="text-md text-muted-foreground">{formatAddress(property.street_address)}</p>
-            {listing.verifiedAt && (
-              <span className="text-xs text-muted-foreground">
-                Inspected{" "}
-                {new Date(listing.verifiedAt).toLocaleDateString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </span>
-            )}
-            <Link
-              href="/#verified"
-              className="text-xs font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300"
-            >
-              What does Verified mean?
-            </Link>
-          </div>
-        </div>
-        {/* Signed-out visitors see the heart too; pressing it asks them to
-            create the free account that keeps favourites. Landlord and staff
-            sessions can't save, so they don't get it. */}
-        {(isStudent || !session) && (
-          <div className="shrink-0 pt-0.5">
-            <SaveButton listingId={listingId} initialSaved={isSaved} signedOut={!session} />
-          </div>
-        )}
-      </header>
-
-      {/* Gallery + money card sit side by side on large screens,
-          starting at the same vertical position — the reservation card is
-          never scrolled below the photos, same layout logic as an
-          e-commerce product image + buy box. */}
-      <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start xl:gap-10">
-        <div>
-          {/* Photos — inspector-captured (EXIF-verified) plus the
-              landlord's own whole-property shots (property_media, 0026) */}
-          <div className="mb-10">
-            <ListingGallery photos={galleryPhotos} propertyName={property.name} />
-          </div>
-
-          {version.description && (
-            <section aria-labelledby="about-heading">
-              <h2 id="about-heading" className="text-xl">
-                About this place
-              </h2>
-              <p className="mt-3 max-w-[70ch] text-md leading-relaxed text-muted-foreground">
-                {version.description}
-              </p>
-            </section>
-          )}
-
-          {amenityKeys.length > 0 && (
-            <section aria-labelledby="amenities-heading" className="mt-10">
-              <h2 id="amenities-heading" className="scroll-mt-24 text-xl">
-                Amenities we confirmed
-              </h2>
-              <AmenityList keys={amenityKeys} />
-            </section>
-          )}
-
-          {houseRules.length > 0 && (
-            <section id="house-rules" aria-labelledby="house-rules-heading" className="mt-10 scroll-mt-24">
-              <h2 id="house-rules-heading" className="text-xl">
-                House rules
-              </h2>
-              <ul className="mt-3 max-w-[70ch] list-disc space-y-1.5 pl-5 text-md leading-relaxed text-muted-foreground">
-                {houseRules.map((rule, i) => (
-                  <li key={i}>{rule}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <section aria-labelledby="units-heading" className="mt-10">
-            <h2 id="units-heading" className="text-xl">
-              Room types
-            </h2>
-            <BeforeYouReserve
-              genderArrangement={property.gender_arrangement}
-              amenityCount={amenityKeys.length}
-              houseRuleCount={houseRules.length}
-            />
-            <RoomCategoryList
-              listingId={listingId}
-              units={units}
-              availability={availability}
-              photos={orderedPhotos}
-              unitPhotos={unitPhotos}
-              propertyName={property.name}
-              canReserve={canReserve}
-              needsProfile={needsProfile}
-              myLiveBeds={myLiveBeds}
-            />
-          </section>
-
-          {/* Pre-reservation channel to the landlord — separate from the
-              reservation chat thread (only opens once a hold exists) and
-              from /support (staff-routed, never reaches the landlord). */}
-          <section aria-labelledby="ask-heading" className="mt-10 max-w-sm">
-            <h2 id="ask-heading" className="text-xl">
-              Have a question?
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Ask the landlord directly, or request a viewing. No reservation needed.
-            </p>
-            <div className="mt-3 grid gap-2">
-              {session ? (
-                <>
-                  <AskLandlordDialog listingId={listingId} propertyName={property.name} viewing />
-                  <AskLandlordDialog listingId={listingId} propertyName={property.name} />
-                </>
-              ) : (
-                <Link
-                  href={signInHref}
-                  className="inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-background text-base font-semibold text-foreground shadow-xs hover:bg-muted"
-                >
-                  Sign in to ask a question
-                </Link>
-              )}
-            </div>
-          </section>
-        </div>
-
-        {/* Reservation panel — pinned so price + CTA are never scrolled out
-            of view: a sticky sidebar on desktop, a fixed bottom bar on
-            mobile (there's no room beside the content there). */}
-        <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start">
-          <MoneyCard
-            session={session}
-            signInHref={signInHref}
-            canReserve={canReserve}
-            minPriceUgx={minPriceUgx}
-            maxPriceUgx={maxPriceUgx}
-            bookingFeePercent={property.booking_fee_percent}
-            advanceRentRequired={property.advance_rent_required}
-          />
-        </aside>
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/96 p-3 shadow-[0_-12px_32px_-18px_rgba(0,47,47,0.35)] backdrop-blur-xl lg:hidden">
-        <MoneyCard
-          session={session}
-          signInHref={signInHref}
-          canReserve={canReserve}
-          minPriceUgx={minPriceUgx}
-          maxPriceUgx={maxPriceUgx}
-          compact
-        />
-      </div>
-      {/* Clears the fixed mobile bar so it never covers the last room row. */}
-      <div className="h-28 lg:hidden" aria-hidden />
-    </div>
-  );
-}
-
-/** What a student should know before pressing Reserve (R06, R09, R12),
- * placed right above the room list where every Reserve button lives. */
-function BeforeYouReserve({
-  genderArrangement,
-  amenityCount,
-  houseRuleCount,
-}: {
-  genderArrangement: string | null;
-  amenityCount: number;
-  houseRuleCount: number;
-}) {
-  const notProvided = <span className="text-muted-foreground">Not provided</span>;
-  return (
-    <dl className="mt-4 grid gap-x-4 gap-y-2 rounded-xl border border-border bg-muted/50 p-4 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
-      <dt className="font-semibold">Who can stay</dt>
-      <dd>{genderArrangement ? GENDER_ARRANGEMENT_LABELS[genderArrangement] : notProvided}</dd>
-      <dt className="font-semibold">Amenities</dt>
-      <dd>
-        {amenityCount > 0 ? (
-          <a href="#amenities-heading" className="font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
-            {amenityCount} confirmed, see the list
-          </a>
-        ) : (
-          notProvided
-        )}
-      </dd>
-      <dt className="font-semibold">House rules</dt>
-      <dd>
-        {houseRuleCount > 0 ? (
-          <a href="#house-rules" className="font-semibold text-teal-700 underline-offset-4 hover:underline dark:text-teal-300">
-            {houseRuleCount === 1 ? "1 rule" : `${houseRuleCount} rules`}, read before reserving
-          </a>
-        ) : (
-          notProvided
-        )}
-      </dd>
-    </dl>
-  );
-}
-
-function MoneyCard({
-  session,
-  canReserve,
-  minPriceUgx,
-  maxPriceUgx,
-  bookingFeePercent,
-  advanceRentRequired,
-  compact = false,
-  signInHref,
-}: {
-  session: Awaited<ReturnType<typeof getServerSession>>;
-  signInHref: string;
-  canReserve: boolean;
-  minPriceUgx: number;
-  maxPriceUgx: number;
-  bookingFeePercent?: number | null;
-  advanceRentRequired?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        compact
-          ? "flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
-          : "rounded-2xl border border-border bg-card p-5 shadow-[0_22px_50px_-32px_rgba(0,47,47,0.35)] sm:p-6",
-      )}
-    >
-      <div className={cn("min-w-0", compact && "flex-1")}>
-        {minPriceUgx !== maxPriceUgx && (
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">From</p>
-        )}
-        <p
-          className={cn(
-            "tabular font-display font-semibold leading-tight text-foreground",
-            compact ? "text-lg" : "mt-0.5 text-[1.75rem]",
-          )}
-        >
-          {formatUgx(minPriceUgx)}
-        </p>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          {minPriceUgx !== maxPriceUgx && !compact && <>Up to {formatUgx(maxPriceUgx)} · </>}
-          per bed / semester
-        </p>
-        {!compact && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Reserve any available room. It&apos;s free to hold your spot.
-          </p>
-        )}
-      </div>
-      {!session && (
-        <Link
-          href={signInHref}
-          className={cn(
-            "inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground shadow-xs transition duration-300 hover:bg-teal-700 active:scale-[0.98]",
-            compact ? "shrink-0" : "mt-4 w-full",
-          )}
-        >
-          Sign in to reserve
-        </Link>
-      )}
-      {canReserve && (
-        <p
-          className={cn(
-            "font-semibold leading-snug text-foreground",
-            compact ? "max-w-48 shrink-0 text-right text-xs sm:text-sm" : "mt-4 text-sm",
-          )}
-        >
-          Select an available room{compact ? "" : " below to reserve."}
-        </p>
-      )}
-      {!compact && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Rent and tenancy terms are agreed directly with the landlord.
-        </p>
-      )}
-      {!compact && (bookingFeePercent != null || advanceRentRequired) && (
-        <div className="mt-3 rounded-lg bg-muted p-3">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Other charges
-          </p>
-          <ul className="mt-1.5 space-y-1 text-xs text-foreground">
-            {bookingFeePercent != null && (
-              <li>{bookingFeePercent}% booking fee on the semester rent</li>
-            )}
-            {advanceRentRequired && <li>Advance rent required before move-in</li>}
-          </ul>
-        </div>
-      )}
-      {!compact && (
-        <div className="mt-4 border-t border-border pt-4">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Before you move in
-          </p>
-          <ol className="mt-1.5 list-inside list-decimal space-y-1 text-xs text-muted-foreground">
-            <li>Reserve a free room. No payment is needed to hold it.</li>
-            <li>Agree tenancy terms and pay the landlord directly.</li>
-            <li>Confirm your move-in here so the room is marked occupied.</li>
-          </ol>
-        </div>
-      )}
-    </div>
-  );
+  const { property, listing, version, photos, units, availability, propertyMedia, unitPhotos } = detail;
+  const heldBeds: [string, "reserved" | "booked"][] = reservations.filter(row => row.status === "reserved" || row.status === "booked").map(row => [row.bedId, row.status as "reserved" | "booked"]);
+  const availableUnitIds = new Set(availability.filter(bed => bed.available).map(bed => bed.unit_id));
+  const prices = units.filter(unit => availableUnitIds.has(unit.id)).map(unit => unit.pricePerTermUgx);
+  const minPriceUgx = prices.length ? Math.min(...prices) : null;
+  const orderedPhotos = [...photos].sort((a,b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder);
+  const galleryPhotos = [
+    ...orderedPhotos.map(photo => ({ id: photo.id, storageKey: photo.storageKey, group: "Inspection" })),
+    ...propertyMedia.map(photo => ({ id: photo.id, storageKey: photo.storage_key, group: "Property" })),
+    ...unitPhotos.map(photo => ({ id: `${photo.unitId}-${photo.storageKey}`, storageKey: photo.storageKey, group: "Rooms" })),
+  ].filter((photo,index,all) => all.findIndex(other => other.storageKey === photo.storageKey) === index);
+  const amenities = Object.entries(version.amenities).filter(([,has]) => has).map(([key]) => key);
+  const identity = <>
+    <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><BackButton fallbackHref="/search" label="Back to results"/><span aria-hidden>/</span><Link href="/search?campus=MUK">Makerere hostels</Link><span aria-hidden>/</span><span>{property.name}</span></nav>
+    <header className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl leading-tight tracking-tight sm:text-3xl">{property.name}</h1><VerifiedBadge/></div><p className="mt-3 text-muted-foreground">{formatAddress(property.street_address)}</p><p className="mt-2 text-sm text-muted-foreground">{listing.verifiedAt ? `Inspected ${new Date(listing.verifiedAt).toLocaleDateString("en-UG", {day:"numeric",month:"long",year:"numeric"})}` : "Inspection date unavailable"} · <Link href="/safety" className="underline">Inspection explained</Link></p></div>{(isStudent || !session) && <div className="relative shrink-0"><SaveButton listingId={listingId} initialSaved={saved.some(row => row.id === listingId)} signedOut={!session}/></div>}</header>
+  </>;
+  return <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    {minPriceUgx !== null && <ListingStructuredData listing={{ id: listingId, name: property.name, streetAddress: property.street_address, lat: property.gps_lat, lon: property.gps_lon, minPriceUgx, maxPriceUgx: Math.max(...prices), photoKeys: galleryPhotos.map(photo => photo.storageKey), amenities: amenities.map(amenityLabel) }}/>}
+    <TrackRecentlyViewed id={listingId} name={property.name} streetAddress={property.street_address} photoStorageKey={galleryPhotos[0]?.storageKey ?? null} priceUgx={minPriceUgx ?? 0}/>
+    <ListingGallery photos={galleryPhotos} propertyName={property.name}/>
+    <ListingExperience identity={identity} studentUniversity={profile?.university ?? null} detail={detail} canReserve={isStudent} signedIn={!!session} needsProfile={isStudent && profile === null} heldBeds={heldBeds} savedIds={saved.map(row => row.id)}/>
+  </div>;
 }

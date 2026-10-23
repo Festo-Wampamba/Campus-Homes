@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 
 import { Analytics } from "@/components/analytics";
 import { CookieNotice } from "@/components/cookie-notice";
+import { FloatingWhatsApp } from "@/components/shell/floating-whatsapp";
 import { getSiteUrl } from "@/lib/site-url";
 
 import { Providers } from "./providers";
@@ -111,6 +112,7 @@ export default async function RootLayout({
         <NextIntlClientProvider>
           <Providers>{children}</Providers>
           <CookieNotice />
+          <FloatingWhatsApp />
           <Analytics />
         </NextIntlClientProvider>
       </body>

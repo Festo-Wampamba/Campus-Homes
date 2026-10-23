@@ -8,6 +8,7 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/
 import { api, apiErrorMessage } from "@/lib/api";
 
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cash: "Cash",
   mtn_momo: "MTN MoMo",
   airtel_money: "Airtel Money",
   card: "Card",

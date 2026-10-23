@@ -15,6 +15,7 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { usePagination } from "@/lib/use-pagination";
 import { MessageButton } from "@/components/chat/message-button";
 import { ConfirmBookingDialog } from "@/components/landlord/confirm-booking-dialog";
+import { StudentDetailsButton } from "@/components/landlord/student-details-button";
 
 import type { RoomInfo } from "./room-lookup";
 
@@ -345,6 +346,7 @@ export function LandlordReservationsList({
                             onReleased={() => onReleased(reservation.id)}
                           />
                         )}
+                        <StudentDetailsButton reservationId={reservation.id} />
                         <MessageButton reservationId={reservation.id} messagesHref="/landlord/messages" />
                       </div>
                     </td>

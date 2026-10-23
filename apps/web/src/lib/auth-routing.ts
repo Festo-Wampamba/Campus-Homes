@@ -35,7 +35,7 @@ export function authorizedNext(access: AccountAccess, rawNext: unknown): string 
   if (path.includes("%")) return null;
   const workspace = workspaceForPath(path);
   if (workspace) return access.workspaces.includes(workspace) ? next : null;
-  const publicPath = ["/", "/search", "/support", "/landlords", "/landlords/enroll"].includes(path) || within(path, "/listings");
+  const publicPath = ["/", "/search", "/how-it-works", "/support", "/contact", "/faqs", "/safety", "/landlords", "/landlords/enroll"].includes(path) || within(path, "/listings");
   return publicPath ? next : null;
 }
 

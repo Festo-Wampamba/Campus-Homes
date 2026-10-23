@@ -30,6 +30,7 @@ import { SignOutButton } from "@/components/shell/sign-out-button";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { IdleTimeout } from "@/components/shell/idle-timeout";
 
 export type NotificationRow = {
   id: string;
@@ -194,6 +195,7 @@ export function AppShell({
   headerExtra?: React.ReactNode;
 }) {
   const canSwitchWorkspace = new Set(access.workspaces).size > 1;
+  const isStaff = access.workspaces.includes("ops") || access.workspaces.includes("admin");
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeSidebarCollapsed, getSidebarCollapsed, getSidebarCollapsedServerSnapshot);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -305,6 +307,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <PresenceHeartbeat />
+      <IdleTimeout signInPath={isStaff ? "/staff" : "/sign-in"} />
       <aside className={cn("fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 lg:block", collapsed ? "w-16" : "w-62")}>
         <Sidebar nav={nav} pathname={pathname} collapsed={collapsed} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
       </aside>
@@ -318,7 +321,7 @@ export function AppShell({
       )}
 
       <div className={cn("transition-[padding] duration-150", collapsed ? "lg:pl-16" : "lg:pl-62")}>
-        <header className="sticky top-0 z-20 flex h-17 items-center gap-3 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-border dark:bg-background/95">
+        <header className="sticky top-0 z-30 flex h-17 items-center gap-3 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-border dark:bg-background/95">
           <button type="button" aria-label="Open navigation" onClick={() => setMenuOpen(true)} className="grid size-10 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden dark:text-foreground dark:hover:bg-muted"><Menu aria-hidden className="size-5" /></button>
           <button
             type="button"
@@ -328,8 +331,10 @@ export function AppShell({
           >
             {collapsed ? <PanelLeftOpen aria-hidden className="size-4.5" /> : <PanelLeftClose aria-hidden className="size-4.5" />}
           </button>
-          <button type="button" onClick={() => setSearchOpen(true)} className="flex h-10 min-w-0 max-w-md flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-500 transition-colors hover:border-slate-300 sm:flex-none sm:w-80 dark:border-border dark:bg-muted dark:text-muted-foreground">
-            <Search aria-hidden className="size-4" /><span className="truncate">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-[10px] sm:inline">/</kbd>
+          {/* Phone: a clear square search button (the squeezed field read as an
+              empty box). Tablet and up: the full search field. */}
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search the workspace" className="flex size-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 transition-colors hover:border-slate-300 sm:h-10 sm:w-80 sm:justify-start sm:px-3 sm:text-left sm:text-slate-500 dark:border-border dark:bg-muted dark:text-muted-foreground">
+            <Search aria-hidden className="size-5 sm:size-4" /><span className="hidden truncate sm:inline">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-[10px] sm:inline">/</kbd>
           </button>
           <div className="ml-auto flex items-center gap-2">
             {headerExtra}

@@ -19,11 +19,11 @@ const UNIVERSITY_LABELS: Record<University, string> = {
 };
 
 const selectClass = cn(
-  "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
+  "flex h-12 w-full rounded-xl border border-[#dbe7e5] bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
   "focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
 );
 const inputClass = cn(
-  "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
+  "flex h-12 w-full rounded-xl border border-[#dbe7e5] bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150",
   "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10",
 );
 
@@ -134,7 +134,7 @@ export function StudentProfileForm({
         </select>
       </div>
 
-      <div className="border-t border-border pt-4">
+      <div className="border-t border-[#edf2f1] pt-6">
         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">
           Personal details (optional)
         </p>
