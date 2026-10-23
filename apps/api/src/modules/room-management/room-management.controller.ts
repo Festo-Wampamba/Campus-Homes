@@ -5,6 +5,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
+  BatchRoomUpdateDto,
   BedBlockInputDto,
   BulkRoomInputDto,
   RejectRoomChangeSetDto,
@@ -42,6 +43,11 @@ export class RoomManagementController {
   @Post('properties/:propertyId/rooms')
   createRoom(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: RoomUnitInputDto) {
     return this.rooms.createRoom(rlsCtx(req), propertyId, body);
+  }
+
+  @Post('properties/:propertyId/rooms/batch-update')
+  batchUpdateRooms(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: BatchRoomUpdateDto) {
+    return this.rooms.batchUpdateRooms(rlsCtx(req), propertyId, body);
   }
 
   @Post('properties/:propertyId/rooms/bulk')

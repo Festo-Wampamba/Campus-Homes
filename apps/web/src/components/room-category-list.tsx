@@ -51,8 +51,8 @@ export type CategoryGroup = {
 
 export function roomDisplayLabel(group: Pick<CategoryGroup, "category" | "selfContained">): string {
   const base = roomCategoryLabel(group.category);
-  if (base.toLowerCase().includes("self-contained")) return base;
-  return `${base} ${group.selfContained ? "self-contained" : "non-self-contained"}`;
+  // Only self-contained is called out; plain types read "Single", "Double"… (Festo, 2026-10-23).
+  return group.selfContained && !base.toLowerCase().includes("self-contained") ? `${base} self-contained` : base;
 }
 
 /** How much of this room type is free, so 30 rooms never read as "2 rooms". */
