@@ -11,6 +11,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HealthController } from './modules/health/health.controller';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { LandlordRatingsModule } from './modules/landlord-ratings/landlord-ratings.module';
 import { LandlordsModule } from './modules/landlords/landlords.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
@@ -35,6 +36,7 @@ import { RootController } from './root.controller';
     AuthModule,
     ListingsModule,
     LandlordsModule,
+    LandlordRatingsModule,
     OpsModule,
     ProfileModule,
     FinanceModule,

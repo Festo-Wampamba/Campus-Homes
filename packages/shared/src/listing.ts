@@ -9,6 +9,7 @@ import {
   VERIFICATION_CHECKLIST_COMPONENTS,
 } from './enums.js';
 import { ugxAmount, uuid } from './common.js';
+import { landlordRatingSchema } from './landlord-rating.js';
 
 // One entry per checklist component; a listing can only be verified when all 6 pass.
 export const checklistComponentResultSchema = z.object({
@@ -267,6 +268,10 @@ export const publicLandlordSummarySchema = z.object({
   // Aggregate recorded listing inquiries only; never student/contact data.
   responseRate: z.number().int().min(0).max(100).nullable(),
   within24HoursRate: z.number().int().min(0).max(100).nullable(),
+  // Student ratings of this landlord (0073), anonymous.
+  ratingAverage: z.number().min(1).max(5).nullable().optional(),
+  ratingCount: z.number().int().nonnegative().optional(),
+  recentRatings: z.array(landlordRatingSchema).optional(),
 });
 
 export const listingDetailResponseSchema = z.object({
