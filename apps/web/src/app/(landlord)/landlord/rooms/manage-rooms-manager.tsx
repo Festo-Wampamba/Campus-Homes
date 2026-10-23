@@ -208,7 +208,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   return (
     <div className="space-y-6">
       {/* Sticky Property & Semester Bar */}
-      <div className="sticky top-0 z-20 -mx-4 -mt-6 sm:-mx-6 bg-card/95 backdrop-blur-md px-4 sm:px-6 py-4 border-b border-border shadow-xs">
+      <div className="sticky top-17 z-20 -mx-4 -mt-6 sm:-mx-6 bg-card/95 backdrop-blur-md px-4 sm:px-6 py-4 border-b border-border shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold font-heading text-foreground">

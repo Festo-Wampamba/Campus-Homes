@@ -15,7 +15,7 @@ release PR to `main` (deploys staging) → production by hand with
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
+| 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork); email used meanwhile |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
@@ -35,7 +35,14 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 
 ## 1. WhatsApp OTP (official Cloud API)
 
-- **What:** Send sign-in, sign-up and forgot-password codes over WhatsApp.
+- **What:** Send sign-in, sign-up and forgot-password codes over WhatsApp,
+  plus the walk-in student invite ("your landlord booked you a room").
+- **Why it matters now (2026-10-23):** SMS through Africa's Talking doesn't
+  deliver on staging (sandbox), so the walk-in SMS invite never arrived.
+  Until WhatsApp is live, use **email**: the walk-in form takes an optional
+  email (sign-in + receipts go there), and Logto's sign-in experience should
+  offer email codes and "Forgot password" on staging and production (Logto
+  console → Sign-in experience; Festo).
 - **Guide:** [`docs/runbooks/whatsapp-otp-setup.md`](docs/runbooks/whatsapp-otp-setup.md).
   It has its own step checklist (Steps 0–7).
 - **Where we stopped:** Step 0, getting the URSB and URA documents ready.
