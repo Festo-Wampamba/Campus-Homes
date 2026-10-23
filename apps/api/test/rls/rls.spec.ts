@@ -5,6 +5,8 @@
  * with identity bound via app.user_id / app.user_role session variables.
  * Prerequisite: docker compose -f docker-compose.test.yml up -d && pnpm db:migrate
  */
+import type { PoolClient } from 'pg';
+
 import { asIdentity, grantPlatformRole, pool, seed } from './helpers';
 
 // Seeded fixture ids
@@ -1486,5 +1488,84 @@ describe('property_campus_routes (0072): cached road routes are service-only', (
       c.query('SELECT distance_m FROM property_campus_routes WHERE property_id = $1', [property1]).then((r) => r.rows),
     );
     expect(rows).toEqual([{ distance_m: 10000 }]);
+  });
+});
+
+describe('landlord_ratings (0073): service-only writes, only after a reservation and a message', () => {
+  // student1 holds reservation1 at landlord1's hostel. Everything below runs in
+  // one rolled-back transaction per test.
+  async function rateAsService(c: PoolClient, landlordId: string, withMessage: boolean) {
+    if (withMessage) {
+      const thread = await c.query(
+        `INSERT INTO chat_threads (student_id, landlord_id) VALUES ($1, $2) RETURNING id`,
+        [student1, landlordId],
+      );
+      await c.query(`INSERT INTO chat_messages (thread_id, from_user_id, body) VALUES ($1, $2, 'Hi')`, [
+        thread.rows[0].id,
+        student1,
+      ]);
+    }
+    return c.query(
+      `INSERT INTO landlord_ratings (landlord_id, student_id, rating, comment) VALUES ($1, $2, 4, 'Helpful')`,
+      [landlordId, student1],
+    );
+  }
+
+  async function switchTo(c: PoolClient, userId: string, role: string) {
+    await c.query(`SELECT set_config('app.user_id', $1, true), set_config('app.user_role', $2, true)`, [userId, role]);
+  }
+
+  it('a student cannot insert a rating directly', async () => {
+    // Under a student session the trigger can't see the hostel chain and
+    // refuses first; RLS (no student INSERT policy) would refuse anyway.
+    await expect(
+      asIdentity({ userId: student1, role: 'student' }, (c) =>
+        c.query(`INSERT INTO landlord_ratings (landlord_id, student_id, rating) VALUES ($1, $2, 5)`, [landlord1, student1]),
+      ),
+    ).rejects.toThrow(/row-level security|landlord rating requires/i);
+  });
+
+  it('refuses a rating from a student who reserved but never messaged the landlord', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'service_role' }, (c) => rateAsService(c, landlord1, false)),
+    ).rejects.toThrow(/landlord rating requires/);
+  });
+
+  it('refuses a rating for a landlord the student never reserved with, even after a message', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'service_role' }, (c) => rateAsService(c, landlord2, true)),
+    ).rejects.toThrow(/landlord rating requires/);
+  });
+
+  it('records a rating from a student who reserved and messaged', async () => {
+    const result = await asIdentity({ userId: student1, role: 'service_role' }, (c) => rateAsService(c, landlord1, true));
+    expect(result.rowCount).toBe(1);
+  });
+
+  it('another student cannot read the rating', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+      await rateAsService(c, landlord1, true);
+      await switchTo(c, student2, 'student');
+      return (await c.query('SELECT id FROM landlord_ratings')).rows;
+    });
+    expect(rows).toHaveLength(0);
+  });
+
+  it('the rated landlord can read it', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+      await rateAsService(c, landlord1, true);
+      await switchTo(c, landlord1, 'landlord');
+      return (await c.query('SELECT rating FROM landlord_ratings')).rows;
+    });
+    expect(rows).toEqual([{ rating: 4 }]);
+  });
+
+  it('a rating cannot be changed afterwards, even by the service', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+        await rateAsService(c, landlord1, true);
+        await c.query(`UPDATE landlord_ratings SET rating = 1`);
+      }),
+    ).rejects.toThrow(/permission denied/i);
   });
 });

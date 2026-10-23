@@ -9,7 +9,10 @@ export const PUBLIC_LANDLORD_SUMMARY_SQL = `
          CASE WHEN stats.total >= 5
            THEN ROUND(100.0 * stats.replied / stats.total)::int ELSE NULL END AS "responseRate",
          CASE WHEN stats.total >= 5
-           THEN ROUND(100.0 * stats.within_day / stats.total)::int ELSE NULL END AS "within24HoursRate"
+           THEN ROUND(100.0 * stats.within_day / stats.total)::int ELSE NULL END AS "within24HoursRate",
+         rating.average AS "ratingAverage",
+         rating.total AS "ratingCount",
+         recent.items AS "recentRatings"
   FROM properties p
   JOIN landlords ll ON ll.user_id = p.landlord_id
   JOIN users u ON u.id = ll.user_id AND u.deleted_at IS NULL
@@ -23,6 +26,18 @@ export const PUBLIC_LANDLORD_SUMMARY_SQL = `
       AND i.created_at >= now() - interval '90 days'
       AND i.created_at <= now() - interval '24 hours'
   ) stats ON true
+  -- Student ratings (0073): anonymous average and the latest written comments.
+  LEFT JOIN LATERAL (
+    SELECT ROUND(AVG(lr.rating), 1)::float8 AS average, COUNT(*)::int AS total
+    FROM landlord_ratings lr WHERE lr.landlord_id = p.landlord_id
+  ) rating ON true
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('rating', r.rating, 'comment', r.comment, 'createdAt', r.created_at)
+                              ORDER BY r.created_at DESC), '[]'::jsonb) AS items
+    FROM (SELECT rating, comment, created_at FROM landlord_ratings
+          WHERE landlord_id = p.landlord_id AND comment IS NOT NULL
+          ORDER BY created_at DESC LIMIT 3) r
+  ) recent ON true
   WHERE p.id = $1
     AND EXISTS (SELECT 1 FROM listings l WHERE l.property_id = p.id AND l.status = 'verified')
 `;

@@ -18,7 +18,7 @@ export default async function StudentMessagesPage() {
     <>
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ae5528]">Stay in touch</p>
       <h1 className="ch-student-page__title mt-3">Messages</h1>
-      <p className="ch-student-page__lede">Ask a landlord about a room, follow up on a reservation and keep replies in one place.</p>
+      <p className="ch-student-page__lede">Chat with the landlord of the hostel you reserved, and rate them once you have talked.</p>
       <Suspense fallback={<p className="mt-6 text-sm text-muted-foreground">Loading…</p>}>
         <ChatInbox initialThreads={threads} currentUserId={session.user.id} />
       </Suspense>
