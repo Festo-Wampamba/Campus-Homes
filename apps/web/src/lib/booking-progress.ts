@@ -7,7 +7,7 @@ export type BookingStep = { key: string; label: string; detail: string; at: stri
 
 const ENDED: Partial<Record<StudentReservationView["status"], { label: string; detail: string }>> = {
   cancelled: { label: "Reservation cancelled", detail: "This reservation was cancelled. Reserve again if a bed is free." },
-  expired: { label: "Hold expired", detail: "The 24-hour hold ran out before the landlord confirmed. Reserve again if a bed is free." },
+  expired: { label: "Hold expired", detail: "The 6-hour hold ran out before the landlord confirmed. Reserve again if a bed is free." },
   released: { label: "Released by the landlord", detail: "The landlord released this bed. Contact support if you need help." },
   refunded: { label: "Refunded", detail: "This reservation was closed and refunded." },
 };

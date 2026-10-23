@@ -15,12 +15,12 @@ export const SUPPORT_FAQS: SupportFaq[] = [
   {
     question: 'What is the difference between reserving and booking?',
     answer:
-      'Reserving holds a bed for you for 24 hours, for free, while you view the room and agree terms with the landlord. It is not final: you can cancel it, and it ends on its own if the 24 hours run out. Booking makes the bed yours. After you agree terms, you tap Request booking in My reservations and the landlord confirms it. A booking does not expire, only the landlord can release it, and rent is paid to the landlord directly.',
+      'Reserving holds a bed for you for 6 hours, for free, while you view the room and agree terms with the landlord. It is not final: you can cancel it, and it ends on its own if the 6 hours run out. Booking makes the bed yours. After you agree terms, you tap Request booking in My reservations and the landlord confirms it. A booking does not expire, only the landlord can release it, and rent is paid to the landlord directly.',
   },
   {
     question: 'How long is a room held for me?',
     answer:
-      '24 hours from the moment you reserve. My reservations shows the time left. If the hold runs out, it ends on its own and the bed goes back on the list for other students.',
+      '6 hours from the moment you reserve. My reservations shows the time left. If the hold runs out, it ends on its own and the bed goes back on the list for other students.',
   },
   {
     question: 'How many rooms can I reserve at once?',
@@ -116,10 +116,10 @@ export const SUPPORT_MANUAL: SupportManualSection[] = [
     id: 'reserving',
     title: 'Reserving a room',
     steps: [
-      'Reserving is free. Choose a room type on the listing and tap Reserve; we hold one bed of that type for you for 24 hours.',
+      'Reserving is free. Choose a room type on the listing and tap Reserve; we hold one bed of that type for you for 6 hours.',
       `You can have up to ${MAX_ACTIVE_RESERVATIONS} live reservations at once, and only one of each room type per hostel.`,
       'A popup confirms the hostel, room type and when the hold ends. The room type then shows a yellow Reserved button.',
-      'My reservations shows a countdown. If the 24 hours run out, the hold ends on its own and the bed is offered to other students.',
+      'My reservations shows a countdown. If the 6 hours run out, the hold ends on its own and the bed is offered to other students.',
       'Changed your mind? Cancel the hold from My reservations to free the bed and your slot.',
     ],
   },

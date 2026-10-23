@@ -265,7 +265,7 @@ export function ListingExperience({
             <p className="mt-3 flex items-start gap-2 text-muted-foreground"><MapPin aria-hidden className="size-5 shrink-0" />{property.street_address}</p>
             {detail.route ? <p className="mt-2 text-sm text-muted-foreground">{formatRoadTrip(detail.route.distanceMeters, detail.route.durationSeconds)} to {campus?.name ?? "campus"}, by the fastest driving route.</p> : null}
             <div className="mt-4 h-80 overflow-hidden rounded-2xl border border-border bg-muted" aria-label={`Map showing ${property.name} and ${campus?.name ?? "the selected campus"}`}>
-              {mapMarkers.length ? <MapFallbackBoundary><ListingsMap className="h-full" markers={mapMarkers} selectedId={listing.id} onSelect={() => {}} onBoundsChange={() => {}} fitToMarkers initialCenter={[property.gps_lon!, property.gps_lat!]} /></MapFallbackBoundary> : <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">A map is unavailable because this property has no verified coordinates.</div>}
+              {mapMarkers.length ? <MapFallbackBoundary><ListingsMap className="h-full" markers={mapMarkers} selectedId={listing.id} onSelect={() => {}} onBoundsChange={() => {}} fitToMarkers initialCenter={[property.gps_lon!, property.gps_lat!]} layerControls streetViewAt={{ lat: property.gps_lat!, lon: property.gps_lon! }} /></MapFallbackBoundary> : <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">A map is unavailable because this property has no verified coordinates.</div>}
             </div>
           </section>
 

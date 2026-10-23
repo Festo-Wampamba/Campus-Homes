@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Banknote, Bath, BedDouble, CircleCheck, Images, ShowerHead, Users, type LucideIcon } from "lucide-react";
-import { MAX_ACTIVE_RESERVATIONS, type ListingDetailResponse, type ListingPhoto } from "@campushomes/shared";
+import { MAX_ACTIVE_RESERVATIONS, ROOM_CATEGORIES, type ListingDetailResponse, type ListingPhoto } from "@campushomes/shared";
 
 import { formatUgx, roomCategoryLabel } from "@/lib/format";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -51,15 +51,15 @@ export type CategoryGroup = {
 
 export function roomDisplayLabel(group: Pick<CategoryGroup, "category" | "selfContained">): string {
   const base = roomCategoryLabel(group.category);
-  return group.selfContained && !base.toLowerCase().includes("self-contained") ? `${base} self-contained` : base;
+  if (base.toLowerCase().includes("self-contained")) return base;
+  return `${base} ${group.selfContained ? "self-contained" : "non-self-contained"}`;
 }
 
 /** How much of this room type is free, so 30 rooms never read as "2 rooms". */
-export function availabilityLabel(group: Pick<CategoryGroup, "freeRoomCount" | "availableCount" | "capacity">): string {
-  if (group.availableCount === 0) return "Currently unavailable";
-  const rooms = `${group.freeRoomCount} ${group.freeRoomCount === 1 ? "room" : "rooms"}`;
-  if (group.capacity <= 1) return `${rooms} available`;
-  return `${rooms} · ${group.availableCount} ${group.availableCount === 1 ? "bed" : "beds"} free`;
+// Public pages never say how many rooms or beds are free (Festo, 2026-10-23,
+// reversing 2026-10-22): landlords see the counts in Manage rooms.
+export function availabilityLabel(group: Pick<CategoryGroup, "availableCount">): string {
+  return group.availableCount > 0 ? "Available" : "Currently unavailable";
 }
 
 export function roomBathroomLabel(group: Pick<CategoryGroup, "selfContained">): string {
@@ -484,10 +484,13 @@ export function RoomCategoryList({
     );
   }
 
-  const sections = [
-    { key: "single", label: "Single rooms", groups: groups.filter((group) => group.capacity === 1) },
-    { key: "shared", label: "Shared rooms", groups: groups.filter((group) => group.capacity > 1) },
-  ].filter((section) => section.groups.length > 0);
+  // One section per room type (Single rooms, Double rooms…), each listing its
+  // self-contained and non-self-contained variants (Festo, 2026-10-23).
+  const sections = ROOM_CATEGORIES.map((category) => ({
+    key: category,
+    label: `${roomCategoryLabel(category)} rooms`,
+    groups: groups.filter((group) => group.category === category),
+  })).filter((section) => section.groups.length > 0);
 
   return (
     <>
