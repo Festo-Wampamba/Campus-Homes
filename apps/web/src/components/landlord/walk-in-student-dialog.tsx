@@ -38,6 +38,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
   const router = useRouter();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [university, setUniversity] = useState<University>("MUK");
   const [bedId, setBedId] = useState(beds[0]?.id ?? "");
   const [movedIn, setMovedIn] = useState(false);
@@ -62,6 +63,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
           bedId,
           name: name.trim(),
           phone: phone.trim(),
+          email: email.trim() || undefined,
           university,
           movedIn,
           bookingFeeCollectedUgx: bookingFee ? Number(bookingFee) : undefined,
@@ -85,7 +87,8 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
         <DialogBody>
           <p role="status" className="text-sm">
             {name.trim()} now has this room {done.status === "occupied" ? "and is recorded as moved in" : "booked"}. The bed is no longer offered on CampusHomes.
-            {done.studentCreated ? " We created their CampusHomes account and" : " They already had a CampusHomes account;"} we texted {phone.trim()} how to sign in and see the booking.
+            {done.studentCreated ? " We created their CampusHomes account." : " They already had a CampusHomes account."}{" "}
+            {email.trim() ? `We emailed ${email.trim()} how to sign in and see the booking${bookingFee || deposit ? ", with a payment receipt" : ""}.` : `They sign in with ${phone.trim()} to see the booking.`}
           </p>
         </DialogBody>
         <DialogFooter>
@@ -120,6 +123,11 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
                   Phone number <span aria-hidden className="text-destructive">*</span>
                   <input required type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+256 7XX XXX XXX" aria-describedby="walk-in-phone-hint" className={FIELD} />
                   <span id="walk-in-phone-hint" className="mt-1 block text-xs font-normal text-muted-foreground">They sign in with this number.</span>
+                </label>
+                <label className="block text-sm font-semibold">
+                  Email (optional)
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-describedby="walk-in-email-hint" className={FIELD} />
+                  <span id="walk-in-email-hint" className="mt-1 block text-xs font-normal text-muted-foreground">They can sign in with it, and payment receipts go here.</span>
                 </label>
                 <label className="block text-sm font-semibold">
                   University <span aria-hidden className="text-destructive">*</span>

@@ -29,6 +29,18 @@ export class ReservationsController {
     return this.reservationsService.book(rlsCtx(req), body);
   }
 
+  @Get('receipts')
+  @Roles('student', 'landlord')
+  receipts(@Req() req: AuthenticatedRequest) {
+    return this.reservationsService.receipts(rlsCtx(req));
+  }
+
+  @Get(':id/student')
+  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  studentDetails(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservationsService.studentDetails(rlsCtx(req), id);
+  }
+
   @Post('walk-in')
   @Roles('landlord', 'custodian', 'ops_lead', 'admin')
   onboardWalkIn(@Req() req: AuthenticatedRequest, @Body() body: OnboardWalkInDto) {

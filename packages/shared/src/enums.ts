@@ -164,7 +164,8 @@ export const RESERVATION_STATUSES = [
   'refunded',
 ] as const;
 export const PAYMENT_PROVIDERS = ['flutterwave'] as const;
-export const PAYMENT_METHODS = ['mtn_momo', 'airtel_money', 'card', 'bank_transfer'] as const;
+// 'cash' (0075): walk-in and in-person payments a landlord records offline.
+export const PAYMENT_METHODS = ['mtn_momo', 'airtel_money', 'card', 'bank_transfer', 'cash'] as const;
 export const PAYMENT_STATUSES = ['pending', 'succeeded', 'failed', 'cancelled'] as const;
 export const REFUND_REASONS = [
   'cooling_off',

@@ -1569,3 +1569,66 @@ describe('landlord_ratings (0073): service-only writes, only after a reservation
     ).rejects.toThrow(/permission denied/i);
   });
 });
+
+describe('payment_receipts (0075): service-only writes, each party reads its own', () => {
+  // reservation1: student1 at landlord1's hostel. Rolled back per test.
+  async function receiptAsService(c: PoolClient) {
+    await c.query(
+      `INSERT INTO payment_receipts (reservation_id, student_id, landlord_id, property_name, room_label, deposit_ugx, payment_method)
+       VALUES ($1, $2, $3, 'Hostel One', 'Room 1A', 100000, 'cash')`,
+      [reservation1, student1, landlord1],
+    );
+  }
+
+  async function readAs(c: PoolClient, userId: string, role: string) {
+    await c.query(`SELECT set_config('app.user_id', $1, true), set_config('app.user_role', $2, true)`, [userId, role]);
+    return (await c.query('SELECT deposit_ugx FROM payment_receipts')).rows;
+  }
+
+  it('the student reads their own receipt', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+      await receiptAsService(c);
+      return readAs(c, student1, 'student');
+    });
+    expect(rows).toEqual([{ deposit_ugx: 100000 }]);
+  });
+
+  it("another student cannot read someone else's receipt", async () => {
+    const rows = await asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+      await receiptAsService(c);
+      return readAs(c, student2, 'student');
+    });
+    expect(rows).toHaveLength(0);
+  });
+
+  it('the landlord reads receipts for their own hostel', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+      await receiptAsService(c);
+      return readAs(c, landlord1, 'landlord');
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("another landlord cannot read the receipt", async () => {
+    const rows = await asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+      await receiptAsService(c);
+      return readAs(c, landlord2, 'landlord');
+    });
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a landlord cannot write a receipt directly', async () => {
+    await expect(
+      asIdentity({ userId: landlord1, role: 'landlord' }, (c) => receiptAsService(c)),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('a receipt cannot be changed afterwards, even by the service', async () => {
+    await expect(
+      asIdentity({ userId: student1, role: 'service_role' }, async (c) => {
+        await receiptAsService(c);
+        await c.query(`UPDATE payment_receipts SET deposit_ugx = 1`);
+      }),
+    ).rejects.toThrow(/permission denied/i);
+  });
+});

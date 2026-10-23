@@ -15,5 +15,5 @@ export default async function UsersPage() {
   ]);
   const rows = data?.rows ?? [];
   return <><PageHeader eyebrow="User management" title="All users" description="Search students, landlords, operations staff, and administrators from one source-backed directory." />
-    <SectionCard title={`${rows.length.toLocaleString()} user records`} description={`Newest first · bounded to ${data?.limit ?? 250} records`}><UsersManager rows={rows} roles={roleData?.roles ?? []} permissions={roleData?.permissions ?? []} properties={propertyData?.rows ?? []} canMutate={access?.permissions.includes("users.update") ?? false} /></SectionCard>{data && <div className="mt-3"><Freshness asOf={data.asOf} /></div>}</>;
+    <SectionCard title={`${rows.length.toLocaleString()} user records`} description={`Newest first · bounded to ${data?.limit ?? 250} records`}><UsersManager rows={rows} roles={roleData?.roles ?? []} permissions={roleData?.permissions ?? []} properties={propertyData?.rows ?? []} canMutate={access?.permissions.includes("users.update") ?? false} canResetPasswords={access?.permissions.includes("users.password_reset") ?? false} /></SectionCard>{data && <div className="mt-3"><Freshness asOf={data.asOf} /></div>}</>;
 }

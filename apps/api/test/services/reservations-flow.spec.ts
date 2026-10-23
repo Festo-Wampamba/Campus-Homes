@@ -463,6 +463,68 @@ describe('walk-in onboarding (student who never used CampusHomes)', () => {
   });
 });
 
+describe('payment receipts and student details (Festo, 2026-10-23)', () => {
+  let reservationId: string;
+
+  beforeAll(async () => {
+    const { bedId: bed } = await seedUnitWithBed('Receipt walk-in');
+    reservationId = (await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Cash Student', phone: '+256710000311', email: 'cash.student@example.com',
+      university: 'MUK', movedIn: false, bookingFeeCollectedUgx: 50_000, depositCollectedUgx: 150_000, paymentMethod: 'cash',
+    })).reservationId;
+  });
+
+  it('records a receipt with the amounts and method the landlord entered', async () => {
+    const row = (await pool.query(
+      `SELECT booking_fee_ugx, deposit_ugx, payment_method::text AS method FROM payment_receipts WHERE reservation_id = $1`,
+      [reservationId],
+    )).rows[0];
+    expect(row).toEqual({ booking_fee_ugx: 50_000, deposit_ugx: 150_000, method: 'cash' });
+  });
+
+  it("lists the receipt in the landlord's payments", async () => {
+    const receipts = (await reservationsService.receipts(landlordCtx(landlord1))) as { reservationId: string; totalUgx: number }[];
+    expect(receipts.find((r) => r.reservationId === reservationId)?.totalUgx).toBe(200_000);
+  });
+
+  it("lists the receipt in the student's own receipts", async () => {
+    const studentId = (await pool.query(`SELECT id FROM users WHERE phone = '+256710000311'`)).rows[0].id as string;
+    const receipts = (await reservationsService.receipts(studentCtx(studentId))) as { reservationId: string }[];
+    expect(receipts.map((r) => r.reservationId)).toEqual([reservationId]);
+  });
+
+  it('keeps the email the landlord entered for the walk-in student', async () => {
+    const details = await reservationsService.studentDetails(landlordCtx(landlord1), reservationId);
+    expect([details.name, details.email]).toEqual(['Cash Student', 'cash.student@example.com']);
+  });
+
+  it("refuses another landlord the student's details", async () => {
+    await expect(reservationsService.studentDetails(landlordCtx(landlord2), reservationId)).rejects.toThrow();
+  });
+
+  it("never attaches a landlord-typed email to a student's existing account", async () => {
+    const existing = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ('+256710000313', 'student', 'active', 'Has Account') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [existing]);
+    const { bedId: bed } = await seedUnitWithBed('Existing account email');
+    await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Has Account', phone: '+256710000313', email: 'landlord.typed@example.com', university: 'MUK', movedIn: false,
+    });
+    const row = await pool.query(`SELECT email FROM users WHERE id = $1`, [existing]);
+    expect(row.rows[0].email).toBeNull();
+  });
+
+  it('does not record a receipt when no money was entered', async () => {
+    const { bedId: bed } = await seedUnitWithBed('No-payment walk-in');
+    const result = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'No Payment', phone: '+256710000312', university: 'MUK', movedIn: false,
+    });
+    const rows = await pool.query(`SELECT 1 FROM payment_receipts WHERE reservation_id = $1`, [result.reservationId]);
+    expect(rows.rowCount).toBe(0);
+  });
+});
+
 describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('releases a Reserved bed with a reason, no refund flagged when nothing was collected', async () => {
     const { bedId: bed5 } = await seedUnitWithBed('Room 2A');

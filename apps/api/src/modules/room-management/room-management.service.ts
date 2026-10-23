@@ -515,6 +515,8 @@ export class RoomManagementService {
         }
       }
 
+      // Read before applying, so renames still show the old code.
+      const summary = await this.changeSummary(client, changeSetId, row.property_id);
       const versions = await client.query<RoomTypeVersionRow>(
         `SELECT * FROM room_type_versions WHERE change_set_id=$1 ORDER BY version_number`, [changeSetId],
       );
@@ -531,16 +533,17 @@ export class RoomManagementService {
            reviewer_notes=$3, rejection_reason=NULL, updated_at=now() WHERE id=$1`,
         [changeSetId, ctx.userId, notes ?? null],
       );
-      return { landlordId: row.landlord_id, propertyId: row.property_id };
+      return { landlordId: row.landlord_id, propertyId: row.property_id, summary };
     });
     await this.audit.record(ctx, 'room_change_set.approve', 'room_inventory_change_set', changeSetId, { notes });
+    const approvedMessage = `Operations approved your room changes at ${result.summary}. They are live now.${notes ? ` Note: ${notes}` : ''}`;
     await this.notifications.notify(result.landlordId, 'room_changes.approved', 'in_app', {
-      message: 'Your room inventory changes were approved and are now live.',
+      message: approvedMessage,
       href: `/landlord/rooms?propertyId=${result.propertyId}`,
     });
     this.emailUsers([result.landlordId], {
       subject: 'Your room changes were approved',
-      message: 'CampusHomes Operations approved your room inventory changes. They are now live.',
+      message: approvedMessage,
       path: `/landlord/rooms?propertyId=${result.propertyId}`,
       action: 'View your rooms',
     });
@@ -570,7 +573,7 @@ export class RoomManagementService {
     });
     await this.audit.record(ctx, 'room_change_set.reject', 'room_inventory_change_set', changeSetId, { reason });
     await this.notifications.notify(result.landlord_id, 'room_changes.rejected', 'in_app', {
-      message: `Your room inventory changes need revision: ${reason}`,
+      message: `Operations sent your room changes back for revision: ${reason}`,
       href: `/landlord/rooms?propertyId=${result.property_id}`,
     });
     this.emailUsers([result.landlord_id], {
@@ -1135,6 +1138,26 @@ export class RoomManagementService {
         action: 'Open room changes',
       });
     }
+  }
+
+  /** "Mirembe Courts: 3 rooms (Double 1 → A01, …) and 1 room type", for notices. */
+  private async changeSummary(client: PoolClient, changeSetId: string, propertyId: string): Promise<string> {
+    const property = (await client.query<{ name: string }>(`SELECT name FROM properties WHERE id=$1`, [propertyId])).rows[0];
+    const rooms = (await client.query<{ action: string; old_code: string | null; new_code: string | null }>(
+      `SELECT c.action, u.label AS old_code, c.proposed_data->>'roomCode' AS new_code
+       FROM room_unit_changes c LEFT JOIN units u ON u.id = c.unit_id
+       WHERE c.change_set_id=$1 ORDER BY c.created_at`, [changeSetId],
+    )).rows;
+    const types = (await client.query(`SELECT 1 FROM room_type_versions WHERE change_set_id=$1`, [changeSetId])).rowCount ?? 0;
+    const shown = rooms.slice(0, 5).map((room) =>
+      room.action === 'create' ? `new ${room.new_code}`
+        : room.old_code && room.new_code && room.old_code !== room.new_code ? `${room.old_code} → ${room.new_code}`
+          : `${room.action} ${room.old_code ?? room.new_code ?? 'room'}`);
+    const parts = [
+      rooms.length ? `${rooms.length} ${rooms.length === 1 ? 'room' : 'rooms'} (${shown.join(', ')}${rooms.length > 5 ? ', …' : ''})` : '',
+      types ? `${types} room ${types === 1 ? 'type' : 'types'}` : '',
+    ].filter(Boolean);
+    return `${property?.name ?? 'your hostel'}: ${parts.join(' and ') || 'no changes'}`;
   }
 
   /** Best-effort email to these users' addresses; never fails the caller. */
