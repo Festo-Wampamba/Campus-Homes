@@ -54,7 +54,7 @@ export const reservations = pgTable(
     depositUgx: integer('deposit_ugx'),
 
     reservedAt: timestamp('reserved_at', { withTimezone: true }),
-    // 24h from reserve; cleared once Booked (a booked bed never auto-expires).
+    // Hold window (reservation_hold_hours, 6h) from reserve; cleared once Booked (a booked bed never auto-expires).
     reservedExpiresAt: timestamp('reserved_expires_at', { withTimezone: true }),
 
     // Student asked the landlord to confirm the booking (0064).
