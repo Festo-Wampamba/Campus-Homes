@@ -3,7 +3,7 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-18._
+_Last updated: 2026-10-23._
 
 **Where things stand:** production, staging and `main` run `a42b74a`
 (schema 70/70). GitHub branches are only `main`, `development` and
@@ -27,6 +27,7 @@ release PR to `main` (deploys staging) → production by hand with
 | 26 | [Production checks for the 2026-10-18 release](#26-production-checks-for-the-2026-10-18-release) | Festo | ☐ Open (server-side checks passed) |
 | 27 | [Off-site SEO](#27-off-site-seo) | Festo | ☐ Open (sitemaps already submitted) |
 | 28 | [Decide: unique room codes per property?](#28-decide-unique-room-codes-per-property) | Festo | ☐ Open |
+| 29 | [Google Routes: billing + API key](#29-google-routes-billing--api-key) | Festo → Claude | ⏸ Paused (card rejected by Google) |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -186,6 +187,28 @@ Sitemaps are already submitted to Google and Bing (2026-10-17). Left:
 - **Decide:** keep per-building, or require per-property. Per-property
   means a migration (unique index) after cleaning up existing duplicates,
   plus the same check in the spreadsheet import.
+
+## 29. Google Routes: billing + API key
+
+- **What:** turn on road distances (hostel → campus). The code is live on
+  staging (#249), and the daily cap and owner alert are in #253. Without a key,
+  hostels show no distance (never a guess).
+- **Blocked on:** Google Cloud billing. The prepaid card was rejected at the
+  free-trial sign-up (2026-10-23). Try another card (Visa/Mastercard debit or
+  credit that allows international online payments).
+- **Steps once billing works:**
+  1. Project `CampusHomes` → enable **Routes API**.
+  2. Routes API → Quotas → set the **per day** request quota to **300**
+     (≤ the free monthly allowance even if hit every day). If only
+     per-minute quotas exist, tell Claude: add an in-app daily cap instead.
+  3. Billing → Budgets & alerts → $1 budget with email alerts.
+  4. Credentials → API key, restricted to IP `169.58.85.25` and the Routes
+     API only.
+  5. Dokploy → staging API → **Environment** → `GOOGLE_ROUTES_API_KEY` →
+     Save → Deploy. Tell Claude "key added". Claude checks Samuel Courts
+     shows about 10 km.
+- **Fallback if no card works:** OpenRouteService (free key, no card),
+  which needs a small adapter change.
 
 ---
 
