@@ -315,6 +315,7 @@ describe('detail() public landlord summary', () => {
     const detail = await listings.detail(listingId);
     expect(detail.landlord).toEqual({
       displayName: 'Property landlord', joinedAt: expect.any(Date), responseRate: null, within24HoursRate: null,
+      ratingAverage: null, ratingCount: 0, recentRatings: [],
     });
   });
 
@@ -341,6 +342,6 @@ describe('detail() public landlord summary', () => {
     }
     const detail = await listings.detail(listingId);
     expect(detail.landlord).toMatchObject({ responseRate: 60, within24HoursRate: 40 });
-    expect(Object.keys(detail.landlord ?? {}).sort()).toEqual(['displayName', 'joinedAt', 'responseRate', 'within24HoursRate']);
+    expect(Object.keys(detail.landlord ?? {}).sort()).toEqual(['displayName', 'joinedAt', 'ratingAverage', 'ratingCount', 'recentRatings', 'responseRate', 'within24HoursRate']);
   });
 });

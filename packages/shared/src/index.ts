@@ -13,6 +13,7 @@ export * from './lead.js';
 export * from './reservation.js';
 export * from './ops.js';
 export * from './chat.js';
+export * from './landlord-rating.js';
 export * from './notification.js';
 export * from './rbac.js';
 export * from './admin.js';

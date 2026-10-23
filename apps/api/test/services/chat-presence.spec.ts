@@ -12,6 +12,7 @@ import type { RlsContext } from '../../src/db/rls-context';
 import { ChatService } from '../../src/modules/chat/chat.service';
 import { PresenceService } from '../../src/modules/presence/presence.service';
 import { testDatabaseUrl } from '../test-database-url';
+import { seedReservation } from './reservation-fixture';
 
 /** In-memory stand-in for the few Redis calls presence makes (TTL not simulated). */
 function fakeRedis() {
@@ -59,7 +60,7 @@ async function messageRow(id: string) {
 }
 
 beforeAll(async () => {
-  await pool.query(`TRUNCATE users, students, landlords, chat_threads, chat_messages CASCADE`);
+  await pool.query(`TRUNCATE users, students, landlords, semesters, chat_threads, chat_messages CASCADE`);
   const user = async (phone: string, role: string) =>
     (await pool.query(`INSERT INTO users (phone, role, status) VALUES ($1, $2, 'active') RETURNING id`, [phone, role]))
       .rows[0].id as string;
@@ -68,6 +69,8 @@ beforeAll(async () => {
   outsider = await user('+256710000303', 'student');
   await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK'), ($2, 'MUK')`, [student, outsider]);
   await pool.query(`INSERT INTO landlords (user_id, legal_name, kyc_status) VALUES ($1, 'Test Landlord', 'verified')`, [landlord]);
+  // Chat is open only between a student and the landlord they reserved with (0073).
+  await seedReservation(pool, student, landlord, 'presence');
   threadId = (
     await pool.query(`INSERT INTO chat_threads (student_id, landlord_id) VALUES ($1, $2) RETURNING id`, [student, landlord])
   ).rows[0].id as string;

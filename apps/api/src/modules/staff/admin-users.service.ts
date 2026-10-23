@@ -674,6 +674,7 @@ export class AdminUsersService {
         -- reservation-keyed deletes above only catch rows tied to a deleted
         -- reservation; one with a NULL/foreign reservation_id would otherwise
         -- block the users delete (23503).
+        DELETE FROM landlord_ratings WHERE student_id IN (SELECT id FROM _pg_g) OR landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM landlord_strikes WHERE landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM student_flags WHERE student_id IN (SELECT id FROM _pg_g);
         DELETE FROM tenant_agreements WHERE student_id IN (SELECT id FROM _pg_g);

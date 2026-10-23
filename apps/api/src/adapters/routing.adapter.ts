@@ -13,19 +13,32 @@ export interface DrivingRoute {
 }
 
 export interface RoutingAdapter {
-  /** The provider's best driving route, or null when it has none. */
+  /** The provider's best driving route, or null when it has none (or is paused at its daily cap). */
   drivingRoute(origin: LatLon, destination: LatLon): Promise<DrivingRoute | null>;
 }
 
 const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 const TIMEOUT_MS = 4000;
+// Google answers 429 once the daily request cap set in the Cloud console is
+// used up, and resets it at midnight Pacific time. A refused request is not
+// billed, so retrying hourly is free and resumes on its own after the reset.
+// ponytail: in-memory pause, per API process; fine while the API runs as one.
+const QUOTA_PAUSE_MS = 60 * 60 * 1000;
 
 const waypoint = ({ lat, lon }: LatLon) => ({ location: { latLng: { latitude: lat, longitude: lon } } });
 
 export class GoogleRoutes implements RoutingAdapter {
-  constructor(private readonly apiKey: string) {}
+  private pausedUntil = 0;
+  private hasAlerted = false;
+
+  constructor(
+    private readonly apiKey: string,
+    /** Called once each time the daily cap is reached (not on every retry). */
+    private readonly onDailyCapReached: () => void = () => {},
+  ) {}
 
   async drivingRoute(origin: LatLon, destination: LatLon): Promise<DrivingRoute | null> {
+    if (Date.now() < this.pausedUntil) return null;
     const res = await fetch(ROUTES_URL, {
       method: 'POST',
       headers: {
@@ -47,8 +60,17 @@ export class GoogleRoutes implements RoutingAdapter {
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    if (res.status === 429) {
+      this.pausedUntil = Date.now() + QUOTA_PAUSE_MS;
+      if (!this.hasAlerted) {
+        this.hasAlerted = true;
+        this.onDailyCapReached();
+      }
+      return null;
+    }
     // Never echo the response body: it can include request details.
     if (!res.ok) throw new Error(`Google Routes failed: HTTP ${res.status}`);
+    this.hasAlerted = false;
     return parseRoutesResponse(await res.json());
   }
 }
