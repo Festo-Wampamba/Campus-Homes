@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { PAYMENT_METHODS, RESERVATION_STATUSES } from './enums.js';
+import { PAYMENT_METHODS, RESERVATION_STATUSES, UNIVERSITIES } from './enums.js';
 import { idempotencyKey, ugPhone, ugxAmount, uuid } from './common.js';
 
 // Reserve -> Book -> Move-in (bed-level redesign, 2026-09). Booking payment
@@ -48,6 +48,23 @@ export const bookReservationSchema = z
     path: ['studentPhone'],
   });
 export type BookReservationInput = z.infer<typeof bookReservationSchema>;
+
+// A student who walked in without CampusHomes (Festo, 2026-10-23): the landlord
+// creates their account (or finds it by phone) and books them a free bed in
+// one step. The student later signs in with this phone to claim the account.
+// No email: sign-in also claims accounts by verified email, so an email typed
+// by the landlord could let someone other than the student claim it.
+export const onboardWalkInSchema = z.object({
+  bedId: uuid,
+  name: z.string().trim().min(2).max(120),
+  phone: ugPhone,
+  university: z.enum(UNIVERSITIES),
+  movedIn: z.boolean().default(false),
+  bookingFeeCollectedUgx: ugxAmount.optional(),
+  depositCollectedUgx: ugxAmount.optional(),
+  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+});
+export type OnboardWalkInInput = z.infer<typeof onboardWalkInSchema>;
 
 // Landlord/custodian/ops freeing up a Reserved or Booked bed the student
 // didn't end up taking. Always requires a reason — money may already have

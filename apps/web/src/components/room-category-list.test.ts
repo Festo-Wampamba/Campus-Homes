@@ -28,7 +28,7 @@ describe("room category decision facts",()=>{
     expect(groups.map(group=>[group.capacity,group.availableCount])).toEqual([[1,1],[2,1]]);
   });
   it("uses the public room vocabulary without changing the category key",()=>{
-    expect(roomDisplayLabel({category:"single",selfContained:false})).toBe("Single non-self-contained");
+    expect(roomDisplayLabel({category:"single",selfContained:false})).toBe("Single");
     expect(roomDisplayLabel({category:"single",selfContained:true})).toBe("Single self-contained");
     expect(roomDisplayLabel({category:"double",selfContained:true})).toBe("Double self-contained");
     expect(roomBathroomLabel({selfContained:false})).toBe("Shared bathroom");

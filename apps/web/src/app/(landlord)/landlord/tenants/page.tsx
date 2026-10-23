@@ -4,12 +4,14 @@ import { Info, Users } from "lucide-react";
 import { getLandlordReservations, getMyProperties, getPropertyDetail } from "@/lib/landlord";
 import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
+import { WalkInStudentButton } from "@/components/landlord/walk-in-student-dialog";
+import { freeBedsForWalkIn } from "../bookings/room-lookup";
 import { TenantsList } from "./tenants-list";
 
 export const metadata: Metadata = { title: "Tenants" };
 
 export default async function LandlordTenantsPage() {
-  const [reservations, properties] = await Promise.all([getLandlordReservations(), getMyProperties()]);
+  const [reservations, properties, freeBeds] = await Promise.all([getLandlordReservations(), getMyProperties(), freeBedsForWalkIn()]);
   const details = await Promise.all(properties.map((p) => getPropertyDetail(p.id)));
 
   const roomsByBedId = new Map<string, { label: string; propertyName: string }>();
@@ -25,8 +27,15 @@ export default async function LandlordTenantsPage() {
 
   return (
     <>
-      <h1 className="text-2xl">Tenants</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Students currently in one of your rooms.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl">Tenants</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Students currently in one of your rooms. A student who came to you in person? Add them here and give them a room.
+          </p>
+        </div>
+        <WalkInStudentButton beds={freeBeds} />
+      </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card>

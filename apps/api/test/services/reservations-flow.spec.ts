@@ -413,6 +413,56 @@ describe('walk-in booking (Book directly on an Available bed, §7)', () => {
   });
 });
 
+describe('walk-in onboarding (student who never used CampusHomes)', () => {
+  it('creates the student account and books the bed', async () => {
+    const { bedId: bed } = await seedUnitWithBed('Walk-in new student');
+    const result = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Walk In Student', phone: '+256710000301', university: 'MUK', movedIn: false,
+    });
+    expect([result.studentCreated, result.status]).toEqual([true, 'booked']);
+  });
+
+  it('reuses the student account that already has this phone', async () => {
+    const existing = await seed(
+      `INSERT INTO users (phone, role, status, name) VALUES ('+256710000302', 'student', 'active', 'Known Student') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [existing]);
+    const { bedId: bed } = await seedUnitWithBed('Walk-in known student');
+    const result = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Known Student', phone: '+256710000302', university: 'MUK', movedIn: false,
+    });
+    expect(result.studentId).toBe(existing);
+  });
+
+  it('records the move-in when the student moves in on the spot', async () => {
+    const { bedId: bed } = await seedUnitWithBed('Walk-in moved in');
+    const result = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Moved In Student', phone: '+256710000303', university: 'MUK', movedIn: true,
+    });
+    const row = await pool.query(`SELECT status FROM reservations WHERE id = $1`, [result.reservationId]);
+    expect(row.rows[0].status).toBe('occupied');
+  });
+
+  it("refuses a phone number that belongs to a landlord's account", async () => {
+    const { bedId: bed } = await seedUnitWithBed('Walk-in landlord phone');
+    const phone = (await pool.query(`SELECT phone FROM users WHERE id = $1`, [landlord2])).rows[0].phone as string;
+    await expect(
+      reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+        bedId: bed, name: 'Not A Student', phone, university: 'MUK', movedIn: false,
+      }),
+    ).rejects.toThrow(/not a student/i);
+  });
+
+  it("refuses a landlord adding a student to another landlord's bed", async () => {
+    const { bedId: bed } = await seedUnitWithBed('Walk-in wrong landlord');
+    await expect(
+      reservationsService.onboardWalkIn(landlordCtx(landlord2), {
+        bedId: bed, name: 'Wrong Landlord', phone: '+256710000304', university: 'MUK', movedIn: false,
+      }),
+    ).rejects.toThrow();
+  });
+});
+
 describe('release (landlord frees a Reserved or Booked bed, §15-16)', () => {
   it('releases a Reserved bed with a reason, no refund flagged when nothing was collected', async () => {
     const { bedId: bed5 } = await seedUnitWithBed('Room 2A');
