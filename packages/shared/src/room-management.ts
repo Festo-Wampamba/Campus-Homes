@@ -59,6 +59,16 @@ export const roomUnitInputSchema = z.object({
 });
 export type RoomUnitInput = z.infer<typeof roomUnitInputSchema>;
 
+// Edit many rooms at once (Festo, 2026-10-23), e.g. renumbering codes. One
+// draft change set, all-or-nothing; Ops still reviews it like single edits.
+export const batchRoomUpdateSchema = z.object({
+  rooms: z.array(roomUnitInputSchema.extend({ roomId: uuid })).min(1).max(200),
+}).refine(
+  (value) => new Set(value.rooms.map((room) => `${(room.buildingName ?? '').toLowerCase()}|${room.roomCode.toLowerCase()}`)).size === value.rooms.length,
+  { path: ['rooms'], message: 'Two rooms in this batch have the same code' },
+);
+export type BatchRoomUpdateInput = z.infer<typeof batchRoomUpdateSchema>;
+
 export const bulkRoomInputSchema = z.object({
   roomTypeId: uuid,
   buildingName: z.string().trim().max(120).nullable().optional(),

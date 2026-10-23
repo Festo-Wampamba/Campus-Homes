@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
-  ACCESSIBILITY_FEATURE_OPTIONS,
   GENDER_ARRANGEMENT_LABELS,
   PROPERTY_AUTHORITY_ROLE_LABELS,
   RENT_PERIOD_LABELS,
@@ -43,6 +42,9 @@ const selectClass = cn(
 export type PropertyExtendedFieldsValue = {
   alternativeName: string;
   locationDetails: string;
+  description: string;
+  // One rule per line in the textarea; an array on the wire.
+  houseRules: string;
   genderArrangement: GenderArrangement | "";
   // Free text, not the University enum — see NEARBY_INSTITUTIONS' comment in
   // packages/shared/src/property.ts for why this stays separate from the
@@ -66,10 +68,48 @@ export type PropertyExtendedFieldsValue = {
   photographyConsent: boolean;
 };
 
+/** Widely used hostel rules a landlord can tick instead of typing. */
+export const COMMON_HOUSE_RULES = [
+  "Visitors must leave by 9 pm",
+  "No overnight guests",
+  "Quiet hours from 10 pm to 6 am",
+  "Gate closes at 11 pm",
+  "No smoking on the premises",
+  "No alcohol or drugs on the premises",
+  "No cooking in the rooms",
+  "Keep shared spaces clean",
+  "No pets",
+  "Report damage to the custodian promptly",
+] as const;
+
+const isCommonRule = (line: string) => (COMMON_HOUSE_RULES as readonly string[]).includes(line.trim());
+
+export function houseRuleLines(text: string): string[] {
+  return text.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+/** Ticked common rules first, then the landlord's own text untouched. */
+export function toggleHouseRule(text: string, rule: string, on: boolean): string {
+  const common = COMMON_HOUSE_RULES.filter((r) => (r === rule ? on : houseRuleLines(text).includes(r)));
+  const custom = customHouseRules(text);
+  return [...common, ...(custom ? [custom] : [])].join("\n");
+}
+
+export function customHouseRules(text: string): string {
+  return text.split("\n").filter((line) => !isCommonRule(line)).join("\n").replace(/^\n+/, "");
+}
+
+export function withCustomHouseRules(text: string, custom: string): string {
+  const common = COMMON_HOUSE_RULES.filter((r) => houseRuleLines(text).includes(r));
+  return [...common, ...(custom ? [custom] : [])].join("\n");
+}
+
 export function emptyPropertyExtendedFields(): PropertyExtendedFieldsValue {
   return {
     alternativeName: "",
     locationDetails: "",
+    description: "",
+    houseRules: "",
     genderArrangement: "",
     otherCatchments: [],
     authorityRole: "",
@@ -124,10 +164,14 @@ export function PropertyExtendedFields({
   value,
   onChange,
   idPrefix,
+  amenitiesExtra
 }: {
   value: PropertyExtendedFieldsValue;
   onChange: (patch: Partial<PropertyExtendedFieldsValue>) => void;
   idPrefix: string;
+  // The landlord form's own utilities/services checklist (proposedAmenities),
+  // shown inside this one Amenities box instead of as a second list.
+  amenitiesExtra?: React.ReactNode;
 }) {
   const [customInstitution, setCustomInstitution] = useState("");
   const customInstitutions = value.otherCatchments.filter(
@@ -181,6 +225,55 @@ export function PropertyExtendedFields({
           rows={2}
           className="min-h-16 max-h-60 resize-y"
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-description`}>About the hostel (optional)</Label>
+        <Textarea
+          id={`${idPrefix}-description`}
+          value={value.description}
+          onChange={(e) => onChange({ description: e.target.value })}
+          placeholder="e.g. A quiet hostel 10 minutes' walk from the main gate, with a study room and 24-hour security."
+          rows={4}
+          maxLength={2000}
+          aria-describedby={`${idPrefix}-description-hint`}
+          className="min-h-24 max-h-80 resize-y"
+        />
+        <p id={`${idPrefix}-description-hint`} className="text-xs text-muted-foreground">
+          Students see this on your listing after our team checks it during the inspection.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-houseRules`}>House rules (optional)</Label>
+        <div className="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-2">
+          {COMMON_HOUSE_RULES.map((rule) => (
+            <label key={rule} className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={houseRuleLines(value.houseRules).includes(rule)}
+                onChange={(e) => onChange({ houseRules: toggleHouseRule(value.houseRules, rule, e.target.checked) })}
+              />
+              {rule}
+            </label>
+          ))}
+        </div>
+        <Label htmlFor={`${idPrefix}-houseRules`} className="pt-1 text-xs font-medium text-muted-foreground">
+          Your own rules
+        </Label>
+        <Textarea
+          id={`${idPrefix}-houseRules`}
+          value={customHouseRules(value.houseRules)}
+          onChange={(e) => onChange({ houseRules: withCustomHouseRules(value.houseRules, e.target.value) })}
+          placeholder={"One rule per line, e.g.\nNo loud music after 9 pm"}
+          rows={3}
+          aria-describedby={`${idPrefix}-houseRules-hint`}
+          className="min-h-20 max-h-80 resize-y"
+        />
+        <p id={`${idPrefix}-houseRules-hint`} className="text-xs text-muted-foreground">
+          Tick the common rules that apply and add any of your own, one per line. Shown to students on your listing.
+        </p>
       </div>
 
       <div className="space-y-1.5">
@@ -374,7 +467,9 @@ export function PropertyExtendedFields({
           securityFeatures) — only the presentation is merged. */}
       <div className="space-y-1.5">
         <Label>Amenities</Label>
+        <p className="text-xs text-muted-foreground">What the property offers. Our team confirms these at the inspection.</p>
         <div className="divide-y divide-border rounded-md border border-border">
+          {amenitiesExtra ? <div className="space-y-3 p-3">{amenitiesExtra}</div> : null}
           <CheckboxGrid
             options={UTILITY_OPTIONS}
             value={value.furnishingItems}
@@ -390,14 +485,6 @@ export function PropertyExtendedFields({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Accessibility</Label>
-        <CheckboxGrid
-          options={ACCESSIBILITY_FEATURE_OPTIONS}
-          value={value.accessibilityFeatures}
-          onChange={(accessibilityFeatures) => onChange({ accessibilityFeatures })}
-        />
-      </div>
     </div>
   );
 }
@@ -409,6 +496,8 @@ export function serializePropertyExtendedFields(v: PropertyExtendedFieldsValue) 
   return {
     alternativeName: v.alternativeName.trim() || null,
     locationDetails: v.locationDetails.trim() || null,
+    description: v.description.trim() || null,
+    houseRules: v.houseRules.split("\n").map((rule) => rule.trim()).filter(Boolean).slice(0, 50),
     genderArrangement: v.genderArrangement || null,
     otherCatchments: v.otherCatchments,
     authorityRole: v.authorityRole || undefined,
@@ -433,6 +522,8 @@ export function serializePropertyExtendedFields(v: PropertyExtendedFieldsValue) 
 export function propertyExtendedFieldsFromProperty(p: {
   alternativeName: string | null;
   locationDetails: string | null;
+  description?: string | null;
+  houseRules?: string[];
   genderArrangement: string | null;
   otherCatchments: string[];
   authorityRole: string | null;
@@ -452,6 +543,8 @@ export function propertyExtendedFieldsFromProperty(p: {
   return {
     alternativeName: p.alternativeName ?? "",
     locationDetails: p.locationDetails ?? "",
+    description: p.description ?? "",
+    houseRules: (p.houseRules ?? []).join("\n"),
     genderArrangement: (p.genderArrangement ?? "") as GenderArrangement | "",
     otherCatchments: p.otherCatchments ?? [],
     authorityRole: (p.authorityRole ?? "") as PropertyAuthorityRole | "",

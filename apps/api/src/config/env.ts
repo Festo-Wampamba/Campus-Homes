@@ -140,7 +140,13 @@ const envSchema = z.object({
   // documents; reads go through presigned GETs from /uploads/document-url.
   // Production refuses document uploads while it is unset.
   B2_PRIVATE_BUCKET: z.string().min(1).optional(),
-  SENTRY_DSN: z.string().optional(),
+  // Server-side only (never sent to browsers): road distance from each hostel
+  // to its campus. Restrict the key to the Routes API and the server's IP.
+  GOOGLE_ROUTES_API_KEY: z.string().min(1).optional(),
+  SENTRY_DSN: z.string().url().optional(),
+  // Required with SENTRY_DSN (checked in loadEnv): staging and production both
+  // run NODE_ENV=production, so NODE_ENV can't tell their errors apart.
+  SENTRY_ENVIRONMENT: z.enum(['production', 'staging', 'development']).optional(),
   POWER_BI_PUSH_URL: z.string().url().optional(),
   POWER_BI_API_TOKEN: z.string().min(1).optional(),
   // Base URL clients are redirected back to after Flutterwave checkout.
@@ -184,6 +190,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (parsed.data.LOGTO_ENDPOINT && new URL(parsed.data.LOGTO_ENDPOINT).protocol !== 'https:') insecure.push('LOGTO_ENDPOINT');
     if (insecure.length) throw new Error(`Production requires HTTPS: ${insecure.join(', ')}`);
     if (!parsed.data.TRUSTED_PROXY_CIDRS.length) throw new Error('Production requires TRUSTED_PROXY_CIDRS');
+  }
+  if (parsed.data.SENTRY_DSN && !parsed.data.SENTRY_ENVIRONMENT) {
+    throw new Error('Invalid environment configuration: SENTRY_ENVIRONMENT');
   }
   if (parsed.data.PHONE_OTP_CHANNEL === 'whatsapp') {
     const required = ['WHATSAPP_GRAPH_API_VERSION', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_AUTH_TEMPLATE_NAME', 'LOGTO_SMS_WEBHOOK_SECRET'] as const;

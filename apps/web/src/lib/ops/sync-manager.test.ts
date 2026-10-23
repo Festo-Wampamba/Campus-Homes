@@ -83,6 +83,20 @@ describe("syncQueuedDrafts", () => {
     expect(updated?.syncStatus).toBe("queued");
   });
 
+  it("keeps a draft queued when the session has ended (inactivity sign-out)", async () => {
+    await putDraft(queuedDraft("visit-sync-401"));
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: "Unauthorized" }),
+    }) as unknown as typeof fetch;
+
+    await syncQueuedDrafts();
+
+    const updated = await getDraft("visit-sync-401");
+    expect(updated?.syncStatus).toBe("queued");
+  });
+
   it("leaves a draft queued with its photo pending when upload signing is rate limited", async () => {
     const photo = { type: "image/jpeg", size: 10 } as unknown as File;
     await putDraft({ ...queuedDraft("visit-sign-429"), photos: [{ file: photo, category: "bedroom" as const }] });

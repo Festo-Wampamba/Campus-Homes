@@ -14,6 +14,7 @@ import { getServerSession } from "@/lib/session";
 import { ApproveVisitButton } from "./approve-visit-button";
 import { ChecklistItemDialog } from "./checklist-item-dialog";
 import { CreateListingToPublish } from "./create-listing-to-publish";
+import { CorrectionFixPanel } from "../../inspect/[visitId]/correction-fix-panel";
 
 export const metadata: Metadata = { title: "Visit review" };
 
@@ -46,13 +47,20 @@ export default async function VisitDetailPage({
   // calls .startsWith on an object and 500s the whole page.
   const photos = normalizeVisitPhotos(visit.photoStorageKeys);
 
-  const listings = visit.approvedAt && isLead ? await getPropertyListings(visit.propertyId) : [];
+  // A failed lookup must never read as "no listing" or "no semester".
+  let publishLoadFailed = false;
+  const listings = visit.approvedAt && isLead
+    ? await getPropertyListings(visit.propertyId).catch(() => { publishLoadFailed = true; return []; })
+    : [];
   // A landlord-onboarded property has no listing at all, so an approved visit
   // has nothing to publish — offer the lead the applicable semesters to create one.
   const publishableSemesters =
-    visit.approvedAt && isLead && listings.length === 0
-      ? await getPublishableSemesters(visit.propertyId)
+    visit.approvedAt && isLead && listings.length === 0 && !publishLoadFailed
+      ? await getPublishableSemesters(visit.propertyId).catch(() => { publishLoadFailed = true; return []; })
       : [];
+  // A lead who assigned the visit to themself is its inspector, so they can
+  // fix a flagged item here instead of waiting on themself in "My visits".
+  const canFixHere = Boolean(session && visit.inspectorId === session.user.id);
 
   return (
     <>
@@ -138,7 +146,31 @@ export default async function VisitDetailPage({
           </Card>
         )}
 
-        {visit.approvedAt && visit.result === "passed" && listings.length === 0 && (
+        {canFixHere && visit.corrections.some((c) => c.status === "open") && (
+          <Card>
+            <CardContent className="p-5">
+              <CorrectionFixPanel
+                visitId={visit.id}
+                corrections={visit.corrections}
+                componentLabel={COMPONENT_LABEL}
+                checklist={visit.checklist}
+                intro="You inspected this visit, so you can fix these items here and carry on to approve and publish."
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {publishLoadFailed && (
+          <Card>
+            <CardContent className="p-5">
+              <p role="alert" className="text-sm text-destructive">
+                Couldn&apos;t load this property&apos;s publishing options. Reload the page; if it keeps failing, sign out and back in.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!publishLoadFailed && visit.approvedAt && visit.result === "passed" && listings.length === 0 && (
           <Card>
             <CardContent className="space-y-3 p-5">
               <p className="text-sm text-muted-foreground">

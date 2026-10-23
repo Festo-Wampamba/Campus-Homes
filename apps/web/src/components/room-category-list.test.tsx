@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import { RoomCategoryList } from "./room-category-list";
+import { RoomCategoryList, availabilityLabel } from "./room-category-list";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
@@ -21,10 +21,22 @@ const UNIT = {
 const BED_A = "22222222-2222-4222-8222-222222222222";
 const BED_B = "33333333-3333-4333-8333-333333333333";
 
+HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+  this.removeAttribute("open");
+};
+
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(availability: { id: string; unit_id: string; available: boolean }[], units = [UNIT]) {
+async function render(
+  availability: { id: string; unit_id: string; available: boolean }[],
+  units = [UNIT],
+  publicPresentation = false,
+  roomAmenitiesByUnit?: Map<string, unknown>,
+) {
   await act(async () =>
     root.render(
       <RoomCategoryList
@@ -36,6 +48,8 @@ async function render(availability: { id: string; unit_id: string; available: bo
         propertyName="Kikoni Rise"
         canReserve={false}
         needsProfile={false}
+        publicPresentation={publicPresentation}
+        roomAmenitiesByUnit={roomAmenitiesByUnit}
       />,
     ),
   );
@@ -116,6 +130,46 @@ describe("RoomCategoryList", () => {
     expect(container.textContent).not.toMatch(/\broom/);
   });
 
+  // Festo, 2026-10-23: one section per room type, each variant named.
+  it("groups room types under their own heading", async () => {
+    await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
+
+    expect(container.querySelector("h3")?.textContent).toBe("Double rooms");
+  });
+
+  it("names a plain room type without a self-contained suffix", async () => {
+    await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
+
+    expect(container.textContent).not.toContain("self-contained");
+  });
+
+  // Festo, 2026-10-23: room and bed totals stay on the landlord's side.
+  it("says a room type is available without counting rooms or beds", async () => {
+    await render([{ id: BED_A, unit_id: UNIT.id, available: true }], [UNIT], true);
+
+    expect(container.textContent).not.toMatch(/\d+ (rooms?|beds?)\b/);
+  });
+
+  it("opens room details with only supplied room amenities", async () => {
+    await render(
+      [{ id: BED_A, unit_id: UNIT.id, available: true }],
+      [UNIT],
+      true,
+      new Map([[UNIT.id, ["study_desk", "wardrobe"]]]),
+    );
+
+    const details = [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "View details");
+    expect(details).toBeDefined();
+    await act(async () => details?.click());
+
+    expect(container.textContent).toContain("Double details");
+    expect(container.textContent).toContain("Room amenities");
+    expect(container.textContent).toContain("Study desk");
+    expect(container.textContent).toContain("Wardrobe");
+    expect(container.textContent).not.toContain("Electricity");
+    expect(container.textContent).toContain("Deposit not stated");
+  });
+
   it("shows Reserved instead of Reserve on a room type the student already holds", async () => {
     await renderForStudent(new Map([[BED_B, "reserved"]]));
 
@@ -129,5 +183,15 @@ describe("RoomCategoryList", () => {
 
     const labels = [...container.querySelectorAll("a, button")].map((el) => el.textContent?.trim());
     expect(labels).toEqual(["Reserved", "Reserved"]);
+  });
+});
+
+describe("availabilityLabel", () => {
+  it("says a room type with a free bed is available", () => {
+    expect(availabilityLabel({ availableCount: 40 })).toBe("Available");
+  });
+
+  it("says when nothing is free", () => {
+    expect(availabilityLabel({ availableCount: 0 })).toBe("Currently unavailable");
   });
 });

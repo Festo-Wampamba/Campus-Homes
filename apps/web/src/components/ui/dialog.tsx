@@ -33,8 +33,12 @@ function Dialog({
   size = "md",
   dismissible = true,
   resizable = false,
+  className,
+  "aria-label": ariaLabel,
   children,
 }: {
+  className?: string;
+  "aria-label"?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   size?: "sm" | "md" | "lg" | "xl";
@@ -73,6 +77,7 @@ function Dialog({
   return (
     <dialog
       ref={ref}
+      aria-label={ariaLabel}
       onClose={() => onOpenChange(false)}
       onClick={(e) => {
         if (!dismissible) return;
@@ -104,6 +109,7 @@ function Dialog({
         resizable && "sm:resize sm:min-w-[36rem] sm:min-h-[min(24rem,90vh)] max-w-[95vw] sm:max-h-[90vh]",
         "z-(--z-modal) backdrop:bg-black/50",
         "open:animate-in open:fade-in open:zoom-in-95 open:duration-150",
+        className,
       )}
     >
       {/* flex column filling the dialog's max-height — DialogBody is the

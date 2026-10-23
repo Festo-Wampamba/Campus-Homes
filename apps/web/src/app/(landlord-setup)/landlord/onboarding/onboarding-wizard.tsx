@@ -37,10 +37,25 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { AMENITY_OPTIONS, humanizeKey } from "@/lib/format";
+import { useIdleDraft } from "@/lib/idle-timeout";
 import { APPROVAL_PATH } from "@/lib/landlord-gate";
 import { cn } from "@/lib/utils";
 
 type Step = "legal" | "property";
+
+// The property step's typed values, kept across an inactivity sign-out. The
+// legal step is saved to the API before this step opens; the cover photo
+// (a File) can't be stored and has to be picked again.
+interface PropertyDraft {
+  propertyName: string;
+  streetAddress: string;
+  type: PropertyType;
+  catchment: University;
+  roomCategoryRows: RoomCategoryRow[];
+  amenities: Record<string, boolean>;
+  extended: PropertyExtendedFieldsValue;
+  declaration: PropertyDeclarationFieldsValue;
+}
 
 const UNIVERSITY_LABELS: Record<University, string> = {
   MUK: "Makerere University",
@@ -89,9 +104,11 @@ function StepHeader({ step, title, description }: { step: Step; title: string; d
 export function OnboardingWizard({
   initialProfile,
   initialStep,
+  draftKey,
 }: {
   initialProfile: LandlordProfile | null;
   initialStep: Step;
+  draftKey: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(initialStep);
@@ -113,6 +130,26 @@ export function OnboardingWizard({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const propertyDraft = useMemo<PropertyDraft | null>(
+    () => (step === "property"
+      ? { propertyName, streetAddress, type, catchment, roomCategoryRows, amenities, extended, declaration }
+      : null),
+    [step, propertyName, streetAddress, type, catchment, roomCategoryRows, amenities, extended, declaration],
+  );
+  const { draft, settle: settleDraft } = useIdleDraft(draftKey, propertyDraft);
+
+  function restoreDraft() {
+    if (!draft) return;
+    setPropertyName(draft.propertyName);
+    setStreetAddress(draft.streetAddress);
+    setType(draft.type);
+    setCatchment(draft.catchment);
+    setRoomCategoryRows(draft.roomCategoryRows);
+    setAmenities(draft.amenities);
+    setExtended(draft.extended);
+    setDeclaration(draft.declaration);
+    settleDraft();
+  }
 
   const knownAmenityKeys = useMemo(() => new Set(AMENITY_OPTIONS.map((o) => o.key)), []);
   const customAmenityKeys = Object.keys(amenities).filter(
@@ -278,6 +315,15 @@ export function OnboardingWizard({
               title="Submit your property"
               description="Our Ops team schedules a physical verification visit once this is submitted."
             />
+            {draft && (
+              <div role="status" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
+                <p>You were signed out while filling this in. Restore the details you&apos;d entered? You&apos;ll need to add the cover photo again.</p>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="secondary" onClick={settleDraft}>Discard</Button>
+                  <Button type="button" size="sm" onClick={restoreDraft}>Restore</Button>
+                </div>
+              </div>
+            )}
             <form onSubmit={submitProperty} className="space-y-7">
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-1.5">
@@ -372,13 +418,15 @@ export function OnboardingWizard({
                   showPhotos
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Amenities (optional)</Label>
-                <p className="text-xs text-muted-foreground">
-                  What the property offers. Ops confirms these during verification.
-                </p>
+
+              <PropertyExtendedFields
+                value={extended}
+                onChange={(patch) => setExtended((prev) => ({ ...prev, ...patch }))}
+                idPrefix="onboarding-property"
+                amenitiesExtra={(
+                  <>
                 <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
-                  {AMENITY_OPTIONS.map((option) => (
+                  {AMENITY_OPTIONS.filter((option) => option.key !== "security").map((option) => (
                     <label key={option.key} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -423,12 +471,8 @@ export function OnboardingWizard({
                     Add
                   </Button>
                 </div>
-              </div>
-
-              <PropertyExtendedFields
-                value={extended}
-                onChange={(patch) => setExtended((prev) => ({ ...prev, ...patch }))}
-                idPrefix="onboarding-property"
+                  </>
+                )}
               />
 
               <PropertyDeclarationFields

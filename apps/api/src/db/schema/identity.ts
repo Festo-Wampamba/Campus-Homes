@@ -104,6 +104,7 @@ export const sessions = pgTable('sessions', {
   userAgent: text('user_agent'),
   authenticatedAt: timestamp('authenticated_at', { withTimezone: true }),
   mfaVerified: boolean('mfa_verified').notNull().default(false),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

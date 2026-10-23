@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -13,11 +13,20 @@ export interface MapBounds {
   maxLon: number;
 }
 
+// Static markup only (no data interpolated), so insertAdjacentHTML is safe.
+const PIN_SVG =
+  '<svg class="map-marker__pin" viewBox="0 0 24 34" aria-hidden="true" focusable="false">' +
+  '<path fill="currentColor" stroke="#fff" stroke-width="1.5" d="M12 1C6 1 1.5 5.4 1.5 11.2c0 7.6 9.1 19.7 9.5 20.2a1.3 1.3 0 0 0 2 0c.4-.5 9.5-12.6 9.5-20.2C22.5 5.4 18 1 12 1z"/>' +
+  '<circle cx="12" cy="11.2" r="4" fill="#fff"/></svg>';
+
 export interface MapMarker {
   id: string;
   lat: number;
   lon: number;
   label: string;
+  displayLabel?: string;
+  // A campus gets a teal pin; listings get the red pin people know from Google Maps.
+  kind?: "listing" | "campus";
 }
 
 // §20 resolved: MapLibre + OSM raster tiles. Attribution is mandatory under
@@ -37,6 +46,14 @@ const TILE_URL =
 // chunk it imports into public/maplibre/ from the installed package.
 maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
+// Satellite view (Festo, 2026-10-23): Esri World Imagery, free with
+// attribution. Swap via NEXT_PUBLIC_SATELLITE_TILE_URL; same `||` reason as above.
+const SATELLITE_TILE_URL =
+  process.env.NEXT_PUBLIC_SATELLITE_TILE_URL ||
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+
+// Both layers live in one style; a hidden layer's tiles are never fetched, and
+// the attribution control only credits the visible source.
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
@@ -47,9 +64,24 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
       attribution:
         '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     },
+    satellite: {
+      type: "raster",
+      tiles: [SATELLITE_TILE_URL],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+    },
   },
-  layers: [{ id: "osm", type: "raster", source: "osm" }],
+  layers: [
+    { id: "osm", type: "raster", source: "osm" },
+    { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
+  ],
 };
+
+/** Google Maps URLs API: opens Street View at a point, no API key needed. */
+export function streetViewUrl({ lat, lon }: { lat: number; lon: number }): string {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
+}
 
 // Makerere main campus — the launch catchment (brief §1).
 const INITIAL_CENTER: [number, number] = [32.5687, 0.3345];
@@ -74,6 +106,9 @@ export function ListingsMap({
   className,
   initialCenter = INITIAL_CENTER,
   initialZoom = INITIAL_ZOOM,
+  initialBounds,
+  layerControls = false,
+  streetViewAt,
 }: {
   markers: MapMarker[];
   selectedId: string | null;
@@ -89,6 +124,11 @@ export function ListingsMap({
   // university) instead of the Makerere default — read once, at mount.
   initialCenter?: [number, number];
   initialZoom?: number;
+  initialBounds?: MapBounds;
+  // Map / Satellite switch over the map (listing page).
+  layerControls?: boolean;
+  // Adds a Street View link for this point next to the switch.
+  streetViewAt?: { lat: number; lon: number };
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -104,6 +144,8 @@ export function ListingsMap({
   // re-center out from under a user who has already panned it.
   const initialCenterRef = useRef(initialCenter);
   const initialZoomRef = useRef(initialZoom);
+  const initialBoundsRef = useRef(initialBounds);
+  const [layer, setLayer] = useState<"map" | "satellite">("map");
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -122,6 +164,10 @@ export function ListingsMap({
       // through to the page as normal.
       cooperativeGestures: true,
     });
+    if (initialBoundsRef.current) {
+      const bounds = initialBoundsRef.current;
+      map.fitBounds([[bounds.minLon, bounds.minLat], [bounds.maxLon, bounds.maxLat]], {padding: 32, duration: 0});
+    }
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.AttributionControl({ compact: false }));
 
@@ -163,6 +209,17 @@ export function ListingsMap({
     };
   }, []);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      map.setLayoutProperty("osm", "visibility", layer === "map" ? "visible" : "none");
+      map.setLayoutProperty("satellite", "visibility", layer === "satellite" ? "visible" : "none");
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [layer]);
+
   // Sync markers (≤50 per search — rebuild is cheap and simple)
   useEffect(() => {
     const map = mapRef.current;
@@ -172,12 +229,19 @@ export function ListingsMap({
     for (const marker of markers) {
       const el = document.createElement("button");
       el.type = "button";
-      el.setAttribute("aria-label", `Show listing: ${marker.label}`);
-      el.className =
-        "map-pin tabular cursor-pointer rounded-full px-2.5 py-1 text-xs font-semibold shadow-md transition-colors duration-150";
-      el.textContent = marker.label;
+      el.setAttribute("aria-label", marker.kind === "campus" ? marker.label : `Show listing: ${marker.label}`);
+      el.className = "map-marker";
+      el.dataset.kind = marker.kind ?? "listing";
+      el.title = marker.label;
+      const label = document.createElement("span");
+      label.className = "map-marker__label tabular";
+      // textContent, never innerHTML: names come from landlord input.
+      label.textContent = marker.displayLabel ?? marker.label;
+      el.append(label);
+      el.insertAdjacentHTML("beforeend", PIN_SVG);
       el.addEventListener("click", () => onSelectRef.current(marker.id));
-      const m = new maplibregl.Marker({ element: el })
+      // anchor "bottom": the pin's tip, not its centre, sits on the coordinate.
+      const m = new maplibregl.Marker({ element: el, anchor: "bottom" })
         .setLngLat([marker.lon, marker.lat])
         .addTo(map);
       markerRefs.current.set(marker.id, m);
@@ -204,5 +268,21 @@ export function ListingsMap({
   // child (and the whole page) wider than the viewport instead of shrinking
   // to fit. overflow-hidden clips the map/controls to this box no matter
   // what size MapLibre's internal canvas thinks it wants to be.
-  return <div ref={containerRef} className={cn("min-w-0 overflow-hidden", className)} />;
+  if (!layerControls) return <div ref={containerRef} className={cn("min-w-0 overflow-hidden", className)} />;
+  const option = (active: boolean) =>
+    cn("grid min-h-11 place-items-center px-3 sm:min-h-9", active ? "bg-primary text-primary-foreground" : "hover:bg-muted");
+  return (
+    <div className={cn("relative min-w-0 overflow-hidden", className)}>
+      <div ref={containerRef} className="size-full min-w-0 overflow-hidden" />
+      <div role="group" aria-label="Map view" className="absolute left-2 top-2 z-10 flex divide-x divide-border overflow-hidden rounded-md border border-border bg-card text-sm font-semibold text-foreground shadow-sm">
+        <button type="button" aria-pressed={layer === "map"} onClick={() => setLayer("map")} className={option(layer === "map")}>Map</button>
+        <button type="button" aria-pressed={layer === "satellite"} onClick={() => setLayer("satellite")} className={option(layer === "satellite")}>Satellite</button>
+        {streetViewAt && (
+          <a href={streetViewUrl(streetViewAt)} target="_blank" rel="noopener noreferrer" className={option(false)}>
+            Street View<span className="sr-only"> (opens Google Maps in a new tab)</span>
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }

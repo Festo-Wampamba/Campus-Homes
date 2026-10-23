@@ -5,7 +5,7 @@ const assuranceTime = new Date('2026-01-01T00:00:00Z');
 function database(overrides: Record<string, unknown> = {}) {
   const row = {
     sessionId: 'session', sessionCreatedAt: new Date(), expiresAt: new Date(Date.now() + 60_000),
-    authenticatedAt: assuranceTime, mfaVerified: true,
+    authenticatedAt: assuranceTime, mfaVerified: true, lastActivityAt: new Date(),
     userId: 'user', role: 'admin', status: 'active', deletedAt: null,
     name: 'Test', email: null, phone: null, ...overrides,
   };

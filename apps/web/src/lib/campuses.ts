@@ -2,6 +2,19 @@ import type { University } from "@campushomes/shared";
 
 export type CampusLocation = { code: University; name: string; lat: number; lon: number };
 
+export const ENABLED_CAMPUSES = [{
+  code: "MUK" as const,
+  name: "Makerere University",
+  lat: 0.3345,
+  lon: 32.5687,
+  image: "/images/campushomes/makerere-campus-hd-v2.webp",
+  areas: [
+    { name: "Kikoni", query: "Kikoni" },
+    { name: "Wandegeya", query: "Wandegeya" },
+    { name: "Makerere", query: "Makerere" },
+  ],
+}] as const;
+
 // Approximate campus centers for the Kampala-area launch catchment
 // (PRODUCT.md) — used only to point the search map at the right
 // neighborhood when a student browses by university, not as a precise
@@ -13,7 +26,7 @@ export type CampusLocation = { code: University; name: string; lat: number; lon:
 // MUK is the sole pilot university for first testing. This map is the one
 // place that gates all of them — re-add an entry here to bring one back.
 export const CAMPUS_LOCATIONS: Partial<Record<University, CampusLocation>> = {
-  MUK: { code: "MUK", name: "Makerere University", lat: 0.3345, lon: 32.5687 },
+  ...Object.fromEntries(ENABLED_CAMPUSES.map((campus) => [campus.code, campus])),
 };
 
 // The catchment filter (`university`) is what scopes results to a campus;

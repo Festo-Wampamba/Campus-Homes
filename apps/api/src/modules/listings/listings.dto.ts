@@ -2,6 +2,8 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 import {
+  listingReviewsQuerySchema,
+  listingSearchPageSchema,
   listingSearchSchema,
   submitPropertySchema,
   updatePropertySchema,
@@ -15,6 +17,10 @@ export class SubmitPropertyDto extends createZodDto(submitPropertySchema) {}
 export class UpdatePropertyDto extends createZodDto(updatePropertySchema) {}
 
 export class ListingSearchDto extends createZodDto(listingSearchSchema) {}
+
+export class ListingSearchPageDto extends createZodDto(listingSearchPageSchema) {}
+
+export class ListingReviewsQueryDto extends createZodDto(listingReviewsQuerySchema) {}
 
 export class AddPropertyDocumentDto extends createZodDto(
   z.object({

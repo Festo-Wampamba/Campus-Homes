@@ -212,7 +212,7 @@ function ReservationCard({
 
   return (
     <div ref={ref} id={`reservation-${reservation.id}`}>
-      <Card className={cn(highlighted && "ring-2 ring-teal-600 ring-offset-2 ring-offset-background")}>
+      <Card className={cn("rounded-[18px] border-[#dbe7e5] shadow-[0_8px_24px_rgba(23,63,67,0.04)]", highlighted && "ring-2 ring-teal-600 ring-offset-2 ring-offset-background")}>
         <CardContent className="flex flex-wrap items-start justify-between gap-3 p-5">
           <div className="min-w-0">
             <Link
@@ -273,7 +273,7 @@ function ReservationCard({
             )}
           </div>
         </CardContent>
-        <div className="border-t border-border px-5 py-3">
+        <div className="border-t border-[#edf2f1] px-5 py-3">
           <button
             type="button"
             aria-expanded={isTrackerOpen}

@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
@@ -22,9 +22,23 @@ import { assertStaffScope } from '../auth/staff-scope';
 import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { sendPaymentReceiptEmail } from './payment-receipt-email';
+import { sendWalkInWelcomeEmail } from './walk-in-email';
 import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
-export const DEFAULT_RESERVE_HOURS = 24;
+export const DEFAULT_RESERVE_HOURS = 6;
+
+type ReceiptRow = {
+  receipt_number: string;
+  student_id: string;
+  landlord_id: string;
+  property_name: string;
+  room_label: string;
+  booking_fee_ugx: number;
+  deposit_ugx: number;
+  payment_method: string | null;
+  recorded_at: Date;
+};
 // A student already moved in (occupied) can't reserve a new bed until their
 // current term is within this many days of ending — reserving a second home
 // mid-semester makes no sense; reserving next semester's place as this one
@@ -264,6 +278,7 @@ export class ReservationsService {
    * student's phone). Booking payment is offline; this just records what
    * was reported collected. */
   async book(ctx: RlsContext, input: BookReservationInput) {
+    let receipt: ReceiptRow | null = null;
     const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
       let bedId: string;
       let existingReservationId: string | null = null;
@@ -379,8 +394,24 @@ export class ReservationsService {
         );
         reservationRow = inserted;
       }
+      // Money recorded at booking gets a receipt both sides keep (0075).
+      const bookingFee = input.bookingFeeCollectedUgx ?? 0;
+      const deposit = input.depositCollectedUgx ?? 0;
+      if (bookingFee + deposit > 0) {
+        receipt = (await client.query<ReceiptRow>(
+          `INSERT INTO payment_receipts (reservation_id, student_id, landlord_id, property_name, room_label,
+             booking_fee_ugx, deposit_ugx, payment_method, recorded_by)
+           SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5, $6
+           FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
+           WHERE b.id = $7
+           RETURNING receipt_number, student_id, landlord_id, property_name, room_label,
+             booking_fee_ugx, deposit_ugx, payment_method::text AS payment_method, recorded_at`,
+          [reservationRow!.id, studentId, bookingFee, deposit, input.paymentMethod ?? null, ctx.userId, bedId],
+        )).rows[0] ?? null;
+      }
       return reservationRow;
     });
+    if (receipt) this.deliverReceipt(receipt);
 
     await this.audit.record(ctx, 'reservation.book', 'reservation', result!.id, {
       bedId: result!.bedId,
@@ -395,6 +426,172 @@ export class ReservationsService {
       })
       .catch((err: unknown) => console.error('[reservations] booking confirmed notify failed:', err));
     return result;
+  }
+
+  /** Emails the receipt to the student and the landlord and leaves each an
+   * in-app notice. Best-effort and after commit: the row is the record. */
+  private deliverReceipt(receipt: ReceiptRow) {
+    void this.rlsDb.run(SERVICE(receipt.landlord_id), async (_db, client) =>
+      (await client.query<{ id: string; email: string | null; name: string | null }>(
+        `SELECT id, email, NULLIF(btrim(name), '') AS name FROM users WHERE id = ANY($1::uuid[])`,
+        [[receipt.student_id, receipt.landlord_id]],
+      )).rows)
+      .then(async (people) => {
+        const student = people.find((p) => p.id === receipt.student_id);
+        const landlord = people.find((p) => p.id === receipt.landlord_id);
+        const total = receipt.booking_fee_ugx + receipt.deposit_ugx;
+        const summary = `UGX ${total.toLocaleString('en-UG')} for ${receipt.room_label} at ${receipt.property_name} (receipt ${receipt.receipt_number})`;
+        const base = {
+          receiptNumber: receipt.receipt_number,
+          studentName: student?.name ?? 'Student',
+          propertyName: receipt.property_name,
+          roomLabel: receipt.room_label,
+          bookingFeeUgx: receipt.booking_fee_ugx,
+          depositUgx: receipt.deposit_ugx,
+          paymentMethod: receipt.payment_method,
+          recordedAt: receipt.recorded_at,
+        };
+        const env = loadEnv();
+        await Promise.all([
+          student?.email ? sendPaymentReceiptEmail(env, { ...base, to: student.email, audience: 'student' }) : null,
+          landlord?.email ? sendPaymentReceiptEmail(env, { ...base, to: landlord.email, audience: 'landlord' }) : null,
+          this.notifications?.notify(receipt.student_id, 'payment.receipt', 'in_app', {
+            message: `Payment recorded: ${summary}.`, href: '/reservations',
+          }),
+          this.notifications?.notify(receipt.landlord_id, 'payment.receipt', 'in_app', {
+            message: `You recorded ${summary} from ${base.studentName}.`, href: '/landlord/payments',
+          }),
+        ]);
+      })
+      .catch((err: unknown) => console.error('[reservations] receipt delivery failed:', err instanceof Error ? err.message : err));
+  }
+
+  /** Receipts for the signed-in student or landlord, newest first. */
+  receipts(ctx: RlsContext) {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) =>
+      (await client.query(
+        `SELECT r.id, r.receipt_number AS "receiptNumber", r.reservation_id AS "reservationId",
+                r.property_name AS "propertyName", r.room_label AS "roomLabel",
+                NULLIF(btrim(u.name), '') AS "studentName",
+                r.booking_fee_ugx AS "bookingFeeUgx", r.deposit_ugx AS "depositUgx",
+                r.booking_fee_ugx + r.deposit_ugx AS "totalUgx",
+                r.payment_method::text AS "paymentMethod", r.recorded_at AS "recordedAt"
+         FROM payment_receipts r JOIN users u ON u.id = r.student_id
+         WHERE r.student_id = $1 OR r.landlord_id = $1
+         ORDER BY r.recorded_at DESC LIMIT 500`,
+        [ctx.userId],
+      )).rows,
+    );
+  }
+
+  /** What a bed's landlord (or custodian/ops) may see about its student. */
+  async studentDetails(ctx: RlsContext, reservationId: string) {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const reservation = (await client.query<{ bed_id: string; student_id: string }>(
+        `SELECT bed_id, student_id FROM reservations WHERE id = $1`, [reservationId],
+      )).rows[0];
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      await this.assertCanManageBed(client, ctx, reservation.bed_id);
+      return (await client.query(
+        `SELECT NULLIF(btrim(u.name), '') AS name, COALESCE(u.phone, u.contact_phone) AS phone, u.email,
+                s.university::text AS university, s.year_of_study AS "yearOfStudy", u.gender,
+                u.date_of_birth::text AS "dateOfBirth", u.nationality, u.address,
+                u.emergency_contact_name AS "emergencyContactName", u.emergency_contact_phone AS "emergencyContactPhone",
+                u.logto_user_id IS NOT NULL AS "hasSignedIn"
+         FROM users u LEFT JOIN students s ON s.user_id = u.id WHERE u.id = $1`,
+        [reservation.student_id],
+      )).rows[0];
+    });
+  }
+
+  /** A student who walked in without CampusHomes (Festo, 2026-10-23): find
+   * their student account by phone or create one, then book() the bed like any
+   * walk-in. They claim the account when they first sign in with this phone
+   * (ProvisioningService links by verified phone). The account is committed
+   * before the booking, so a failed booking can leave an account with no room;
+   * the bed checks run first to keep that rare. */
+  async onboardWalkIn(ctx: RlsContext, input: OnboardWalkInInput) {
+    const account = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      await this.assertCanManageBed(client, ctx, input.bedId);
+      const property = (await client.query<{ name: string; room_label: string }>(
+        `SELECT p.name, u.label AS room_label FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id WHERE b.id = $1`,
+        [input.bedId],
+      )).rows[0];
+      const existing = (await client.query<{ id: string; role: string; has_profile: boolean }>(
+        `SELECT u.id, u.role::text AS role, EXISTS (SELECT 1 FROM students s WHERE s.user_id = u.id) AS has_profile
+         FROM users u WHERE u.phone = $1 AND u.deleted_at IS NULL`,
+        [input.phone],
+      )).rows[0];
+      if (existing && existing.role !== 'student') {
+        throw new ConflictException('This phone number belongs to a landlord or staff account, not a student');
+      }
+      if (input.email) {
+        const taken = await client.query(
+          `SELECT 1 FROM users WHERE lower(btrim(email)) = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR id <> $2)`,
+          [input.email, existing?.id ?? null],
+        );
+        if (taken.rowCount) throw new ConflictException('That email already belongs to another CampusHomes account');
+        // Never attach a landlord-typed email to an account that already
+        // exists: sign-in claims by email, so it could hand over someone
+        // else's account. Only a brand-new walk-in account takes it.
+      }
+      const studentId = existing?.id ?? (await client.query<{ id: string }>(
+        `INSERT INTO users (phone, contact_phone, email, name, role, status)
+         VALUES ($1, $1, $2, $3, 'student', 'active') RETURNING id`,
+        [input.phone, input.email ?? null, input.name],
+      )).rows[0]!.id;
+      if (!existing?.has_profile) {
+        await client.query(
+          `INSERT INTO students (user_id, university) VALUES ($1, $2::university) ON CONFLICT (user_id) DO NOTHING`,
+          [studentId, input.university],
+        );
+      }
+      const email = (await client.query<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [studentId])).rows[0]?.email ?? null;
+      return {
+        studentId,
+        email,
+        created: !existing,
+        propertyName: property?.name ?? 'Your hostel',
+        roomLabel: property?.room_label ?? 'your room',
+      };
+    });
+
+    // book() always returns the row it wrote or throws.
+    const booked = (await this.book(ctx, {
+      bedId: input.bedId,
+      studentPhone: input.phone,
+      bookingFeeCollectedUgx: input.bookingFeeCollectedUgx,
+      depositCollectedUgx: input.depositCollectedUgx,
+      paymentMethod: input.paymentMethod,
+    }))!;
+    if (input.movedIn) await this.confirmMoveIn(ctx, booked.id);
+    await this.audit.record(ctx, 'reservation.walk_in_onboard', 'reservation', booked.id, {
+      studentCreated: account.created,
+      movedIn: input.movedIn,
+    });
+    this.notifications
+      ?.notify(account.studentId, 'walk_in.onboarded', 'sms', {
+        message: `CampusHomes: ${account.propertyName} added your room booking. Sign in at campushomes.co.ug with this phone number to see it.`,
+        href: '/reservations',
+      })
+      .catch((err: unknown) => console.error('[reservations] walk-in SMS failed:', err));
+    if (account.email) {
+      sendWalkInWelcomeEmail(loadEnv(), {
+        to: account.email, studentName: input.name, propertyName: account.propertyName, roomLabel: account.roomLabel, phone: input.phone,
+      }).catch((err: unknown) => console.error('[reservations] walk-in email failed:', err instanceof Error ? err.message : err));
+    }
+    this.notifications
+      ?.notify(ctx.userId, 'walk_in.added', 'in_app', {
+        message: `You added ${input.name} to ${account.roomLabel} at ${account.propertyName}${input.movedIn ? ' and recorded the move-in' : ''}.`,
+        href: '/landlord/bookings',
+      })
+      .catch((err: unknown) => console.error('[reservations] walk-in notice failed:', err));
+    return {
+      reservationId: booked.id,
+      studentId: account.studentId,
+      studentCreated: account.created,
+      status: input.movedIn ? 'occupied' as const : 'booked' as const,
+    };
   }
 
   /** Landlord/custodian/ops frees up a Reserved or Booked bed the student

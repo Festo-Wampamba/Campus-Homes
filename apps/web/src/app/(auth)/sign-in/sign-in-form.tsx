@@ -17,6 +17,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   identity_conflict: "Your verified contact matches conflicting CampusHomes records. Contact support and quote the request ID in the address bar.",
   mfa_required: "Staff accounts need 2-step verification. Sign in again: you will be asked to set up an authenticator app (such as Google Authenticator) or a passkey before you can continue.",
   sso_logout_failed: "Your CampusHomes session ended, but provider sign-out could not be confirmed.",
+  // Never state the timeout length (Festo, 2026-10-22: security).
+  idle_timeout: "You were signed out due to inactivity. Sign in again to continue.",
+  session_ended: "Your session has ended. Sign in again to continue.",
 };
 
 export type SignInMode = "landlord-create" | "landlord-signin" | "all";
@@ -51,12 +54,12 @@ export function TermsNote() {
 function LandlordSignIn({ mode, next, error }: { mode: Exclude<SignInMode, "all">; next: string; error?: string | null }) {
   const creating = mode === "landlord-create";
   return (
-    <Card className="w-full max-w-md shadow-xl">
-      <CardContent className="p-4 sm:p-6">
+    <Card className="w-full max-w-md rounded-[1.5rem] border-white/70 bg-white/95 shadow-[0_24px_80px_-32px_rgba(23,63,67,0.45)] backdrop-blur">
+      <CardContent className="p-6 sm:p-8">
         <div className="mb-3 flex flex-col items-center gap-1 sm:mb-4">
           <Wordmark stacked />
         </div>
-        <p className="mb-5 text-center text-sm text-muted-foreground">
+        <p className="mb-6 text-center text-sm leading-6 text-muted-foreground">
           List and manage your properties on CampusHomes with a landlord account.
         </p>
         <ErrorNotice error={error} />
@@ -88,13 +91,13 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
   if (mode !== "all") return <LandlordSignIn mode={mode} next={next ?? "/landlord"} error={error} />;
 
   return (
-    <Card className="w-full max-w-md shadow-xl">
-      <CardContent className="p-4 sm:p-6">
+    <Card className="w-full max-w-md rounded-[1.5rem] border-white/70 bg-white/95 shadow-[0_24px_80px_-32px_rgba(23,63,67,0.45)] backdrop-blur">
+      <CardContent className="p-6 sm:p-8">
         <div className="mb-3 flex flex-col items-center gap-1 sm:mb-4">
           <Wordmark stacked />
         </div>
 
-        <p className="mb-5 text-center text-sm text-muted-foreground">
+        <p className="mb-6 text-center text-sm leading-6 text-muted-foreground">
           Choose where you want to go. Your account determines which workspaces you can access.
         </p>
 

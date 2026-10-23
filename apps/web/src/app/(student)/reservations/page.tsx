@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Timer } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
+import { ReceiptsTable } from "@/components/payments/receipts-table";
+import { getMyReceipts } from "@/lib/receipts";
 import { getMyReservations } from "@/lib/reservations";
 import { ReservationsList } from "./reservations-list";
 
@@ -13,11 +15,13 @@ export default async function ReservationsPage({
 }: {
   searchParams: Promise<{ new?: string; track?: string }>;
 }) {
-  const [reservations, { new: justReservedId, track: trackId }] = await Promise.all([getMyReservations(), searchParams]);
+  const [reservations, { new: justReservedId, track: trackId }, receipts] = await Promise.all([getMyReservations(), searchParams, getMyReceipts()]);
 
   return (
     <>
-      <h1 className="text-2xl">My reservations</h1>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ae5528]">Your room holds</p>
+      <h1 className="ch-student-page__title mt-3">My reservations</h1>
+      <p className="ch-student-page__lede">A reservation is free and holds an available bed while you view the room and agree terms with the landlord.</p>
       {reservations.length === 0 ? (
         <div className="mt-6">
           <EmptyState
@@ -36,6 +40,13 @@ export default async function ReservationsPage({
         </div>
       ) : (
         <ReservationsList reservations={reservations} highlightId={justReservedId} trackId={trackId} />
+      )}
+      {!!receipts?.length && (
+        <section aria-labelledby="receipts-heading" className="mt-10">
+          <h2 id="receipts-heading" className="text-xl">Payment receipts</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Payments your landlord recorded. A copy was emailed to you.</p>
+          <div className="mt-4"><ReceiptsTable receipts={receipts} showStudent={false} /></div>
+        </section>
       )}
     </>
   );

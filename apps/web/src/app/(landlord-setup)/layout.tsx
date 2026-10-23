@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { IdleTimeout } from "@/components/shell/idle-timeout";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 import { Wordmark } from "@/components/shell/wordmark";
 import type { Property } from "@campushomes/shared";
@@ -31,6 +32,7 @@ export default async function LandlordSetupLayout({
 
   return (
     <div className="flex min-h-dvh flex-col bg-muted/30">
+      <IdleTimeout signInPath="/sign-in" />
       <header className="flex items-center justify-between border-b border-border bg-background px-4 py-3 sm:px-6">
         <Wordmark />
         <SignOutButton />

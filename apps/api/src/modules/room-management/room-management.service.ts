@@ -9,6 +9,7 @@ import type { PoolClient } from 'pg';
 
 import type {
   BedBlockInput,
+  BatchRoomUpdateInput,
   BulkRoomInput,
   RoomTypeInput,
   RoomUnitInput,
@@ -21,6 +22,8 @@ import { assertStaffScope } from '../auth/staff-scope';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isOwnedStorageKey } from '../uploads/storage-key';
+import { loadEnv } from '../../config/env';
+import { sendRoomChangeEmail } from './room-change-email';
 import { roomImportTemplate } from './room-import';
 
 type JsonRecord = Record<string, unknown>;
@@ -241,7 +244,29 @@ export class RoomManagementService {
   }
 
   async updateRoom(ctx: RlsContext, roomOrChangeId: string, input: RoomUnitInput) {
-    const propertyId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+    const propertyId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, (_db, client) =>
+      this.stageRoomUpdate(client, ctx, roomOrChangeId, input));
+    await this.audit.record(ctx, 'room.draft_update', 'unit', roomOrChangeId, {});
+    return this.pendingRoom(ctx, propertyId, roomOrChangeId);
+  }
+
+  /** Many room edits in one draft change set, all or nothing. */
+  async batchUpdateRooms(ctx: RlsContext, propertyId: string, input: BatchRoomUpdateInput) {
+    await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await this.assertPropertyOwner(client, propertyId, ctx.userId);
+      for (const { roomId, ...room } of input.rooms) {
+        const roomPropertyId = await this.stageRoomUpdate(client, ctx, roomId, room);
+        if (roomPropertyId !== propertyId) throw new BadRequestException('Every room must belong to this property');
+      }
+    });
+    await this.audit.record(ctx, 'room.batch_draft_update', 'property', propertyId, { count: input.rooms.length });
+    const ids = new Set(input.rooms.map((room) => room.roomId));
+    const overview = await this.overviewForProperty(ctx, propertyId);
+    return overview.rooms.filter((room: { id: string }) => ids.has(room.id));
+  }
+
+  /** Stages one room edit inside the caller's transaction; returns its property. */
+  private async stageRoomUpdate(client: PoolClient, ctx: RlsContext, roomOrChangeId: string, input: RoomUnitInput) {
       const pending = await client.query<{ id: string; property_id: string; change_set_id: string }>(
         `SELECT c.id, cs.property_id, c.change_set_id FROM room_unit_changes c
          JOIN room_inventory_change_sets cs ON cs.id=c.change_set_id
@@ -270,9 +295,6 @@ export class RoomManagementService {
         [changeSet.id, roomOrChangeId, input.roomTypeId, JSON.stringify({ ...input, capacity }), ctx.userId],
       );
       return unit.property_id;
-    });
-    await this.audit.record(ctx, 'room.draft_update', 'unit', roomOrChangeId, {});
-    return this.pendingRoom(ctx, propertyId, roomOrChangeId);
   }
 
   async archiveRoom(ctx: RlsContext, unitId: string) {
@@ -493,6 +515,8 @@ export class RoomManagementService {
         }
       }
 
+      // Read before applying, so renames still show the old code.
+      const summary = await this.changeSummary(client, changeSetId, row.property_id);
       const versions = await client.query<RoomTypeVersionRow>(
         `SELECT * FROM room_type_versions WHERE change_set_id=$1 ORDER BY version_number`, [changeSetId],
       );
@@ -509,12 +533,19 @@ export class RoomManagementService {
            reviewer_notes=$3, rejection_reason=NULL, updated_at=now() WHERE id=$1`,
         [changeSetId, ctx.userId, notes ?? null],
       );
-      return { landlordId: row.landlord_id, propertyId: row.property_id };
+      return { landlordId: row.landlord_id, propertyId: row.property_id, summary };
     });
     await this.audit.record(ctx, 'room_change_set.approve', 'room_inventory_change_set', changeSetId, { notes });
+    const approvedMessage = `Operations approved your room changes at ${result.summary}. They are live now.${notes ? ` Note: ${notes}` : ''}`;
     await this.notifications.notify(result.landlordId, 'room_changes.approved', 'in_app', {
-      message: 'Your room inventory changes were approved and are now live.',
+      message: approvedMessage,
       href: `/landlord/rooms?propertyId=${result.propertyId}`,
+    });
+    this.emailUsers([result.landlordId], {
+      subject: 'Your room changes were approved',
+      message: approvedMessage,
+      path: `/landlord/rooms?propertyId=${result.propertyId}`,
+      action: 'View your rooms',
     });
     return { approved: true };
   }
@@ -542,8 +573,14 @@ export class RoomManagementService {
     });
     await this.audit.record(ctx, 'room_change_set.reject', 'room_inventory_change_set', changeSetId, { reason });
     await this.notifications.notify(result.landlord_id, 'room_changes.rejected', 'in_app', {
-      message: `Your room inventory changes need revision: ${reason}`,
+      message: `Operations sent your room changes back for revision: ${reason}`,
       href: `/landlord/rooms?propertyId=${result.property_id}`,
+    });
+    this.emailUsers([result.landlord_id], {
+      subject: 'Your room changes need revision',
+      message: `CampusHomes Operations sent your room changes back: ${reason}`,
+      path: `/landlord/rooms?propertyId=${result.property_id}`,
+      action: 'Review your changes',
     });
     return { rejected: true };
   }
@@ -1091,5 +1128,46 @@ export class RoomManagementService {
       propertyId,
       changeSetId,
     })));
+    // In-app alone went unnoticed (Festo, 2026-10-23): reviewers get an email too.
+    for (const portal of ['ops', 'admin'] as const) {
+      const ids = reviewers.filter((r) => (r.role_key === 'ops_lead') === (portal === 'ops')).map((r) => r.user_id);
+      this.emailUsers(ids, {
+        subject: 'Room changes are waiting for your review',
+        message: 'A landlord submitted room inventory changes on CampusHomes. Review and approve or send them back.',
+        path: `/${portal}/room-changes`,
+        action: 'Open room changes',
+      });
+    }
+  }
+
+  /** "Mirembe Courts: 3 rooms (Double 1 → A01, …) and 1 room type", for notices. */
+  private async changeSummary(client: PoolClient, changeSetId: string, propertyId: string): Promise<string> {
+    const property = (await client.query<{ name: string }>(`SELECT name FROM properties WHERE id=$1`, [propertyId])).rows[0];
+    const rooms = (await client.query<{ action: string; old_code: string | null; new_code: string | null }>(
+      `SELECT c.action, u.label AS old_code, c.proposed_data->>'roomCode' AS new_code
+       FROM room_unit_changes c LEFT JOIN units u ON u.id = c.unit_id
+       WHERE c.change_set_id=$1 ORDER BY c.created_at`, [changeSetId],
+    )).rows;
+    const types = (await client.query(`SELECT 1 FROM room_type_versions WHERE change_set_id=$1`, [changeSetId])).rowCount ?? 0;
+    const shown = rooms.slice(0, 5).map((room) =>
+      room.action === 'create' ? `new ${room.new_code}`
+        : room.old_code && room.new_code && room.old_code !== room.new_code ? `${room.old_code} → ${room.new_code}`
+          : `${room.action} ${room.old_code ?? room.new_code ?? 'room'}`);
+    const parts = [
+      rooms.length ? `${rooms.length} ${rooms.length === 1 ? 'room' : 'rooms'} (${shown.join(', ')}${rooms.length > 5 ? ', …' : ''})` : '',
+      types ? `${types} room ${types === 1 ? 'type' : 'types'}` : '',
+    ].filter(Boolean);
+    return `${property?.name ?? 'your hostel'}: ${parts.join(' and ') || 'no changes'}`;
+  }
+
+  /** Best-effort email to these users' addresses; never fails the caller. */
+  private emailUsers(userIds: string[], email: Omit<Parameters<typeof sendRoomChangeEmail>[1], 'to'>) {
+    if (userIds.length === 0) return;
+    void this.rlsDb.run({ userId: '00000000-0000-0000-0000-000000000000', role: 'service_role' }, async (_db, client) =>
+      (await client.query<{ email: string }>(
+        `SELECT email FROM users WHERE id = ANY($1::uuid[]) AND email IS NOT NULL AND deleted_at IS NULL`, [userIds],
+      )).rows.map((row) => row.email))
+      .then((to) => sendRoomChangeEmail(loadEnv(), { ...email, to }))
+      .catch((err: unknown) => console.error('[room-changes] email failed:', err instanceof Error ? err.message : err));
   }
 }

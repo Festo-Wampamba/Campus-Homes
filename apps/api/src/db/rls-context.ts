@@ -25,6 +25,7 @@ export async function withRlsContext<T>(
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
+  let staleConnection: Error | undefined;
   try {
     await client.query('BEGIN');
     // Defense in depth: switch to the restricted app_user role explicitly.
@@ -46,8 +47,20 @@ export async function withRlsContext<T>(
     return result;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
+    // A named prepared statement whose cached plan no longer matches the
+    // schema (a migration changed a selected column's type) fails with 0A000
+    // on every later call on this connection. Destroy the connection so the
+    // pool opens a fresh one instead of serving that error forever.
+    if (pgCode(err) === '0A000') staleConnection = err as Error;
     throw err;
   } finally {
-    client.release();
+    client.release(staleConnection);
   }
+}
+
+// Drizzle wraps pg errors, so the SQLSTATE can sit on err.cause.
+function pgCode(err: unknown): string | undefined {
+  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+  const code = e?.code ?? e?.cause?.code;
+  return typeof code === 'string' ? code : undefined;
 }

@@ -35,7 +35,6 @@ const AUTHORITY_ROLES = ["owner", "joint_owner", "property_manager", "caretaker"
 const RENT_PERIODS = ["monthly", "per_semester", "other"];
 const FURNISHING_ITEMS = ["bathroom", "kitchen", "fully_furnished", "partly_furnished", "unfurnished", "mattress", "wardrobe", "study_desk", "bed"];
 const SECURITY_FEATURES = ["perimeter_wall", "security_guard", "cctv", "fire_extinguishers", "smoke_detectors", "emergency_exit", "first_aid_kit", "off_grid_light"];
-const ACCESSIBILITY_FEATURES = ["step_free_entrance", "ground_floor_rooms", "accessible_bathroom", "lift", "wheelchair_accessible"];
 const emptyUnit = (): UnitDraft => ({ label: "", capacity: "1", roomCategory: "single", pricePerTermUgx: "", depositUgx: "", operationalStatus: "available", buildingName: "", floorLabel: "", electricityMeterType: "included", notes: "" });
 const emptyForm = { landlordId: "", name: "", alternativeName: "", streetAddress: "", locationDetails: "", type: "hostel", genderArrangement: "", catchment: "MUK", description: "", operationalStatus: "open", contactPhone: "", contactEmail: "", houseRules: "", semesterId: "", water: "included", electricity: "included", internet: "included", wasteCollection: "included", authorityRole: "owner", authorityRoleOther: "", transportShuttle: "false", advanceRentRequired: "false", bookingFeePercent: "", rentPeriodOther: "", selfContainedRoomCount: "", nonSelfContainedRoomCount: "", photographyConsent: "false", declaredInfoAccurate: "false", declaredAuthorityOverProperty: "false", declaredWillKeepUpdated: "false", declaredAuthorizesPublish: "false", declaredConsentToProcessing: "false" };
 const DECLARATION_KEYS: [string, string][] = [
@@ -287,7 +286,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
         <section className="rounded-xl border border-slate-200 p-4 dark:border-border">
           <h3 className="text-sm font-bold">Security &amp; accessibility</h3>
           <div className="mt-3"><AdminField label="Security measures"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{SECURITY_FEATURES.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={securityFeatures[item] ?? false} onChange={(e) => setSecurityFeatures((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
-          <div className="mt-4"><AdminField label="Accessibility"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{ACCESSIBILITY_FEATURES.map((item) => <label key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-muted"><input type="checkbox" checked={accessibilityFeatures[item] ?? false} onChange={(e) => setAccessibilityFeatures((current) => ({ ...current, [item]: e.target.checked }))} />{item.replaceAll("_", " ")}</label>)}</div></AdminField></div>
+          
         </section>
 
         <section className="rounded-xl border border-slate-200 p-4 dark:border-border">

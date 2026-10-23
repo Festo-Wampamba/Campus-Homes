@@ -3,7 +3,7 @@
 Follow-up work tracker. Each item has a status, an owner and a detail section
 below. Tick an item and move it to **Done** when it ships.
 
-_Last updated: 2026-10-19._
+_Last updated: 2026-10-23._
 
 **Where things stand:** production, staging and `main` run `a42b74a`
 (schema 70/70). GitHub branches are only `main`, `development` and
@@ -15,7 +15,7 @@ release PR to `main` (deploys staging) → production by hand with
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork) |
+| 1 | [WhatsApp OTP (official Cloud API)](#1-whatsapp-otp-official-cloud-api) | Festo → Claude | ⏸ Paused at Step 0 (URSB/URA paperwork); email used meanwhile |
 | 5 | [Kiwanda: resubmit 4 pending inspections](#5-kiwanda-resubmit-4-pending-inspections) | Kiwanda / Festo | ☐ Open |
 | 7 | [Fix flaky `IssueStrikeForm` test](#7-fix-flaky-issuestrikeform-test) | — | 👀 Couldn't reproduce (0/51); watching |
 | 8 | [Verify the contact phone by SMS](#8-verify-the-contact-phone-by-sms) | — | 💤 Later |
@@ -26,8 +26,9 @@ release PR to `main` (deploys staging) → production by hand with
 | 26 | [Production checks for the 2026-10-18 release](#26-production-checks-for-the-2026-10-18-release) | Festo | ☐ Open (server-side checks passed) |
 | 27 | [Off-site SEO](#27-off-site-seo) | Festo | ☐ Open (sitemaps already submitted) |
 | 28 | [Decide: unique room codes per property?](#28-decide-unique-room-codes-per-property) | Festo | ☐ Open |
-| 29 | [Old database dumps on the VPS](#29-old-database-dumps-on-the-vps) | Festo → Claude | ☐ Open (env copy shredded; dumps left) |
-| 30 | [Safe Docker cleanup to replace Dokploy's](#30-safe-docker-cleanup-to-replace-dokploys) | Claude | ☐ Open (needs OK) |
+| 29 | [Google Routes: billing + API key](#29-google-routes-billing--api-key) | Festo → Claude | ⏸ Paused (card rejected by Google) |
+| 30 | [Old database dumps on the VPS](#30-old-database-dumps-on-the-vps) | Festo → Claude | ☐ Open (env copy shredded; dumps left) |
+| 31 | [Safe Docker cleanup to replace Dokploy's](#31-safe-docker-cleanup-to-replace-dokploys) | Claude | ☐ Open (needs OK) |
 
 Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ paused · 💤 later · ✅ done
 
@@ -35,7 +36,14 @@ Status key: ☐ open · 🔜 queued · 🚧 in progress · 👀 watching · ⏸ 
 
 ## 1. WhatsApp OTP (official Cloud API)
 
-- **What:** Send sign-in, sign-up and forgot-password codes over WhatsApp.
+- **What:** Send sign-in, sign-up and forgot-password codes over WhatsApp,
+  plus the walk-in student invite ("your landlord booked you a room").
+- **Why it matters now (2026-10-23):** SMS through Africa's Talking doesn't
+  deliver on staging (sandbox), so the walk-in SMS invite never arrived.
+  Until WhatsApp is live, use **email**: the walk-in form takes an optional
+  email (sign-in + receipts go there), and Logto's sign-in experience should
+  offer email codes and "Forgot password" on staging and production (Logto
+  console → Sign-in experience; Festo).
 - **Guide:** [`docs/runbooks/whatsapp-otp-setup.md`](docs/runbooks/whatsapp-otp-setup.md).
   It has its own step checklist (Steps 0–7).
 - **Where we stopped:** Step 0, getting the URSB and URA documents ready.
@@ -181,7 +189,29 @@ Sitemaps are already submitted to Google and Bing (2026-10-17). Left:
   means a migration (unique index) after cleaning up existing duplicates,
   plus the same check in the spreadsheet import.
 
-## 29. Old database dumps on the VPS
+## 29. Google Routes: billing + API key
+
+- **What:** turn on road distances (hostel → campus). The code is live on
+  staging (#249), and the daily cap and owner alert are in #253. Without a key,
+  hostels show no distance (never a guess).
+- **Blocked on:** Google Cloud billing. The prepaid card was rejected at the
+  free-trial sign-up (2026-10-23). Try another card (Visa/Mastercard debit or
+  credit that allows international online payments).
+- **Steps once billing works:**
+  1. Project `CampusHomes` → enable **Routes API**.
+  2. Routes API → Quotas → set the **per day** request quota to **300**
+     (≤ the free monthly allowance even if hit every day). If only
+     per-minute quotas exist, tell Claude: add an in-app daily cap instead.
+  3. Billing → Budgets & alerts → $1 budget with email alerts.
+  4. Credentials → API key, restricted to IP `169.58.85.25` and the Routes
+     API only.
+  5. Dokploy → staging API → **Environment** → `GOOGLE_ROUTES_API_KEY` →
+     Save → Deploy. Tell Claude "key added". Claude checks Samuel Courts
+     shows about 10 km.
+- **Fallback if no card works:** OpenRouteService (free key, no card),
+  which needs a small adapter change.
+
+## 30. Old database dumps on the VPS
 
 - The plaintext env copies (`campushomes-*-env-source.txt`, 2026-09-01) were
   shredded on 2026-10-19.
@@ -190,7 +220,7 @@ Sitemaps are already submitted to Google and Bing (2026-10-17). Left:
   copies, readable by other users on the box (modes 644/664). Decide: move
   them to the private backup bucket, or delete them. At minimum `chmod 600`.
 
-## 30. Safe Docker cleanup to replace Dokploy's
+## 31. Safe Docker cleanup to replace Dokploy's
 
 - Dokploy's "Daily Docker Cleanup" is **off** since 2026-10-19 (see
   CLAUDE.md, 2026-10-19). Disk use will grow from old images and build cache.

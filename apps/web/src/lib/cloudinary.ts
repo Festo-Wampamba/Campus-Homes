@@ -6,6 +6,8 @@ const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 // Returns null when neither applies (no cloud name configured yet) — callers
 // render a placeholder instead of a broken image.
 export function listingPhotoUrl(storageKey: string, width = 800): string | null {
+  // Bundled CampusHomes images also support controlled local UI fixtures.
+  if (/^\/images\/campushomes\/[a-zA-Z0-9_-]+\.(webp|png|jpe?g)$/.test(storageKey)) return storageKey;
   if (storageKey.startsWith("http://") || storageKey.startsWith("https://")) {
     return storageKey;
   }

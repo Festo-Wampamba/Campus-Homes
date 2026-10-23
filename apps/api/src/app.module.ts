@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import { DbModule } from './db/db.module';
@@ -10,6 +11,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HealthController } from './modules/health/health.controller';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { LandlordRatingsModule } from './modules/landlord-ratings/landlord-ratings.module';
 import { LandlordsModule } from './modules/landlords/landlords.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
@@ -28,11 +30,13 @@ import { RootController } from './root.controller';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     DbModule,
     RedisModule,
     AuthModule,
     ListingsModule,
     LandlordsModule,
+    LandlordRatingsModule,
     OpsModule,
     ProfileModule,
     FinanceModule,
@@ -52,6 +56,8 @@ import { RootController } from './root.controller';
   ],
   controllers: [HealthController, RootController],
   providers: [
+    // Reports unhandled (non-HttpException) errors; no-op without SENTRY_DSN.
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
     // Global: every request body/query hitting a createZodDto() DTO is
     // validated against the shared schema before any handler runs.
     { provide: APP_PIPE, useClass: ZodValidationPipe },
