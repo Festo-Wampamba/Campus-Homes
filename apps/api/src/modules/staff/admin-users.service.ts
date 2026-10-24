@@ -6,6 +6,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+
 import type { PoolClient } from 'pg';
 import type {
   AdminPermissionGrantInput,
@@ -306,6 +308,28 @@ export class AdminUsersService {
     });
     await this.audit.record(actor, 'users.sessions_revoke', 'user', userId, { revoked });
     return { revoked };
+  }
+
+  /** Super admin only (users.password_reset, 0075): sets a temporary password
+   * for someone who cannot sign in, ends their sessions and returns it once.
+   * Never stored or logged. Landlords and students otherwise use "Forgot
+   * password"; Ops asks a super admin. */
+  async resetPassword(actor: RlsContext, userId: string) {
+    if (actor.userId === userId) throw new BadRequestException('Change your own password from your account settings');
+    const target = await this.rlsDb.run(SERVICE_CTX, async (_db, client) =>
+      (await client.query<{ logtoUserId: string | null }>(
+        `SELECT logto_user_id AS "logtoUserId" FROM users WHERE id = $1 AND deleted_at IS NULL`, [userId],
+      )).rows[0]);
+    if (!target) throw new NotFoundException('User not found');
+    if (!target.logtoUserId) {
+      throw new ConflictException('This person has not signed in yet, so there is no password to reset. Ask them to sign in with their phone or email.');
+    }
+    // 96 random bits plus one of each character class for Logto's password policy.
+    const temporaryPassword = `${randomBytes(12).toString('base64url')}a7K!`;
+    await this.logtoManagement.setPassword(target.logtoUserId, temporaryPassword);
+    await this.rlsDb.run(SERVICE_CTX, (_db, client) => client.query('DELETE FROM sessions WHERE user_id = $1', [userId]));
+    await this.audit.record(actor, 'users.password_reset', 'user', userId, {});
+    return { temporaryPassword };
   }
 
   async update(
@@ -640,6 +664,7 @@ export class AdminUsersService {
         DELETE FROM refunds WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM landlord_strikes WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM student_flags WHERE reservation_id IN (SELECT id FROM _pg_res);
+        DELETE FROM payment_receipts WHERE reservation_id IN (SELECT id FROM _pg_res) OR student_id IN (SELECT id FROM _pg_g) OR landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM payments WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM move_ins WHERE reservation_id IN (SELECT id FROM _pg_res);
         DELETE FROM reservations WHERE id IN (SELECT id FROM _pg_res);
@@ -674,6 +699,7 @@ export class AdminUsersService {
         -- reservation-keyed deletes above only catch rows tied to a deleted
         -- reservation; one with a NULL/foreign reservation_id would otherwise
         -- block the users delete (23503).
+        DELETE FROM landlord_ratings WHERE student_id IN (SELECT id FROM _pg_g) OR landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM landlord_strikes WHERE landlord_id IN (SELECT id FROM _pg_g);
         DELETE FROM student_flags WHERE student_id IN (SELECT id FROM _pg_g);
         DELETE FROM tenant_agreements WHERE student_id IN (SELECT id FROM _pg_g);

@@ -22,6 +22,7 @@ export default async function LandlordProfilePage() {
   return (
     <>
       <h1 className="text-2xl">Account settings</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Keep your details up to date so students and our team can reach you.</p>
       <div className="mt-6">
         <LandlordAccountSettings
           profile={profile}

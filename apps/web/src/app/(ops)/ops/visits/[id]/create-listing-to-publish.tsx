@@ -37,8 +37,11 @@ export function CreateListingToPublish({
   if (semesters.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No semester is configured for this property&apos;s catchment yet. Add one in admin
-        settings before this property can be published.
+        No open semester exists yet for this hostel&apos;s university. An admin adds it under{" "}
+        <a href="/admin/settings" className="font-semibold text-primary underline underline-offset-2">
+          Platform settings → Semester schedule
+        </a>
+        . If the hostel&apos;s university is wrong, correct it on the property first. Then reload this page.
       </p>
     );
   }

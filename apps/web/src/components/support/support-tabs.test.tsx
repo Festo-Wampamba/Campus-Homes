@@ -15,9 +15,9 @@ jest.mock("../../lib/api", () => ({
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(initialTab: SupportTab = "ai", phone = "+256768561023") {
+async function render(initialTab: SupportTab = "ai") {
   await act(async () =>
-    root.render(<SupportTabs initialTab={initialTab} email="hello@campushomes.co.ug" phone={phone} desk={null} />),
+    root.render(<SupportTabs initialTab={initialTab} />),
   );
 }
 
@@ -78,16 +78,10 @@ it("explains when CampusHomes AI is unavailable", async () => {
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("not available right now");
 });
 
-it("links the WhatsApp number to a WhatsApp chat", async () => {
-  await render("contact");
-
-  expect(container.querySelector('a[href^="https://wa.me/"]')?.getAttribute("href")).toBe("https://wa.me/256768561023");
-});
-
-it("hides the WhatsApp card when no number is set", async () => {
-  await render("contact", "");
-
-  expect(container.querySelector('a[href^="https://wa.me/"]')).toBeNull();
+it("links to the dedicated contact page instead of nesting contact in a tab", async () => {
+  await render();
+  expect(container.querySelector('a[href="/contact"]')?.textContent).toBe("Contact Us");
+  expect(container.querySelectorAll('[role="tab"]')).toHaveLength(2);
 });
 
 it("narrows the user manual to matching steps", async () => {

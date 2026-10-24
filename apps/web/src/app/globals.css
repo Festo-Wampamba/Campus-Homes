@@ -1,6 +1,46 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* WhatsApp uses its familiar green; public/student brand tokens stay intact. */
+.ch-whatsapp-float {
+  position: fixed;
+  inset-inline-end: max(20px, env(safe-area-inset-right));
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #128c4a;
+  box-shadow: 0 6px 20px rgb(0 40 30 / 20%);
+  transition: background-color 180ms ease;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.ch-whatsapp-float:hover { background: #0d6b38; }
+.ch-whatsapp-float:focus-visible { outline: 3px solid var(--ring); outline-offset: 4px; }
+.ch-whatsapp-float[data-dragging="true"] { cursor: grabbing; }
+.ch-whatsapp-float__instruction {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 1023px) {
+  .ch-whatsapp-float--listing { --ch-whatsapp-room-offset: calc(104px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ch-whatsapp-float { transition: none; }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*
@@ -221,16 +261,63 @@
 }
 
 @layer components {
-  /* MapLibre price pins (DOM-created in listings-map.tsx). Dark teal, not
-     the badge's solid teal-600 — VerifiedBadge keeps its reserved fill. */
-  .map-pin {
-    background: var(--teal-900);
-    color: #fff;
-    border: 2px solid #fff;
+  /* MapLibre markers (DOM-created in listings-map.tsx): a Google-Maps-style
+     teardrop pin with its name/price label above it. Listings are red,
+     the campus teal (never the VerifiedBadge's reserved solid teal-600). */
+  .map-marker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
   }
-  .map-pin:hover,
-  .map-pin[data-selected="true"] {
+  .map-marker__label {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 1px solid rgb(0 0 0 / 0.12);
+    border-radius: 9999px;
+    background: #fff;
+    color: var(--teal-900);
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+  }
+  .map-marker__pin {
+    width: 28px;
+    height: 40px;
+    color: #ea4335;
+    filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.35));
+    transform-origin: bottom center;
+    transition: transform 150ms ease-out;
+  }
+  .map-marker[data-kind="campus"] .map-marker__pin {
+    color: var(--teal-900);
+  }
+  .map-marker:hover .map-marker__pin,
+  .map-marker[data-selected="true"] .map-marker__pin {
+    transform: scale(1.15);
+  }
+  .map-marker:hover .map-marker__label,
+  .map-marker[data-selected="true"] .map-marker__label {
+    border-color: transparent;
     background: var(--coral-600);
+    color: #fff;
+  }
+  .map-marker:focus-visible {
+    outline: 2px solid var(--teal-600);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .map-marker__pin { transition: none; }
   }
 
   /* MapLibre's non-compact attribution renders as one unbroken line by

@@ -144,11 +144,13 @@ export function CorrectionFixPanel({
   corrections,
   componentLabel,
   checklist,
+  intro,
 }: {
   visitId: string;
   corrections: VisitCorrection[];
   componentLabel: Record<VerificationChecklistComponent, string>;
   checklist: Partial<Record<VerificationChecklistComponent, { passed: boolean; notes?: string }>>;
+  intro?: string;
 }) {
   const router = useRouter();
   const open = corrections.filter((c) => c.status === "open");
@@ -157,7 +159,7 @@ export function CorrectionFixPanel({
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-warning">
-        The lead sent {open.length === 1 ? "one item" : `${open.length} items`} back for correction:
+        {intro ?? `The lead sent ${open.length === 1 ? "one item" : `${open.length} items`} back for correction:`}
       </p>
       {open.map((correction) => (
         <CorrectionItem

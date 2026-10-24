@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { BookOpen, Mail, MessageCircle, ShieldAlert, Sparkles } from "lucide-react";
+import { BookOpen, Mail, ShieldAlert, Sparkles } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function ContactPanel({
         {whatsappDigits ? (
           <section className="flex flex-col rounded-xl border border-success/30 bg-success-subtle p-5 sm:p-6">
             <h2 className="flex items-center gap-2.5 text-lg">
-              <MessageCircle aria-hidden className="size-5 text-success" />
+              <WhatsAppIcon className="size-5 text-success" />
               WhatsApp support
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -42,7 +43,7 @@ export function ContactPanel({
               rel="noopener noreferrer"
               className={cn(buttonVariants(), "mt-4 bg-success text-success-foreground hover:bg-success/90")}
             >
-              <MessageCircle aria-hidden />
+              <WhatsAppIcon />
               Open WhatsApp chat
             </a>
           </section>

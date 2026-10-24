@@ -13,6 +13,20 @@ export interface RecentlyViewedEntry {
   viewedAt: number;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Storage is user-controlled: anything else could write here. Only well-formed
+// entries leave this module, so an `id` can't smuggle a path into the
+// credentialed `/listings/${id}` request or a link.
+function isEntry(value: unknown): value is RecentlyViewedEntry {
+  const e = value as Partial<RecentlyViewedEntry> | null;
+  return typeof e === "object" && e !== null
+    && typeof e.id === "string" && UUID.test(e.id)
+    && typeof e.name === "string" && typeof e.streetAddress === "string"
+    && (e.photoStorageKey === null || typeof e.photoStorageKey === "string")
+    && typeof e.priceUgx === "number" && typeof e.viewedAt === "number";
+}
+
 // Cached by raw string so repeated calls return the same array reference
 // when nothing changed — required for useSyncExternalStore (its getSnapshot
 // must be stable, or React treats every call as "the store changed" and
@@ -32,7 +46,7 @@ export function getRecentlyViewed(): RecentlyViewedEntry[] {
   cachedRaw = raw;
   try {
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-    cachedEntries = Array.isArray(parsed) ? (parsed as RecentlyViewedEntry[]) : [];
+    cachedEntries = Array.isArray(parsed) ? parsed.filter(isEntry) : [];
   } catch {
     cachedEntries = [];
   }

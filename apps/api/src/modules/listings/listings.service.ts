@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type {
   ListingSearchInput,
+  ListingSearchPageInput,
   SubmitPropertyInput,
   UnitOperationalStatus,
   UpdatePropertyInput,
@@ -27,22 +28,20 @@ import {
   roles,
   userRoleAssignments,
 } from '../../db/schema';
+import { PUBLIC_LANDLORD_SUMMARY_SQL } from './public-landlord-summary';
+import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
+import {
+  buildListingSearchQuery,
+  LIVE_RESERVATION_STATUSES,
+  SAVED_LISTINGS_LIMIT,
+  UNIVERSITY_CENTERS,
+  UNAVAILABLE_OPERATIONAL_STATUSES,
+} from './listing-search';
 
-/** A bed still counts as "live" (not available) under these statuses —
- * cancelled/expired/released reservations free the bed back up. An occupied
- * bed stays live indefinitely (no lease-end/renewal flow yet — out of scope
- * per the redesign doc §19). Mirrors the `reservations_one_live_hold_per_bed`
- * partial unique index (0033). */
-const LIVE_RESERVATION_STATUSES = ['reserved', 'booked', 'occupied'] as const;
-
-/** units.operational_status values that make every bed in a room unavailable
- * independent of any reservation (room-level manual override — maintenance,
- * deliberately blocked). Walk-in occupancy now goes through Book-on-Available
- * (0033) instead of an operational_status value, so 'available' is the only
- * "free" state left here. */
-const UNAVAILABLE_OPERATIONAL_STATUSES = ['blocked', 'under_maintenance'] as const;
+/** `logEvent: false` keeps load-test traffic out of the search funnel. */
+type SearchLogOptions = { logEvent?: boolean };
 
 /** Anonymous/public reads: RLS only exposes `status = 'verified'` rows to a
  * non-ops, non-owner identity, so the nil uuid sees exactly the public set. */
@@ -68,6 +67,7 @@ export class ListingsService {
   constructor(
     private readonly rlsDb: RlsDb,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly routes?: PropertyRoutes,
   ) {}
 
   // ── landlord paths ─────────────────────────────────────────────────────────
@@ -100,6 +100,8 @@ export class ListingsService {
           alternativeName: input.alternativeName,
           streetAddress: input.streetAddress,
           locationDetails: input.locationDetails,
+          description: input.description ?? null,
+          houseRules: input.houseRules,
           type: input.type,
           genderArrangement: input.genderArrangement,
           catchment: input.catchment,
@@ -525,176 +527,110 @@ export class ListingsService {
 
   // ── public paths ───────────────────────────────────────────────────────────
 
-  search(input: ListingSearchInput) {
-    // service_role: the properties join is invisible to a public identity.
+  search(input: ListingSearchInput, { logEvent = true }: SearchLogOptions = {}) {
+    // Keep the legacy endpoint's array response while sharing all eligibility,
+    // filters, and displayed-price semantics with the paged endpoint.
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      // gps_point is a generated PostGIS column with a GiST index (0001).
-      // Photo + room-size spread ride along via LATERAL joins so a search
-      // result never has to pretend a listing is one photo-less, one-size
-      // room — units.capacity already varies per room, this just surfaces it.
-      // lv.price_per_term_ugx is the *cheapest* room category (computed at
-      // publish time, ops.service.ts) — "starting from", not the only price;
-      // room_categories carries the full per-category breakdown for display.
-      // min/max capacity, unit_count and room_categories all exclude units
-      // with a live reservation (LIVE_RESERVATION_STATUSES) or a manually-set
-      // unavailable operational_status (UNAVAILABLE_OPERATIONAL_STATUSES,
-      // 0024 — catches a room let outside the reservation flow entirely) — a
-      // search result must never advertise rooms that are already
-      // held/paid/occupied, and a listing with nothing left to reserve is
-      // excluded entirely below.
-      // RLS policies on these tables expand into ~200 sub-plans, so planning
-      // cost ~100 ms vs ~40 ms to execute (staging EXPLAIN, 2026-10-18), and
-      // Postgres kept choosing a fresh custom plan every call. A named
-      // statement with a forced generic plan is planned once per pooled
-      // connection (planning drops to <1 ms, same rows).
+      // ponytail: one generic plan per pooled connection, chosen without seeing
+      // the bbox or filters (RLS planning cost ~100 ms vs ~40 ms to run). Fine at
+      // pilot scale; if search slows as listings grow, EXPLAIN again and try
+      // plan_cache_mode = auto. Named statements need a direct connection: a
+      // transaction-mode pooler (PgBouncer, Neon pooled) loses them. A migration
+      // that changes a selected column's type fails them with 0A000, and
+      // withRlsContext then replaces the connection.
       await client.query('SET LOCAL plan_cache_mode = force_generic_plan');
+      const query = buildListingSearchQuery(input, {
+        mode: 'items',
+        sort: 'price_asc',
+        limit: input.limit,
+        offset: 0,
+        center: null,
+      });
       const res = await client.query({
         name: 'listings_search',
-        text: `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
-                lv.id AS version_id, lv.price_per_term_ugx, lv.amenities, lv.description,
-                p.name, p.street_address, p.gps_lat, p.gps_lon, p.catchment AS university,
-                p.gender_arrangement,
-                ph.storage_key AS photo_storage_key,
-                u.min_capacity, u.max_capacity, COALESCE(u.unit_count, 0) AS unit_count,
-                COALESCE(u.room_count, 0) AS room_count,
-                COALESCE(u.max_price, lv.price_per_term_ugx) AS max_price_per_term_ugx,
-                COALESCE(u.has_self_contained, false) AS has_self_contained,
-                COALESCE(rc.categories, '[]'::jsonb) AS room_categories
-         FROM listings l
-         JOIN listing_versions lv ON lv.id = l.current_version_id
-         JOIN properties p ON p.id = l.property_id
-         LEFT JOIN LATERAL (
-           SELECT storage_key FROM listing_photos
-           WHERE listing_version_id = lv.id
-           ORDER BY is_primary DESC, sort_order ASC
-           LIMIT 1
-         ) ph ON true
-         LEFT JOIN LATERAL (
-           -- Joining beds fans a room out to one row per available bed, so
-           -- COUNT(*) here is an available-BED count, not a room count — a
-           -- partially-let double still contributes its one free bed. MIN/MAX
-           -- capacity describe the room itself and are unaffected by the fan-out;
-           -- room_count (DISTINCT) is the number of rooms with a free bed.
-           SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, COUNT(DISTINCT un.id) AS room_count,
-                  MAX(usp.price_per_term_ugx) AS max_price,
-                  bool_or(un.self_contained) AS has_self_contained,
-                  bool_or(NOT un.self_contained) AS has_non_self_contained
-           FROM units un
-           JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
-           JOIN beds bd ON bd.unit_id = un.id
-           WHERE un.property_id = l.property_id
-             AND un.operational_status <> ALL($11::text[])
-             AND NOT EXISTS (
-               SELECT 1 FROM unit_blocks ub
-               WHERE ub.unit_id = un.id AND ub.cleared_at IS NULL
-                 AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
-             )
-             AND NOT bd.blocked
-             AND NOT EXISTS (
-               SELECT 1 FROM reservations r
-               WHERE r.bed_id = bd.id AND r.status = ANY($10::reservation_status[])
-             )
-         ) u ON true
-         LEFT JOIN LATERAL (
-           SELECT jsonb_agg(
-                    jsonb_build_object(
-                      'category', category,
-                      'price_per_term_ugx', price_per_term_ugx,
-                      'unit_count', unit_count
-                    ) ORDER BY price_per_term_ugx ASC
-                  ) AS categories
-           FROM (
-             -- Same available-bed-count fan-out as above, grouped per category.
-             SELECT un.room_category AS category, usp.price_per_term_ugx, COUNT(*) AS unit_count
-             FROM units un
-             JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
-             JOIN beds bd ON bd.unit_id = un.id
-             WHERE un.property_id = l.property_id
-               AND un.operational_status <> ALL($11::text[])
-               AND NOT EXISTS (
-                 SELECT 1 FROM unit_blocks ub
-                 WHERE ub.unit_id = un.id AND ub.cleared_at IS NULL
-                   AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
-               )
-               AND NOT bd.blocked
-               AND NOT EXISTS (
-                 SELECT 1 FROM reservations r
-                 WHERE r.bed_id = bd.id AND r.status = ANY($10::reservation_status[])
-               )
-             GROUP BY un.room_category, usp.price_per_term_ugx
-           ) grouped
-         ) rc ON true
-          WHERE l.status = 'verified'
-            AND p.gps_point && ST_MakeEnvelope($1, $2, $3, $4, 4326)
-            AND ($5::int IS NULL OR lv.price_per_term_ugx <= $5)
-            AND ($6::int IS NULL OR lv.price_per_term_ugx >= $6)
-            AND ($7::int IS NULL OR u.max_capacity >= $7)
-            AND (
-              $8::text IS NULL
-              OR p.name ILIKE '%' || $8 || '%'
-              OR p.street_address ILIKE '%' || $8 || '%'
-            )
-            AND (
-              $12::text IS NULL OR EXISTS (
-                SELECT 1 FROM units uf
-                JOIN unit_semester_pricing uspf ON uspf.unit_id = uf.id AND uspf.semester_id = l.semester_id
-                JOIN beds bf ON bf.unit_id = uf.id
-                WHERE uf.property_id = l.property_id
-                  AND uf.room_category = $12::room_category
-                  AND uf.operational_status <> ALL($11::text[])
-                  AND NOT EXISTS (
-                    SELECT 1 FROM unit_blocks ub
-                    WHERE ub.unit_id = uf.id AND ub.cleared_at IS NULL
-                      AND ub.starts_at <= now() AND (ub.ends_at IS NULL OR ub.ends_at > now())
-                  )
-                  AND NOT bf.blocked
-                  AND NOT EXISTS (
-                    SELECT 1 FROM reservations rf
-                    WHERE rf.bed_id = bf.id AND rf.status = ANY($10::reservation_status[])
-                  )
-              )
-            )
-            AND ($13::text IS NULL OR p.catchment = $13::university)
-            AND ($14::text IS NULL OR p.gender_arrangement = $14)
-            AND (
-              $15::boolean IS NULL
-              OR ($15 = true AND COALESCE(u.has_self_contained, false))
-              OR ($15 = false AND COALESCE(u.has_non_self_contained, false))
-            )
-            AND COALESCE(u.unit_count, 0) > 0
-          ORDER BY lv.price_per_term_ugx ASC
-          LIMIT $9`,
-        values: [
-          input.minLon,
-          input.minLat,
-          input.maxLon,
-          input.maxLat,
-          input.maxPriceUgx ?? null,
-          input.minPriceUgx ?? null,
-          input.minCapacity ?? null,
-          input.q ?? null,
-          input.limit,
-          LIVE_RESERVATION_STATUSES,
-          UNAVAILABLE_OPERATIONAL_STATUSES,
-          input.roomCategory ?? null,
-          input.university ?? null,
-          input.genderArrangement ?? null,
-          input.selfContained ?? null,
-        ],
+        text: query.text,
+        values: query.values,
       });
-      // Pilot-funnel backstop (0032) — best-effort: a logging failure must
-      // never break a search response. Same client/transaction, so no
-      // nested-rlsDb.run risk.
-      try {
+      if (logEvent) try {
         await client.query(
           `INSERT INTO product_events (event_type, payload) VALUES ('search', $1::jsonb)`,
-          [JSON.stringify({ q: input.q ?? null, roomCategory: input.roomCategory ?? null, university: input.university ?? null, resultCount: res.rows.length })],
+          [JSON.stringify({
+            q: input.q ?? null,
+            roomCategory: input.roomCategory ?? null,
+            university: input.university ?? null,
+            resultCount: res.rows.length,
+          })],
         );
       } catch (err) {
         console.error('[analytics] search event log failed:', err);
       }
       return res.rows as unknown[];
+    });
+  }
+
+  searchPage(input: ListingSearchPageInput, { logEvent = true }: SearchLogOptions = {}) {
+    const configuredCenter = UNIVERSITY_CENTERS[input.university] ?? null;
+    const center = input.campusLat != null && input.campusLon != null
+      ? { lat: input.campusLat, lon: input.campusLon }
+      : configuredCenter;
+    if (input.sort === 'distance_asc' && !center) {
+      throw new BadRequestException(`No configured campus center for ${input.university}`);
+    }
+    const offset = (input.page - 1) * input.limit;
+    if (!Number.isSafeInteger(offset)) {
+      throw new BadRequestException('page is too large');
+    }
+
+    return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await client.query('SET LOCAL plan_cache_mode = force_generic_plan');
+      const countQuery = buildListingSearchQuery(input, {
+        mode: 'count',
+        sort: input.sort,
+        limit: input.limit,
+        offset,
+        center,
+      });
+      const itemsQuery = buildListingSearchQuery(input, {
+        mode: 'items',
+        sort: input.sort,
+        limit: input.limit,
+        offset,
+        center,
+      });
+      const countRes = await client.query({
+        name: countQuery.name,
+        text: countQuery.text,
+        values: countQuery.values,
+      });
+      const itemsRes = await client.query({
+        name: itemsQuery.name,
+        text: itemsQuery.text,
+        values: itemsQuery.values,
+      });
+      const total = Number(countRes.rows[0]?.total ?? 0);
+      if (logEvent) try {
+        await client.query(
+          `INSERT INTO product_events (event_type, payload) VALUES ('search', $1::jsonb)`,
+          [JSON.stringify({
+            q: input.q ?? null,
+            roomCategory: input.roomCategory ?? null,
+            university: input.university,
+            sort: input.sort,
+            page: input.page,
+            resultCount: itemsRes.rows.length,
+            total,
+          })],
+        );
+      } catch (err) {
+        console.error('[analytics] search-page event log failed:', err);
+      }
+      return {
+        items: itemsRes.rows as unknown[],
+        total,
+        page: input.page,
+        pageSize: input.limit,
+        hasMore: offset + itemsRes.rows.length < total,
+      };
     });
   }
 
@@ -719,7 +655,10 @@ export class ListingsService {
       // so the heavier queries below are named statements with a forced
       // generic plan, planned once per pooled connection (staging EXPLAIN,
       // 2026-10-19: ~93 ms planning per detail call -> under 1 ms).
-      await db.execute(sql`SET LOCAL plan_cache_mode = force_generic_plan`);
+      // jit off here too, not just in the API pool: a generic plan's default
+      // estimates cross jit_above_cost, and JIT then turned a 10 ms
+      // availability query into 18 s on a pool without -c jit=off.
+      await db.execute(sql`SELECT set_config('plan_cache_mode', 'force_generic_plan', true), set_config('jit', 'off', true)`);
       const [version] = await db
         .select()
         .from(listingVersions)
@@ -779,7 +718,7 @@ export class ListingsService {
       // unit look free. Only a boolean per unit leaves this query. The
       // property row rides along for the same reason (no public SELECT on
       // properties) — name/address/GPS of a verified listing are public data.
-      const { availability, property, propertyMedia, roomTypePhotos } = await this.rlsDb.run(
+      const { availability, property, propertyMedia, roomTypePhotos, roomAmenities, landlord } = await this.rlsDb.run(
         SERVICE_CTX,
         async (_db, client) => {
           // Availability is per-bed now (0033) — a partially-let room still
@@ -789,7 +728,9 @@ export class ListingsService {
           // reservation on it.
           // Named + generic plan, as above: this was ~62 ms to plan, ~17 ms
           // to run.
-          await client.query('SET LOCAL plan_cache_mode = force_generic_plan');
+          await client.query(
+            `SELECT set_config('plan_cache_mode', 'force_generic_plan', true), set_config('jit', 'off', true)`,
+          );
           const availRes = await client.query({
             name: 'listing_detail_availability',
             text: `SELECT b.id, b.unit_id, (
@@ -822,7 +763,7 @@ export class ListingsService {
             ],
           });
           const propRes = await client.query(
-            `SELECT p.id, p.name, p.street_address, p.gps_lat, p.gps_lon,
+            `SELECT p.id, p.name, p.street_address, p.catchment, p.gps_lat, p.gps_lon,
                     p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
                     p.house_rules
              FROM properties p
@@ -859,6 +800,16 @@ export class ListingsService {
              ORDER BY rtp.is_primary DESC, rtp.sort_order`,
             values: [detail.listing.propertyId, detail.listing.semesterId],
           });
+          // Only approved room-type snapshots can supply public room amenities.
+          const roomAmenitiesRes = await client.query(
+            `SELECT u.id, rtv.amenities
+             FROM units u
+             JOIN room_types rt ON rt.id = u.room_type_id
+             JOIN room_type_versions rtv ON rtv.id = rt.current_version_id AND rtv.status = 'approved'
+             WHERE u.property_id = $1`,
+            [detail.listing.propertyId],
+          );
+          const landlordRes = await client.query(PUBLIC_LANDLORD_SUMMARY_SQL, [detail.listing.propertyId]);
           // Pilot-funnel backstop (0032) — best-effort, same posture as the
           // search() event log above.
           try {
@@ -875,6 +826,7 @@ export class ListingsService {
               id: string;
               name: string;
               street_address: string;
+              catchment: string | null;
               gps_lat: string | null;
               gps_lon: string | null;
               booking_fee_percent: string | number | null;
@@ -884,10 +836,30 @@ export class ListingsService {
             },
             propertyMedia: mediaRes.rows as { id: string; storage_key: string; caption: string | null }[],
             roomTypePhotos: roomTypePhotoRes.rows as { unitId: string; storageKey: string }[],
+            roomAmenities: roomAmenitiesRes.rows as { id: string; amenities: string[] }[],
+            landlord: landlordRes.rows[0] ?? null,
           };
         },
       );
-      return { ...detail, property, availability, propertyMedia, unitPhotos: [...detail.unitPhotos, ...roomTypePhotos] };
+      const amenitiesByUnit = new Map(roomAmenities.map(room => [room.id, room.amenities]));
+      // Road distance to the hostel's campus (Google's fastest driving route),
+      // looked up after the transaction closes so a slow provider never holds
+      // a pooled connection. Straight-line is only for the student estimator.
+      const campusCenter = property?.catchment
+        ? UNIVERSITY_CENTERS[property.catchment as keyof typeof UNIVERSITY_CENTERS]
+        : undefined;
+      const lat = Number(property?.gps_lat);
+      const lon = Number(property?.gps_lon);
+      const drive = this.routes && campusCenter && property?.gps_lat != null && property?.gps_lon != null
+        && Number.isFinite(lat) && Number.isFinite(lon)
+        ? await this.routes.forProperty(property.id, property.catchment!, { lat, lon }, campusCenter)
+        : null;
+      return {
+        ...detail, property, availability, propertyMedia, landlord,
+        route: drive ? { mode: 'drive' as const, ...drive } : null,
+        units: detail.units.map(unit => ({ ...unit, amenities: amenitiesByUnit.get(unit.id) ?? [] })),
+        unitPhotos: [...detail.unitPhotos, ...roomTypePhotos],
+      };
     });
   }
 
@@ -923,10 +895,39 @@ export class ListingsService {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const counts = await client.query(
           `SELECT p.catchment AS university,
-                  COUNT(*) FILTER (WHERE l.status = 'verified') AS hostel_count
+                  COUNT(*) FILTER (WHERE l.status = 'verified') AS hostel_count,
+                  COUNT(*) FILTER (
+                    WHERE l.status = 'verified'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM units un
+                        JOIN unit_semester_pricing usp
+                          ON usp.unit_id = un.id
+                         AND usp.semester_id = l.semester_id
+                        JOIN beds bd ON bd.unit_id = un.id
+                        WHERE un.property_id = p.id
+                          AND un.operational_status <> ALL($1::text[])
+                          AND NOT bd.blocked
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM unit_blocks ub
+                            WHERE ub.unit_id = un.id
+                              AND ub.cleared_at IS NULL
+                              AND ub.starts_at <= now()
+                              AND (ub.ends_at IS NULL OR ub.ends_at > now())
+                          )
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM reservations r
+                            WHERE r.bed_id = bd.id
+                              AND r.status = ANY($2::reservation_status[])
+                          )
+                      )
+                  ) AS available_hostel_count
            FROM properties p
            LEFT JOIN listings l ON l.property_id = p.id
            GROUP BY p.catchment`,
+          [UNAVAILABLE_OPERATIONAL_STATUSES, LIVE_RESERVATION_STATUSES],
         );
       const photos = await client.query(`SELECT university, storage_key AS photo_storage_key FROM campus_photos`);
       const photoByUniversity = new Map(
@@ -936,16 +937,17 @@ export class ListingsService {
         ]),
       );
       const countByUniversity = new Map(
-        (counts.rows as { university: string; hostel_count: string }[]).map((c) => [
+        (counts.rows as { university: string; hostel_count: string; available_hostel_count: string }[]).map((c) => [
           c.university,
-          c.hostel_count,
+          { hostel_count: c.hostel_count, available_hostel_count: c.available_hostel_count },
         ]),
       );
       const universities = new Set([...photoByUniversity.keys(), ...countByUniversity.keys()]);
       return [...universities].map((university) => ({
         university,
         photo_storage_key: photoByUniversity.get(university) ?? null,
-        hostel_count: countByUniversity.get(university) ?? 0,
+        hostel_count: Number(countByUniversity.get(university)?.hostel_count ?? 0),
+        available_hostel_count: Number(countByUniversity.get(university)?.available_hostel_count ?? 0),
       }));
     });
   }
@@ -957,50 +959,24 @@ export class ListingsService {
    * gates on 'verified', so a stale favourite would just be a dead end. */
   savedByStudent(studentId: string) {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const query = buildListingSearchQuery({
+        minLon: -180,
+        minLat: -90,
+        maxLon: 180,
+        maxLat: 90,
+        limit: SAVED_LISTINGS_LIMIT,
+      }, {
+        mode: 'items',
+        sort: 'price_asc',
+        limit: SAVED_LISTINGS_LIMIT,
+        offset: 0,
+        center: null,
+        savedStudentId: studentId,
+        includeUnavailable: true,
+      });
       const res = await client.query(
-        `SELECT l.id, l.property_id, l.semester_id, l.expires_at,
-                lv.id AS version_id, lv.price_per_term_ugx, lv.amenities, lv.description,
-                p.name, p.street_address, p.gps_lat, p.gps_lon,
-                ph.storage_key AS photo_storage_key,
-                u.min_capacity, u.max_capacity, COALESCE(u.unit_count, 0) AS unit_count,
-                COALESCE(u.max_price, lv.price_per_term_ugx) AS max_price_per_term_ugx,
-                COALESCE(rc.categories, '[]'::jsonb) AS room_categories
-         FROM saved_listings sl
-         JOIN listings l ON l.id = sl.listing_id
-         JOIN listing_versions lv ON lv.id = l.current_version_id
-         JOIN properties p ON p.id = l.property_id
-         LEFT JOIN LATERAL (
-           SELECT storage_key FROM listing_photos
-           WHERE listing_version_id = lv.id
-           ORDER BY is_primary DESC, sort_order ASC
-           LIMIT 1
-         ) ph ON true
-         LEFT JOIN LATERAL (
-           SELECT MIN(un.capacity) AS min_capacity, MAX(un.capacity) AS max_capacity,
-                  COUNT(*) AS unit_count, MAX(usp.price_per_term_ugx) AS max_price
-           FROM units un
-           JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
-           WHERE un.property_id = l.property_id
-         ) u ON true
-         LEFT JOIN LATERAL (
-           SELECT jsonb_agg(
-                    jsonb_build_object(
-                      'category', category,
-                      'price_per_term_ugx', price_per_term_ugx,
-                      'unit_count', unit_count
-                    ) ORDER BY price_per_term_ugx ASC
-                  ) AS categories
-           FROM (
-             SELECT un.room_category AS category, usp.price_per_term_ugx, COUNT(*) AS unit_count
-             FROM units un
-             JOIN unit_semester_pricing usp ON usp.unit_id = un.id AND usp.semester_id = l.semester_id
-             WHERE un.property_id = l.property_id
-             GROUP BY un.room_category, usp.price_per_term_ugx
-           ) grouped
-         ) rc ON true
-         WHERE sl.student_id = $1 AND l.status = 'verified'
-         ORDER BY sl.created_at DESC`,
-        [studentId],
+        query.text,
+        query.values,
       );
       return res.rows as unknown[];
     });
@@ -1018,11 +994,72 @@ export class ListingsService {
          JOIN listings l ON l.id = lv.listing_id
          JOIN properties p ON p.id = l.property_id
          WHERE r.comment IS NOT NULL
+           AND l.status = 'verified'
+           AND lv.verified_at IS NOT NULL
          ORDER BY r.overall_rating DESC, r.submitted_at DESC
          LIMIT $1`,
         [limit],
       );
       return res.rows as unknown[];
+    });
+  }
+
+  /** Reviews for a public listing, aggregated at property level so a
+   * student's completed stay remains useful when a landlord publishes a new
+   * listing version. Only verified listing versions contribute; student
+   * identity is deliberately absent from both the aggregate and item query. */
+  listingReviews(listingId: string, page: number, limit: number) {
+    const offset = (page - 1) * limit;
+    if (!Number.isSafeInteger(offset)) {
+      throw new BadRequestException('page is too large');
+    }
+
+    return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const listingRes = await client.query<{ property_id: string }>(
+        `SELECT l.property_id
+         FROM listings l
+         JOIN listing_versions lv ON lv.id = l.current_version_id
+         WHERE l.id = $1
+           AND l.status = 'verified'`,
+        [listingId],
+      );
+      const propertyId = listingRes.rows[0]?.property_id;
+      if (!propertyId) {
+        throw new NotFoundException('Listing not found');
+      }
+
+      const aggregateRes = await client.query<{ average: number | string | null; total: number | string }>(
+        `SELECT
+           ROUND(AVG(r.overall_rating)::numeric, 2)::double precision AS average,
+           COUNT(*)::int AS total
+         FROM reviews r
+         JOIN listing_versions review_version ON review_version.id = r.listing_version_id
+         JOIN listings review_listing ON review_listing.id = review_version.listing_id
+         WHERE review_listing.property_id = $1
+           AND review_version.verified_at IS NOT NULL`,
+        [propertyId],
+      );
+      const itemsRes = await client.query(
+        `SELECT r.id, r.overall_rating, r.comment, r.submitted_at
+         FROM reviews r
+         JOIN listing_versions review_version ON review_version.id = r.listing_version_id
+         JOIN listings review_listing ON review_listing.id = review_version.listing_id
+         WHERE review_listing.property_id = $1
+           AND review_version.verified_at IS NOT NULL
+         ORDER BY r.submitted_at DESC, r.id ASC
+         LIMIT $2 OFFSET $3`,
+        [propertyId, limit, offset],
+      );
+      const aggregate = aggregateRes.rows[0];
+      const total = Number(aggregate?.total ?? 0);
+      return {
+        items: itemsRes.rows as unknown[],
+        average: aggregate?.average == null ? null : Number(aggregate.average),
+        total,
+        page,
+        pageSize: limit,
+        hasMore: offset + itemsRes.rows.length < total,
+      };
     });
   }
 

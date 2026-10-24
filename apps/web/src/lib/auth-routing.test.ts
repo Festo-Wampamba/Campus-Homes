@@ -44,6 +44,11 @@ describe("workspace routing", () => {
     expect(authDestination(session(access(["student", "landlord"])), "/landlord/properties?tab=rooms#new")).toBe("/landlord/properties?tab=rooms#new");
   });
 
+  it("restores the public contact page and listing report after sign-in", () => {
+    const next = `/contact?${new URLSearchParams({listingId:"10000000-0000-4000-8000-000000000001",subject:"Report listing: Kikoni hostel"})}#message`;
+    expect(authDestination(session(access(["student"])), next)).toBe(next);
+  });
+
   it.each(["/admin", "/ops/inspect", "/landlord", "/api/auth/logto/sign-out", "/auth/callback", "/sign-in", "/unknown"])("discards unauthorized or non-navigation next %s", (next) => {
     expect(authDestination(session(access(["student"])), next)).toBe("/");
   });

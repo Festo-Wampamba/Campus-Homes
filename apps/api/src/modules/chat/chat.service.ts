@@ -58,6 +58,7 @@ export class ChatService {
 
   /** Message insert runs as the caller — RLS proves thread membership. */
   async sendMessage(ctx: RlsContext, threadId: string, body: string) {
+    await this.assertThreadAllowed(ctx, threadId);
     const message = await this.rlsDb.run(ctx, async (db) => {
       const row = firstRow(
         await db
@@ -134,9 +135,10 @@ export class ChatService {
     return updated;
   }
 
-  /** People the current user can safely start a conversation with. Students
-   * may contact approved landlords; landlords may contact students who have
-   * already enquired or reserved against one of their properties. */
+  /** People the current user can start a conversation with: only the other
+   * side of a reservation (0073, student_reserved_with_landlord). Students see
+   * the landlords of hostels they reserved, landlords the students who
+   * reserved with them. */
   contacts(ctx: RlsContext) {
     return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) => {
       const landlord = await client.query<{ verified: boolean }>(
@@ -144,26 +146,20 @@ export class ChatService {
       );
       if (landlord.rows[0]?.verified) {
         return (await client.query(
-          `SELECT DISTINCT u.id AS "userId", u.name, 'student' AS kind,
-                  'Enquiry or reservation' AS context
-           FROM users u
-           WHERE u.status = 'active' AND u.deleted_at IS NULL AND (
-             EXISTS (SELECT 1 FROM inquiries i WHERE i.student_id = u.id AND i.landlord_id = $1)
-             OR EXISTS (
-               SELECT 1 FROM reservations r JOIN beds b ON b.id=r.bed_id JOIN units un ON un.id=b.unit_id
-               JOIN properties p ON p.id=un.property_id WHERE r.student_id=u.id AND p.landlord_id=$1
-             )
-           ) ORDER BY u.name NULLS LAST`, [ctx.userId],
+          `SELECT u.id AS "userId", u.name, 'student' AS kind, 'Reserved at your hostel' AS context
+           FROM students s JOIN users u ON u.id = s.user_id
+           WHERE u.status = 'active' AND u.deleted_at IS NULL
+             AND student_reserved_with_landlord(s.user_id, $1)
+           ORDER BY u.name NULLS LAST`, [ctx.userId],
         )).rows;
       }
       return (await client.query(
-        `SELECT DISTINCT u.id AS "userId", COALESCE(NULLIF(l.legal_name, ''), u.name) AS name,
-                'landlord' AS kind, 'Verified CampusHomes landlord' AS context
+        `SELECT u.id AS "userId", COALESCE(NULLIF(l.legal_name, ''), u.name) AS name,
+                'landlord' AS kind, 'Landlord of a hostel you reserved' AS context
          FROM landlords l JOIN users u ON u.id=l.user_id
-         JOIN properties p ON p.landlord_id=l.user_id
-         JOIN listings li ON li.property_id=p.id AND li.status='verified'
-         WHERE l.kyc_status='verified' AND u.status='active' AND u.deleted_at IS NULL
-         ORDER BY name NULLS LAST`,
+         WHERE u.status='active' AND u.deleted_at IS NULL
+           AND student_reserved_with_landlord($1, l.user_id)
+         ORDER BY name NULLS LAST`, [ctx.userId],
       )).rows;
     });
   }
@@ -173,17 +169,11 @@ export class ChatService {
     return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) => {
       const parties = await client.query<{ student_id: string; landlord_id: string }>(
         `SELECT $1::uuid AS student_id, $2::uuid AS landlord_id
-         WHERE EXISTS (SELECT 1 FROM students s WHERE s.user_id=$1)
-           AND EXISTS (SELECT 1 FROM landlords l JOIN users u ON u.id=l.user_id
-                       JOIN properties p ON p.landlord_id=l.user_id JOIN listings li ON li.property_id=p.id
-                       WHERE l.user_id=$2 AND l.kyc_status='verified' AND u.status='active' AND li.status='verified')
+         WHERE student_reserved_with_landlord($1, $2)
          UNION ALL
          SELECT $2::uuid, $1::uuid
          WHERE EXISTS (SELECT 1 FROM landlords l WHERE l.user_id=$1 AND l.kyc_status='verified')
-           AND EXISTS (SELECT 1 FROM students s WHERE s.user_id=$2)
-           AND (EXISTS (SELECT 1 FROM inquiries i WHERE i.student_id=$2 AND i.landlord_id=$1)
-                OR EXISTS (SELECT 1 FROM reservations r JOIN beds b ON b.id=r.bed_id JOIN units un ON un.id=b.unit_id
-                           JOIN properties p ON p.id=un.property_id WHERE r.student_id=$2 AND p.landlord_id=$1))
+           AND student_reserved_with_landlord($2, $1)
          LIMIT 1`, [ctx.userId, recipientUserId],
       );
       const party = parties.rows[0];
@@ -192,7 +182,8 @@ export class ChatService {
     });
   }
 
-  messages(ctx: RlsContext, threadId: string) {
+  async messages(ctx: RlsContext, threadId: string) {
+    await this.assertThreadAllowed(ctx, threadId);
     // RLS returns nothing if the caller isn't a participant (or ops).
     return this.rlsDb.run(ctx, (db) =>
       db
@@ -250,13 +241,30 @@ export class ChatService {
          ) latest ON true
          LEFT JOIN chat_messages unread ON unread.thread_id = t.id
            AND unread.from_user_id IS DISTINCT FROM $1 AND unread.read_at IS NULL
-         WHERE t.student_id=$1 OR t.landlord_id=$1
+         WHERE (t.student_id=$1 OR t.landlord_id=$1)
+           AND student_reserved_with_landlord(t.student_id, t.landlord_id)
          GROUP BY t.id, other.id, other.name, other.email, other.phone, other.last_seen_at, latest.body
          ORDER BY t.last_message_at DESC NULLS LAST, t.created_at DESC`, [ctx.userId],
       )).rows,
     );
     const online = (await this.presence?.onlineSet(threads.map((t) => t.counterpartId))) ?? new Set<string>();
     return threads.map((t) => ({ ...t, counterpartOnline: online.has(t.counterpartId) }));
+  }
+
+  /** Participants may use a thread only while the reservation rule holds
+   * (0073): older pre-reservation threads stay stored but closed. Ops and
+   * other non-participants fall through to RLS as before. */
+  private async assertThreadAllowed(ctx: RlsContext, threadId: string) {
+    const thread = await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) =>
+      (await client.query<{ allowed: boolean }>(
+        `SELECT student_reserved_with_landlord(student_id, landlord_id) AS allowed
+         FROM chat_threads WHERE id = $1 AND (student_id = $2 OR landlord_id = $2)`,
+        [threadId, ctx.userId],
+      )).rows[0],
+    );
+    if (thread && !thread.allowed) {
+      throw new ForbiddenException('Messages open once the student has reserved at this landlord’s hostel');
+    }
   }
 
   /** The other person in a thread: online, last seen and typing. Participants only. */

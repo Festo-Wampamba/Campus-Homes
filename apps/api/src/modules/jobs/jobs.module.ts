@@ -90,7 +90,7 @@ export class JobsRunner implements OnModuleInit, OnApplicationShutdown {
     await this.maintenanceQueue?.close();
   }
 
-  /** Still Reserved past its 24h window → Expired (§11). A Booked
+  /** Still Reserved past its hold window → Expired (§11). A Booked
    * reservation never reaches this state (reservedExpiresAt is cleared the
    * moment a landlord Books it), so there's nothing to refund here — no
    * online payment was ever taken for a mere reservation. */

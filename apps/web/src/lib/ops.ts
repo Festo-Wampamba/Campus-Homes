@@ -35,16 +35,14 @@ export function getVisitDetail(visitId: string): Promise<OpsVisitDetail | null> 
   return apiServer<OpsVisitDetail>(`/ops/visits/${visitId}`);
 }
 
+// Strict on purpose: an empty list here is shown as "no listing" / "no
+// semester", so a failed request must surface as an error, never as [].
 export function getPropertyListings(propertyId: string): Promise<OpsPropertyListing[]> {
-  return apiServer<OpsPropertyListing[]>(`/ops/properties/${propertyId}/listings`).then(
-    (rows) => rows ?? [],
-  );
+  return apiServerStrict<OpsPropertyListing[]>(`/ops/properties/${propertyId}/listings`);
 }
 
 export function getPublishableSemesters(propertyId: string): Promise<OpsPublishableSemester[]> {
-  return apiServer<OpsPublishableSemester[]>(
-    `/ops/properties/${propertyId}/publishable-semesters`,
-  ).then((rows) => rows ?? []);
+  return apiServerStrict<OpsPublishableSemester[]>(`/ops/properties/${propertyId}/publishable-semesters`);
 }
 
 export function getKycQueue(): Promise<OpsLandlordKycRow[]> {

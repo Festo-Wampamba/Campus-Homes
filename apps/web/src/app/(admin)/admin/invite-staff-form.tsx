@@ -108,7 +108,7 @@ export function InviteStaffForm({ invitation }: { invitation?: EditableInvitatio
             : "Sends a one-time email invitation that expires after 24 hours. Staff complete authenticator verification to access their workspace."}
           onClose={() => setOpen(false)}
         />
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-auto flex-col">
           <DialogBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor={`${idPrefix}-name`} required>Full name</Label>

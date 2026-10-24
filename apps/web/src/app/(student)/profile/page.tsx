@@ -29,12 +29,17 @@ export default async function StudentProfilePage({
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center py-8">
-      <Card className="w-full max-w-lg shadow-md">
+    <div className="max-w-3xl">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ae5528] dark:text-orange-300">Your account</p>
+      <h1 className="ch-student-page__title mt-3">{profile ? "Your profile" : "Complete your profile"}</h1>
+      <p className="ch-student-page__lede">
+        {profile
+          ? "Keep your details up to date so landlords and our team can reach you."
+          : "One quick step before you can reserve a room."}
+      </p>
+      <Card className="mt-7 w-full rounded-[18px] border-[#dbe7e5] shadow-[0_8px_24px_rgba(23,63,67,0.04)]">
         <CardContent className="p-6 sm:p-8">
-          <h1 className="mb-1 font-display text-lg font-bold text-foreground">
-            {profile ? "Your profile" : "Complete your profile"}
-          </h1>
+          <h2 className="mb-1 text-lg font-bold text-foreground">Student details</h2>
           <p className="mb-6 text-sm text-muted-foreground">
             {profile
               ? "Keep your details up to date."

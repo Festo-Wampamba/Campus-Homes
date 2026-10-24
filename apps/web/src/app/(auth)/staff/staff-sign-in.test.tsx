@@ -41,6 +41,11 @@ describe("StaffSignIn", () => {
   it("shows the staff MFA error on the staff page", () => {
     expect(renderToStaticMarkup(<StaffSignIn next={null} error="mfa_required" />)).toContain("2-step verification");
   });
+
+  it("explains an inactivity sign-out on the staff page", () => {
+    expect(renderToStaticMarkup(<StaffSignIn next={null} error="idle_timeout" />))
+      .toContain("You were signed out due to inactivity. Sign in again to continue.");
+  });
 });
 
 describe("hasVerifiedStaffSession", () => {

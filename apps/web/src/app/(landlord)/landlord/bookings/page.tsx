@@ -6,22 +6,28 @@ import { bookingStage } from "@/lib/booking-stage";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/landlord/analytics/stat-card";
 import { LandlordReservationsList } from "./landlord-reservations-list";
-import { roomsByBedId } from "./room-lookup";
+import { WalkInStudentButton } from "@/components/landlord/walk-in-student-dialog";
+import { freeBedsForWalkIn, roomsByBedId } from "./room-lookup";
 
 export const metadata: Metadata = { title: "Bookings" };
 
 export default async function LandlordBookingsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const [{ status = "all" }, all, rooms] = await Promise.all([searchParams, getLandlordReservations(), roomsByBedId()]);
+  const [{ status = "all" }, all, rooms, freeBeds] = await Promise.all([searchParams, getLandlordReservations(), roomsByBedId(), freeBedsForWalkIn()]);
   const bookings = all.filter((r) => bookingStage(r.status) === "booking");
   const awaitingMoveIn = bookings.filter((r) => r.status === "booked").length;
   const movedIn = bookings.filter((r) => r.status === "occupied").length;
 
   return (
     <>
-      <h1 className="text-2xl">Bookings</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Rooms you have confirmed for a student, and students who have moved in. Holds that aren&apos;t confirmed yet are under Reservations.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl">Bookings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Rooms you have confirmed for a student, and students who have moved in. Holds that aren&apos;t confirmed yet are under Reservations.
+          </p>
+        </div>
+        <WalkInStudentButton beds={freeBeds} />
+      </div>
 
       {bookings.length === 0 ? (
         <div className="mt-6">

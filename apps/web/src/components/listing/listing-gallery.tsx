@@ -3,96 +3,26 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Camera, Expand } from "lucide-react";
-
 import { listingPhotoUrl } from "@/lib/cloudinary";
-import { cn } from "@/lib/utils";
 import { PhotoLightbox, type LightboxState } from "@/components/listing/photo-lightbox";
 
-type GalleryPhoto = { id: string; storageKey: string };
-
-const VISIBLE = 3;
-
-/**
- * Listing gallery: one large photo plus two beside it. Each photo fills its
- * tile (edges trimmed when its shape differs), and any tile opens the
- * full-screen viewer, which always shows the whole photo.
- */
+type GalleryPhoto = { id: string; storageKey: string; group?: string };
 export function ListingGallery({ photos, propertyName }: { photos: GalleryPhoto[]; propertyName: string }) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
-
-  if (photos.length === 0) {
-    return (
-      <div className="flex aspect-[4/3] items-center justify-center rounded-2xl bg-teal-50 text-muted-foreground sm:aspect-[16/9]">
-        <span className="inline-flex items-center gap-2 text-sm">
-          <Camera aria-hidden className="size-4" />
-          Photos coming soon
-        </span>
-      </div>
-    );
-  }
-
-  const open = (index: number) => setLightbox({ photos, index, caption: `${propertyName} photos` });
-  const visible = photos.slice(0, VISIBLE);
-  const hidden = photos.length - visible.length;
-  const hasSide = visible.length > 1;
-
-  return (
-    <>
-      <div className={cn("grid gap-2", hasSide && "sm:grid-cols-3 sm:grid-rows-2")}>
-        {visible.map((photo, i) => {
-          const main = i === 0;
-          const url = listingPhotoUrl(photo.storageKey, main ? 1200 : 600);
-          const showMore = !main && i === visible.length - 1 && hidden > 0;
-          return (
-            <button
-              key={photo.id}
-              type="button"
-              onClick={() => open(i)}
-              aria-label={`Open photo ${i + 1} of ${photos.length}`}
-              className={cn(
-                "relative overflow-hidden rounded-2xl bg-muted outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
-                main
-                  ? cn("aspect-[4/3]", hasSide && "sm:col-span-2 sm:row-span-2 sm:aspect-auto sm:h-[30rem]")
-                  : cn("hidden sm:block", visible.length === 2 && "sm:row-span-2"),
-              )}
-            >
-              {url ? (
-                <Image
-                  src={url}
-                  alt={`${propertyName}, photo ${i + 1}`}
-                  fill
-                  sizes={main ? "(min-width: 640px) 60vw, 100vw" : "25vw"}
-                  className="object-cover"
-                  priority={main}
-                />
-              ) : (
-                <span className="flex h-full items-center justify-center text-muted-foreground">
-                  <Camera aria-hidden className="size-5" />
-                </span>
-              )}
-              {showMore && (
-                <span className="absolute inset-0 grid place-items-center bg-black/55 text-sm font-semibold text-white">
-                  +{hidden} more
-                </span>
-              )}
-              {main && (
-                <span className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-semibold text-white">
-                  <Expand aria-hidden className="size-3.5" />
-                  {photos.length > 1 ? `View all ${photos.length} photos` : "View photo"}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-      <PhotoLightbox
-        state={lightbox}
-        propertyName={propertyName}
-        onClose={() => setLightbox(null)}
-        onNavigate={(delta) =>
-          setLightbox((s) => (s ? { ...s, index: (s.index + delta + s.photos.length) % s.photos.length } : s))
-        }
-      />
-    </>
-  );
+  const [group, setGroup] = useState("All photos");
+  const groups = ["All photos", ...new Set(photos.map(photo => photo.group).filter((value): value is string => !!value))];
+  const filtered = group === "All photos" ? photos : photos.filter(photo => photo.group === group);
+  function open(index: number) { setLightbox({ photos: filtered, index, caption: `${propertyName} · ${group}` }); }
+  if (!photos.length) return <div className="flex aspect-[16/9] items-center justify-center rounded-2xl bg-muted text-muted-foreground"><Camera aria-hidden className="mr-2 size-5"/>No property photos available</div>;
+  return <>
+    <div className="relative"><div className={`flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-2xl sm:grid sm:h-[430px] sm:grid-rows-2 sm:overflow-hidden ${filtered.length === 1 ? "sm:grid-cols-1" : "sm:grid-cols-4"}`}>
+      {filtered.map((photo,index) => <button key={photo.id} type="button" onClick={() => open(index)} aria-label={`Open ${photo.group ?? "property"} photo ${index + 1} of ${filtered.length}`} className={`relative aspect-[4/3] w-full shrink-0 snap-center overflow-hidden bg-muted sm:aspect-auto ${index === 0 ? (filtered.length === 1 ? "sm:row-span-2" : "sm:col-span-2 sm:row-span-2") : filtered.length === 2 ? "sm:col-span-2 sm:row-span-2" : filtered.length === 3 ? "sm:col-span-2" : index > 4 ? "sm:hidden" : ""}`}><GalleryImage photo={photo} name={propertyName} priority={index === 0}/><span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-3 py-2 text-xs text-white">{photo.group ?? "Property"} · {index + 1}/{filtered.length}</span></button>)}
+    </div><button className="absolute right-3 bottom-3 flex min-h-11 items-center gap-2 rounded-full bg-card px-4 text-sm font-semibold shadow-sm" onClick={() => open(0)}><Expand aria-hidden className="size-4"/>View gallery</button></div>
+    {groups.length > 1 && <div className="mt-3 flex flex-wrap gap-2" aria-label="Photo groups">{groups.map(value => <button type="button" key={value} aria-pressed={group === value} className={`min-h-11 rounded-full border border-border px-4 text-sm ${group === value ? "bg-primary text-primary-foreground" : "bg-card"}`} onClick={() => setGroup(value)}>{value}</button>)}</div>}
+    <PhotoLightbox state={lightbox} propertyName={propertyName} onClose={() => setLightbox(null)} onNavigate={delta => setLightbox(state => state ? {...state,index:(state.index+delta+state.photos.length)%state.photos.length} : null)}/>
+  </>;
+}
+function GalleryImage({photo,name,priority}:{photo:GalleryPhoto;name:string;priority:boolean}) {
+  const [failed,setFailed] = useState(false); const url=listingPhotoUrl(photo.storageKey,priority?1200:600);
+  return !failed && url ? <Image src={url} alt={`${name} · ${photo.group ?? "Property"}`} fill sizes={priority ? "(min-width:640px) 50vw, 100vw" : "(min-width:640px) 25vw,100vw"} priority={priority} className="object-cover" onError={() => setFailed(true)}/> : <span className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"><Camera aria-hidden className="size-5"/>Photo unavailable</span>;
 }

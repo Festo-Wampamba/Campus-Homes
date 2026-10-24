@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { PAYMENT_METHODS, RESERVATION_STATUSES } from './enums.js';
+import { PAYMENT_METHODS, RESERVATION_STATUSES, UNIVERSITIES } from './enums.js';
 import { idempotencyKey, ugPhone, ugxAmount, uuid } from './common.js';
 
 // Reserve -> Book -> Move-in (bed-level redesign, 2026-09). Booking payment
@@ -48,6 +48,59 @@ export const bookReservationSchema = z
     path: ['studentPhone'],
   });
 export type BookReservationInput = z.infer<typeof bookReservationSchema>;
+
+// A student who walked in without CampusHomes (Festo, 2026-10-23): the landlord
+// creates their account (or finds it by phone) and books them a free bed in
+// one step. The student later signs in with this phone or email to claim it.
+// Email is optional and must not belong to another account: SMS codes don't
+// reach students yet (Festo, 2026-10-23), so email is how most will sign in.
+// Like the phone, whoever controls the address can claim the account.
+export const onboardWalkInSchema = z.object({
+  bedId: uuid,
+  name: z.string().trim().min(2).max(120),
+  phone: ugPhone,
+  email: z.string().trim().toLowerCase().email().max(254).optional(),
+  university: z.enum(UNIVERSITIES),
+  movedIn: z.boolean().default(false),
+  bookingFeeCollectedUgx: ugxAmount.optional(),
+  depositCollectedUgx: ugxAmount.optional(),
+  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+});
+export type OnboardWalkInInput = z.infer<typeof onboardWalkInSchema>;
+
+// A booking fee / deposit a landlord recorded (0075). Both parties get a copy.
+export const paymentReceiptSchema = z.object({
+  id: uuid,
+  receiptNumber: z.string(),
+  reservationId: uuid,
+  propertyName: z.string(),
+  roomLabel: z.string(),
+  studentName: z.string().nullable(),
+  bookingFeeUgx: z.number().int().nonnegative(),
+  depositUgx: z.number().int().nonnegative(),
+  totalUgx: z.number().int().nonnegative(),
+  paymentMethod: z.enum(PAYMENT_METHODS).nullable(),
+  recordedAt: z.string(),
+});
+export type PaymentReceipt = z.infer<typeof paymentReceiptSchema>;
+
+// What the landlord of a booked bed may see about the student. Never any
+// credential: passwords live in Logto and are reset by the student or a super admin.
+export const reservationStudentSchema = z.object({
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  university: z.string().nullable(),
+  yearOfStudy: z.number().int().nullable(),
+  gender: z.string().nullable(),
+  dateOfBirth: z.string().nullable(),
+  nationality: z.string().nullable(),
+  address: z.string().nullable(),
+  emergencyContactName: z.string().nullable(),
+  emergencyContactPhone: z.string().nullable(),
+  hasSignedIn: z.boolean(),
+});
+export type ReservationStudent = z.infer<typeof reservationStudentSchema>;
 
 // Landlord/custodian/ops freeing up a Reserved or Booked bed the student
 // didn't end up taking. Always requires a reason — money may already have
