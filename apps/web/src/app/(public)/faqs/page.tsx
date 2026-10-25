@@ -15,7 +15,7 @@ export default function FaqsPage() {
       <section className="ch-public-page__hero ch-public-page__hero--dark">
         <div className="mx-auto w-full max-w-5xl">
           <p className="ch-eyebrow text-coral-500">Help before you search</p>
-          <h1>Questions students ask before reserving.</h1>
+          <h1>Questions students ask before reserving</h1>
           <p className="text-white/78">Clear answers about what CampusHomes checks, how room holds work and where rent is paid.</p>
         </div>
       </section>

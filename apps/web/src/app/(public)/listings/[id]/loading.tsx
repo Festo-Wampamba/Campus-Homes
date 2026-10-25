@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function ListingLoading() {
   return (
     <div
-      className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10"
+      className="mx-auto w-full max-w-[var(--ch-page-max)] px-4 py-7 sm:px-6 lg:px-8 lg:py-10"
       aria-busy="true"
       aria-label="Loading listing"
     >
