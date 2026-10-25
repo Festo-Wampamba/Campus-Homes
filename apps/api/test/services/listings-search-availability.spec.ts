@@ -235,6 +235,21 @@ describe('detail() room-type photos', () => {
   });
 });
 
+describe('detail() per-room photos', () => {
+  it('returns a room\'s own photo against that room', async () => {
+    await pool.query(
+      `INSERT INTO unit_photos (unit_id, storage_key, uploaded_by)
+       SELECT $1, 'uploads/landlord/room-occupied.jpg', p.landlord_id
+       FROM units u JOIN properties p ON p.id = u.property_id WHERE u.id = $1`,
+      [unitOccupied],
+    );
+
+    const detail = await listings.detail(listingId);
+
+    expect(detail.unitPhotos).toContainEqual({ unitId: unitOccupied, storageKey: 'uploads/landlord/room-occupied.jpg' });
+  });
+});
+
 describe('search() self-contained filter (0053)', () => {
   // The only still-available bed is on unitCancelled — mark that room
   // self-contained so has_self_contained (computed over available units only)
