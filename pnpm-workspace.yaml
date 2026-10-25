@@ -17,7 +17,9 @@ overrides:
   uuid@8.3.2: 11.1.1
   proxy-addr@<2.0.8: 2.0.8
   source-map-js@<1.2.2: 1.2.2
+  body-parser@<2.4.0: 2.4.0
+  multer@<2.5.0: 2.5.0
 
 catalog:
-  zod: ^4.1.12
+  zod: ^4.6.6
   typescript: ^5.9.3

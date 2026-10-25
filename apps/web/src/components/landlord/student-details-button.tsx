@@ -34,9 +34,6 @@ export function StudentDetailsButton({ reservationId }: { reservationId: string 
         ["University", student.university ? (UNIVERSITY_LABELS[student.university as keyof typeof UNIVERSITY_LABELS] ?? student.university) : null],
         ["Year of study", student.yearOfStudy != null ? String(student.yearOfStudy) : null],
         ["Gender", student.gender],
-        ["Date of birth", student.dateOfBirth],
-        ["Nationality", student.nationality],
-        ["Home address", student.address],
         ["Emergency contact", [student.emergencyContactName, student.emergencyContactPhone].filter(Boolean).join(" · ") || null],
       ]
     : [];

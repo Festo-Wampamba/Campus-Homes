@@ -313,13 +313,23 @@ export class AdminUsersService {
   /** Super admin only (users.password_reset, 0075): sets a temporary password
    * for someone who cannot sign in, ends their sessions and returns it once.
    * Never stored or logged. Landlords and students otherwise use "Forgot
-   * password"; Ops asks a super admin. */
-  async resetPassword(actor: RlsContext, userId: string) {
+   * password"; Ops asks a super admin. Same staff-target guard as
+   * revokeSessions: the permission can be granted directly, so it must not
+   * reach a super admin or a staff member outside the actor's scope. */
+  async resetPassword(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    actorAssignments: RoleAssignment[],
+    userId: string,
+  ) {
     if (actor.userId === userId) throw new BadRequestException('Change your own password from your account settings');
-    const target = await this.rlsDb.run(SERVICE_CTX, async (_db, client) =>
-      (await client.query<{ logtoUserId: string | null }>(
+    const target = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const row = (await client.query<{ logtoUserId: string | null }>(
         `SELECT logto_user_id AS "logtoUserId" FROM users WHERE id = $1 AND deleted_at IS NULL`, [userId],
-      )).rows[0]);
+      )).rows[0];
+      if (row) await this.assertMayActOnStaffTarget(client, actorPermissions, actorAssignments, userId);
+      return row;
+    });
     if (!target) throw new NotFoundException('User not found');
     if (!target.logtoUserId) {
       throw new ConflictException('This person has not signed in yet, so there is no password to reset. Ask them to sign in with their phone or email.');

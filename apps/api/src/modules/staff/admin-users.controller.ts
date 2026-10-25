@@ -72,7 +72,7 @@ export class AdminUsersController {
   @Post(':id/password-reset')
   @RequirePermission('users.password_reset')
   resetPassword(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.users.resetPassword(rlsCtx(req), id);
+    return this.users.resetPassword(rlsCtx(req), req.permissions, req.assignments, id);
   }
 
   @Post(':id/sessions/revoke')
