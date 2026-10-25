@@ -121,6 +121,7 @@
 }
 
 .ch-landlords-hero__eyebrow {
+  margin: 0;
   display: inline-flex;
   align-items: center;
   gap: 12px;
@@ -496,6 +497,155 @@
   text-underline-offset: 4px;
 }
 
+/* "Your control." picks up the brand teal, lightened for the dark photo. */
+.ch-landlords-hero h1 span {
+  color: #9adbd4;
+}
+
+.ch-landlords-hero__points {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ch-landlords-hero__points li {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--landlords-hero-copy);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ch-landlords-hero__points svg {
+  width: 16px;
+  height: 16px;
+  color: var(--landlords-peach);
+  stroke-width: 2;
+}
+
+/* The people stand centre-right in the photo, so on wide screens the copy
+   moves left and the scrim fades out toward them instead of covering them. */
+@media (min-width: 1021px) {
+  .ch-landlords-hero__image {
+    object-position: center 38%;
+  }
+
+  .ch-landlords-hero__scrim {
+    background:
+      linear-gradient(90deg, rgba(4, 30, 33, 0.94) 0%, rgba(4, 30, 33, 0.82) 34%, rgba(4, 30, 33, 0.35) 64%, rgba(4, 30, 33, 0.12) 100%),
+      linear-gradient(180deg, rgba(4, 30, 33, 0.35) 0%, transparent 30%, transparent 70%, rgba(4, 30, 33, 0.45) 100%);
+  }
+
+  .ch-landlords-hero__inner {
+    place-items: center start;
+    text-align: left;
+  }
+
+  .ch-landlords-hero__copy {
+    width: min(100%, 600px);
+  }
+
+  .ch-landlords-hero h1,
+  .ch-landlords-hero__lede {
+    margin-inline: 0;
+  }
+
+  .ch-landlords-hero__actions,
+  .ch-landlords-hero__points {
+    justify-content: flex-start;
+  }
+}
+
+/* "More than a listing": the same photo, framed and cropped toward the
+   landlord, beside what the dashboard does for him. */
+.ch-landlords-showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: clamp(36px, 6vw, 80px);
+}
+
+.ch-landlords-showcase__media {
+  position: sticky;
+  top: 104px;
+  margin: 0;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 1px solid var(--landlords-line);
+  border-radius: 28px;
+  background: var(--landlords-hero-base);
+  box-shadow: 0 24px 60px rgba(8, 38, 40, 0.18);
+}
+
+.ch-landlords-showcase__image {
+  object-fit: cover;
+  object-position: 68% center;
+}
+
+.ch-landlords-showcase__chip {
+  position: absolute;
+  display: flex;
+  max-width: calc(100% - 32px);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 16px;
+  padding: 12px 16px;
+  background: rgba(6, 34, 37, 0.62);
+  color: #ffffff;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+.ch-landlords-showcase__chip--top {
+  top: 16px;
+  left: 16px;
+}
+
+.ch-landlords-showcase__chip--bottom {
+  right: 16px;
+  bottom: 16px;
+}
+
+.ch-landlords-showcase__chip svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: var(--landlords-peach);
+  stroke-width: 1.9;
+}
+
+.ch-landlords-showcase__chip span {
+  display: grid;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ch-landlords-showcase__chip strong {
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.ch-landlords-showcase__copy .ch-landlords-values {
+  margin-top: 40px;
+  gap: 32px 28px;
+}
+
 @media (max-width: 1020px) {
   .ch-landlords-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -504,6 +654,20 @@
   .ch-landlords-dashboard {
     grid-template-columns: 1fr;
     gap: 42px;
+  }
+
+  .ch-landlords-showcase {
+    grid-template-columns: 1fr;
+  }
+
+  .ch-landlords-showcase__media {
+    position: relative;
+    top: auto;
+    aspect-ratio: 3 / 2;
+  }
+
+  .ch-landlords-showcase__image {
+    object-position: center;
   }
 }
 

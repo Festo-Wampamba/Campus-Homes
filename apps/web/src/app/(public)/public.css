@@ -27,13 +27,22 @@
   transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
+/* Over a hero photo the bar is tinted glass, not fully transparent: busy
+   images (trees, people, signage) otherwise sit right behind the links and
+   logo and wash them out. */
 .ch-public-header--hero {
   position: fixed;
   inset-inline: 0;
-  background: transparent;
-  border-color: transparent;
+  background: linear-gradient(180deg, rgb(4 26 29 / 0.62) 0%, rgb(4 26 29 / 0.38) 100%);
+  border-color: rgb(255 255 255 / 0.12);
   color: #fff;
-  box-shadow: none;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset;
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.ch-public-header--hero:not(.ch-public-header--scrolled) .ch-public-header__link {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
 }
 
 .ch-public-header--hero.ch-public-header--scrolled {
