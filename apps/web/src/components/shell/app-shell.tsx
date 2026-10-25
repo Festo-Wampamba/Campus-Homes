@@ -424,7 +424,7 @@ export function AppShell({
             <SignOutButton />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-[var(--ch-app-max)] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
       </div>
 
       {messageToast && (

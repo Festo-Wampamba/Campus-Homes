@@ -29,7 +29,7 @@ export default function HowItWorksPage() {
         <div className="ch-journey-hero__inner">
           <div className="ch-journey-hero__copy">
             <p className="ch-journey-eyebrow">How CampusHomes works</p>
-            <h1 id="journey-hero-heading"><span>Your next room.</span><span>One clear journey.</span></h1>
+            <h1 id="journey-hero-heading"><span>Your next room</span><span>One clear journey</span></h1>
             <p className="ch-journey-hero__lede">
               See the route from search to move-in on desktop or phone. Compare inspected hostels, reserve for free and
               keep the next step clear.

@@ -51,6 +51,10 @@
  * generated components theme themselves.
  */
 :root {
+  /* Page widths grow with the screen up to a cap, so content uses a 27-inch
+     display instead of sitting in a 1248px column in the middle. */
+  --ch-page-max: clamp(1248px, 80vw, 1760px);
+  --ch-app-max: clamp(1480px, 88vw, 2048px);
   /* brand ramp */
   --teal-900: oklch(0.32 0.055 195);
   --teal-700: oklch(0.45 0.075 195);

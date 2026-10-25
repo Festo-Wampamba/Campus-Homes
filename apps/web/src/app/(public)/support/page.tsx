@@ -28,7 +28,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
         <Image src="/images/campushomes/student-lounge-hd-v2.webp" alt="" fill priority sizes="100vw" className="ch-support-hero__image" />
         <div className="ch-support-hero__inner">
           <p className="ch-support-eyebrow">CampusHomes support</p>
-          <h1 id="support-heading">Help when you need it.</h1>
+          <h1 id="support-heading">Help when you need it</h1>
           <p className="ch-support-hero__description">Ask CampusHomes AI or follow the user manual. For help with your account, a booking or a safety concern, <Link href="/contact">talk to our team</Link>.</p>
         </div>
       </section>

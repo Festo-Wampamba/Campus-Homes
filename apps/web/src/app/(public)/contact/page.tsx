@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -77,18 +76,10 @@ export default async function ContactPage({
   return (
     <div className="ch-public-page ch-contact-page">
       <section className="ch-contact-hero" aria-labelledby="contact-hero-heading">
-        <Image
-          src="/images/campushomes/student-lounge-hd-v2.webp"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="ch-contact-hero__image"
-        />
         <div className="ch-contact-hero__inner">
           <div className="ch-contact-hero__copy">
             <p className="ch-contact-eyebrow">CampusHomes contact</p>
-            <h1 id="contact-hero-heading">Contact CampusHomes.</h1>
+            <h1 id="contact-hero-heading">Contact CampusHomes</h1>
             <p>
               Talk to the CampusHomes team about a listing, a reservation, landlord questions or a safety concern.
               Choose the channel that suits you and keep your housing search moving.
@@ -105,7 +96,26 @@ export default async function ContactPage({
             </div>
           </div>
 
-
+          {/* The hero shows the actual ways to reach us instead of a stock
+              photo, so the page reads as "contact" at a glance. */}
+          <nav className="ch-contact-hero__channels" aria-label="Ways to reach CampusHomes">
+            <a href={`tel:${CAMPUSHOMES_CONTACT.officePhone}`} className="ch-contact-hero__channel">
+              <span className="ch-contact-hero__channel-icon"><Phone aria-hidden /></span>
+              <span><small>Call the office</small><strong>{CAMPUSHOMES_CONTACT.officePhoneLabel}</strong></span>
+            </a>
+            <a href={CAMPUSHOMES_CONTACT.whatsappHref} target="_blank" rel="noopener noreferrer" className="ch-contact-hero__channel">
+              <span className="ch-contact-hero__channel-icon ch-contact-hero__channel-icon--whatsapp"><WhatsAppIcon aria-hidden /></span>
+              <span><small>WhatsApp</small><strong>{CAMPUSHOMES_CONTACT.whatsappPhoneLabel}</strong></span>
+            </a>
+            <a href={`mailto:${CAMPUSHOMES_CONTACT.email}`} className="ch-contact-hero__channel">
+              <span className="ch-contact-hero__channel-icon"><Mail aria-hidden /></span>
+              <span><small>Email</small><strong>{CAMPUSHOMES_CONTACT.email}</strong></span>
+            </a>
+            <a href={CAMPUSHOMES_CONTACT.mapsHref} target="_blank" rel="noopener noreferrer" className="ch-contact-hero__channel">
+              <span className="ch-contact-hero__channel-icon"><MapPin aria-hidden /></span>
+              <span><small>Visit the office</small><strong>{CAMPUSHOMES_CONTACT.office}</strong></span>
+            </a>
+          </nav>
         </div>
       </section>
 
