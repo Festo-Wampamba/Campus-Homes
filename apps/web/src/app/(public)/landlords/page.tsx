@@ -2,12 +2,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  CalendarDays,
   CheckCircle2,
-  CircleUserRound,
   Clock3,
   Eye,
-  House,
   LayoutDashboard,
   ListChecks,
   LockKeyhole,
@@ -20,6 +17,7 @@ import {
 
 import { api } from "@/lib/api";
 import { CreateAccountDialog } from "./create-account-dialog";
+import { LandlordSignupSteps } from "./landlord-signup-steps";
 import { OnboardingLeadForm } from "./onboarding-lead-form";
 import "./landlords.css";
 
@@ -48,11 +46,12 @@ const VALUE_PROPS = [
   { icon: Eye, title: "List rooms when you're ready", body: "Choose which properties or rooms to publish. Only the listing details you publish are visible to students." },
 ] as const;
 
-const STEPS = [
-  { number: "01", icon: CircleUserRound, title: "Create an account", body: "Use your secure CampusHomes account and add a landlord workspace." },
-  { number: "02", icon: ShieldCheck, title: "Complete verification", body: "Our operations team contacts you, checks your details and arranges a property visit." },
-  { number: "03", icon: House, title: "Set up your rooms", body: "Add room types, beds, photos and prices, or import your rooms from a spreadsheet." },
-  { number: "04", icon: CalendarDays, title: "Run your hostel", body: "Track tenants, payments, bookings and move-ins, and publish rooms whenever you choose." },
+// What the online steps actually ask for (onboarding-wizard.tsx).
+const SIGNUP_READY = [
+  "An email or phone number you can receive a code on",
+  "Your legal name as it appears on your ID",
+  "The property's name and street address",
+  "Photos and room prices, if you have them (optional)",
 ] as const;
 
 const DASHBOARD_CAPABILITIES = [
@@ -91,7 +90,7 @@ export default async function LandlordsPage() {
           <div className="ch-landlords-hero__copy">
             <p className="ch-landlords-hero__eyebrow">Built for landlords &amp; hostel owners</p>
             <h1 id="landlords-hero-heading">
-              Your hostel. <span>Your control.</span>
+              <span>Your hostel</span> <span className="ch-landlords-hero__accent">Your control</span>
             </h1>
             <p className="ch-landlords-hero__lede">Run your rooms, tenants and payments from one free dashboard that stays private to you. List rooms for students near Makerere only when you&apos;re ready.</p>
             <div className="ch-landlords-hero__actions">
@@ -109,61 +108,62 @@ export default async function LandlordsPage() {
       </section>
 
       <section className="ch-landlords-section" aria-labelledby="why-heading">
-        <div className="ch-landlords-container ch-landlords-showcase">
-          <figure className="ch-landlords-showcase__media">
-            <Image
-              src={LANDLORD_PHOTO}
-              alt="A hostel landlord talking with two students outside his building"
-              fill
-              sizes="(max-width: 1020px) 100vw, 42vw"
-              className="ch-landlords-showcase__image"
-            />
-            <figcaption className="ch-landlords-showcase__chip ch-landlords-showcase__chip--top">
-              <UsersRound aria-hidden="true" />
-              <span><strong>Tenants, rooms, payments</strong>One dashboard</span>
-            </figcaption>
-            <div className="ch-landlords-showcase__chip ch-landlords-showcase__chip--bottom" aria-hidden="true">
-              <Clock3 />
-              <span><strong>Open 24/7</strong>Phone or laptop</span>
+        <div className="ch-landlords-container">
+          <div className="ch-landlords-showcase">
+            <figure className="ch-landlords-showcase__media">
+              <Image
+                src={LANDLORD_PHOTO}
+                alt="A hostel landlord talking with two students outside his building"
+                fill
+                sizes="(max-width: 1020px) 100vw, 50vw"
+                className="ch-landlords-showcase__image"
+              />
+            </figure>
+            <div className="ch-landlords-showcase__copy">
+              <p className="ch-landlords-eyebrow">More than a listing</p>
+              <h2 id="why-heading" className="ch-landlords-section__title">Run your whole hostel from one dashboard</h2>
+              <p className="ch-landlords-section__lede">CampusHomes is your free platform for managing your properties. Keep track of rooms, tenants and payments every day, and connect with students looking for accommodation when you choose to.</p>
+              <ul className="ch-landlords-showcase__stats">
+                <li><UsersRound aria-hidden="true" /><span><strong>Tenants, rooms, payments</strong>One dashboard</span></li>
+                <li><Clock3 aria-hidden="true" /><span><strong>Open 24/7</strong>Phone or laptop</span></li>
+              </ul>
             </div>
-          </figure>
-          <div className="ch-landlords-showcase__copy">
-            <p className="ch-landlords-eyebrow">More than a listing</p>
-            <h2 id="why-heading" className="ch-landlords-section__title">Run your whole hostel from one dashboard.</h2>
-            <p className="ch-landlords-section__lede">CampusHomes is your free platform for managing your properties. Keep track of rooms, tenants and payments every day, and connect with students looking for accommodation when you choose to.</p>
-            <div className="ch-landlords-values">
-              {VALUE_PROPS.map(({ icon: Icon, title, body }) => (
-                <article key={title} className="ch-landlords-value">
-                  <span className="ch-landlords-value__icon"><Icon aria-hidden="true" /></span>
-                  <div>
-                    <h3>{title}</h3>
-                    <p>{body}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
+          </div>
+          <div className="ch-landlords-values ch-landlords-values--wide">
+            {VALUE_PROPS.map(({ icon: Icon, title, body }) => (
+              <article key={title} className="ch-landlords-value">
+                <span className="ch-landlords-value__icon"><Icon aria-hidden="true" /></span>
+                <div>
+                  <h3>{title}</h3>
+                  <p>{body}</p>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
       <section className="ch-landlords-section ch-landlords-section--soft" aria-labelledby="onboarding-heading">
-        <div className="ch-landlords-container">
-        <p className="ch-landlords-eyebrow">How onboarding works</p>
-        <h2 id="onboarding-heading" className="ch-landlords-section__title">Create your account, then our team helps you get set up.</h2>
-        <p className="ch-landlords-section__lede">A property visit keeps anything you publish grounded. You still control your rent, tenancy terms and day-to-day relationship with your students.</p>
-        <ol className="ch-landlords-steps">
-          {STEPS.map(({ number, icon: Icon, title, body }) => (
-            <li key={number} className="ch-landlords-step">
-              <div className="ch-landlords-step__top"><span>{number}</span><Icon aria-hidden="true" /></div>
-              <h3>{title}</h3>
-              <p>{body}</p>
-            </li>
-          ))}
-        </ol>
-        <div className="ch-landlords-process-note">
-          <ShieldCheck aria-hidden="true" />
-          <p><strong>Verification comes before publication.</strong> We review your landlord details and arrange a physical property verification before a listing goes live.</p>
-        </div>
+        <div className="ch-landlords-container ch-landlords-signup">
+          <div className="ch-landlords-signup__intro">
+            <p className="ch-landlords-eyebrow">Create your landlord account</p>
+            <h2 id="onboarding-heading" className="ch-landlords-section__title">From sign-up to your dashboard in six steps</h2>
+            <p className="ch-landlords-section__lede">The first four steps happen online and take one sitting. Then our team verifies your property, and your dashboard is ready.</p>
+            <aside className="ch-landlords-signup__ready" aria-labelledby="signup-ready-heading">
+              <h3 id="signup-ready-heading"><ListChecks aria-hidden="true" />Have these ready</h3>
+              <ul>
+                {SIGNUP_READY.map((item) => <li key={item}><CheckCircle2 aria-hidden="true" />{item}</li>)}
+              </ul>
+            </aside>
+            <div className="ch-landlords-signup__cta">
+              <CreateAccountDialog />
+            </div>
+            <div className="ch-landlords-process-note">
+              <ShieldCheck aria-hidden="true" />
+              <p><strong>Verification comes before publication.</strong> No room is shown to students until our team has visited and approved the property.</p>
+            </div>
+          </div>
+          <LandlordSignupSteps />
         </div>
       </section>
 
@@ -172,7 +172,7 @@ export default async function LandlordsPage() {
         <div className="ch-landlords-dashboard">
           <div>
             <p className="ch-landlords-eyebrow">Inside your dashboard</p>
-            <h2 id="dashboard-heading" className="ch-landlords-section__title">Everything your hostel needs, day to day.</h2>
+            <h2 id="dashboard-heading" className="ch-landlords-section__title">Everything your hostel needs, day to day</h2>
             <p className="ch-landlords-section__lede">Use the basic property-management tools for free, whether or not any of your rooms are listed publicly.</p>
           </div>
           <ul className="ch-landlords-capabilities">
@@ -185,7 +185,7 @@ export default async function LandlordsPage() {
       <section id="request-onboarding" className="ch-landlords-section ch-landlords-section--soft ch-landlords-request" aria-labelledby="request-onboarding-heading">
         <div className="ch-landlords-container ch-landlords-container--narrow">
           <p className="ch-landlords-eyebrow">Let&apos;s get your hostel set up</p>
-          <h2 id="request-onboarding-heading" className="ch-landlords-section__title">Request onboarding.</h2>
+          <h2 id="request-onboarding-heading" className="ch-landlords-section__title">Request onboarding</h2>
           <p className="ch-landlords-section__lede">Tell us about your property and our team will reach out to arrange an onboarding visit.</p>
           <div className="ch-landlords-request__details">
             <aside className="ch-landlords-requirements" aria-label="Information needed to request onboarding">

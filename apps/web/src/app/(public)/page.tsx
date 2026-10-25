@@ -147,7 +147,7 @@ export default function HomePage() {
               Student hostels near Makerere University
             </p>
             <h1 id="home-heading" className="ch-home-hero__title">
-              Find your hostel near Makerere.
+              Find your hostel near Makerere
             </h1>
             <p className="ch-home-hero__subcopy">
               Compare inspected hostels, see semester prices and reserve your room for free.

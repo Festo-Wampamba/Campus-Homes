@@ -1,5 +1,5 @@
 .ch-legal {
-  width: min(100% - 40px, 1248px);
+  width: min(100% - 40px, var(--ch-page-max));
   margin-inline: auto;
   padding-block: 64px 96px;
   color: var(--ch-ink);

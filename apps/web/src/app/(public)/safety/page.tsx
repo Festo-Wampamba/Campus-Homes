@@ -32,7 +32,7 @@ export default function SafetyPage() {
       <section className="ch-safety-hero" aria-labelledby="safety-hero-heading">
         <div className="ch-safety-hero__inner">
           <p className="ch-safety-eyebrow">Safety and verification</p>
-          <h1 id="safety-hero-heading">Make your next housing decision with the facts in view.</h1>
+          <h1 id="safety-hero-heading">Make your next housing decision with the facts in view</h1>
           <p>
             CampusHomes records what our team sees during an inspection so you can visit, ask questions and decide carefully.
           </p>

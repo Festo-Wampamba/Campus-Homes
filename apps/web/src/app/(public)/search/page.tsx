@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default function SearchPage({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
-  return <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-10"><h1 className="text-3xl">Student hostels near Makerere</h1><p role="status" className="mt-4 text-muted-foreground">Finding available hostels…</p></div>}><PrefetchedResults searchParams={searchParams}/></Suspense>;
+  return <Suspense fallback={<div className="mx-auto max-w-[var(--ch-page-max)] px-4 py-10"><h1 className="text-3xl">Student hostels near Makerere</h1><p role="status" className="mt-4 text-muted-foreground">Finding available hostels…</p></div>}><PrefetchedResults searchParams={searchParams}/></Suspense>;
 }
 
 async function PrefetchedResults({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
