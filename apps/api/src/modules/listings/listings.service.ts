@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type {
   ListingSearchInput,
@@ -651,15 +651,27 @@ export class ListingsService {
       if (!listing?.currentVersionId) {
         throw new NotFoundException('Listing not found');
       }
+      // Same reason as search(): RLS makes planning cost more than executing,
+      // so the heavier queries below are named statements with a forced
+      // generic plan, planned once per pooled connection (staging EXPLAIN,
+      // 2026-10-19: ~93 ms planning per detail call -> under 1 ms).
+      // jit off here too, not just in the API pool: a generic plan's default
+      // estimates cross jit_above_cost, and JIT then turned a 10 ms
+      // availability query into 18 s on a pool without -c jit=off.
+      await db.execute(sql`SELECT set_config('plan_cache_mode', 'force_generic_plan', true), set_config('jit', 'off', true)`);
       const [version] = await db
         .select()
         .from(listingVersions)
-        .where(eq(listingVersions.id, listing.currentVersionId));
+        .where(eq(listingVersions.id, sql.placeholder('versionId')))
+        .prepare('listing_detail_version')
+        .execute({ versionId: listing.currentVersionId });
       const photos = await db
         .select()
         .from(listingPhotos)
-        .where(eq(listingPhotos.listingVersionId, listing.currentVersionId))
-        .orderBy(listingPhotos.sortOrder);
+        .where(eq(listingPhotos.listingVersionId, sql.placeholder('versionId')))
+        .orderBy(listingPhotos.sortOrder)
+        .prepare('listing_detail_photos')
+        .execute({ versionId: listing.currentVersionId });
       // Rooms are permanent/property-level (2026-09) — scope to this
       // listing's property + semester via unit_semester_pricing rather than
       // a listing_id column on units.
@@ -677,18 +689,27 @@ export class ListingsService {
         .from(units)
         .innerJoin(
           unitSemesterPricing,
-          and(eq(unitSemesterPricing.unitId, units.id), eq(unitSemesterPricing.semesterId, listing.semesterId)),
+          and(
+            eq(unitSemesterPricing.unitId, units.id),
+            eq(unitSemesterPricing.semesterId, sql.placeholder('semesterId')),
+          ),
         )
-        .where(eq(units.propertyId, listing.propertyId));
+        .where(eq(units.propertyId, sql.placeholder('propertyId')))
+        .prepare('listing_detail_units')
+        .execute({ semesterId: listing.semesterId, propertyId: listing.propertyId });
       // unit_photos_read (0008) allows public read once the parent listing is
       // verified — same PUBLIC_CTX this whole block already runs under.
+      // = ANY(array) rather than inArray(): one parameter keeps the statement
+      // text, and so its cached plan, the same for any number of rooms.
       const unitIds = unitRows.map((u) => u.id);
       const unitPhotoRows = unitIds.length
         ? await db
             .select({ unitId: unitPhotos.unitId, storageKey: unitPhotos.storageKey })
             .from(unitPhotos)
-            .where(inArray(unitPhotos.unitId, unitIds))
+            .where(sql`${unitPhotos.unitId} = ANY(${sql.placeholder('unitIds')}::uuid[])`)
             .orderBy(asc(unitPhotos.sortOrder))
+            .prepare('listing_detail_unit_photos')
+            .execute({ unitIds })
         : [];
       return { listing, version, photos, units: unitRows, unitPhotos: unitPhotoRows };
     }).then(async (detail) => {
@@ -705,8 +726,14 @@ export class ListingsService {
           // manually blocked, its room isn't under a room-level override
           // (maintenance/blocked), and it has no live (reserved/booked)
           // reservation on it.
-          const availRes = await client.query(
-            `SELECT b.id, b.unit_id, (
+          // Named + generic plan, as above: this was ~62 ms to plan, ~17 ms
+          // to run.
+          await client.query(
+            `SELECT set_config('plan_cache_mode', 'force_generic_plan', true), set_config('jit', 'off', true)`,
+          );
+          const availRes = await client.query({
+            name: 'listing_detail_availability',
+            text: `SELECT b.id, b.unit_id, (
                NOT b.blocked
                AND u.operational_status <> ALL($3::text[])
                AND NOT EXISTS (
@@ -728,8 +755,13 @@ export class ListingsService {
                  SELECT 1 FROM unit_semester_pricing usp
                  WHERE usp.unit_id = u.id AND usp.semester_id = $4
                )`,
-            [detail.listing.propertyId, LIVE_RESERVATION_STATUSES, UNAVAILABLE_OPERATIONAL_STATUSES, detail.listing.semesterId],
-          );
+            values: [
+              detail.listing.propertyId,
+              LIVE_RESERVATION_STATUSES,
+              UNAVAILABLE_OPERATIONAL_STATUSES,
+              detail.listing.semesterId,
+            ],
+          });
           const propRes = await client.query(
             `SELECT p.id, p.name, p.street_address, p.catchment, p.gps_lat, p.gps_lon,
                     p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
@@ -754,8 +786,9 @@ export class ListingsService {
           // Photos the landlord added to each room type in Manage Rooms. Only
           // the room type's current (approved) version is public, and each
           // photo is reported against every priced room of that type.
-          const roomTypePhotoRes = await client.query(
-            `SELECT u.id AS "unitId", rtp.storage_key AS "storageKey"
+          const roomTypePhotoRes = await client.query({
+            name: 'listing_detail_room_type_photos',
+            text: `SELECT u.id AS "unitId", rtp.storage_key AS "storageKey"
              FROM units u
              JOIN room_types rt ON rt.id = u.room_type_id
              JOIN room_type_photos rtp ON rtp.room_type_version_id = rt.current_version_id
@@ -765,8 +798,8 @@ export class ListingsService {
                  WHERE usp.unit_id = u.id AND usp.semester_id = $2
                )
              ORDER BY rtp.is_primary DESC, rtp.sort_order`,
-            [detail.listing.propertyId, detail.listing.semesterId],
-          );
+            values: [detail.listing.propertyId, detail.listing.semesterId],
+          });
           // Only approved room-type snapshots can supply public room amenities.
           const roomAmenitiesRes = await client.query(
             `SELECT u.id, rtv.amenities

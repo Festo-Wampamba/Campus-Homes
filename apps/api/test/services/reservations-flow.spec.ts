@@ -502,6 +502,23 @@ describe('payment receipts and student details (Festo, 2026-10-23)', () => {
     await expect(reservationsService.studentDetails(landlordCtx(landlord2), reservationId)).rejects.toThrow();
   });
 
+  it('shows the landlord contact and emergency details only, never date of birth, nationality or address', async () => {
+    const details = await reservationsService.studentDetails(landlordCtx(landlord1), reservationId);
+    expect(Object.keys(details).sort()).toEqual([
+      'email', 'emergencyContactName', 'emergencyContactPhone', 'gender', 'hasSignedIn', 'name', 'phone', 'university', 'yearOfStudy',
+    ]);
+  });
+
+  it("refuses the student's details once the booking is released", async () => {
+    const { bedId: bed } = await seedUnitWithBed('Released walk-in');
+    const walkIn = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Released Student', phone: '+256710000314', university: 'MUK', movedIn: false,
+    });
+    await reservationsService.release(landlordCtx(landlord1), walkIn.reservationId, { reason: 'Did not take the room', refundRequired: false });
+
+    await expect(reservationsService.studentDetails(landlordCtx(landlord1), walkIn.reservationId)).rejects.toThrow(ForbiddenException);
+  });
+
   it("never attaches a landlord-typed email to a student's existing account", async () => {
     const existing = await seed(
       `INSERT INTO users (phone, role, status, name) VALUES ('+256710000313', 'student', 'active', 'Has Account') RETURNING id`,

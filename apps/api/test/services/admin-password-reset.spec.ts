@@ -3,7 +3,7 @@
  * temporary password set through Logto, sessions ended, never stored.
  * Logto is the external boundary, so it is faked here.
  */
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import { RlsDb } from '../../src/db/db.module';
@@ -21,6 +21,10 @@ const adminUsers = new AdminUsersService(rlsDb, new AuditService(rlsDb), { setPa
 let admin: RlsContext;
 let signedInUser: string;
 let neverSignedIn: string;
+let superAdminTarget: string;
+let platformStaffTarget: string;
+const superPerms = new Set(['users.password_reset', 'roles.manage_super_admin']);
+const platformWide = [{ scopeType: 'platform_wide', scopeId: null }];
 
 beforeAll(async () => {
   await pool.query(`TRUNCATE users RESTART IDENTITY CASCADE`);
@@ -28,7 +32,18 @@ beforeAll(async () => {
   admin = { userId: await id(`INSERT INTO users (phone, role, status) VALUES ('+256710000901', 'admin', 'active') RETURNING id`), role: 'admin', mfaVerified: true };
   signedInUser = await id(`INSERT INTO users (phone, role, status, logto_user_id) VALUES ('+256710000902', 'student', 'active', 'logto-902') RETURNING id`);
   neverSignedIn = await id(`INSERT INTO users (phone, role, status) VALUES ('+256710000903', 'student', 'active') RETURNING id`);
+  superAdminTarget = await id(`INSERT INTO users (phone, role, status, logto_user_id) VALUES ('+256710000904', 'admin', 'active', 'logto-904') RETURNING id`);
+  platformStaffTarget = await id(`INSERT INTO users (phone, role, status, logto_user_id) VALUES ('+256710000905', 'admin', 'active', 'logto-905') RETURNING id`);
+  await assign(superAdminTarget, 'super_admin');
+  await assign(platformStaffTarget, 'support_admin');
 });
+
+async function assign(userId: string, roleKey: string) {
+  await pool.query(`
+    INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_id, assigned_by, reason)
+    SELECT $1, id, 'platform_wide', NULL, $1, 'seed' FROM roles WHERE key = $2
+  `, [userId, roleKey]);
+}
 
 beforeEach(() => setPassword.mockClear());
 
@@ -38,13 +53,13 @@ afterAll(async () => {
 
 describe('resetPassword', () => {
   it("sets the returned temporary password on the person's Logto identity", async () => {
-    const { temporaryPassword } = await adminUsers.resetPassword(admin, signedInUser);
+    const { temporaryPassword } = await adminUsers.resetPassword(admin, superPerms, platformWide, signedInUser);
 
     expect(setPassword).toHaveBeenCalledWith('logto-902', temporaryPassword);
   });
 
   it('returns a strong temporary password', async () => {
-    const { temporaryPassword } = await adminUsers.resetPassword(admin, signedInUser);
+    const { temporaryPassword } = await adminUsers.resetPassword(admin, superPerms, platformWide, signedInUser);
 
     expect(temporaryPassword).toMatch(/^[A-Za-z0-9_-]{16}a7K!$/);
   });
@@ -55,12 +70,30 @@ describe('resetPassword', () => {
       [signedInUser],
     );
 
-    await adminUsers.resetPassword(admin, signedInUser);
+    await adminUsers.resetPassword(admin, superPerms, platformWide, signedInUser);
 
     expect((await pool.query(`SELECT 1 FROM sessions WHERE user_id = $1`, [signedInUser])).rowCount).toBe(0);
   });
 
   it('refuses someone who has never signed in', async () => {
-    await expect(adminUsers.resetPassword(admin, neverSignedIn)).rejects.toThrow(ConflictException);
+    await expect(adminUsers.resetPassword(admin, superPerms, platformWide, neverSignedIn)).rejects.toThrow(ConflictException);
+  });
+
+  it("refuses a super admin's password without roles.manage_super_admin", async () => {
+    await expect(
+      adminUsers.resetPassword(admin, new Set(['users.password_reset']), platformWide, superAdminTarget),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('leaves the Logto password untouched when the target is refused', async () => {
+    await adminUsers.resetPassword(admin, new Set(['users.password_reset']), platformWide, superAdminTarget).catch(() => undefined);
+
+    expect(setPassword).not.toHaveBeenCalled();
+  });
+
+  it("refuses a staff member outside the actor's own scope", async () => {
+    await expect(
+      adminUsers.resetPassword(admin, superPerms, [{ scopeType: 'catchment', scopeId: 'MUK' }], platformStaffTarget),
+    ).rejects.toThrow(ForbiddenException);
   });
 });
