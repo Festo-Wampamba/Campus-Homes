@@ -484,18 +484,22 @@ export class ReservationsService {
     );
   }
 
-  /** What a bed's landlord (or custodian/ops) may see about its student. */
+  /** What a bed's landlord (or custodian/ops) may see about its student:
+   * contact and emergency details for running the booking, only while it is
+   * live. Date of birth, nationality and home address stay with the student. */
   async studentDetails(ctx: RlsContext, reservationId: string) {
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
-      const reservation = (await client.query<{ bed_id: string; student_id: string }>(
-        `SELECT bed_id, student_id FROM reservations WHERE id = $1`, [reservationId],
+      const reservation = (await client.query<{ bed_id: string; student_id: string; status: string }>(
+        `SELECT bed_id, student_id, status::text AS status FROM reservations WHERE id = $1`, [reservationId],
       )).rows[0];
       if (!reservation) throw new NotFoundException('Reservation not found');
       await this.assertCanManageBed(client, ctx, reservation.bed_id);
+      if (!['reserved', 'booked', 'occupied'].includes(reservation.status)) {
+        throw new ForbiddenException('Student details are only available while the reservation or booking is active');
+      }
       return (await client.query(
         `SELECT NULLIF(btrim(u.name), '') AS name, COALESCE(u.phone, u.contact_phone) AS phone, u.email,
                 s.university::text AS university, s.year_of_study AS "yearOfStudy", u.gender,
-                u.date_of_birth::text AS "dateOfBirth", u.nationality, u.address,
                 u.emergency_contact_name AS "emergencyContactName", u.emergency_contact_phone AS "emergencyContactPhone",
                 u.logto_user_id IS NOT NULL AS "hasSignedIn"
          FROM users u LEFT JOIN students s ON s.user_id = u.id WHERE u.id = $1`,
