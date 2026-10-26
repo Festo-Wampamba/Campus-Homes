@@ -9,7 +9,7 @@
   radial-gradient(60% 80% at 85% 20%, rgb(252 177 119 / 22%) 0%, transparent 60%),
   radial-gradient(55% 70% at 10% 100%, rgb(42 157 150 / 30%) 0%, transparent 60%),
   radial-gradient(rgb(255 255 255 / 9%) 1px, transparent 1px) 0 0 / 22px 22px; }
-.ch-contact-hero__inner { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); align-items: center; gap: clamp(32px, 5vw, 80px); width: min(100% - 32px, var(--ch-page-max)); margin-inline: auto; padding: 148px 0 88px; }
+.ch-contact-hero__inner { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); align-items: center; gap: clamp(32px, 5vw, 80px); width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max)); margin-inline: auto; padding: 148px 0 88px; }
 .ch-contact-hero__channels { display: grid; gap: 12px; }
 .ch-contact-hero__channel { display: flex; align-items: center; gap: 16px; min-height: 76px; padding: 14px 18px; border: 1px solid rgb(255 255 255 / 16%); border-radius: 18px; background: rgb(255 255 255 / 7%); color: white; text-decoration: none; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; transform: translateX(16px); animation: ch-contact-in 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards; transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease; }
 .ch-contact-hero__channel:nth-child(2) { animation-delay: 80ms; }
@@ -37,7 +37,7 @@
 .ch-contact-button--outline:hover { background: rgb(255 255 255 / 10%); }
 .ch-contact-button--dark { margin-top: 24px; background: var(--teal-900); color: white; }
 .ch-contact-button--dark:hover { background: var(--teal-700); }
-.ch-contact-content { width: min(100% - 32px, var(--ch-page-max)); margin-inline: auto; padding: 64px 0 80px; }
+.ch-contact-content { width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max)); margin-inline: auto; padding: 64px 0 80px; }
 .ch-contact-section, .ch-contact-office, .ch-contact-message, .ch-contact-safety { margin-bottom: 64px; }
 .ch-contact-section__header { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 32px; margin-bottom: 24px; }
 .ch-contact-section__header h2, .ch-contact-office h2, .ch-contact-safety h2 { font-size: clamp(1.5rem, 2.5vw, 2rem); line-height: 1.3; }
