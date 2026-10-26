@@ -238,6 +238,8 @@ export const opsQueueRowSchema = z.object({
   inspector_id: uuid.nullable(),
   landlord_kyc_status: z.enum(KYC_STATUSES),
   age_hours: z.coerce.number(),
+  // Its approved visit predates a switch back to listing (0076): schedule a new one.
+  needs_reinspection: z.boolean().default(false),
 });
 export type OpsQueueRow = z.infer<typeof opsQueueRowSchema>;
 

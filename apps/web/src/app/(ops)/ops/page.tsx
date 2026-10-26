@@ -20,6 +20,7 @@ function ageTone(ageHours: number): "success" | "warning" | "destructive" {
 
 function visitStageLabel(row: OpsQueueRow): string | null {
   if (row.visit_id === null) return null;
+  if (row.needs_reinspection) return "Back to listing. New inspection needed";
   if (row.result === "passed") return "Awaiting your approval";
   if (row.result === "failed") return "Visit failed. Schedule a re-visit";
   if (row.result === "pending") return row.scheduled_at ? "Visit scheduled" : "Not yet scheduled";
@@ -27,6 +28,7 @@ function visitStageLabel(row: OpsQueueRow): string | null {
 }
 
 function stageTone(row: OpsQueueRow): "warning" | "destructive" | "neutral" {
+  if (row.needs_reinspection) return "warning";
   if (row.result === "passed") return "warning";
   if (row.result === "failed") return "destructive";
   return "neutral";
@@ -37,7 +39,8 @@ function QueueRow({ row }: { row: OpsQueueRow }) {
   const stageLabel = visitStageLabel(row);
   // A failed visit is a dead end — it can never be approved, so the useful
   // action is scheduling a fresh one, not re-opening the failed checklist.
-  const needsReschedule = row.result === "failed";
+  // Same for an approved visit older than a switch back to listing.
+  const needsReschedule = row.result === "failed" || row.needs_reinspection;
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
