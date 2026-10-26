@@ -336,8 +336,11 @@ export class AdminUsersService {
     }
     // 96 random bits plus one of each character class for Logto's password policy.
     const temporaryPassword = `${randomBytes(12).toString('base64url')}a7K!`;
-    await this.logtoManagement.setPassword(target.logtoUserId, temporaryPassword);
+    // Sign out first: if Logto then fails, the person just signs in again with
+    // their old password. Setting the password first and failing on the
+    // sign-out left a password nobody was shown and no audit row.
     await this.rlsDb.run(SERVICE_CTX, (_db, client) => client.query('DELETE FROM sessions WHERE user_id = $1', [userId]));
+    await this.logtoManagement.setPassword(target.logtoUserId, temporaryPassword);
     await this.audit.record(actor, 'users.password_reset', 'user', userId, {});
     return { temporaryPassword };
   }

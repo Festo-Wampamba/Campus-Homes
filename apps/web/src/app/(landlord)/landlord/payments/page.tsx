@@ -4,18 +4,15 @@ import { Wallet } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { ReceiptsTable } from "@/components/payments/receipts-table";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatUgx } from "@/lib/format";
+import { formatUgx, kampalaMonth } from "@/lib/format";
 import { getMyReceipts } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Payments & Earnings" };
 
 export default async function LandlordPaymentsPage() {
-  const receipts = await getMyReceipts();
-  const now = new Date();
-  const thisMonth = receipts?.filter((r) => {
-    const at = new Date(r.recordedAt);
-    return at.getFullYear() === now.getFullYear() && at.getMonth() === now.getMonth();
-  }) ?? [];
+  const receipts = await getMyReceipts("landlord");
+  const currentMonth = kampalaMonth(new Date());
+  const thisMonth = receipts?.filter((r) => kampalaMonth(new Date(r.recordedAt)) === currentMonth) ?? [];
   const sum = (list: { totalUgx: number }[]) => list.reduce((total, r) => total + r.totalUgx, 0);
 
   return (

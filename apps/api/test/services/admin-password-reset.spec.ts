@@ -75,6 +75,18 @@ describe('resetPassword', () => {
     expect((await pool.query(`SELECT 1 FROM sessions WHERE user_id = $1`, [signedInUser])).rowCount).toBe(0);
   });
 
+  it('still signs the person out when Logto rejects the new password', async () => {
+    await pool.query(
+      `INSERT INTO sessions (id, user_id, token, expires_at) VALUES (gen_random_uuid(), $1, 'reset-fail-token', now() + interval '1 day')`,
+      [signedInUser],
+    );
+    setPassword.mockRejectedValueOnce(new Error('Logto unavailable'));
+
+    await adminUsers.resetPassword(admin, superPerms, platformWide, signedInUser).catch(() => undefined);
+
+    expect((await pool.query(`SELECT 1 FROM sessions WHERE user_id = $1`, [signedInUser])).rowCount).toBe(0);
+  });
+
   it('refuses someone who has never signed in', async () => {
     await expect(adminUsers.resetPassword(admin, superPerms, platformWide, neverSignedIn)).rejects.toThrow(ConflictException);
   });

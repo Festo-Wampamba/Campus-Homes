@@ -483,14 +483,19 @@ describe('payment receipts and student details (Festo, 2026-10-23)', () => {
   });
 
   it("lists the receipt in the landlord's payments", async () => {
-    const receipts = (await reservationsService.receipts(landlordCtx(landlord1))) as { reservationId: string; totalUgx: number }[];
+    const receipts = (await reservationsService.receipts(landlordCtx(landlord1), 'landlord')) as { reservationId: string; totalUgx: number }[];
     expect(receipts.find((r) => r.reservationId === reservationId)?.totalUgx).toBe(200_000);
   });
 
   it("lists the receipt in the student's own receipts", async () => {
     const studentId = (await pool.query(`SELECT id FROM users WHERE phone = '+256710000311'`)).rows[0].id as string;
-    const receipts = (await reservationsService.receipts(studentCtx(studentId))) as { reservationId: string }[];
+    const receipts = (await reservationsService.receipts(studentCtx(studentId), 'student')) as { reservationId: string }[];
     expect(receipts.map((r) => r.reservationId)).toEqual([reservationId]);
+  });
+
+  it("keeps receipts the landlord recorded out of their own student receipts", async () => {
+    const receipts = (await reservationsService.receipts(landlordCtx(landlord1), 'student')) as { reservationId: string }[];
+    expect(receipts.map((r) => r.reservationId)).not.toContain(reservationId);
   });
 
   it('keeps the email the landlord entered for the walk-in student', async () => {
