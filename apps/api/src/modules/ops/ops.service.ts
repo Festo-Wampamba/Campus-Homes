@@ -94,7 +94,8 @@ export class OpsService {
    * to scheduling a re-visit — the property is neither pending (there's a
    * completed visit) nor does it ever get approved (a failed visit can't
    * be), so it would otherwise be silently orphaned forever. Manage-only
-   * properties (0076) are never listed, so they never need a visit. */
+   * properties (0076) are never listed, so they never need a visit; one that
+   * switched back to listing needs a visit newer than that switch. */
   queue(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
@@ -113,7 +114,8 @@ export class OpsService {
            AND (v.id IS NULL
             OR v.result = 'pending'
             OR v.result = 'failed'
-            OR (v.result = 'passed' AND v.approved_at IS NULL))
+            OR (v.result = 'passed' AND v.approved_at IS NULL)
+            OR (p.listing_requested_at IS NOT NULL AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)))
          ORDER BY p.created_at ASC`,
       );
       return res.rows as unknown[];
@@ -740,7 +742,12 @@ export class OpsService {
       // and account-status check is re-run here, not just trusted from
       // whenever the property was first created.
       const [property] = await db
-        .select({ landlordId: properties.landlordId, name: properties.name, listingIntent: properties.listingIntent })
+        .select({
+          landlordId: properties.landlordId,
+          name: properties.name,
+          listingIntent: properties.listingIntent,
+          listingRequestedAt: properties.listingRequestedAt,
+        })
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
       if (!property) {
@@ -781,6 +788,13 @@ export class OpsService {
       if (!approvedVisit) {
         throw new ConflictException(
           'This property has no ops-lead-approved inspection. Approve the passed visit before publishing',
+        );
+      }
+      // Rooms may have changed without a visit while it was manage-only
+      // (listings_intent_guard enforces this too).
+      if (property.listingRequestedAt && (!approvedVisit.completedAt || approvedVisit.completedAt < property.listingRequestedAt)) {
+        throw new ConflictException(
+          'This property switched back to listing after its last inspection. Complete and approve a new verification visit before publishing',
         );
       }
 

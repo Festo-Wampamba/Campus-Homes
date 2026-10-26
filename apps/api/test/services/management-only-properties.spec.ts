@@ -5,7 +5,7 @@
  * (service check + DB trigger), and its room changes are reviewed without a
  * site visit. Taking a live listing down is staff-only.
  */
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import { ConsoleMessaging } from '../../src/adapters/messaging.adapter';
@@ -100,6 +100,10 @@ const publish = (listingId: string) => ops.publishListing(opsLeadCtx, {
   units: [{ label: `R-${listingId.slice(0, 6)}`, capacity: 1, roomCategory: 'single', pricePerTermUgx: 500_000 }],
 });
 
+const SUSPEND = new Set(['properties.update', 'listings.suspend']);
+const freshSignIn = () => new Date().toISOString();
+const staleSignIn = new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString();
+
 const queueIds = async () => ((await ops.queue(opsLeadCtx)) as { id: string }[]).map((row) => row.id);
 
 beforeAll(async () => {
@@ -193,9 +197,75 @@ describe('staff switch', () => {
     const { propertyId, listingId } = await inspectedProperty('Taken Down Hostel', 'list');
     await publish(listingId);
 
-    await adminProperties.setListingIntent(opsLeadCtx, propertyId, 'manage_only');
+    await adminProperties.setListingIntent(opsLeadCtx, SUSPEND, freshSignIn(), propertyId, 'manage_only');
 
     expect((await pool.query(`SELECT status::text FROM listings WHERE id = $1`, [listingId])).rows[0].status).toBe('suspended');
+  });
+
+  it('needs listings.suspend to take a live listing down', async () => {
+    const { propertyId, listingId } = await inspectedProperty('No Suspend Hostel', 'list');
+    await publish(listingId);
+
+    await expect(
+      adminProperties.setListingIntent(opsLeadCtx, new Set(['properties.update']), freshSignIn(), propertyId, 'manage_only'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('needs a fresh sign-in to take a live listing down', async () => {
+    const { propertyId, listingId } = await inspectedProperty('Stale Session Hostel', 'list');
+    await publish(listingId);
+
+    await expect(
+      adminProperties.setListingIntent(opsLeadCtx, SUSPEND, staleSignIn, propertyId, 'manage_only'),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+});
+
+describe('switching back to listing', () => {
+  it('puts a previously inspected property back in the Ops queue', async () => {
+    const { propertyId } = await inspectedProperty('Returning Hostel', 'manage_only');
+
+    await listings.setListingIntent(landlordCtx, propertyId, 'list');
+
+    expect(await queueIds()).toContain(propertyId);
+  });
+
+  it('refuses to publish on the inspection from before the switch', async () => {
+    const { propertyId, listingId } = await inspectedProperty('Old Inspection Hostel', 'manage_only');
+    await listings.setListingIntent(landlordCtx, propertyId, 'list');
+
+    await expect(publish(listingId)).rejects.toThrow(ConflictException);
+  });
+
+  it('ignores a landlord clearing the switch time directly', async () => {
+    const { propertyId } = await inspectedProperty('Cleared Stamp Hostel', 'manage_only');
+    await listings.setListingIntent(landlordCtx, propertyId, 'list');
+
+    await pool.query(`UPDATE properties SET listing_requested_at = NULL WHERE id = $1`, [propertyId]);
+
+    expect((await pool.query(`SELECT listing_requested_at FROM properties WHERE id = $1`, [propertyId])).rows[0].listing_requested_at).not.toBeNull();
+  });
+});
+
+describe('a publish racing a switch to manage-only', () => {
+  it('fails once the switch commits first', async () => {
+    const { propertyId, listingId } = await inspectedProperty('Race Hostel', 'list');
+    const switcher = await pool.connect();
+    const publisher = await pool.connect();
+    try {
+      await switcher.query('BEGIN');
+      await switcher.query(`UPDATE properties SET listing_intent = 'manage_only' WHERE id = $1`, [propertyId]);
+      // Blocks on the property row lock until the switch commits.
+      const publishing = publisher.query(`UPDATE listings SET status = 'verified', verified_at = now() WHERE id = $1`, [listingId])
+        .then(() => null, (err: { code?: string }) => err.code);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await switcher.query('COMMIT');
+
+      expect(await publishing).toBe('23514');
+    } finally {
+      switcher.release();
+      publisher.release();
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import type {
   AddAdminPropertyMediaInput,
@@ -11,6 +11,7 @@ import type {
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
+import { assertFreshSignIn } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 
@@ -317,20 +318,39 @@ export class AdminPropertiesService {
   /** Staff switch between "manage only" and "manage and list" (0076). Taking a
    * live listing down is Ops-only (Festo, 2026-10-26): switching a listed
    * property to manage-only suspends its verified listings in the same
-   * transaction, so properties_listing_intent_guard lets the change through. */
-  async setListingIntent(actor: RlsContext, propertyId: string, listingIntent: ListingIntent) {
+   * transaction, so properties_listing_intent_guard lets the change through.
+   * That suspension needs listings.suspend and its fresh sign-in, the same
+   * as suspending a listing any other way. */
+  async setListingIntent(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    authenticatedAt: string | null | undefined,
+    propertyId: string,
+    listingIntent: ListingIntent,
+  ) {
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const current = (await client.query<{ listingIntent: ListingIntent }>(
         'SELECT listing_intent AS "listingIntent" FROM properties WHERE id = $1 FOR UPDATE',
         [propertyId],
       )).rows[0];
       if (!current) throw new NotFoundException('Property not found');
-      const suspended = listingIntent === 'manage_only'
-        ? (await client.query<{ id: string }>(
+      let suspended: string[] = [];
+      if (listingIntent === 'manage_only') {
+        const live = (await client.query<{ id: string }>(
+          `SELECT id FROM listings WHERE property_id = $1 AND status = 'verified' FOR UPDATE`,
+          [propertyId],
+        )).rows;
+        if (live.length) {
+          if (!actorPermissions.has('listings.suspend')) {
+            throw new ForbiddenException('Taking a live listing down needs the listings.suspend permission');
+          }
+          assertFreshSignIn(authenticatedAt, 'listings.suspend');
+          suspended = (await client.query<{ id: string }>(
             `UPDATE listings SET status = 'suspended' WHERE property_id = $1 AND status = 'verified' RETURNING id`,
             [propertyId],
-          )).rows.map((row) => row.id)
-        : [];
+          )).rows.map((row) => row.id);
+        }
+      }
       await client.query('UPDATE properties SET listing_intent = $2 WHERE id = $1', [propertyId, listingIntent]);
       return { from: current.listingIntent, suspendedListingIds: suspended };
     });

@@ -66,6 +66,9 @@ export const properties = pgTable('properties', {
   // LISTING_INTENTS (0076): a 'manage_only' property is never listed to
   // students and never enters the Ops verification queue.
   listingIntent: text('listing_intent').notNull().default('list'),
+  // Set by trigger on manage_only -> list: publishing then needs an
+  // inspection completed after it (0076).
+  listingRequestedAt: timestamp('listing_requested_at', { withTimezone: true }),
   amenities: jsonb('amenities').notNull().default({}),
   utilities: jsonb('utilities').notNull().default({}),
   houseRules: jsonb('house_rules').notNull().default([]),

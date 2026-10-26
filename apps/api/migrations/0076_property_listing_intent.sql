@@ -6,18 +6,41 @@ ALTER TABLE properties
   ADD COLUMN listing_intent text NOT NULL DEFAULT 'list'
   CONSTRAINT properties_listing_intent_chk CHECK (listing_intent IN ('manage_only', 'list'));
 --> statement-breakpoint
--- A manage-only property is never shown to students: no listing of it may
--- become verified, whichever path tries (publish, admin, direct SQL).
+-- When a manage-only property switched (back) to 'list'. Rooms may have been
+-- added without a visit while it was manage-only, so it needs an inspection
+-- completed after this moment before it can be published. Owned by the
+-- trigger below: landlords can UPDATE their own row under RLS.
+ALTER TABLE properties ADD COLUMN listing_requested_at timestamp with time zone;
+--> statement-breakpoint
+-- A listing may become verified only on a 'list' property, and only after an
+-- inspection newer than its last switch to 'list'. FOR SHARE on the property
+-- row serializes this with a concurrent intent change: whichever commits
+-- second sees the first. SECURITY DEFINER so the checks see every row
+-- regardless of the caller's RLS.
 CREATE FUNCTION enforce_listing_intent_on_publish() RETURNS trigger
   LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = public
   AS $$
+DECLARE
+  v_intent text;
+  v_requested timestamp with time zone;
 BEGIN
-  IF NEW.status = 'verified' AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'verified')
-     AND EXISTS (SELECT 1 FROM properties p WHERE p.id = NEW.property_id AND p.listing_intent = 'manage_only') THEN
-    RAISE EXCEPTION 'listing % cannot be verified: its property is manage-only', NEW.id
-      USING ERRCODE = 'check_violation';
+  IF NEW.status = 'verified' AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'verified') THEN
+    SELECT p.listing_intent, p.listing_requested_at INTO v_intent, v_requested
+      FROM properties p WHERE p.id = NEW.property_id FOR SHARE;
+    IF v_intent = 'manage_only' THEN
+      RAISE EXCEPTION 'listing % cannot be verified: its property is manage-only', NEW.id
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF v_requested IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM verification_visits vv
+      WHERE vv.property_id = NEW.property_id AND vv.result = 'passed'
+        AND vv.approved_at IS NOT NULL AND vv.completed_at >= v_requested
+    ) THEN
+      RAISE EXCEPTION 'listing % cannot be verified: no approved inspection since its property switched to listing', NEW.id
+        USING ERRCODE = 'check_violation';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -28,10 +51,10 @@ CREATE TRIGGER listings_intent_guard
   FOR EACH ROW EXECUTE FUNCTION enforce_listing_intent_on_publish();
 --> statement-breakpoint
 -- The reverse: a property with a live listing can't quietly become
--- manage-only (landlords may UPDATE their own row under RLS). Only Ops takes
--- a live listing down first, which AdminPropertiesService.setListingIntent
--- does in the same transaction. SECURITY DEFINER so the check sees every
--- listing of the property regardless of the caller's RLS.
+-- manage-only. Only Ops takes a live listing down first, which
+-- AdminPropertiesService.setListingIntent does in the same transaction.
+-- Also stamps listing_requested_at on manage_only -> list and keeps every
+-- other write from changing it.
 CREATE FUNCTION enforce_listing_intent_change() RETURNS trigger
   LANGUAGE plpgsql
   SECURITY DEFINER
@@ -43,10 +66,15 @@ BEGIN
     RAISE EXCEPTION 'property % has a live listing and cannot become manage-only', NEW.id
       USING ERRCODE = 'check_violation';
   END IF;
+  IF NEW.listing_intent = 'list' AND OLD.listing_intent = 'manage_only' THEN
+    NEW.listing_requested_at := now();
+  ELSE
+    NEW.listing_requested_at := OLD.listing_requested_at;
+  END IF;
   RETURN NEW;
 END;
 $$;
 --> statement-breakpoint
 CREATE TRIGGER properties_listing_intent_guard
-  BEFORE UPDATE OF listing_intent ON properties
+  BEFORE UPDATE ON properties
   FOR EACH ROW EXECUTE FUNCTION enforce_listing_intent_change();

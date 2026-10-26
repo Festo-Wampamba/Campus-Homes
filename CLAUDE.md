@@ -1492,12 +1492,18 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     `verified` on a manage-only property; `properties_listing_intent_guard`
     refuses switching a property with a verified listing to manage-only
     (landlords can UPDATE their own property row under RLS, so the API check
-    alone isn't enough).
+    alone isn't enough). The publish trigger takes `FOR SHARE` on the
+    property row, so a publish and a switch serialize (Codex review, #271).
+  - `properties.listing_requested_at` is stamped by the trigger on
+    manage_only -> list (and kept from any other write). The Ops queue
+    re-lists the property and publish (service + trigger) needs an approved
+    visit completed after it: rooms may have changed unvisited meanwhile.
   - Switching: landlord `PATCH /listings/properties/:id/listing-intent`
     (manage-only → list joins the Ops queue; list → manage-only only while
     nothing is live). Staff `PATCH /admin/properties/:id/listing-intent`
     (`properties.update`) suspends live listings in the same transaction:
-    taking a listing down is Ops-only (Festo). Both audited
+    taking a listing down is Ops-only (Festo). Doing so also needs
+    `listings.suspend` + a fresh sign-in (`assertFreshSignIn`). Both audited
     `properties.listing_intent`. Admin Properties shows a Purpose badge +
     filter; landlord property dialog has the switch panel.
   - Gotcha: `db:migrate` uses `DATABASE_MIGRATIONS_URL` first, and the

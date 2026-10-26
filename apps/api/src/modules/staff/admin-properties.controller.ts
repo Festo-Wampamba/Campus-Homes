@@ -54,7 +54,9 @@ export class AdminPropertiesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: SetListingIntentDto,
   ) {
-    return this.properties.setListingIntent(rlsCtx(req), id, body.listingIntent);
+    return this.properties.setListingIntent(
+      rlsCtx(req), req.permissions, req.session.access.assurance.authenticatedAt, id, body.listingIntent,
+    );
   }
 
   @Post(':id/units')
