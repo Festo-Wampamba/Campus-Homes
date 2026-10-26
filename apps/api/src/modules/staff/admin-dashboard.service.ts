@@ -259,7 +259,7 @@ export class AdminDashboardService {
       const result = await client.query(`
         SELECT p.id, p.name, p.street_address AS "streetAddress", p.catchment::text,
                p.type::text, p.status::text, p.operational_status AS "operationalStatus",
-               p.amenities, p.utilities, p.cover_photo_key AS "coverPhotoKey",
+               p.listing_intent AS "listingIntent", p.amenities, p.utilities, p.cover_photo_key AS "coverPhotoKey",
                p.created_at AS "createdAt",
                coalesce(nullif(u.name, ''), l.legal_name) AS "landlordName",
                l.kyc_status::text AS "landlordKycStatus",

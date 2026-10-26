@@ -2,6 +2,7 @@ import { Logger, Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { OpsModule } from '../ops/ops.module';
 import { EventsController } from './events.controller';
 import { ListingsController } from './listings.controller';
 import { ListingsService } from './listings.service';
@@ -13,7 +14,7 @@ import { sendRoutesDailyCapEmail } from './routes-cap-email';
 const logger = new Logger('ListingsModule');
 
 @Module({
-  imports: [AuthModule, NotificationsModule],
+  imports: [AuthModule, NotificationsModule, OpsModule],
   controllers: [ListingsController, EventsController],
   providers: [
     ListingsService,

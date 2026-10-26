@@ -10,6 +10,7 @@ import {
   ListingSearchDto,
   ListingReviewsQueryDto,
   ListingSearchPageDto,
+  SetListingIntentDto,
   SubmitPropertyDto,
   UpdatePropertyDto,
   UpdateUnitOperationalStatusDto,
@@ -98,6 +99,17 @@ export class ListingsController {
   @Roles('landlord')
   myProperties(@Req() req: AuthenticatedRequest) {
     return this.listings.myProperties(rlsCtx(req));
+  }
+
+  @Patch('properties/:id/listing-intent')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  setListingIntent(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SetListingIntentDto,
+  ) {
+    return this.listings.setListingIntent(rlsCtx(req), id, body.listingIntent);
   }
 
   @Patch('properties/:id')

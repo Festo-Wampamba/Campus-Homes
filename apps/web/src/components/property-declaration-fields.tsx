@@ -1,5 +1,7 @@
 "use client";
 
+import type { ListingIntent } from "@campushomes/shared";
+
 /** The landlord's own 5-item consent (Google Form "Consent & Declaration"
  * section, 0025) — mirrors TENANT_AGREEMENT_DECLARATION_TEXT's pattern as 5
  * discrete checkboxes instead of one block, matching the source form.
@@ -34,21 +36,31 @@ const DECLARATIONS: { key: keyof PropertyDeclarationFieldsValue; label: string }
   { key: "declaredConsentToProcessing", label: "I consent to CampusHomes processing my data." },
 ];
 
-export function propertyDeclarationsAllAccepted(v: PropertyDeclarationFieldsValue): boolean {
-  return DECLARATIONS.every((d) => v[d.key]);
+// Nothing is published for a manage-only property, so it isn't asked.
+function declarationsFor(listingIntent: ListingIntent) {
+  return listingIntent === "list" ? DECLARATIONS : DECLARATIONS.filter((d) => d.key !== "declaredAuthorizesPublish");
+}
+
+export function propertyDeclarationsAllAccepted(
+  v: PropertyDeclarationFieldsValue,
+  listingIntent: ListingIntent = "list",
+): boolean {
+  return declarationsFor(listingIntent).every((d) => v[d.key]);
 }
 
 export function PropertyDeclarationFields({
   value,
   onChange,
+  listingIntent = "list",
 }: {
   value: PropertyDeclarationFieldsValue;
   onChange: (patch: Partial<PropertyDeclarationFieldsValue>) => void;
+  listingIntent?: ListingIntent;
 }) {
   return (
     <div className="space-y-2 rounded-md border border-border p-3">
       <p className="text-sm font-semibold text-foreground">Consent &amp; declaration</p>
-      {DECLARATIONS.map((d) => (
+      {declarationsFor(listingIntent).map((d) => (
         <label key={d.key} className="flex items-start gap-2.5 text-sm text-foreground">
           <input
             type="checkbox"

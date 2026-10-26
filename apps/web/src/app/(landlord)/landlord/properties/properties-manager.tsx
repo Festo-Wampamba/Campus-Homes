@@ -36,12 +36,15 @@ function ManageRoomsLink({ property }: { property: Property }) {
 
 const PAGE_SIZE = 12;
 
-function PropertyStatusChip({ status }: { status: string }) {
-  const presentation = propertyStatusPresentation(status);
+function PropertyStatusChip({ property }: { property: Property }) {
+  const presentation = propertyStatusPresentation(property.status);
   return (
-    <StatusChip tone={presentation.tone}>
-      {presentation.label}
-    </StatusChip>
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <StatusChip tone={presentation.tone}>
+        {presentation.label}
+      </StatusChip>
+      {property.listingIntent === "manage_only" && <StatusChip tone="neutral">Manage only</StatusChip>}
+    </span>
   );
 }
 
@@ -185,7 +188,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       <td className="px-4 py-3 text-muted-foreground">{property.streetAddress}</td>
                       <td className="px-4 py-3 text-muted-foreground">{property.catchment}</td>
                       <td className="px-4 py-3">
-                        <PropertyStatusChip status={property.status} />
+                        <PropertyStatusChip property={property} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end">
@@ -221,7 +224,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       {property.streetAddress} · {property.catchment}
                     </p>
                   </div>
-                  <PropertyStatusChip status={property.status} />
+                  <PropertyStatusChip property={property} />
                   <ManageRoomsLink property={property} />
                   <Button
                     type="button"
@@ -251,7 +254,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       </h2>
                       <p className="text-sm text-muted-foreground">{property.streetAddress}</p>
                       <div className="mt-2">
-                        <PropertyStatusChip status={property.status} />
+                        <PropertyStatusChip property={property} />
                       </div>
                     </div>
                     <ManageRoomsLink property={property} />

@@ -56,6 +56,7 @@ const submitInput = (name: string) => ({
   declaredWillKeepUpdated: true as const,
   declaredAuthorizesPublish: true as const,
   declaredConsentToProcessing: true as const,
+  listingIntent: 'list' as const,
 });
 
 let opsLead: string;

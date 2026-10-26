@@ -384,9 +384,13 @@ export class RoomManagementService {
       if (counts.physicalRoomChangesCount + counts.roomTypeChangesCount === 0) {
         throw new BadRequestException('There are no changes to submit');
       }
+      // New rooms or capacity changes on a listed property need a site visit
+      // before approval. A manage-only property (0076) is never shown to
+      // students, so Ops still reviews it but never visits (Festo, 2026-10-26).
       const requiresVisit = await client.query(
-        `SELECT 1 FROM room_unit_changes WHERE change_set_id=$1 AND action IN ('create','capacity_change') LIMIT 1`,
-        [changeSetId],
+        `SELECT 1 FROM room_unit_changes c JOIN properties p ON p.id = $2
+         WHERE c.change_set_id=$1 AND c.action IN ('create','capacity_change') AND p.listing_intent = 'list' LIMIT 1`,
+        [changeSetId, row.property_id],
       );
       const status = requiresVisit.rows.length ? 'visit_required' : 'pending_review';
       const updated = await client.query<ChangeSetRow>(

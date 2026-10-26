@@ -7,6 +7,7 @@ import {
   PROPERTY_TYPES,
   UNIVERSITIES,
   type LandlordProfile,
+  type ListingIntent,
   type Property,
   type PropertyType,
   type University,
@@ -17,6 +18,7 @@ import {
   LandlordIdentityFields,
   type LandlordIdentityFieldsValue,
 } from "@/components/landlord-identity-fields";
+import { ListingIntentChoice } from "@/components/listing-intent-choice";
 import {
   emptyPropertyDeclarationFields,
   PropertyDeclarationFields,
@@ -55,6 +57,8 @@ interface PropertyDraft {
   amenities: Record<string, boolean>;
   extended: PropertyExtendedFieldsValue;
   declaration: PropertyDeclarationFieldsValue;
+  // Optional: drafts saved before 0076 don't have it.
+  listingIntent?: ListingIntent;
 }
 
 const UNIVERSITY_LABELS: Record<University, string> = {
@@ -128,13 +132,14 @@ export function OnboardingWizard({
   const [declaration, setDeclaration] = useState<PropertyDeclarationFieldsValue>(
     emptyPropertyDeclarationFields(),
   );
+  const [listingIntent, setListingIntent] = useState<ListingIntent>("list");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const propertyDraft = useMemo<PropertyDraft | null>(
     () => (step === "property"
-      ? { propertyName, streetAddress, type, catchment, roomCategoryRows, amenities, extended, declaration }
+      ? { propertyName, streetAddress, type, catchment, roomCategoryRows, amenities, extended, declaration, listingIntent }
       : null),
-    [step, propertyName, streetAddress, type, catchment, roomCategoryRows, amenities, extended, declaration],
+    [step, propertyName, streetAddress, type, catchment, roomCategoryRows, amenities, extended, declaration, listingIntent],
   );
   const { draft, settle: settleDraft } = useIdleDraft(draftKey, propertyDraft);
 
@@ -148,6 +153,7 @@ export function OnboardingWizard({
     setAmenities(draft.amenities);
     setExtended(draft.extended);
     setDeclaration(draft.declaration);
+    setListingIntent(draft.listingIntent ?? "list");
     settleDraft();
   }
 
@@ -210,7 +216,7 @@ export function OnboardingWizard({
   async function submitProperty(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!propertyDeclarationsAllAccepted(declaration)) {
+    if (!propertyDeclarationsAllAccepted(declaration, listingIntent)) {
       setError("Please accept every item in the consent & declaration section.");
       return;
     }
@@ -255,6 +261,7 @@ export function OnboardingWizard({
           selfContainedRoomCount,
           nonSelfContainedRoomCount,
           ...declaration,
+          listingIntent,
           ...(coverPhotoKey ? { coverPhotoKey } : {}),
         }),
       });
@@ -313,7 +320,9 @@ export function OnboardingWizard({
             <StepHeader
               step="property"
               title="Submit your property"
-              description="Our Ops team schedules a physical verification visit once this is submitted."
+              description={listingIntent === "list"
+                ? "Our Ops team schedules a physical verification visit once this is submitted."
+                : "Our team reviews your details before your dashboard opens. No inspection visit is needed."}
             />
             {draft && (
               <div role="status" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
@@ -325,6 +334,7 @@ export function OnboardingWizard({
               </div>
             )}
             <form onSubmit={submitProperty} className="space-y-7">
+              <ListingIntentChoice value={listingIntent} onChange={setListingIntent} />
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="propertyName" required>Property name</Label>
@@ -478,6 +488,7 @@ export function OnboardingWizard({
               <PropertyDeclarationFields
                 value={declaration}
                 onChange={(patch) => setDeclaration((prev) => ({ ...prev, ...patch }))}
+                listingIntent={listingIntent}
               />
 
               <Button type="submit" disabled={pending} className="w-full">

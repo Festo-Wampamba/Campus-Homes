@@ -1,15 +1,17 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import type {
   AddAdminPropertyMediaInput,
   AddAdminPropertyUnitsInput,
   AdminUnitInput,
   CreateAdminPropertyInput,
+  ListingIntent,
   UpdateAdminPropertyInput,
 } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
+import { assertFreshSignIn } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 
@@ -146,6 +148,7 @@ export class AdminPropertiesService {
       const property = (await client.query(`
         SELECT p.*, p.street_address AS "streetAddress", p.landlord_id AS "landlordId",
                p.operational_status AS "operationalStatus", p.house_rules AS "houseRules",
+               p.listing_intent AS "listingIntent",
                p.contact_phone AS "contactPhone", p.contact_email AS "contactEmail",
                p.cover_photo_key AS "coverPhotoKey",
                p.alternative_name AS "alternativeName", p.location_details AS "locationDetails",
@@ -310,6 +313,55 @@ export class AdminPropertiesService {
     });
     await this.audit.record(actor, 'properties.update', 'property', propertyId, { fields: Object.keys(input) });
     return result;
+  }
+
+  /** Staff switch between "manage only" and "manage and list" (0076). Taking a
+   * live listing down is Ops-only (Festo, 2026-10-26): switching a listed
+   * property to manage-only suspends its verified listings in the same
+   * transaction, so properties_listing_intent_guard lets the change through.
+   * That suspension needs listings.suspend and its fresh sign-in, the same
+   * as suspending a listing any other way. */
+  async setListingIntent(
+    actor: RlsContext,
+    actorPermissions: Set<string>,
+    authenticatedAt: string | null | undefined,
+    propertyId: string,
+    listingIntent: ListingIntent,
+  ) {
+    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const current = (await client.query<{ listingIntent: ListingIntent }>(
+        'SELECT listing_intent AS "listingIntent" FROM properties WHERE id = $1 FOR UPDATE',
+        [propertyId],
+      )).rows[0];
+      if (!current) throw new NotFoundException('Property not found');
+      let suspended: string[] = [];
+      if (listingIntent === 'manage_only') {
+        const live = (await client.query<{ id: string }>(
+          `SELECT id FROM listings WHERE property_id = $1 AND status = 'verified' FOR UPDATE`,
+          [propertyId],
+        )).rows;
+        if (live.length) {
+          if (!actorPermissions.has('listings.suspend')) {
+            throw new ForbiddenException('Taking a live listing down needs the listings.suspend permission');
+          }
+          assertFreshSignIn(authenticatedAt, 'listings.suspend');
+          suspended = (await client.query<{ id: string }>(
+            `UPDATE listings SET status = 'suspended' WHERE property_id = $1 AND status = 'verified' RETURNING id`,
+            [propertyId],
+          )).rows.map((row) => row.id);
+        }
+      }
+      await client.query('UPDATE properties SET listing_intent = $2 WHERE id = $1', [propertyId, listingIntent]);
+      return { from: current.listingIntent, suspendedListingIds: suspended };
+    });
+    if (result.from !== listingIntent) {
+      await this.audit.record(actor, 'properties.listing_intent', 'property', propertyId, {
+        from: result.from,
+        to: listingIntent,
+        suspendedListingIds: result.suspendedListingIds,
+      });
+    }
+    return { listingIntent, suspendedListings: result.suspendedListingIds.length };
   }
 
   async addUnits(actor: RlsContext, propertyId: string, input: AddAdminPropertyUnitsInput) {

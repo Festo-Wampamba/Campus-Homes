@@ -5,6 +5,7 @@ import {
   listingReviewsQuerySchema,
   listingSearchPageSchema,
   listingSearchSchema,
+  setListingIntentSchema,
   submitPropertySchema,
   updatePropertySchema,
   updateUnitOperationalStatusSchema,
@@ -15,6 +16,8 @@ import { DOC_TYPES } from '@campushomes/shared';
 export class SubmitPropertyDto extends createZodDto(submitPropertySchema) {}
 
 export class UpdatePropertyDto extends createZodDto(updatePropertySchema) {}
+
+export class SetListingIntentDto extends createZodDto(setListingIntentSchema) {}
 
 export class ListingSearchDto extends createZodDto(listingSearchSchema) {}
 

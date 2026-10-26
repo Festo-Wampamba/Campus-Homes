@@ -17,7 +17,11 @@ type SignupStep = {
   title: string;
   body: string;
   needs: string[];
+  /** What the step looks like for a landlord who only manages (0076). */
+  manageOnly?: "skipped" | { title: string; body: string; needs: string[] };
 };
+
+type SignupPath = "manage_only" | "list";
 
 // Mirrors the real flow: Logto sign-in → /landlords/enroll → onboarding wizard
 // (legal step, property step) → Ops verification → dashboard. Keep in step
@@ -41,7 +45,7 @@ const SIGNUP_STEPS: SignupStep[] = [
     icon: Building2,
     who: "You",
     title: "Submit your property",
-    body: "Add the hostel's name and street address. Photos and room prices can be added now or later.",
+    body: "Add the hostel's name and street address, and choose to manage it only or also list it to students. Photos and room prices can be added now or later.",
     needs: ["Property name", "Street address", "Cover photo and room prices (optional)"],
   },
   {
@@ -50,6 +54,12 @@ const SIGNUP_STEPS: SignupStep[] = [
     title: "Confirm five short declarations",
     body: "Confirm the details are accurate, that you own or manage the property, and agree to keep prices and availability current.",
     needs: ["Five tick boxes, read before you confirm"],
+    // The consent to publish isn't asked when nothing is published.
+    manageOnly: {
+      title: "Confirm four short declarations",
+      body: "Confirm the details are accurate, that you own or manage the property, and agree to keep prices and availability current.",
+      needs: ["Four tick boxes, read before you confirm"],
+    },
   },
   {
     icon: BadgeCheck,
@@ -57,6 +67,7 @@ const SIGNUP_STEPS: SignupStep[] = [
     title: "We verify your property",
     body: "Our operations team reviews your details and arranges a visit. Your dashboard shows the approval status and updates by itself.",
     needs: ["Someone available for the visit"],
+    manageOnly: "skipped",
   },
   {
     icon: LayoutDashboard,
@@ -64,7 +75,17 @@ const SIGNUP_STEPS: SignupStep[] = [
     title: "Start managing, publish when ready",
     body: "Add rooms and tenants, record payments with receipts, and publish rooms to students whenever you choose.",
     needs: ["Nothing more. You're set up"],
+    manageOnly: {
+      title: "Start managing",
+      body: "Add rooms and tenants and record payments with receipts. Your property stays private; list it to students later if you choose.",
+      needs: ["Nothing more. You're set up"],
+    },
   },
+];
+
+const PATHS: { value: SignupPath; label: string }[] = [
+  { value: "list", label: "Manage and list" },
+  { value: "manage_only", label: "Manage only" },
 ];
 
 /**
@@ -75,6 +96,7 @@ const SIGNUP_STEPS: SignupStep[] = [
 export function LandlordSignupSteps() {
   const listRef = useRef<HTMLOListElement>(null);
   const [visible, setVisible] = useState(0);
+  const [path, setPath] = useState<SignupPath>("list");
 
   useEffect(() => {
     const list = listRef.current;
@@ -115,33 +137,56 @@ export function LandlordSignupSteps() {
   }, []);
 
   return (
-    <ol ref={listRef} className="ch-signup-steps">
-      <span className="ch-signup-steps__rail" aria-hidden="true">
-        <span className="ch-signup-steps__fill" />
-      </span>
-      {SIGNUP_STEPS.map(({ icon: Icon, who, title, body, needs }, index) => (
-        <li
-          key={title}
-          data-step={index}
-          data-visible={index < visible ? "true" : undefined}
-          className="ch-signup-step"
-        >
-          <span className="ch-signup-step__marker" aria-hidden="true">
-            <Icon />
-          </span>
-          <div className="ch-signup-step__card">
-            <p className="ch-signup-step__meta">
-              <span>Step {index + 1}</span>
-              <span className={who === "You" ? "ch-signup-step__who" : "ch-signup-step__who ch-signup-step__who--team"}>{who}</span>
-            </p>
-            <h3>{title}</h3>
-            <p>{body}</p>
-            <ul className="ch-signup-step__needs" aria-label={`What you need for step ${index + 1}`}>
-              {needs.map((need) => <li key={need}>{need}</li>)}
-            </ul>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className="ch-signup-flow">
+      <div className="ch-signup-paths" role="group" aria-label="Show the steps for">
+        {PATHS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={path === option.value}
+            className="ch-signup-paths__option"
+            onClick={() => setPath(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <ol ref={listRef} className="ch-signup-steps">
+        <span className="ch-signup-steps__rail" aria-hidden="true">
+          <span className="ch-signup-steps__fill" />
+        </span>
+        {SIGNUP_STEPS.map((step, index) => {
+          const { icon: Icon, who, manageOnly } = step;
+          const skipped = path === "manage_only" && manageOnly === "skipped";
+          const { title, body, needs } =
+            path === "manage_only" && manageOnly && manageOnly !== "skipped" ? manageOnly : step;
+          return (
+            <li
+              key={step.title}
+              data-step={index}
+              data-visible={index < visible ? "true" : undefined}
+              data-skipped={skipped ? "true" : undefined}
+              className="ch-signup-step"
+            >
+              <span className="ch-signup-step__marker" aria-hidden="true">
+                <Icon />
+              </span>
+              <div className="ch-signup-step__card">
+                <p className="ch-signup-step__meta">
+                  <span>Step {index + 1}</span>
+                  <span className={who === "You" ? "ch-signup-step__who" : "ch-signup-step__who ch-signup-step__who--team"}>{who}</span>
+                  {skipped && <span className="ch-signup-step__who ch-signup-step__who--skipped">Not needed for manage only</span>}
+                </p>
+                <h3>{title}</h3>
+                <p>{body}</p>
+                <ul className="ch-signup-step__needs" aria-label={`What you need for step ${index + 1}`}>
+                  {needs.map((need) => <li key={need}>{need}</li>)}
+                </ul>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
