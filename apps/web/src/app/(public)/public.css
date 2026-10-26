@@ -3,7 +3,19 @@
  * The product tokens remain in globals.css; these rules only give the public
  * journey its editorial rhythm and do not alter portal primitives.
  */
+
+/* Fluid reading size for the public site: 17px on phones and tablets,
+   about 18-19px on laptops and monitors up to 24 inches (1920px), capped at
+   21px on 27-inch and wider screens. rem-based so a reader's own browser
+   text size still applies. :has() keeps it to pages that render the public
+   shell. */
+html:has(.ch-public-shell) {
+  font-size: clamp(1.0625rem, 0.875rem + 0.28vw, 1.3125rem);
+}
+
 .ch-public-shell {
+  /* Side gutter around every page container: 16px on phones, 56px on wide screens. */
+  --ch-gutter: clamp(16px, 3.2vw, 56px);
   --ch-card: #fff;
   --ch-accent: #0f6667;
   --ch-ink: #173f43;
@@ -54,7 +66,7 @@
 
 .ch-public-header__inner {
   display: flex;
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   min-height: 72px;
   margin: 0 auto;
   align-items: center;
@@ -200,7 +212,7 @@
   position: relative;
   z-index: 1;
   display: flex;
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   justify-content: center;
   padding: 144px 0 92px;
@@ -245,7 +257,7 @@
 
 .ch-trust-strip__inner {
   display: grid;
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
@@ -273,7 +285,7 @@
 }
 
 .ch-section {
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   padding: 96px 0;
 }
@@ -285,7 +297,7 @@
 .ch-section--soft {
   width: 100%;
   max-width: none;
-  padding-inline: max(16px, calc((100vw - var(--ch-page-max)) / 2));
+  padding-inline: max(var(--ch-gutter), calc((100vw - var(--ch-page-max)) / 2));
   background: var(--ch-surface);
 }
 
@@ -485,7 +497,7 @@
 
 .ch-final-cta__inner {
   display: flex;
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   min-height: 208px;
   margin: 0 auto;
   align-items: center;
@@ -507,7 +519,7 @@
 }
 
 .ch-public-page__hero {
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   padding: 126px 0 64px;
 }
@@ -515,7 +527,7 @@
 .ch-public-page__hero--dark {
   width: 100%;
   max-width: none;
-  padding-inline: max(16px, calc((100vw - var(--ch-page-max)) / 2));
+  padding-inline: max(var(--ch-gutter), calc((100vw - var(--ch-page-max)) / 2));
   background: #173f43;
   color: #fff;
 }
@@ -546,7 +558,7 @@
 }
 
 .ch-public-content {
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   padding: 74px 0 104px;
 }

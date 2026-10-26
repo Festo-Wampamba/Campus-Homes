@@ -62,7 +62,7 @@
 }
 
 .ch-landlords-container {
-  width: min(calc(100% - 32px), var(--landlords-container));
+  width: min(100% - 2 * var(--ch-gutter), var(--landlords-container));
   margin-inline: auto;
 }
 
@@ -110,7 +110,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  width: min(calc(100% - 32px), var(--landlords-container));
+  width: min(100% - 2 * var(--ch-gutter), var(--landlords-container));
   margin-inline: auto;
   padding: 144px 0 92px;
   place-items: center;
@@ -657,8 +657,9 @@
   margin-top: 24px;
 }
 
-/* Timeline. --ch-signup-progress (0..1) is set by the component as steps
-   scroll into view; the fill grows along the rail and each marker lights up. */
+/* Timeline. --ch-signup-progress (0..1) is set by the component from scroll
+   position; the fill tracks it in both directions and each marker lights up
+   as the fill reaches it. */
 .ch-signup-steps {
   --rail-x: 27px;
   position: relative;
@@ -687,7 +688,8 @@
   transform-origin: top;
   background: linear-gradient(180deg, var(--landlords-teal), var(--landlords-peach), var(--landlords-teal));
   background-size: 100% 200%;
-  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* Short, so the fill follows the scroll instead of trailing behind it. */
+  transition: transform 120ms linear;
   animation: ch-signup-flow 3.2s linear infinite;
 }
 
