@@ -93,14 +93,18 @@ export class OpsService {
    * whose inspection failed drops out of every ops screen with no path back
    * to scheduling a re-visit — the property is neither pending (there's a
    * completed visit) nor does it ever get approved (a failed visit can't
-   * be), so it would otherwise be silently orphaned forever. */
+   * be), so it would otherwise be silently orphaned forever. Manage-only
+   * properties (0076) are never listed, so they never need a visit; one that
+   * switched back to listing needs a visit newer than that switch. */
   queue(ctx: RlsContext) {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
         `SELECT p.id, p.name, p.street_address, p.status, p.created_at,
                 v.id AS visit_id, v.result, v.scheduled_at, v.inspector_id,
                 l.kyc_status AS landlord_kyc_status,
-                EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600 AS age_hours
+                EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600 AS age_hours,
+                (p.listing_requested_at IS NOT NULL AND v.result = 'passed' AND v.approved_at IS NOT NULL
+                  AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)) AS needs_reinspection
          FROM properties p
          JOIN landlords l ON l.user_id = p.landlord_id
          LEFT JOIN LATERAL (
@@ -108,10 +112,12 @@ export class OpsService {
            WHERE vv.property_id = p.id
            ORDER BY vv.created_at DESC LIMIT 1
          ) v ON true
-         WHERE v.id IS NULL
+         WHERE p.listing_intent = 'list'
+           AND (v.id IS NULL
             OR v.result = 'pending'
             OR v.result = 'failed'
             OR (v.result = 'passed' AND v.approved_at IS NULL)
+            OR (p.listing_requested_at IS NOT NULL AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)))
          ORDER BY p.created_at ASC`,
       );
       return res.rows as unknown[];
@@ -392,6 +398,9 @@ export class OpsService {
       });
       if (!property) {
         throw new NotFoundException('Property not found');
+      }
+      if (property.listingIntent === 'manage_only') {
+        throw new ConflictException('This property is manage-only. Switch it to "Manage and list" before creating a listing');
       }
       // Re-validate the semester server-side: the picker only checks these
       // conditions at page-load, so a stale page (after a catchment change or
@@ -735,11 +744,20 @@ export class OpsService {
       // and account-status check is re-run here, not just trusted from
       // whenever the property was first created.
       const [property] = await db
-        .select({ landlordId: properties.landlordId, name: properties.name })
+        .select({
+          landlordId: properties.landlordId,
+          name: properties.name,
+          listingIntent: properties.listingIntent,
+          listingRequestedAt: properties.listingRequestedAt,
+        })
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
       if (!property) {
         throw new NotFoundException('Property not found');
+      }
+      // listings_intent_guard (0076) refuses this too; this gives the clear message.
+      if (property.listingIntent === 'manage_only') {
+        throw new ConflictException('This property is manage-only and cannot be listed to students');
       }
       const [landlordAccount] = await db
         .select({ kycStatus: landlords.kycStatus, userStatus: users.status })
@@ -772,6 +790,13 @@ export class OpsService {
       if (!approvedVisit) {
         throw new ConflictException(
           'This property has no ops-lead-approved inspection. Approve the passed visit before publishing',
+        );
+      }
+      // Rooms may have changed without a visit while it was manage-only
+      // (listings_intent_guard enforces this too).
+      if (property.listingRequestedAt && (!approvedVisit.completedAt || approvedVisit.completedAt < property.listingRequestedAt)) {
+        throw new ConflictException(
+          'This property switched back to listing after its last inspection. Complete and approve a new verification visit before publishing',
         );
       }
 

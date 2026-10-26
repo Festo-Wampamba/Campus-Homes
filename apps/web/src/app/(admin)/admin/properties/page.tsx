@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ListingIntent } from "@campushomes/shared";
 
 import { Freshness, PageHeader, SectionCard } from "@/components/admin/admin-ui";
 import { apiServer } from "@/lib/server-api";
@@ -8,7 +9,7 @@ export const metadata: Metadata = { title: "Properties" };
 
 export default async function PropertiesPage() {
   const [data, users, settings, access] = await Promise.all([
-    apiServer<{ rows: (Record<string, unknown> & { id: string; name: string; landlordName: string; catchment: string; type: string; status: string; operationalStatus: string; unitCount: number; availableUnits: number; imageCount: number })[]; asOf: string; limit: number }>("/admin/properties"),
+    apiServer<{ rows: (Record<string, unknown> & { id: string; name: string; landlordName: string; catchment: string; type: string; status: string; operationalStatus: string; listingIntent: ListingIntent; listingStatus: string | null; unitCount: number; availableUnits: number; imageCount: number })[]; asOf: string; limit: number }>("/admin/properties"),
     apiServer<{ rows: { id: string; name: string; email?: string | null; role: string }[] }>("/admin/users"),
     apiServer<{ semesters: { id: string; name: string; university?: string | null; semesterType?: string | null; academicYear?: string | null; startsOn: string; endsOn: string }[] }>("/admin/settings"),
     apiServer<{ permissions: string[] }>("/admin/access/me"),

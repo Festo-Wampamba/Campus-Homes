@@ -4,7 +4,7 @@
 import { Building2, ImagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { withAmenity } from "@campushomes/shared";
+import { withAmenity, type ListingIntent } from "@campushomes/shared";
 
 import { roomCategoryLabel } from "@/lib/format";
 import { AdminField, AdminModal, adminFieldClass, adminTextareaClass } from "@/components/admin/admin-modal";
@@ -16,7 +16,14 @@ import { api, apiErrorMessage } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { usePagination } from "@/lib/use-pagination";
 
-type PropertyRow = Record<string, unknown> & { id: string; name: string; landlordName: string; catchment: string; type: string; status: string; operationalStatus: string; unitCount: number; availableUnits: number; imageCount: number };
+type PropertyRow = Record<string, unknown> & { id: string; name: string; landlordName: string; catchment: string; type: string; status: string; operationalStatus: string; listingIntent: ListingIntent; listingStatus: string | null; unitCount: number; availableUnits: number; imageCount: number };
+type IntentFilter = "all" | ListingIntent;
+
+const INTENT_LABEL: Record<ListingIntent, string> = { manage_only: "Manage only", list: "Manage and list" };
+
+function IntentBadge({ value }: { value: ListingIntent }) {
+  return <span className={value === "manage_only" ? "inline-flex whitespace-nowrap rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700 dark:bg-muted dark:text-slate-300" : "inline-flex whitespace-nowrap rounded-full bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-800 dark:bg-teal-950 dark:text-teal-200"}>{INTENT_LABEL[value]}</span>;
+}
 type Landlord = { id: string; name: string; email?: string | null; role: string };
 type Semester = { id: string; name: string; university?: string | null; semesterType?: string | null; academicYear?: string | null; startsOn: string; endsOn: string };
 type UnitDraft = { label: string; capacity: string; roomCategory: string; pricePerTermUgx: string; depositUgx: string; operationalStatus: string; buildingName: string; floorLabel: string; electricityMeterType: string; notes: string };
@@ -49,6 +56,7 @@ const fieldButton = "inline-flex h-9 items-center justify-center gap-2 rounded-l
 export function PropertiesManager({ rows, landlords, semesters, permissions }: { rows: PropertyRow[]; landlords: Landlord[]; semesters: Semester[]; permissions: string[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [intentFilter, setIntentFilter] = useState<IntentFilter>("all");
   const [view, setView] = useState<ViewMode>("grid");
   const [mode, setMode] = useState<"create" | "edit" | "detail" | null>(null);
   const [selected, setSelected] = useState<PropertyRow | null>(null);
@@ -66,7 +74,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [agreementOpen, setAgreementOpen] = useState(false);
-  const filtered = useMemo(() => rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query.toLowerCase())), [rows, query]);
+  const filtered = useMemo(() => rows.filter((row) => (intentFilter === "all" || row.listingIntent === intentFilter) && JSON.stringify(row).toLowerCase().includes(query.toLowerCase())), [rows, query, intentFilter]);
   const { page, setPage, totalPages, pageItems, total, pageSize } = usePagination(filtered, 10);
   const applicableSemesters = useMemo(() => semesters.filter((semester) => !semester.university || semester.university === form.catchment), [semesters, form.catchment]);
   const canCreate = permissions.includes("properties.create");
@@ -186,6 +194,22 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     catch { setNotice("Media could not be removed."); } finally { setPending(false); }
   }
 
+  // Staff switch (0076). Making a listed property manage-only takes its live
+  // listing down in the same request (taking listings down is Ops-only).
+  async function switchIntent(next: ListingIntent) {
+    if (!selected) return;
+    if (next === "manage_only" && selected.listingStatus === "verified"
+      && !window.confirm(`${selected.name} is listed to students. Switching it to manage only takes the listing down. Continue?`)) return;
+    setPending(true); setNotice(null);
+    try {
+      const result = await api<{ suspendedListings: number }>(`/admin/properties/${selected.id}/listing-intent`, { method: "PATCH", body: JSON.stringify({ listingIntent: next }) });
+      setSelected({ ...selected, listingIntent: next, listingStatus: result.suspendedListings ? "suspended" : selected.listingStatus });
+      setNotice(result.suspendedListings ? "Switched to manage only. The live listing was taken down." : `Switched to ${INTENT_LABEL[next].toLowerCase()}.`);
+      router.refresh();
+    } catch (err) { setNotice(apiErrorMessage(err, "This property could not be switched.")); }
+    finally { setPending(false); }
+  }
+
   function rowActions(row: PropertyRow) {
     return <div className="flex gap-1">
       <button aria-label="View property inventory" title="View inventory" onClick={() => load(row, "detail")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><Building2 className="size-4" /></button>
@@ -197,13 +221,14 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-center dark:border-border">
       <label className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className={`${adminFieldClass} pl-9`} value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search property, landlord, catchment, type, status…" /></label>
       <div className="flex gap-2">
+        <select aria-label="Filter by purpose" className={`${adminFieldClass} sm:w-44`} value={intentFilter} onChange={(e) => { setIntentFilter(e.target.value as IntentFilter); setPage(1); }}><option value="all">All purposes</option><option value="manage_only">Manage only</option><option value="list">Manage and list</option></select>
         <ViewToggle view={view} onChange={setView} />
         {canCreate && <button type="button" onClick={startCreate} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700"><Plus className="size-4" />Add property</button>}
       </div>
     </div>
 
     {view === "list" && (
-      <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-xs"><thead className="bg-slate-50 text-slate-500 dark:bg-muted"><tr>{["Property", "Owner", "Type", "Catchment", "Verification", "Operations", "Units", "Available", "Media", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-bold uppercase tracking-[.06em]">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{pageItems.map((row) =><tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-muted/30"><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.name}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.landlordName}</td><td className="px-4 py-3.5 capitalize dark:text-muted-foreground">{row.type?.replaceAll("_", " ")}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.catchment}</td><td className="px-4 py-3.5"><StatusBadge value={row.status} /></td><td className="px-4 py-3.5"><StatusBadge value={row.operationalStatus} /></td><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.unitCount ?? 0}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.availableUnits ?? 0}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.imageCount ?? 0}</td><td className="px-4 py-3.5">{rowActions(row)}</td></tr>)}</tbody></table>{!filtered.length && <p className="py-14 text-center text-sm text-slate-500">No properties match this search.</p>}</div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-xs"><thead className="bg-slate-50 text-slate-500 dark:bg-muted"><tr>{["Property", "Owner", "Type", "Catchment", "Purpose", "Verification", "Operations", "Units", "Available", "Media", "Actions"].map((label) => <th key={label} className="px-4 py-3 font-bold uppercase tracking-[.06em]">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{pageItems.map((row) =><tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-muted/30"><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.name}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.landlordName}</td><td className="px-4 py-3.5 capitalize dark:text-muted-foreground">{row.type?.replaceAll("_", " ")}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.catchment}</td><td className="px-4 py-3.5"><IntentBadge value={row.listingIntent} /></td><td className="px-4 py-3.5"><StatusBadge value={row.status} /></td><td className="px-4 py-3.5"><StatusBadge value={row.operationalStatus} /></td><td className="px-4 py-3.5 font-bold dark:text-foreground">{row.unitCount ?? 0}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.availableUnits ?? 0}</td><td className="px-4 py-3.5 dark:text-muted-foreground">{row.imageCount ?? 0}</td><td className="px-4 py-3.5">{rowActions(row)}</td></tr>)}</tbody></table>{!filtered.length && <p className="py-14 text-center text-sm text-slate-500">No properties match this search.</p>}</div>
     )}
 
     {view === "rows" && (
@@ -213,6 +238,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
             <p className="font-bold dark:text-foreground">{row.name}</p>
             <p className="text-[11px] text-slate-500 dark:text-muted-foreground">{row.landlordName} · <span className="capitalize">{row.type?.replaceAll("_", " ")}</span> · {row.catchment} · {row.unitCount ?? 0} units ({row.availableUnits ?? 0} available)</p>
           </div>
+          <IntentBadge value={row.listingIntent} />
           <StatusBadge value={row.status} />
           <StatusBadge value={row.operationalStatus} />
           {rowActions(row)}
@@ -234,6 +260,7 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
           <dl className="mb-3 space-y-1 text-xs">
             <div className="flex justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Type</dt><dd className="capitalize text-slate-600 dark:text-muted-foreground">{row.type?.replaceAll("_", " ")}</dd></div>
             <div className="flex justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Catchment</dt><dd className="text-slate-600 dark:text-muted-foreground">{row.catchment}</dd></div>
+            <div className="flex items-center justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Purpose</dt><dd><IntentBadge value={row.listingIntent} /></dd></div>
             <div className="flex items-center justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Operations</dt><dd><StatusBadge value={row.operationalStatus} /></dd></div>
             <div className="flex justify-between gap-2"><dt className="font-semibold uppercase tracking-[.04em] text-slate-400">Units</dt><dd className="text-slate-600 dark:text-muted-foreground">{row.unitCount ?? 0} ({row.availableUnits ?? 0} available)</dd></div>
           </dl>
@@ -308,6 +335,13 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
         </div>
         <button type="button" onClick={() => setAgreementOpen(true)} className={fieldButton}>Edit form</button>
       </section>
+      {selected && <section className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-border">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-bold">Purpose <IntentBadge value={selected.listingIntent} /></h3>
+          <p className="mt-1 text-[11px] text-slate-500">{selected.listingIntent === "manage_only" ? "Run on CampusHomes only. Never shown to students and never in the verification queue." : "Inspected by Ops and listed to students once published."}</p>
+        </div>
+        {canUpdate && <button type="button" disabled={pending} onClick={() => switchIntent(selected.listingIntent === "manage_only" ? "list" : "manage_only")} className={fieldButton}>{selected.listingIntent === "manage_only" ? "Switch to manage and list" : "Switch to manage only"}</button>}
+      </section>}
       <section><h3 className="mb-3 text-sm font-bold">Property media</h3><div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">{detail?.media.map((item) => { const url = listingPhotoUrl(item.storageKey, 400); return <div key={item.id} className="overflow-hidden rounded-lg border border-slate-200 dark:border-border">{url ? <img src={url} alt={item.caption ?? "Property media"} className="h-28 w-full object-cover" /> : <div className="grid h-28 place-items-center bg-slate-100 text-xs text-slate-500 dark:bg-muted">{item.mediaType}</div>}<div className="flex items-center gap-2 p-2"><span className="min-w-0 flex-1 truncate text-[10px]">{item.caption || item.storageKey}</span>{canUpdate && <button title="Remove media" onClick={() => removeMedia(item.id)} className="text-red-700"><Trash2 className="size-3.5" /></button>}</div></div>; })}{!detail?.media.length && <p className="text-xs text-slate-500">No supplementary media.</p>}</div></section><section><h3 className="mb-3 text-sm font-bold">Units ({detail?.units.length ?? 0})</h3><div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-border"><table className="w-full min-w-[850px] text-left text-xs"><thead className="bg-slate-50 dark:bg-muted"><tr>{["Unit", "Building", "Floor", "Type", "Capacity", "Price / bed / term", "Deposit", "Electricity", "Status"].map((item) => <th key={item} className="px-3 py-2">{item}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{detail?.units.map((unit) => <tr key={unit.id}><td className="px-3 py-2 font-bold">{unit.label}</td><td className="px-3 py-2">{unit.buildingName || "N/A"}</td><td className="px-3 py-2">{unit.floorLabel || "N/A"}</td><td className="px-3 py-2 capitalize">{unit.roomCategory.replaceAll("_", " ")}</td><td className="px-3 py-2">{unit.capacity}</td><td className="px-3 py-2">UGX {Number(unit.pricePerTermUgx).toLocaleString()}</td><td className="px-3 py-2">{unit.depositUgx != null ? `UGX ${Number(unit.depositUgx).toLocaleString()}` : "N/A"}</td><td className="px-3 py-2">{unit.electricityMeterType || "N/A"}</td><td className="px-3 py-2"><StatusBadge value={unit.operationalStatus} /></td></tr>)}</tbody></table></div></section><section><h3 className="mb-3 text-sm font-bold">Scoped property team</h3><div className="grid gap-2 sm:grid-cols-2">{detail?.memberships.map((member) => <div key={member.id} className="rounded-lg border border-slate-200 p-3 text-xs dark:border-border"><p className="font-bold">{member.name}</p><p className="mt-1 capitalize text-slate-500">{member.role.replaceAll("_", " ")}{member.workerType ? ` · ${member.workerType.replaceAll("_", " ")}` : ""}</p></div>)}</div></section></div></AdminModal>
 
     {selected && (

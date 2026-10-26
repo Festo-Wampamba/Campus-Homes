@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   DOC_TYPES,
   GENDER_ARRANGEMENTS,
+  LISTING_INTENTS,
   LISTING_STATUSES,
   PROPERTY_AUTHORITY_ROLES,
   PROPERTY_STATUSES,
@@ -126,8 +127,14 @@ export const submitPropertySchema = z
     declaredInfoAccurate: z.literal(true),
     declaredAuthorityOverProperty: z.literal(true),
     declaredWillKeepUpdated: z.literal(true),
-    declaredAuthorizesPublish: z.literal(true),
+    // Not asked for a manage-only property: nothing is published.
+    declaredAuthorizesPublish: z.boolean(),
     declaredConsentToProcessing: z.literal(true),
+    listingIntent: z.enum(LISTING_INTENTS).default('list'),
+  })
+  .refine((v) => v.listingIntent === 'manage_only' || v.declaredAuthorizesPublish, {
+    message: 'Authorise CampusHomes to publish the approved listing',
+    path: ['declaredAuthorizesPublish'],
   })
   .refine((v) => !v.rentPeriods?.includes('other') || Boolean(v.rentPeriodOther), {
     message: 'Describe the rent period',
@@ -221,8 +228,15 @@ export const propertySchema = z.object({
   declaredAuthorizesPublish: z.boolean(),
   declaredConsentToProcessing: z.boolean(),
   coverPhotoKey: z.string().nullable(),
+  listingIntent: z.enum(LISTING_INTENTS),
 });
 export type Property = z.infer<typeof propertySchema>;
+
+// Switching a property between "manage only" and "manage and list" (0076):
+// PATCH /listings/properties/:id/listing-intent (landlord) and
+// PATCH /admin/properties/:id/listing-intent (staff, may take a live listing down).
+export const setListingIntentSchema = z.object({ listingIntent: z.enum(LISTING_INTENTS) });
+export type SetListingIntentInput = z.infer<typeof setListingIntentSchema>;
 
 export const propertyDocumentSchema = z.object({
   id: uuid,

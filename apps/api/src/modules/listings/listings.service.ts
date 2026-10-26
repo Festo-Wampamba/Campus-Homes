@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type {
+  ListingIntent,
   ListingSearchInput,
   ListingSearchPageInput,
   SubmitPropertyInput,
@@ -31,6 +32,8 @@ import {
 import { PUBLIC_LANDLORD_SUMMARY_SQL } from './public-landlord-summary';
 import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../ops/audit.service';
+import { dropVisitRequirement } from '../room-management/visit-requirement';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 import {
   buildListingSearchQuery,
@@ -68,6 +71,7 @@ export class ListingsService {
     private readonly rlsDb: RlsDb,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly routes?: PropertyRoutes,
+    @Optional() private readonly audit?: AuditService,
   ) {}
 
   // ── landlord paths ─────────────────────────────────────────────────────────
@@ -126,8 +130,10 @@ export class ListingsService {
           declaredInfoAccurate: input.declaredInfoAccurate,
           declaredAuthorityOverProperty: input.declaredAuthorityOverProperty,
           declaredWillKeepUpdated: input.declaredWillKeepUpdated,
-          declaredAuthorizesPublish: input.declaredAuthorizesPublish,
+          // Nothing is published for a manage-only property, so no consent is recorded.
+          declaredAuthorizesPublish: input.listingIntent === 'list' && input.declaredAuthorizesPublish,
           declaredConsentToProcessing: input.declaredConsentToProcessing,
+          listingIntent: input.listingIntent,
         })
         .returning();
       if (!property) {
@@ -220,6 +226,44 @@ export class ListingsService {
       }
       return property;
     });
+  }
+
+  /** "Manage only" or "manage and list" for the landlord's own property (0076).
+   * Choosing list puts it in the Ops verification queue. A property that is
+   * live to students can't become manage-only here: taking a listing down is
+   * Ops-only, and properties_listing_intent_guard enforces that in the DB. */
+  async setListingIntent(ctx: RlsContext, propertyId: string, listingIntent: ListingIntent) {
+    // Service role so the switch and the room-change reconciliation commit
+    // together; ownership is checked in the WHERE instead of by RLS.
+    const { property, from } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (db, client) => {
+      const [current] = await db
+        .select({ listingIntent: properties.listingIntent })
+        .from(properties)
+        .where(and(eq(properties.id, propertyId), eq(properties.landlordId, ctx.userId)))
+        .for('update');
+      if (!current) throw new NotFoundException('Property not found');
+      if (listingIntent === 'manage_only' && current.listingIntent !== 'manage_only') {
+        const [live] = await db
+          .select({ id: listings.id })
+          .from(listings)
+          .where(and(eq(listings.propertyId, propertyId), eq(listings.status, 'verified')))
+          .limit(1);
+        if (live) {
+          throw new ConflictException('This property is listed to students. Ask CampusHomes to take the listing down first');
+        }
+        await dropVisitRequirement(client, propertyId);
+      }
+      const [updated] = await db
+        .update(properties)
+        .set({ listingIntent })
+        .where(eq(properties.id, propertyId))
+        .returning();
+      return { property: updated!, from: current.listingIntent };
+    });
+    if (from !== listingIntent) {
+      await this.audit?.record(ctx, 'properties.listing_intent', 'property', propertyId, { from, to: listingIntent });
+    }
+    return property;
   }
 
   myProperties(ctx: RlsContext) {
@@ -498,6 +542,13 @@ export class ListingsService {
 
   createDraftListing(ctx: RlsContext, propertyId: string, semesterId: string) {
     return this.rlsDb.run(ctx, async (db) => {
+      const [property] = await db
+        .select({ listingIntent: properties.listingIntent })
+        .from(properties)
+        .where(eq(properties.id, propertyId));
+      if (property?.listingIntent === 'manage_only') {
+        throw new ConflictException('This property is manage-only. Choose "List this property" first');
+      }
       const [listing] = await db
         .insert(listings)
         .values({ propertyId, semesterId, status: 'draft' })

@@ -2,9 +2,11 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { BedDouble, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
 import {
+  type ListingIntent,
   type Property,
   type PropertyDetail,
   type TenantAgreementForPropertyRow,
@@ -832,7 +834,66 @@ function RoomPhotoManager({
 /** Fetches on mount — mounted only while the dialog is open (same pattern as
  * PropertyForm), so every open re-fetches fresh rather than showing stale
  * data from a previous property. */
-function PropertyDetailBody({ propertyId }: { propertyId: string }) {
+/** Manage only or manage and list (0076). Taking a live listing down is
+ * Ops-only, so a listed property offers the switch only while nothing is live. */
+function ListingIntentPanel({
+  property,
+  listingIntent,
+  onChange,
+}: {
+  property: Property;
+  listingIntent: ListingIntent;
+  onChange: (next: ListingIntent) => void;
+}) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const manageOnly = listingIntent === "manage_only";
+
+  async function switchTo(next: ListingIntent) {
+    setPending(true);
+    setError(null);
+    try {
+      await api(`/listings/properties/${property.id}/listing-intent`, {
+        method: "PATCH",
+        body: JSON.stringify({ listingIntent: next }),
+      });
+      onChange(next);
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't change this. Try again."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{manageOnly ? "Manage only" : "Manage and list"}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {manageOnly
+            ? "Not shown to students. List it whenever you want students to find it; CampusHomes inspects it first."
+            : property.hasLiveListing
+              ? "Listed to students. To stop listing it, contact CampusHomes support."
+              : "CampusHomes inspects this property before its rooms are shown to students."}
+        </p>
+        {error && <p role="alert" className="mt-1 text-xs text-destructive">{error}</p>}
+      </div>
+      {manageOnly ? (
+        <Button type="button" size="sm" disabled={pending} onClick={() => switchTo("list")}>
+          {pending ? "Saving…" : "List this property"}
+        </Button>
+      ) : !property.hasLiveListing ? (
+        <Button type="button" variant="secondary" size="sm" disabled={pending} onClick={() => switchTo("manage_only")}>
+          {pending ? "Saving…" : "Switch to manage only"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function PropertyDetailBody({ propertyId, listingIntent }: { propertyId: string; listingIntent: ListingIntent }) {
   const [detail, setDetail] = useState<PropertyDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
@@ -961,7 +1022,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
             : `Listing status: ${detail.listing.status.replaceAll("_", " ")}. Not yet visible in student search.`}
         </div>
       )}
-      {!detail.listing ? (
+      {!detail.listing ? (listingIntent === "manage_only" ? null : (
         <div className="space-y-3">
           <EmptyState
             icon={BedDouble}
@@ -988,7 +1049,7 @@ function PropertyDetailBody({ propertyId }: { propertyId: string }) {
           )}
           {requestError && <p className="text-sm text-destructive">{requestError}</p>}
         </div>
-      ) : (
+      )) : (
         <>
           {detail.photos.length > 0 && (
             <div>
@@ -1138,6 +1199,11 @@ export function PropertyDetailDialog({
   property: Property | null;
 }) {
   const [builderOpen, setBuilderOpen] = useState(false);
+  // The switch updates this right away; the property prop catches up on refresh.
+  const [intentChange, setIntentChange] = useState<{ propertyId: string; value: ListingIntent } | null>(null);
+  const listingIntent = property
+    ? intentChange?.propertyId === property.id ? intentChange.value : property.listingIntent
+    : "list";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="lg">
@@ -1150,6 +1216,11 @@ export function PropertyDetailDialog({
           />
           <DialogBody className="space-y-6">
             <CoverPhoto property={property} />
+            <ListingIntentPanel
+              property={property}
+              listingIntent={listingIntent}
+              onChange={(value) => setIntentChange({ propertyId: property.id, value })}
+            />
             <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-foreground">Rooms and room types</p>
@@ -1177,7 +1248,7 @@ export function PropertyDetailDialog({
             </div>
             <PropertyQrCode propertyId={property.id} propertyName={property.name} />
             <TenantAgreementsList propertyId={property.id} />
-            <PropertyDetailBody propertyId={property.id} />
+            <PropertyDetailBody propertyId={property.id} listingIntent={listingIntent} />
           </DialogBody>
           <TenantAgreementBuilderDialog
             open={builderOpen}
