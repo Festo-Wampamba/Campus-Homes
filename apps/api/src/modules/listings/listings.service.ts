@@ -33,6 +33,7 @@ import { PUBLIC_LANDLORD_SUMMARY_SQL } from './public-landlord-summary';
 import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../ops/audit.service';
+import { dropVisitRequirement } from '../room-management/visit-requirement';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 import {
   buildListingSearchQuery,
@@ -232,11 +233,14 @@ export class ListingsService {
    * live to students can't become manage-only here: taking a listing down is
    * Ops-only, and properties_listing_intent_guard enforces that in the DB. */
   async setListingIntent(ctx: RlsContext, propertyId: string, listingIntent: ListingIntent) {
-    const { property, from } = await this.rlsDb.run(ctx, async (db) => {
+    // Service role so the switch and the room-change reconciliation commit
+    // together; ownership is checked in the WHERE instead of by RLS.
+    const { property, from } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (db, client) => {
       const [current] = await db
         .select({ listingIntent: properties.listingIntent })
         .from(properties)
-        .where(eq(properties.id, propertyId));
+        .where(and(eq(properties.id, propertyId), eq(properties.landlordId, ctx.userId)))
+        .for('update');
       if (!current) throw new NotFoundException('Property not found');
       if (listingIntent === 'manage_only' && current.listingIntent !== 'manage_only') {
         const [live] = await db
@@ -247,6 +251,7 @@ export class ListingsService {
         if (live) {
           throw new ConflictException('This property is listed to students. Ask CampusHomes to take the listing down first');
         }
+        await dropVisitRequirement(client, propertyId);
       }
       const [updated] = await db
         .update(properties)

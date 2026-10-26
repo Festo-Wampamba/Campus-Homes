@@ -230,6 +230,15 @@ describe('switching back to listing', () => {
     expect(await queueIds()).toContain(propertyId);
   });
 
+  it('flags the queue row as needing a new inspection', async () => {
+    const { propertyId } = await inspectedProperty('Flagged Hostel', 'manage_only');
+    await listings.setListingIntent(landlordCtx, propertyId, 'list');
+
+    const rows = (await ops.queue(opsLeadCtx)) as { id: string; needs_reinspection: boolean }[];
+
+    expect(rows.find((row) => row.id === propertyId)?.needs_reinspection).toBe(true);
+  });
+
   it('refuses to publish on the inspection from before the switch', async () => {
     const { propertyId, listingId } = await inspectedProperty('Old Inspection Hostel', 'manage_only');
     await listings.setListingIntent(landlordCtx, propertyId, 'list');
@@ -266,6 +275,42 @@ describe('a publish racing a switch to manage-only', () => {
       switcher.release();
       publisher.release();
     }
+  });
+});
+
+async function submittedNewRooms(propertyId: string): Promise<string> {
+  const roomType = await rooms.createRoomType(landlordCtx, propertyId, {
+    title: 'Single room', category: 'single', bathroomType: 'shared', capacity: 1, amenities: [],
+    semesterId, pricePerTermUgx: 800000, photos: [],
+  }) as { id: string };
+  await rooms.bulkCreateRooms(landlordCtx, propertyId, { roomTypeId: roomType.id, roomCodes: ['B1'], idempotencyKey: crypto.randomUUID() });
+  const changeSetId = (await pool.query(
+    `SELECT id FROM room_inventory_change_sets WHERE property_id = $1`, [propertyId],
+  )).rows[0].id as string;
+  await rooms.submitChangeSet(landlordCtx, changeSetId);
+  return changeSetId;
+}
+
+const changeSetStatus = async (id: string) =>
+  (await pool.query(`SELECT status::text FROM room_inventory_change_sets WHERE id = $1`, [id])).rows[0].status as string;
+
+describe('switching a property with rooms waiting for a visit', () => {
+  it("moves the landlord's waiting changes to Ops review without a visit", async () => {
+    const property = await listings.submitProperty(landlordCtx, { ...submitInput('Waiting Rooms Hostel'), listingIntent: 'list', declaredAuthorizesPublish: true });
+    const changeSetId = await submittedNewRooms(property.id);
+
+    await listings.setListingIntent(landlordCtx, property.id, 'manage_only');
+
+    expect(await changeSetStatus(changeSetId)).toBe('pending_review');
+  });
+
+  it('does the same when staff switch it', async () => {
+    const property = await listings.submitProperty(landlordCtx, { ...submitInput('Staff Waiting Hostel'), listingIntent: 'list', declaredAuthorizesPublish: true });
+    const changeSetId = await submittedNewRooms(property.id);
+
+    await adminProperties.setListingIntent(opsLeadCtx, SUSPEND, freshSignIn(), property.id, 'manage_only');
+
+    expect(await changeSetStatus(changeSetId)).toBe('pending_review');
   });
 });
 

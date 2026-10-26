@@ -13,6 +13,7 @@ import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { assertFreshSignIn } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
+import { dropVisitRequirement } from '../room-management/visit-requirement';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 
 const SERVICE_CTX: RlsContext = {
@@ -350,6 +351,7 @@ export class AdminPropertiesService {
             [propertyId],
           )).rows.map((row) => row.id);
         }
+        await dropVisitRequirement(client, propertyId);
       }
       await client.query('UPDATE properties SET listing_intent = $2 WHERE id = $1', [propertyId, listingIntent]);
       return { from: current.listingIntent, suspendedListingIds: suspended };

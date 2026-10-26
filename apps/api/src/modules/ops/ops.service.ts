@@ -102,7 +102,9 @@ export class OpsService {
         `SELECT p.id, p.name, p.street_address, p.status, p.created_at,
                 v.id AS visit_id, v.result, v.scheduled_at, v.inspector_id,
                 l.kyc_status AS landlord_kyc_status,
-                EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600 AS age_hours
+                EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600 AS age_hours,
+                (p.listing_requested_at IS NOT NULL AND v.result = 'passed' AND v.approved_at IS NOT NULL
+                  AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)) AS needs_reinspection
          FROM properties p
          JOIN landlords l ON l.user_id = p.landlord_id
          LEFT JOIN LATERAL (
