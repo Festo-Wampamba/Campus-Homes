@@ -1,4 +1,4 @@
-import { formatAddress, roomCategoryLabel, roomSizeLabel } from "./format";
+import { formatAddress, kampalaMonth, roomCategoryLabel, roomSizeLabel } from "./format";
 
 describe("formatAddress", () => {
   it("drops a trailing comma", () => {
@@ -29,5 +29,11 @@ describe("roomCategoryLabel", () => {
 
   it("labels self-contained without the underscore", () => {
     expect(roomCategoryLabel("self_contained")).toBe("Self-contained");
+  });
+});
+
+describe("kampalaMonth", () => {
+  it("puts 1 a.m. Kampala time on the 1st in the new month", () => {
+    expect(kampalaMonth(new Date("2026-10-31T22:00:00Z"))).toBe("2026-11");
   });
 });

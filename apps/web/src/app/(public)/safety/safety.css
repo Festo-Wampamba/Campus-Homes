@@ -33,7 +33,7 @@
 }
 
 .ch-safety-hero__inner {
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   padding: 132px 0 76px;
 }
@@ -72,7 +72,7 @@
 }
 
 .ch-safety-content {
-  width: min(100% - 32px, var(--ch-page-max));
+  width: min(100% - 2 * var(--ch-gutter), var(--ch-page-max));
   margin: 0 auto;
   padding: 76px 0 104px;
 }

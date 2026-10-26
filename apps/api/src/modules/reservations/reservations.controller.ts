@@ -29,10 +29,19 @@ export class ReservationsController {
     return this.reservationsService.book(rlsCtx(req), body);
   }
 
+  // Two routes, not one: someone who is both a student and a landlord must see
+  // only the side of the workspace they are in, and @Roles resolves such a
+  // user to whichever role is listed first.
   @Get('receipts')
-  @Roles('student', 'landlord')
+  @Roles('student')
   receipts(@Req() req: AuthenticatedRequest) {
-    return this.reservationsService.receipts(rlsCtx(req));
+    return this.reservationsService.receipts(rlsCtx(req), 'student');
+  }
+
+  @Get('landlord-receipts')
+  @Roles('landlord')
+  landlordReceipts(@Req() req: AuthenticatedRequest) {
+    return this.reservationsService.receipts(rlsCtx(req), 'landlord');
   }
 
   @Get(':id/student')

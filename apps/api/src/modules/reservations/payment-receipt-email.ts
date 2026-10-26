@@ -1,3 +1,4 @@
+import { escapeHtml, sendNotificationEmail } from '../../adapters/notification-email';
 import type { Env } from '../../config/env';
 
 export type PaymentReceiptEmail = {
@@ -52,29 +53,5 @@ export async function sendPaymentReceiptEmail(env: Env, receipt: PaymentReceiptE
     <p><a href="${env.AUTH_APP_URL}${path}">View it on CampusHomes</a></p>
   `;
 
-  if (!env.RESEND_API_KEY) {
-    console.log(`[email:dev] ${subject} → ${receipt.to}`);
-    return;
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [receipt.to], subject, html }),
-  });
-  if (!res.ok) {
-    // Status only; the body may contain provider details we don't log.
-    throw new Error(`Resend rejected payment receipt email with status ${res.status}`);
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  await sendNotificationEmail(env, { to: [receipt.to], subject, html, kind: 'payment receipt' });
 }

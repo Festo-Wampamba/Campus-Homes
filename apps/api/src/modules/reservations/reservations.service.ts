@@ -467,7 +467,8 @@ export class ReservationsService {
   }
 
   /** Receipts for the signed-in student or landlord, newest first. */
-  receipts(ctx: RlsContext) {
+  receipts(ctx: RlsContext, side: 'student' | 'landlord') {
+    const party = side === 'student' ? 'r.student_id' : 'r.landlord_id';
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) =>
       (await client.query(
         `SELECT r.id, r.receipt_number AS "receiptNumber", r.reservation_id AS "reservationId",
@@ -477,7 +478,7 @@ export class ReservationsService {
                 r.booking_fee_ugx + r.deposit_ugx AS "totalUgx",
                 r.payment_method::text AS "paymentMethod", r.recorded_at AS "recordedAt"
          FROM payment_receipts r JOIN users u ON u.id = r.student_id
-         WHERE r.student_id = $1 OR r.landlord_id = $1
+         WHERE ${party} = $1
          ORDER BY r.recorded_at DESC LIMIT 500`,
         [ctx.userId],
       )).rows,

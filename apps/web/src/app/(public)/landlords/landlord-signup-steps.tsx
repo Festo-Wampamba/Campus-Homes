@@ -67,42 +67,55 @@ const SIGNUP_STEPS: SignupStep[] = [
   },
 ];
 
-/** Vertical timeline whose connector fills as each step scrolls into view. */
+/**
+ * Vertical timeline tied to scroll position: the rail fills down to a line
+ * 65% of the way down the viewport, and each step lights up once its marker
+ * passes that line. Scrolling back up drains the rail and dims the steps again.
+ */
 export function LandlordSignupSteps() {
   const listRef = useRef<HTMLOListElement>(null);
   const [visible, setVisible] = useState(0);
 
   useEffect(() => {
-    const items = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-step]") ?? []);
-    if (items.length === 0) return;
-    if (!("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setVisible(items.length);
+    const list = listRef.current;
+    const rail = list?.querySelector<HTMLElement>(".ch-signup-steps__rail");
+    const markers = Array.from(list?.querySelectorAll<HTMLElement>(".ch-signup-step__marker") ?? []);
+    if (!list || !rail || markers.length === 0) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      list.style.setProperty("--ch-signup-progress", "1");
+      setVisible(markers.length);
       return;
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const index = Number((entry.target as HTMLElement).dataset.step);
-          // Never go backwards: scrolling up keeps finished steps lit.
-          setVisible((count) => Math.max(count, index + 1));
-          observer.unobserve(entry.target);
-        }
-      },
-      { rootMargin: "0px 0px -18% 0px", threshold: 0.35 },
-    );
-    items.forEach((item) => observer.observe(item));
-    return () => observer.disconnect();
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const line = window.innerHeight * 0.65;
+      const { top, height } = rail.getBoundingClientRect();
+      const progress = Math.min(1, Math.max(0, (line - top) / height));
+      // Written straight to the style so scrolling doesn't re-render the list.
+      list.style.setProperty("--ch-signup-progress", progress.toFixed(4));
+      setVisible(markers.filter((marker) => {
+        const box = marker.getBoundingClientRect();
+        return box.top + box.height / 2 <= line;
+      }).length);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
   }, []);
 
-  const progress = visible <= 1 ? 0 : (visible - 1) / (SIGNUP_STEPS.length - 1);
-
   return (
-    <ol
-      ref={listRef}
-      className="ch-signup-steps"
-      style={{ "--ch-signup-progress": progress } as React.CSSProperties}
-    >
+    <ol ref={listRef} className="ch-signup-steps">
       <span className="ch-signup-steps__rail" aria-hidden="true">
         <span className="ch-signup-steps__fill" />
       </span>
