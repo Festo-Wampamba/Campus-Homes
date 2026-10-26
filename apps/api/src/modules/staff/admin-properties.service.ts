@@ -5,6 +5,7 @@ import type {
   AddAdminPropertyUnitsInput,
   AdminUnitInput,
   CreateAdminPropertyInput,
+  ListingIntent,
   UpdateAdminPropertyInput,
 } from '@campushomes/shared';
 
@@ -146,6 +147,7 @@ export class AdminPropertiesService {
       const property = (await client.query(`
         SELECT p.*, p.street_address AS "streetAddress", p.landlord_id AS "landlordId",
                p.operational_status AS "operationalStatus", p.house_rules AS "houseRules",
+               p.listing_intent AS "listingIntent",
                p.contact_phone AS "contactPhone", p.contact_email AS "contactEmail",
                p.cover_photo_key AS "coverPhotoKey",
                p.alternative_name AS "alternativeName", p.location_details AS "locationDetails",
@@ -310,6 +312,36 @@ export class AdminPropertiesService {
     });
     await this.audit.record(actor, 'properties.update', 'property', propertyId, { fields: Object.keys(input) });
     return result;
+  }
+
+  /** Staff switch between "manage only" and "manage and list" (0076). Taking a
+   * live listing down is Ops-only (Festo, 2026-10-26): switching a listed
+   * property to manage-only suspends its verified listings in the same
+   * transaction, so properties_listing_intent_guard lets the change through. */
+  async setListingIntent(actor: RlsContext, propertyId: string, listingIntent: ListingIntent) {
+    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const current = (await client.query<{ listingIntent: ListingIntent }>(
+        'SELECT listing_intent AS "listingIntent" FROM properties WHERE id = $1 FOR UPDATE',
+        [propertyId],
+      )).rows[0];
+      if (!current) throw new NotFoundException('Property not found');
+      const suspended = listingIntent === 'manage_only'
+        ? (await client.query<{ id: string }>(
+            `UPDATE listings SET status = 'suspended' WHERE property_id = $1 AND status = 'verified' RETURNING id`,
+            [propertyId],
+          )).rows.map((row) => row.id)
+        : [];
+      await client.query('UPDATE properties SET listing_intent = $2 WHERE id = $1', [propertyId, listingIntent]);
+      return { from: current.listingIntent, suspendedListingIds: suspended };
+    });
+    if (result.from !== listingIntent) {
+      await this.audit.record(actor, 'properties.listing_intent', 'property', propertyId, {
+        from: result.from,
+        to: listingIntent,
+        suspendedListingIds: result.suspendedListingIds,
+      });
+    }
+    return { listingIntent, suspendedListings: result.suspendedListingIds.length };
   }
 
   async addUnits(actor: RlsContext, propertyId: string, input: AddAdminPropertyUnitsInput) {

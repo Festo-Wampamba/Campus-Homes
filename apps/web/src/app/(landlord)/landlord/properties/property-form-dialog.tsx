@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { PROPERTY_TYPES, UNIVERSITIES, type Property, type PropertyType, type University } from "@campushomes/shared";
+import { PROPERTY_TYPES, UNIVERSITIES, type ListingIntent, type Property, type PropertyType, type University } from "@campushomes/shared";
 
 import {
   emptyPropertyDeclarationFields,
@@ -17,6 +17,7 @@ import {
   serializePropertyExtendedFields,
   type PropertyExtendedFieldsValue,
 } from "@/components/property-extended-fields";
+import { ListingIntentChoice } from "@/components/listing-intent-choice";
 import { RoomCategoryRows, bedsPerRoom, emptyRoomCategoryRow, type RoomCategoryRow } from "@/components/room-category-rows";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -99,6 +100,7 @@ function PropertyForm({
   const [declaration, setDeclaration] = useState<PropertyDeclarationFieldsValue>(
     emptyPropertyDeclarationFields(),
   );
+  const [listingIntent, setListingIntent] = useState<ListingIntent>("list");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,7 +141,7 @@ function PropertyForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!isEdit && !propertyDeclarationsAllAccepted(declaration)) {
+    if (!isEdit && !propertyDeclarationsAllAccepted(declaration, listingIntent)) {
       setError("Please accept every item in the consent & declaration section.");
       return;
     }
@@ -183,7 +185,7 @@ function PropertyForm({
         // Create-only: updatePropertySchema doesn't accept `type` or the
         // 5-item declaration (fixed/one-time-consent once submitted), so
         // only send them when adding.
-        ...(isEdit ? {} : { type, ...declaration }),
+        ...(isEdit ? {} : { type, ...declaration, listingIntent }),
         // Omitted entirely when no new file was picked — for an edit, that
         // leaves the existing cover photo untouched instead of clearing it.
         ...(newCoverPhotoKey ? { coverPhotoKey: newCoverPhotoKey } : {}),
@@ -381,10 +383,14 @@ function PropertyForm({
         />
 
         {!isEdit && (
-          <PropertyDeclarationFields
-            value={declaration}
-            onChange={(patch) => setDeclaration((prev) => ({ ...prev, ...patch }))}
-          />
+          <>
+            <ListingIntentChoice value={listingIntent} onChange={setListingIntent} />
+            <PropertyDeclarationFields
+              value={declaration}
+              onChange={(patch) => setDeclaration((prev) => ({ ...prev, ...patch }))}
+              listingIntent={listingIntent}
+            />
+          </>
         )}
 
         <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">

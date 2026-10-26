@@ -814,6 +814,57 @@
   font-weight: 600;
 }
 
+/* "Manage and list" / "Manage only" switch above the timeline (0076). */
+.ch-signup-paths {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border: 1px solid var(--landlords-line);
+  border-radius: 999px;
+  padding: 4px;
+  background: var(--landlords-surface);
+}
+
+.ch-signup-paths__option {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: transparent;
+  color: var(--landlords-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.ch-signup-paths__option[aria-pressed="true"] {
+  background: var(--landlords-teal-strong);
+  color: #ffffff;
+}
+
+.ch-signup-paths__option:focus-visible {
+  outline: 2px solid var(--landlords-teal);
+  outline-offset: 2px;
+}
+
+.ch-signup-step[data-skipped] .ch-signup-step__card {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ch-signup-step[data-skipped] .ch-signup-step__card h3,
+.ch-signup-step[data-skipped] .ch-signup-step__card > p:not(.ch-signup-step__meta) {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--landlords-muted) 60%, transparent);
+}
+
+.ch-signup-step__who--skipped {
+  background: var(--landlords-line);
+  color: var(--landlords-ink);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ch-signup-step,
   .ch-signup-steps__fill {

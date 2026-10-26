@@ -5,6 +5,7 @@ import {
   addAdminPropertyMediaSchema,
   addAdminPropertyUnitsSchema,
   createAdminPropertySchema,
+  setListingIntentSchema,
   updateAdminPropertySchema,
 } from '@campushomes/shared';
 
@@ -17,6 +18,7 @@ class CreateAdminPropertyDto extends createZodDto(createAdminPropertySchema) {}
 class UpdateAdminPropertyDto extends createZodDto(updateAdminPropertySchema) {}
 class AddAdminPropertyUnitsDto extends createZodDto(addAdminPropertyUnitsSchema) {}
 class AddAdminPropertyMediaDto extends createZodDto(addAdminPropertyMediaSchema) {}
+class SetListingIntentDto extends createZodDto(setListingIntentSchema) {}
 
 @Controller('admin/properties')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -43,6 +45,16 @@ export class AdminPropertiesController {
     @Body() body: UpdateAdminPropertyDto,
   ) {
     return this.properties.update(rlsCtx(req), id, body);
+  }
+
+  @Patch(':id/listing-intent')
+  @RequirePermission('properties.update')
+  setListingIntent(
+    @Req() req: PermissionedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SetListingIntentDto,
+  ) {
+    return this.properties.setListingIntent(rlsCtx(req), id, body.listingIntent);
   }
 
   @Post(':id/units')

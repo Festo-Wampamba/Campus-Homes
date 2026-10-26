@@ -1,7 +1,7 @@
 # Management-only landlords: plan for review
 
-Status: reviewed by Festo 2026-10-26 (decisions below). Question 4 still open.
-Nothing here is built yet.
+Status: approved by Festo 2026-10-26 (decisions below). Built on branch
+`feat/management-only-landlords`.
 
 ## The problem
 
@@ -106,9 +106,11 @@ Rough size: 1 migration, ~6 API files, ~6 web files.
 2. **Taking a live listing down:** Ops only. Landlords cannot unpublish.
 3. **Room changes on manage-only properties:** still reviewed by Ops for
    security, but never require a site visit.
-4. **Admin view:** open, see below.
+4. **Admin view:** staff can see the label on every property, filter by it,
+   and switch it, audited (`properties.listing_intent`). Switching a listed
+   property to manage-only takes its live listing down in the same step.
 
-## Open question 4, restated
+## Question 4 as asked (answered: yes to both)
 
 Each property will carry a label: "Manage only" or "Manage and list". The
 question is what staff can do with that label in the admin and Ops consoles:

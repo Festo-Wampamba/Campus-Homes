@@ -63,6 +63,9 @@ export const properties = pgTable('properties', {
   coverPhotoKey: text('cover_photo_key'),
   description: text('description'),
   operationalStatus: text('operational_status').notNull().default('open'),
+  // LISTING_INTENTS (0076): a 'manage_only' property is never listed to
+  // students and never enters the Ops verification queue.
+  listingIntent: text('listing_intent').notNull().default('list'),
   amenities: jsonb('amenities').notNull().default({}),
   utilities: jsonb('utilities').notNull().default({}),
   houseRules: jsonb('house_rules').notNull().default([]),

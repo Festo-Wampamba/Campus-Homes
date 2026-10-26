@@ -117,6 +117,9 @@ export const PROPERTY_TYPES = [
   'other',
 ] as const;
 export const PROPERTY_STATUSES = ['pending_kyc', 'active', 'suspended'] as const;
+// Whether the landlord wants a property listed to students or only managed
+// on CampusHomes (0076). Listing adds an Ops verification visit.
+export const LISTING_INTENTS = ['manage_only', 'list'] as const;
 export const DOC_TYPES = ['title_deed', 'tenancy', 'authorization', 'other'] as const;
 
 // A listing's inventory is priced per room type, not as one flat price — a
@@ -259,6 +262,7 @@ export type University = (typeof UNIVERSITIES)[number];
 export type KycStatus = (typeof KYC_STATUSES)[number];
 export type PropertyType = (typeof PROPERTY_TYPES)[number];
 export type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
+export type ListingIntent = (typeof LISTING_INTENTS)[number];
 export type DocType = (typeof DOC_TYPES)[number];
 export type RoomCategory = (typeof ROOM_CATEGORIES)[number];
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
