@@ -1,3 +1,4 @@
+import { escapeHtml, sendNotificationEmail } from '../../adapters/notification-email';
 import type { Env } from '../../config/env';
 
 // Structural subset of the inquiry row (drizzle returns category/status as
@@ -41,35 +42,5 @@ export async function sendInquiryEmail(env: Env, inquiry: InquiryEmailPayload): 
     <p><a href="${env.AUTH_APP_URL}/admin/inquiries">Open the inquiries desk</a></p>
   `;
 
-  if (!env.RESEND_API_KEY) {
-    console.log(`[email:dev] ${subject} → ${recipients.join(', ')}`);
-    return;
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: env.AUTH_EMAIL_FROM,
-      to: recipients,
-      subject,
-      html,
-    }),
-  });
-  if (!res.ok) {
-    // Never echo the body — it may contain provider error details we don't
-    // want in logs. Status is enough to diagnose a misconfigured key.
-    throw new Error(`Resend rejected inquiry email with status ${res.status}`);
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  await sendNotificationEmail(env, { to: recipients, subject, html, kind: 'inquiry' });
 }

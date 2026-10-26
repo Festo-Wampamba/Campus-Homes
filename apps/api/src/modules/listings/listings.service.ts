@@ -727,7 +727,8 @@ export class ListingsService {
           // (maintenance/blocked), and it has no live (reserved/booked)
           // reservation on it.
           // Named + generic plan, as above: this was ~62 ms to plan, ~17 ms
-          // to run.
+          // to run. Every parameterized read after the set_config is named:
+          // an unnamed one would still get a generic plan, rebuilt per call.
           await client.query(
             `SELECT set_config('plan_cache_mode', 'force_generic_plan', true), set_config('jit', 'off', true)`,
           );
@@ -762,27 +763,29 @@ export class ListingsService {
               detail.listing.semesterId,
             ],
           });
-          const propRes = await client.query(
-            `SELECT p.id, p.name, p.street_address, p.catchment, p.gps_lat, p.gps_lon,
+          const propRes = await client.query({
+            name: 'listing_detail_property',
+            text: `SELECT p.id, p.name, p.street_address, p.catchment, p.gps_lat, p.gps_lon,
                     p.booking_fee_percent, p.advance_rent_required, p.gender_arrangement,
                     p.house_rules
              FROM properties p
              WHERE p.id = $1`,
-            [detail.listing.propertyId],
-          );
+            values: [detail.listing.propertyId],
+          });
           // Property-level gallery photos — distinct from listing_photos
           // (Ops-only, EXIF/GPS-verified during a visit) and unit_photos
           // (per-room). property_media has no ops_staff FK, so it's the
           // landlord's own write surface for whole-property shots; property_
           // media has no public SELECT policy either (svc_all only, 0013),
           // hence reading it here alongside everything else on this ctx.
-          const mediaRes = await client.query(
-            `SELECT id, storage_key, caption
+          const mediaRes = await client.query({
+            name: 'listing_detail_media',
+            text: `SELECT id, storage_key, caption
              FROM property_media
              WHERE property_id = $1 AND media_type = 'image'
              ORDER BY sort_order, created_at`,
-            [detail.listing.propertyId],
-          );
+            values: [detail.listing.propertyId],
+          });
           // Photos the landlord added to each room type in Manage Rooms. Only
           // the room type's current (approved) version is public, and each
           // photo is reported against every priced room of that type.
@@ -801,15 +804,20 @@ export class ListingsService {
             values: [detail.listing.propertyId, detail.listing.semesterId],
           });
           // Only approved room-type snapshots can supply public room amenities.
-          const roomAmenitiesRes = await client.query(
-            `SELECT u.id, rtv.amenities
+          const roomAmenitiesRes = await client.query({
+            name: 'listing_detail_room_amenities',
+            text: `SELECT u.id, rtv.amenities
              FROM units u
              JOIN room_types rt ON rt.id = u.room_type_id
              JOIN room_type_versions rtv ON rtv.id = rt.current_version_id AND rtv.status = 'approved'
              WHERE u.property_id = $1`,
-            [detail.listing.propertyId],
-          );
-          const landlordRes = await client.query(PUBLIC_LANDLORD_SUMMARY_SQL, [detail.listing.propertyId]);
+            values: [detail.listing.propertyId],
+          });
+          const landlordRes = await client.query({
+            name: 'listing_detail_landlord',
+            text: PUBLIC_LANDLORD_SUMMARY_SQL,
+            values: [detail.listing.propertyId],
+          });
           // Pilot-funnel backstop (0032) — best-effort, same posture as the
           // search() event log above.
           try {

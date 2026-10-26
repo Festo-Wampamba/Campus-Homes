@@ -150,6 +150,14 @@ export function formatDateTime(iso: string): string {
   return KAMPALA_DATE_TIME.format(new Date(iso));
 }
 
+const KAMPALA_MONTH = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Kampala", year: "numeric", month: "2-digit" });
+
+/** Calendar month in Kampala, e.g. "2026-10". The server runs on UTC, which
+ * would count the first three hours of each Kampala month in the previous one. */
+export function kampalaMonth(date: Date): string {
+  return KAMPALA_MONTH.format(date);
+}
+
 // Addresses are stored as typed; drop stray trailing commas ("Makerere Hill,").
 export function formatAddress(address: string): string {
   return address.trim().replace(/[\s,]+$/, "");

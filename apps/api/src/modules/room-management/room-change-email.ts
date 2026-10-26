@@ -1,3 +1,4 @@
+import { escapeHtml, sendNotificationEmail } from '../../adapters/notification-email';
 import type { Env } from '../../config/env';
 
 export type RoomChangeEmail = {
@@ -20,29 +21,5 @@ export async function sendRoomChangeEmail(env: Env, email: RoomChangeEmail): Pro
     <p><a href="${env.AUTH_APP_URL}${email.path}">${escapeHtml(email.action)}</a></p>
   `;
 
-  if (!env.RESEND_API_KEY) {
-    console.log(`[email:dev] ${email.subject} → ${to.join(', ')}`);
-    return;
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to, subject: email.subject, html }),
-  });
-  if (!res.ok) {
-    // Status only; the body may contain provider details we don't log.
-    throw new Error(`Resend rejected room-change email with status ${res.status}`);
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  await sendNotificationEmail(env, { to, subject: email.subject, html, kind: 'room-change' });
 }

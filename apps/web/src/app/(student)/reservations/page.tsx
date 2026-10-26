@@ -15,7 +15,7 @@ export default async function ReservationsPage({
 }: {
   searchParams: Promise<{ new?: string; track?: string }>;
 }) {
-  const [reservations, { new: justReservedId, track: trackId }, receipts] = await Promise.all([getMyReservations(), searchParams, getMyReceipts()]);
+  const [reservations, { new: justReservedId, track: trackId }, receipts] = await Promise.all([getMyReservations(), searchParams, getMyReceipts("student")]);
 
   return (
     <>

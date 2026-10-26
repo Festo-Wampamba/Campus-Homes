@@ -1,3 +1,4 @@
+import { sendNotificationEmail } from '../../adapters/notification-email';
 import type { Env } from '../../config/env';
 
 // Same posture as inquiry-email.ts: plain fetch to Resend to the
@@ -24,21 +25,5 @@ export async function sendRoutesDailyCapEmail(env: Env): Promise<void> {
     in the Google Cloud console.</p>
   `;
 
-  if (!env.RESEND_API_KEY) {
-    console.log(`[email:dev] ${subject} → ${recipients.join(', ')}`);
-    return;
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: recipients, subject, html }),
-  });
-  if (!res.ok) {
-    // Status only; the body may contain provider details we don't log.
-    throw new Error(`Resend rejected routes daily-cap email with status ${res.status}`);
-  }
+  await sendNotificationEmail(env, { to: recipients, subject, html, kind: 'routes daily-cap' });
 }
