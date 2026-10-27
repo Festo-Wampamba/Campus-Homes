@@ -103,6 +103,7 @@ export const LANDLORD_BUSINESS_TYPE_LABELS: Record<string, string> = {
   registered_company: "Registered company",
   partnership: "Partnership",
   hostel_management_company: "Hostel management company",
+  property_manager: "Property manager",
   property_agent: "Property agent",
   university: "University",
   religious_organisation: "Religious organisation",
