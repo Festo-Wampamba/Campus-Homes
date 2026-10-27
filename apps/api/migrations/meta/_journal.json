@@ -533,6 +533,13 @@
       "when": 1792700000000,
       "tag": "0076_property_listing_intent",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1792800000000,
+      "tag": "0077_business_type_property_manager",
+      "breakpoints": true
     }
   ]
 }

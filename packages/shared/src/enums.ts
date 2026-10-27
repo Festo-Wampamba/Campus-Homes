@@ -89,6 +89,7 @@ export const LANDLORD_BUSINESS_TYPES = [
   'registered_company',
   'partnership',
   'hostel_management_company',
+  'property_manager',
   'property_agent',
   'university',
   'religious_organisation',
