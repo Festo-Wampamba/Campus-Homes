@@ -1,0 +1,157 @@
+{
+  "origin": "https://staging.campushomes.co.ug",
+  "results": [
+    {
+      "route": "privacy",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "terms",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "privacy",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "terms",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "privacy",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "terms",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "privacy",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    },
+    {
+      "route": "terms",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations",
+      "apiResponses": [
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        },
+        {
+          "url": "/api/v1/events",
+          "status": 204
+        }
+      ]
+    }
+  ]
+}
