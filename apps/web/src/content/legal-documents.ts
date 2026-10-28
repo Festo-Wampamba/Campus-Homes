@@ -1,34 +1,33 @@
 // Review content from docs/legal/2026-10-23-uganda-review in the original workspace.
+// Privacy policy D2 is Ochaya Odong's 28 October review with factual fixes.
 // Keep draft status until the owner approves factual details and the effective version.
 // Static structured content: no runtime file reads or HTML injection.
 export type LegalBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 export type LegalDocument = {
   title: string;
-  kind: "privacy" | "terms";
+  kind: "privacy" | "terms" | "landlord-agreement";
   version: string;
   prepared: string;
-  downloadHref: string;
   sections: { id: string; title: string; blocks: LegalBlock[] }[];
 };
 
 export const privacyPolicy: LegalDocument = {
   "title": "Privacy policy",
   "kind": "privacy",
-  "version": "CH PP 2026 10 D1",
-  "prepared": "23 October 2026",
-  "downloadHref": "/legal/CampusHomes-Privacy-Policy-DRAFT.docx",
+  "version": "CH PP 2026 10 D2",
+  "prepared": "28 October 2026",
   "sections": [
     {
-      "id": "draft-status",
-      "title": "Draft status and publication conditions",
+      "id": "introduction",
+      "title": "Introduction",
       "blocks": [
         {
           "type": "paragraph",
-          "text": "This is a proposed CampusHomes notice issued by Akolet Properties Ltd. It is separate from a privacy notice for Akolet's corporate website, employment records or other products. The company name appears in the supplied company overview and landlord agreement; it has not been independently verified against URSB. The overview gives registration number 80034439190764, which must be verified before publication. Confirm the registered office, address for legal service, designated data protection officer, PDPO registration and live service providers."
+          "text": "This is a CampusHomes notice issued by Akolet Properties Ltd (referred to here as the Company or Akolet). It is separate from a privacy notice for Akolet's corporate website, employment records or other products. Akolet is registered with the Uganda Registration Services Bureau under number 80034439190764. Its registered office and address for legal service is Maimood Hostel, Office J07, Nkinzi Road, opposite Makerere Eastern Gate, Kampala, Uganda. Our registration number with the Personal Data Protection Office will be added here."
         },
         {
           "type": "paragraph",
-          "text": "The notice below describes the reviewed product and proposes controls for sensitive information, children, transfers and rights requests. Those controls must be implemented and checked before the corresponding statements are published. The accompanying research and implementation report identifies these conditions. This draft is neither an effective policy nor evidence of regulatory registration or operational compliance."
+          "text": "The notice below describes the CampusHomes service (referred to here as CampusHomes) and the controls we apply to sensitive information, children, transfers and rights requests."
         }
       ]
     },
@@ -42,11 +41,11 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           "type": "paragraph",
-          "text": "This policy applies to campushomes.co.ug and its student, landlord and staff portals, inspections and related CampusHomes communications. A landlord may independently decide how to use information for a tenancy. Where we provide a landlord with tools to administer tenant information on its instructions, the applicable roles and responsibilities must also be described in the notice on that form and our agreement with the landlord. A landlord's own legal responsibilities do not disappear because it uses CampusHomes."
+          "text": "This policy applies to campushomes.co.ug and all its users, including tenants (current and prospective), students, landlords, property managers and custodians, and to staff portals, inspections and related CampusHomes communications. A landlord may independently decide how to use information for a tenancy. Where we provide a landlord with tools to administer tenant information on its instructions, the applicable roles and responsibilities must also be described in the notice on that form and our agreement with the landlord. A landlord's own legal responsibilities do not disappear because it uses CampusHomes."
         },
         {
           "type": "paragraph",
-          "text": "Contact our privacy lead through info@akolet.co.ug, using the subject CampusHomes privacy request. Our shared office is Maimood Hostel, Office J07, Nkinzi Road, opposite Makerere Eastern Gate, Kampala, Uganda. Call +256 732 152 211 or contact us on WhatsApp at +256 768 561 023 to arrange a secure way to make a request. Do not send passwords, sign-in codes or identity-document copies through a public message. The named data protection officer and verified registered and service addresses must be inserted in this section before publication."
+          "text": "Contact our privacy or data protection lead through info@akolet.co.ug, using the subject CampusHomes privacy request. Our shared office is Maimood Hostel, Office J07, Nkinzi Road, opposite Makerere Eastern Gate, Kampala, Uganda. Call +256 732 152 211 or contact us on WhatsApp at +256 768 561 023 to arrange a secure way to make a request. Do not send passwords, sign-in codes or identity-document copies through a public message. Our Managing Director is the named data protection lead, and the General Manager deputises in their absence."
         }
       ]
     },
@@ -61,9 +60,9 @@ export const privacyPolicy: LegalDocument = {
         {
           "type": "list",
           "items": [
-            "Account and contact information includes your name, username, email address, telephone numbers, sign-in identifiers and verification status. If you choose Google sign-in, we receive the identity information authorised through that sign-in process.",
-            "Student profile information can include university, year of study, date of birth, gender, nationality, address and emergency-contact details. The form must identify required and optional fields and explain the consequence of leaving a required field blank.",
-            "Landlord and property information includes legal and business names, contact details, authority to advertise or let, verification information and documents where requested, property location, room inventory, rent, deposits, charges, amenities, rules, photographs and inspection records.",
+            "Account and contact information includes your name, username, email address, telephone numbers, sign-in identifiers and verification status. If you choose Google sign-in or another third-party sign-in option, we receive the identity information authorised through that sign-in.",
+            "Student profile information can include university, school or institute of study, year of study, date of birth, gender, nationality, address and emergency-contact details. The forms we use to collect this information identify required and optional fields and explain what happens if a required field is left blank.",
+            "Landlord and property information includes legal and business names, contact details, authority to advertise or let, verification information and documents were requested, property location, room inventory, rent, deposits, charges, amenities, rules, photographs and inspection records.",
             "Service records include favourites, reservations and their expiry, booking requests and confirmations, move-in confirmations, viewing requests, enquiries, landlord messages, reviews, calendar reminders, complaints and safety reports.",
             "Tenant registration and agreement forms can include identity or passport numbers, student registration details, course, parent or guardian and next-of-kin contacts, rent and move-in information, a typed or drawn signature, and other information identified on the particular form. Some forms may ask for optional medical conditions or allergies. Section 4 explains the additional protections for these records.",
             "Support information includes what you send to our team, related replies and references. If you use CampusHomes AI, your question and recent conversation messages are sent to an external AI service as described in section 7.",
@@ -111,7 +110,7 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           "type": "paragraph",
-          "text": "If a tenant form offers an optional medical or allergy field, the form must explain why it is needed, who can see it, its retention period and the applicable legal basis before submission. Where section 9 subsection 3 paragraph b is relied on, the information must be given freely with the data subject's consent; we require a separate affirmative choice for optional health information. Declining it must not prevent use of the ordinary search or reservation service. Section 9 also contains specific employer-duty and qualifying non-profit-body conditions, which are not general permissions for CampusHomes. A general contractual, medical-purpose or legal-obligation ground under section 7 must not be assumed to override section 9. Counsel must confirm the permitted treatment of financial and any emergency medical records before that processing is offered."
+          "text": "If a tenant form offers an optional medical or allergy field, the form will explain why it is needed, who can see it, its retention period and the applicable legal basis before submission. Where section 9 subsection 3 paragraph b is relied on, the information must be given freely with the data subject's consent; we require a separate affirmative choice for optional health information. Declining it must not prevent use of the ordinary search or reservation service. Section 9 also contains specific employer-duty and qualifying non-profit-body conditions, which are not general permissions for CampusHomes. A general contractual, medical-purpose or legal-obligation ground under section 7 must not be assumed to override section 9. Counsel must confirm the permitted treatment of financial and any emergency medical records before that processing is offered."
         },
         {
           "type": "paragraph",
@@ -173,7 +172,7 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           "type": "paragraph",
-          "text": "OpenStreetMap tile servers receive technical connection information, including your IP address, when a map loads. If you choose a Google directions link, Google processes the resulting visit under its own terms. Clicking a WhatsApp link opens an external service and shares the content you choose to send; the floating shortcut itself is locally served and is not an embedded third-party chat widget. Email, telephone and social services you independently use also have their own privacy practices."
+          "text": "OpenStreetMap's tile servers receive technical connection information, including your IP address, when a map loads. If you open a Google Maps or directions link, Google processes that visit under its own terms. Clicking a WhatsApp link opens an external service and shares the content you choose to send; the floating shortcut itself is locally served and is not an embedded third-party chat widget. Email, telephone and social services you independently use also have their own privacy practices."
         }
       ]
     },
@@ -197,11 +196,11 @@ export const privacyPolicy: LegalDocument = {
       "blocks": [
         {
           "type": "paragraph",
-          "text": "CampusHomes uses session and sign-in cookies to authenticate requests and protect the sign-in process. The reviewed application session cookie is campushomes-session-v1, with a seven-day application session lifetime; separate identity-provider and temporary sign-in cookies may have different lifetimes. The deployed cookie inventory must list the actual names, purposes and expiry periods."
+          "text": "CampusHomes uses session and sign-in cookies to authenticate requests and protect the sign-in process. The CampusHomes session cookie is campushomes-session-v1. A session lasts up to seven days, and you are signed out after 10 minutes without activity. Separate identity-provider and temporary sign-in cookies may have different lifetimes. The deployed cookie inventory must list the actual names, purposes and expiry periods."
         },
         {
           "type": "paragraph",
-          "text": "Local storage keeps preferences such as your theme, recently viewed listings, sidebar state and dismissal of the cookie notice. Session storage can keep the position of the movable WhatsApp shortcut and navigation state. Staff inspection tools can keep draft photographs, location observations and inspection notes in IndexedDB until synchronised or removed. Those drafts are work records on the staff device and require device safeguards and a cleanup process."
+          "text": "Local storage keeps preferences such as your theme, recently viewed listings, sidebar state and dismissal of the cookie notice. Session storage can keep the position of the movable WhatsApp shortcut and navigation state. Staff inspection tools can keep draft photographs, location observations and inspection notes in IndexedDB until synchronised or removed. Those drafts are work records on the staff device and subject to our device safeguards and a cleanup process."
         },
         {
           "type": "paragraph",
@@ -219,19 +218,27 @@ export const privacyPolicy: LegalDocument = {
       "blocks": [
         {
           "type": "paragraph",
-          "text": "We retain personal information only for its specified purpose, a lawful related function or an applicable legal requirement. Relevant factors include the account or tenancy relationship, verification need, dispute or safety investigation, contractual evidence and statutory record-keeping. A general wish to keep information useful indefinitely is not a retention rule."
+          "text": "We retain personal data only for as long as necessary for the purpose it was collected for, or to meet legal, tax, accounting and regulatory obligations in Uganda. When a retention period ends, records are deleted, destroyed or anonymised so they cannot be reconstructed, in line with section 18 of the Data Protection and Privacy Act 2019."
         },
         {
           "type": "paragraph",
-          "text": "The published notice must include the approved schedule for account records, identity documents, tenant forms and health details, messages and support records, inspections, search and usage events, security logs, backups and external-provider copies. Exact periods remain subject to approval and implementation; this draft does not invent statutory periods for these categories."
+          "text": "Draft retention periods, to be confirmed by counsel and put into effect before this policy is final:"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Account and payment records (payment receipts, rent and deposit records, invoices): 6 years after the end of the financial year or after the account closes, for tax records and contract claims.",
+            "Identity documents and verification records: the length of the tenancy or landlord relationship plus 6 years.",
+            "Tenant forms: signed agreements for the tenancy plus 6 years; unsuccessful applications 6 months after the decision; health details deleted when the tenancy ends unless needed for an ongoing legal claim.",
+            "Messages and support records: 2 years after resolution for routine requests and enquiries; 6 years for formal disputes and notices.",
+            "Inspection records: the length of the listing plus 6 years. Search history and usage events: 90 days.",
+            "Security and access logs: 12 months.",
+            "Backups: kept on a rolling cycle and overwritten automatically, currently after 14 days."
+          ]
         },
         {
           "type": "paragraph",
-          "text": "When retention is no longer justified, the information must be securely deleted, destroyed or de-identified so it cannot be reconstructed in identifiable form. A legal hold must be documented, access restricted and the hold reviewed. Account closure, account deletion, anonymisation and removal from a public listing are different actions. Removing a database row does not automatically remove storage objects, identity-provider records, backups or a landlord's independently held tenancy records."
-        },
-        {
-          "type": "paragraph",
-          "text": "You may request account closure or deletion through the privacy contact. We will explain any information that must be retained, the reason and applicable period, and which other controller you may need to contact. We must manage deletion across our own systems and contracted providers and keep failed deletion tasks under review. Backup expiry and restoration controls must prevent an erased record from being silently restored into active use."
+          "text": "When retention is no longer justified, the information will be securely deleted, destroyed or de-identified so it cannot be reconstructed in identifiable form. A legal hold must be documented, access restricted and the hold reviewed. Account closure, account deletion, anonymisation and removal from a public listing are different actions. Removing a database row does not automatically remove storage objects, identity-provider records, backups or a landlord's independently held tenancy records."
         }
       ]
     },
@@ -245,7 +252,7 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           "type": "paragraph",
-          "text": "If we believe personal data has been accessed or acquired by an unauthorised person, we must notify Uganda's Personal Data Protection Office through the prescribed Authority procedure immediately and provide information about remedial action. We must follow the Authority's directions on informing affected people. We do not substitute a general 72-hour waiting period for the Ugandan notification requirement."
+          "text": "If we believe personal data has been accessed or acquired by an unauthorised person, we will notify Uganda's Personal Data Protection Office through the prescribed Authority procedure immediately and provide information about remedial action. We must follow the Authority's directions on informing affected people. We do not substitute a general 72-hour waiting period for the Ugandan notification requirement."
         },
         {
           "type": "paragraph",
@@ -259,15 +266,30 @@ export const privacyPolicy: LegalDocument = {
       "blocks": [
         {
           "type": "paragraph",
-          "text": "Subject to the conditions and safeguards in Ugandan law, you may request confirmation and access to information about you and its recipients; correction or deletion of records that are inaccurate, irrelevant, excessive, out of date, incomplete, misleading, unlawfully obtained or no longer authorised to be retained; prevention of certain harmful or incompatible processing; and an end to direct marketing. You may withdraw consent where processing relies on it. Qualifying significant decisions based solely on automated processing are subject to statutory protections and reconsideration rights. The support chatbot does not itself make booking or tenancy decisions."
+          "text": "Under Uganda's Data Protection and Privacy Act 2019 you have the rights below about how Akolet Properties Ltd collects, uses and holds your personal data. Making a request is free unless it is clearly unfounded or excessive."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Access: ask whether we process your personal data and get a clear copy of the records we hold about you, including tenancy records, payment records and identity files.",
+            "Prevent processing: ask us to stop or suspend processing that is causing you unwarranted harm, or is unlawful or no longer necessary.",
+            "Correction: ask us to correct or update personal data that is inaccurate, incomplete or out of date.",
+            "Deletion: ask us to delete personal data we no longer need or are no longer allowed to keep. We cannot delete records the law requires us to keep, such as payment records for tax purposes, until that period ends.",
+            "Direct marketing: ask us to stop using your data for direct marketing at any time.",
+            "Withdraw consent: where we rely on your consent, withdraw it at any time. This does not make earlier lawful processing unlawful."
+          ]
         },
         {
           "type": "paragraph",
-          "text": "Email info@akolet.co.ug with enough detail to locate the records and understand the request. We may need proportionate proof of identity or authority to act for someone else. Ask for a secure submission route for identity evidence. We must protect other people's information when providing a copy. Current PDPO forms, including Form 8 for access, are available through the Personal Data Protection Office; our team should help you use the appropriate procedure."
+          "text": "To make a request, email info@akolet.co.ug with the subject CampusHomes privacy request, or write to the Data Protection Officer, Akolet Properties Ltd, Maimood Hostel, Office J07, Nkinzi Road, opposite Makerere Eastern Gate, Kampala, Uganda."
         },
         {
           "type": "paragraph",
-          "text": "We will give the access decision within seven days and comply promptly within the Act's 30-day outer period, subject to its conditions. We will give the written decision on correction or deletion within seven days. Notices concerning prevention of processing or direct marketing have applicable 14-day response requirements. Where the automated-decision rules apply, we must explain and follow the relevant notification and reconsideration procedure, including its 21-day periods; the implementing regulations also contain a 14-day response path. If we refuse or partly refuse a request, we will explain the reason and complaint route. These legal timelines must be supported by an operational request process before publication."
+          "text": "We check that a request comes from you before acting on it, usually by replying through the email address or phone number on your account. We only ask for more proof of identity when that is not enough, and we will give you a secure way to send it. Do not email a copy of your ID."
+        },
+        {
+          "type": "paragraph",
+          "text": "We respond within 30 days of receiving your request. If we refuse all or part of a request, we explain why and how you can complain to the Personal Data Protection Office."
         }
       ]
     },
@@ -291,7 +313,7 @@ export const privacyPolicy: LegalDocument = {
       "blocks": [
         {
           "type": "paragraph",
-          "text": "Primary foundations are Uganda's Data Protection and Privacy Act 2019, now published as Cap 97, and the Data Protection and Privacy Regulations 2021, SI 21. For sources, section references, unresolved facts and engineering requirements, see the accompanying Uganda Research and Implementation Report and privacy research ledger. DigsConnect was used to compare subject coverage only; its South African legal bases, business model and wording have not been adopted."
+          "text": "Primary foundations are Uganda's Data Protection and Privacy Act 2019, now published as Cap 97, and the Data Protection and Privacy Regulations 2021, SI 21. For sources, section references, unresolved facts and engineering requirements, see the accompanying Uganda Research and Implementation Report and privacy research ledger."
         },
         {
           "type": "list",
@@ -311,7 +333,6 @@ export const termsAndConditions: LegalDocument = {
   "kind": "terms",
   "version": "CH TC 2026 10 D1",
   "prepared": "23 October 2026",
-  "downloadHref": "/legal/CampusHomes-Terms-and-Conditions-DRAFT.docx",
   "sections": [
     {
       "id": "draft-status",
@@ -504,6 +525,10 @@ export const termsAndConditions: LegalDocument = {
         {
           "type": "paragraph",
           "text": "Current student reservations are free from CampusHomes. Any separate Akolet subscription, inspection, photography, promotion or landlord commission must be set out in a completed written quotation or landlord service agreement accepted by the person who must pay. A blank fee row or a website feature does not create a fee."
+        },
+        {
+          "type": "paragraph",
+          "text": "The standard landlord service terms are in the [CampusHomes landlord agreement draft](/landlord-agreement). It is a draft for review and is not signed or in force."
         },
         {
           "type": "paragraph",

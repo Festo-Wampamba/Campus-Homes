@@ -486,6 +486,18 @@ export function OnboardingWizard({
                 )}
               />
 
+              <p className="text-xs text-muted-foreground">
+                Before you submit, read the{" "}
+                <a href="/landlord-agreement" target="_blank" rel="noopener" className="font-semibold text-primary underline underline-offset-2">
+                  landlord agreement (draft)
+                </a>{" "}
+                and the{" "}
+                <a href="/privacy" target="_blank" rel="noopener" className="font-semibold text-primary underline underline-offset-2">
+                  privacy policy (draft)
+                </a>
+                . They open in a new tab, so your answers here stay as they are.
+              </p>
+
               <PropertyDeclarationFields
                 value={declaration}
                 onChange={(patch) => setDeclaration((prev) => ({ ...prev, ...patch }))}
