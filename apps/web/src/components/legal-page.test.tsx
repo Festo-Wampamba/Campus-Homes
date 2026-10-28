@@ -57,7 +57,7 @@ it("distinguishes a free hold from direct landlord payments and preserves statut
   expect(container.querySelector("#cancellation")?.textContent).toContain("Nothing in these terms waives or reduces a non-excludable right");
 });
 
-it("links the terms to the landlord agreement draft", async () => {
-  await act(async () => root.render(<LegalPage document={termsAndConditions} />));
-  expect(container.querySelector('#fees a[href="/landlord-agreement"]')).not.toBeNull();
+it.each([privacyPolicy, termsAndConditions])("does not link $kind to the landlord agreement", async (document) => {
+  await act(async () => root.render(<LegalPage document={document} />));
+  expect(container.querySelector('a[href^="/landlord-agreement"]')).toBeNull();
 });

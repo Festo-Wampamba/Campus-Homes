@@ -42,13 +42,13 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-3"
+        className="inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-current transition-colors hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-3"
       >
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
           {displayName.charAt(0).toUpperCase()}
         </span>
         <span className="hidden max-w-28 truncate sm:inline">{displayName}</span>
-        <ChevronDown aria-hidden className={cn("size-4 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
+        <ChevronDown aria-hidden className={cn("size-4 opacity-70 transition-transform duration-150", open && "rotate-180")} />
       </button>
 
       {open && (
