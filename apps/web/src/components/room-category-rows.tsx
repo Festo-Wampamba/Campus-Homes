@@ -16,7 +16,8 @@ export type RoomCategoryRow = {
   // Local-only key for React reconciliation — never sent to the API.
   key: string;
   category: RoomCategory;
-  // Free-text room type, only meaningful when category is 'other'.
+  // The room type's own name for 'other'; an optional variant name
+  // ("Executive", "Mini", "Deluxe") for every other type.
   customLabel: string;
   roomCount: string;
   pricePerTermUgx: string;
@@ -162,15 +163,13 @@ export function RoomCategoryRows({
                 </option>
               ))}
             </select>
-            {row.category === "other" && (
-              <Input
-                aria-label="Custom room type"
-                value={row.customLabel}
-                maxLength={40}
-                placeholder="e.g. Penthouse suite"
-                onChange={(e) => update(row.key, { customLabel: e.target.value })}
-              />
-            )}
+            <Input
+              aria-label={row.category === "other" ? "Custom room type" : "Variant name (optional)"}
+              value={row.customLabel}
+              maxLength={40}
+              placeholder={row.category === "other" ? "e.g. Penthouse suite" : "Variant (optional), e.g. Executive, Mini"}
+              onChange={(e) => update(row.key, { customLabel: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-count-${i}`}>Rooms</Label>

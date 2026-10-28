@@ -7,7 +7,7 @@ export type PricedRoom = { propertyId: string; propertyName: string; pricePerTer
 const UNLETTABLE = new Set(["blocked", "under_maintenance"]);
 
 export type IncomeFigures = {
-  /** Every open bed let at its listed rent: the most this term can bring in. */
+  /** Every open bed let at its listed rent: the most this semester can bring in. */
   targetUgx: number;
   /** Rent owed by booked and moved-in students, at the price they booked. */
   expectedUgx: number;
@@ -31,7 +31,7 @@ function figures(targetUgx: number, expectedUgx: number, achievedUgx: number): I
   };
 }
 
-/** This term's income per property and overall, from listed rooms and recorded payments. */
+/** This semester's income per property and overall, from listed rooms and recorded payments. */
 export function incomeSummary(rooms: PricedRoom[], tenants: LandlordTenant[]): { total: IncomeFigures; byProperty: PropertyIncome[] } {
   // Keyed by id: two properties may share a name.
   const sums = new Map<string, { name: string; target: number; expected: number; achieved: number }>();
@@ -72,24 +72,4 @@ export function tenantsByRoom(tenants: LandlordTenant[]): TenantRoom[] {
     rooms.set(tenant.unitId, room);
   }
   return [...rooms.values()];
-}
-
-// Names and contacts are typed by students and landlords; a cell starting
-// with one of these runs as a formula when the file is opened in Excel.
-const FORMULA_START = /^[=+\-@\t\r]/;
-
-function csvCell(value: string | number | null): string {
-  const text = value == null ? "" : String(value);
-  const safe = typeof value === "string" && FORMULA_START.test(text) ? `'${text}` : text;
-  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-}
-
-/** The tenant table as CSV, for landlords who keep their own spreadsheet. */
-export function tenantsCsv(tenants: LandlordTenant[]): string {
-  const header = ["Property", "Room", "Bed", "Status", "Name", "Phone", "Email", "Emergency contact", "Emergency phone", "Total (UGX)", "Paid (UGX)", "Balance (UGX)"];
-  const rows = tenants.map((t) => [
-    t.propertyName, t.roomLabel, t.bedLabel, t.status === "occupied" ? "Moved in" : "Booked",
-    t.name, t.phone, t.email, t.emergencyContactName, t.emergencyContactPhone, t.totalUgx, t.paidUgx, t.balanceUgx,
-  ]);
-  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
 }

@@ -164,7 +164,8 @@ export const publishListingSchema = z.object({
         label: z.string().min(1).max(100),
         capacity: z.number().int().min(1).max(20).default(1),
         roomCategory: z.enum(ROOM_CATEGORIES),
-        // Free-text room type used only when roomCategory is 'other'.
+        // The landlord's variant name ("Executive", "Mini") on any type, or
+        // the room type itself when roomCategory is 'other'.
         roomCategoryLabel: z.string().trim().max(40).optional(),
         // Authoritative self-contained flag per room, set by Ops at publish
         // (0053). Optional on input — defaults to false (non-self-contained),

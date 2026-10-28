@@ -125,7 +125,7 @@ export function StudentShell({ children, user }: { children: React.ReactNode; us
           <Link href="/" className="ch-student-shell__mobile-brand lg:hidden" aria-label="CampusHomes home"><Wordmark className="text-[1.05rem]" /></Link>
           <div className="ml-auto flex items-center gap-2">
             <PresenceHeartbeat />
-            {/* Same 5-minute inactivity sign-out as every other signed-in shell (#235). */}
+            {/* Same 10-minute inactivity sign-out as every other signed-in shell (#235). */}
             <IdleTimeout signInPath="/sign-in" />
             <ThemeToggle />
             <Link href="/profile" className="hidden items-center gap-2 rounded-full px-2 py-1 text-sm font-bold hover:bg-teal-50 sm:flex">

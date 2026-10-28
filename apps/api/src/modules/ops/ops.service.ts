@@ -75,6 +75,24 @@ const SERVICE_CTX: RlsContext = {
   role: 'service_role',
 };
 
+type PublishUnit = PublishListingInput['units'][number];
+
+/** A published room type's name: the general type ("Single Room"), with the
+ * landlord's variant after it ("Single Room - Executive"). An 'other' room's
+ * label is the whole name. */
+export function roomTypeTitle(category: string, variant?: string | null): string {
+  const general = `${category.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())} Room`;
+  const name = variant?.trim();
+  if (!name) return general;
+  return category === 'other' ? name : `${general} - ${name}`;
+}
+
+// Rooms sharing a specification share one room type; a variant name makes a
+// separate type even at the same price.
+function roomTypeKey(unit: PublishUnit): string {
+  return JSON.stringify([unit.roomCategory, unit.capacity, unit.pricePerTermUgx, unit.depositUgx ?? null, unit.roomCategoryLabel?.trim() || null]);
+}
+
 @Injectable()
 export class OpsService {
   constructor(
@@ -871,13 +889,13 @@ export class OpsService {
       // category/capacity/price/deposit group and attach every new unit to it.
       const roomTypeIds = new Map<string, string>();
       for (const unit of newUnitInputs) {
-        const key = JSON.stringify([unit.roomCategory, unit.capacity, unit.pricePerTermUgx, unit.depositUgx ?? null]);
+        const key = roomTypeKey(unit);
         if (roomTypeIds.has(key)) continue;
         const roomType = firstRow(await db.insert(roomTypes).values({
           propertyId: listing.propertyId,
           createdBy: property.landlordId,
         }).returning());
-        const title = `${unit.roomCategory.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())} Room`;
+        const title = roomTypeTitle(unit.roomCategory, unit.roomCategoryLabel);
         const version = firstRow(await db.insert(roomTypeVersions).values({
           roomTypeId: roomType.id,
           versionNumber: 1,
@@ -903,11 +921,11 @@ export class OpsService {
         ? await db.insert(units).values(
             newUnitInputs.map((u) => ({
               propertyId: listing.propertyId,
-              roomTypeId: roomTypeIds.get(JSON.stringify([u.roomCategory, u.capacity, u.pricePerTermUgx, u.depositUgx ?? null])),
+              roomTypeId: roomTypeIds.get(roomTypeKey(u)),
               label: u.label,
               capacity: u.capacity,
               roomCategory: u.roomCategory,
-              roomCategoryLabel: u.roomCategory === 'other' ? (u.roomCategoryLabel ?? null) : null,
+              roomCategoryLabel: u.roomCategoryLabel?.trim() || null,
               selfContained: u.selfContained ?? false,
             })),
           ).returning()

@@ -25,6 +25,7 @@ import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendPaymentReceiptEmail } from './payment-receipt-email';
 import { sendWalkInWelcomeEmail } from './walk-in-email';
+import type { TenantExportRow } from './tenants-export';
 import { EXPIRE_OVERDUE_HOLDS_SQL, RESERVATION_EXPIRY_QUEUE } from './reservations.tokens';
 
 export const DEFAULT_RESERVE_HOURS = 6;
@@ -502,7 +503,7 @@ export class ReservationsService {
    * properties in the WHERE clause, since it runs as service_role. */
   landlordTenants(ctx: RlsContext) {
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
-      const tenants = (await client.query<{ reservationId: string; totalUgx: number }>(
+      const tenants = (await client.query<Omit<TenantExportRow, 'paidUgx' | 'balanceUgx'> & { reservationId: string }>(
         `SELECT r.id AS "reservationId", r.bed_id AS "bedId", r.status::text AS status,
                 p.id AS "propertyId", p.name AS "propertyName", un.id AS "unitId", un.label AS "roomLabel",
                 b.label AS "bedLabel", NULLIF(btrim(u.name), '') AS name,

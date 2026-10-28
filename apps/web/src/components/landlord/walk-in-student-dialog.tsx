@@ -189,7 +189,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
                 <label className="block text-sm font-semibold">
                   Total
                   <input readOnly tabIndex={-1} value={formatUgx(totalUgx)} aria-describedby="walk-in-total-hint" className={`${FIELD} bg-muted/40`} />
-                  <span id="walk-in-total-hint" className="mt-1 block text-xs font-normal text-muted-foreground">This room&apos;s rent per term.</span>
+                  <span id="walk-in-total-hint" className="mt-1 block text-xs font-normal text-muted-foreground">This room&apos;s rent per semester.</span>
                 </label>
                 <label className="block text-sm font-semibold">
                   Balance

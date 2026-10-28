@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { LandlordTenant } from "@campushomes/shared";
 
-import { DownloadTenantsCsv } from "@/components/landlord/download-tenants-csv";
+import { DownloadTenantsExcel } from "@/components/landlord/download-tenants-excel";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatUgx } from "@/lib/format";
 import { percent, type IncomeFigures, type PropertyIncome } from "@/lib/tenant-ledger";
@@ -46,7 +46,7 @@ function TargetBar({ total }: { total: IncomeFigures }) {
   );
 }
 
-/** This term's money for the landlord: what full rooms would bring, what
+/** This semester's money for the landlord: what full rooms would bring, what
  * current students owe, what has been paid, and who still owes. */
 export function IncomeProjection({ total, byProperty, tenants }: { total: IncomeFigures; byProperty: PropertyIncome[]; tenants: LandlordTenant[] }) {
   const collected = percent(total.achievedUgx, total.expectedUgx);
@@ -56,12 +56,12 @@ export function IncomeProjection({ total, byProperty, tenants }: { total: Income
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div>
-          <CardTitle>Income this term</CardTitle>
+          <CardTitle>Income this Semester</CardTitle>
           <CardDescription>
             From your listed rents and the payments you&apos;ve recorded. Updates by itself as students book and pay.
           </CardDescription>
         </div>
-        <DownloadTenantsCsv tenants={tenants} />
+        <DownloadTenantsExcel disabled={tenants.length === 0} />
       </CardHeader>
       <div className="space-y-6 px-6 pb-6">
         <dl className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-5">
@@ -77,7 +77,7 @@ export function IncomeProjection({ total, byProperty, tenants }: { total: Income
         {byProperty.length > 1 && (
           <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full min-w-[40rem] text-left text-sm">
-              <caption className="sr-only">Income this term by property</caption>
+              <caption className="sr-only">Income this Semester by property</caption>
               <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
                 <tr>
                   <th scope="col" className="px-3 py-2">Property</th>

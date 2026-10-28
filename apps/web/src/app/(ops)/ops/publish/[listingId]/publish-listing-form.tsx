@@ -174,7 +174,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           property.proposedRoomCategories.map((p) => ({
             key: `prefill-${p.category}-${p.pricePerTermUgx}-${Math.random()}`,
             category: p.category,
-            customLabel: "",
+            customLabel: p.variantName ?? "",
             roomCount: String(p.roomCount),
             pricePerTermUgx: String(p.pricePerTermUgx),
             depositUgx: p.depositUgx != null ? String(p.depositUgx) : "",
@@ -218,16 +218,17 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         const count = Number(row.roomCount);
         const price = Number(row.pricePerTermUgx);
         const deposit = row.depositUgx ? Number(row.depositUgx) : undefined;
+        const variant = row.customLabel.trim();
         return Array.from({ length: count }, (_, i) => ({
           // Present = reuse this existing room, just price it for this
           // semester; absent = a brand-new physical room. label/capacity are
           // ignored server-side when unitId is present (a room's own
           // physical details don't change on repricing).
           ...(row.unitIds?.[i] ? { unitId: row.unitIds[i] } : {}),
-          label: `${roomCategoryLabel(category)} ${i + 1}`,
+          label: `${variant || roomCategoryLabel(category)} ${i + 1}`,
           capacity: bedsPerRoom(row),
           roomCategory: category,
-          ...(category === "other" && row.customLabel.trim() ? { roomCategoryLabel: row.customLabel.trim() } : {}),
+          ...(variant ? { roomCategoryLabel: variant } : {}),
           selfContained: row.selfContained,
           pricePerTermUgx: price,
           ...(deposit ? { depositUgx: deposit } : {}),

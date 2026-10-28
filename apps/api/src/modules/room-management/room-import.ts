@@ -85,6 +85,17 @@ export async function parseRoomSheet(file: Buffer): Promise<ImportedRoomRow[]> {
 
 const TEMPLATE_HEADERS = ['Room code', 'Room type', 'Building', 'Floor'];
 
+// Excel caps a typed-in dropdown list at 255 characters, and a comma or quote
+// inside a name would split it. Within that, the list goes in the cell rule
+// itself: Excel (Windows, Mac, web), LibreOffice, Google Sheets, WPS and
+// OnlyOffice all show it. A longer list points at the "Room types" sheet,
+// which those apps except some older viewers also follow.
+export function roomTypeListFormula(titles: string[]): string {
+  const inline = `"${titles.join(',')}"`;
+  const fitsInline = inline.length <= 255 && titles.every((title) => !/[,"]/.test(title));
+  return fitsInline ? inline : `'Room types'!$A$2:$A$${titles.length + 1}`;
+}
+
 /** A ready-to-fill template using this property's own room type names. The
  * Excel version offers them as a dropdown on the Room type column. */
 export async function roomImportTemplate(format: 'xlsx' | 'csv', roomTypeTitles: string[]) {
@@ -104,17 +115,25 @@ export async function roomImportTemplate(format: 'xlsx' | 'csv', roomTypeTitles:
   rooms.addRow(TEMPLATE_HEADERS).font = { bold: true };
   examples.forEach((row) => rooms.addRow(row));
   rooms.columns.forEach((column) => { column.width = 22; });
+  rooms.views = [{ state: 'frozen', ySplit: 1 }];
   const types = workbook.addWorksheet('Room types');
   types.addRow(['Room types for this property']).font = { bold: true };
   roomTypeTitles.forEach((title) => types.addRow([title]));
+  types.getColumn(1).width = 34;
   if (roomTypeTitles.length) {
-    for (let row = 2; row <= MAX_IMPORT_ROWS + 1; row += 1) {
-      rooms.getCell(`B${row}`).dataValidation = {
-        type: 'list',
-        allowBlank: true,
-        formulae: [`'Room types'!$A$2:$A$${roomTypeTitles.length + 1}`],
-      };
-    }
+    const validation = {
+      type: 'list' as const,
+      allowBlank: true,
+      formulae: [roomTypeListFormula(roomTypeTitles)],
+      showInputMessage: true,
+      promptTitle: 'Room type',
+      prompt: 'Pick one of your room types from the list.',
+      showErrorMessage: true,
+      errorStyle: 'stop' as const,
+      errorTitle: 'Unknown room type',
+      error: 'Choose a room type from the list. Add new ones in Manage Rooms first.',
+    };
+    for (let row = 2; row <= MAX_IMPORT_ROWS + 1; row += 1) rooms.getCell(`B${row}`).dataValidation = validation;
   }
   return {
     buffer: Buffer.from(await workbook.xlsx.writeBuffer()),
