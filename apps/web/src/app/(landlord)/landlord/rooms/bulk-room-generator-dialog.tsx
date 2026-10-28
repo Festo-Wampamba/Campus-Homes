@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, apiErrorMessage } from "@/lib/api";
 import type { RoomType, RoomUnit } from "@/lib/room-management";
 import { planRoomImport, type ImportedRoomRow } from "@/lib/room-import";
+import { resolveRoomTypeId, RoomTypePicker } from "./room-type-picker";
 
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
@@ -29,6 +30,13 @@ interface BulkRoomGeneratorDialogProps {
   onGenerated: (newRooms: RoomUnit[]) => void;
 }
 
+// The three ways to add rooms read as real buttons: brand teal for the one in
+// use, teal-outlined for the others.
+const MODE_BUTTON =
+  "rounded-md border px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+const MODE_ON = "border-primary bg-primary text-primary-foreground shadow-xs";
+const MODE_OFF = "border-primary/40 bg-card text-primary hover:bg-teal-50 dark:hover:bg-primary/10";
+
 export function BulkRoomGeneratorDialog({
   open,
   onOpenChange,
@@ -42,6 +50,7 @@ export function BulkRoomGeneratorDialog({
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string>(
     roomTypes[0]?.id ?? "",
   );
+  const roomTypeId = resolveRoomTypeId(roomTypes, selectedRoomTypeId);
   const [buildingName, setBuildingName] = useState("");
   const [floorLabel, setFloorLabel] = useState("");
 
@@ -172,7 +181,7 @@ export function BulkRoomGeneratorDialog({
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     if (mode === "upload") return handleImport();
-    if (!selectedRoomTypeId) {
+    if (!roomTypeId) {
       setError("Please select a Room Type specification for these rooms.");
       return;
     }
@@ -196,7 +205,7 @@ export function BulkRoomGeneratorDialog({
 
     try {
       const payload = {
-        roomTypeId: selectedRoomTypeId,
+        roomTypeId,
         buildingName: buildingName.trim() || null,
         floorLabel: floorLabel.trim() || null,
         roomCodes: previewCodes,
@@ -240,37 +249,28 @@ export function BulkRoomGeneratorDialog({
           )}
 
           {/* Mode switch */}
-          <div className="flex rounded-lg border border-border p-1 bg-muted/40">
+          <div role="group" aria-label="How to add rooms" className="grid gap-2 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => setMode("range")}
-              className={`flex-1 rounded-md py-2 text-xs font-semibold transition-colors ${
-                mode === "range"
-                  ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              aria-pressed={mode === "range"}
+              className={`${MODE_BUTTON} ${mode === "range" ? MODE_ON : MODE_OFF}`}
             >
               Sequential Range (e.g. Room 101 to 120)
             </button>
             <button
               type="button"
               onClick={() => setMode("custom")}
-              className={`flex-1 rounded-md py-2 text-xs font-semibold transition-colors ${
-                mode === "custom"
-                  ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              aria-pressed={mode === "custom"}
+              className={`${MODE_BUTTON} ${mode === "custom" ? MODE_ON : MODE_OFF}`}
             >
               Custom Codes (CSV or Newline)
             </button>
             <button
               type="button"
               onClick={() => setMode("upload")}
-              className={`flex-1 rounded-md py-2 text-xs font-semibold transition-colors ${
-                mode === "upload"
-                  ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              aria-pressed={mode === "upload"}
+              className={`${MODE_BUTTON} ${mode === "upload" ? MODE_ON : MODE_OFF}`}
             >
               Upload Spreadsheet (Excel or CSV)
             </button>
@@ -298,6 +298,10 @@ export function BulkRoomGeneratorDialog({
                     <Download aria-hidden className="size-3.5" /> CSV template
                   </a>
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  The Excel template has a Room type dropdown with this property&apos;s room types (Excel, LibreOffice and Google Sheets).
+                  A CSV file can&apos;t hold a dropdown, so type room types exactly as listed.
+                </p>
               </div>
 
               <div>
@@ -363,22 +367,7 @@ export function BulkRoomGeneratorDialog({
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="bg-room-type">Room Type Specification</Label>
-              <select
-                id="bg-room-type"
-                value={selectedRoomTypeId}
-                onChange={(e) => setSelectedRoomTypeId(e.target.value)}
-                required
-                className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
-              >
-                {roomTypes.map((rt) => {
-                  const ver = rt.pendingVersion ?? rt.currentVersion;
-                  return (
-                    <option key={rt.id} value={rt.id}>
-                      {ver?.title ?? "Untitled"} ({ver?.capacity ?? 1} beds)
-                    </option>
-                  );
-                })}
-              </select>
+              <RoomTypePicker id="bg-room-type" roomTypes={roomTypes} value={selectedRoomTypeId} onChange={setSelectedRoomTypeId} />
             </div>
 
             <div>

@@ -32,3 +32,10 @@ describe("RoomCategoryRows room types", () => {
     expect(render()).toContain(">Studio</option>");
   });
 });
+
+describe("RoomCategoryRows variants", () => {
+  it("offers a variant name on a general room type", () => {
+    const html = renderToStaticMarkup(<RoomCategoryRows rows={[{ ...emptyRoomCategoryRow(), category: "single" }]} onChange={() => {}} idPrefix="t" />);
+    expect(html).toContain('aria-label="Variant name (optional)"');
+  });
+});

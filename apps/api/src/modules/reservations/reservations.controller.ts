@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 
 import { bookReservationSchema, onboardWalkInSchema, recordPaymentSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
@@ -6,6 +7,7 @@ import { bookReservationSchema, onboardWalkInSchema, recordPaymentSchema, releas
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ReservationsService } from './reservations.service';
+import { tenantsWorkbook } from './tenants-export';
 
 class ReserveDto extends createZodDto(reserveSchema) {}
 class BookDto extends createZodDto(bookReservationSchema) {}
@@ -49,6 +51,16 @@ export class ReservationsController {
   @Roles('landlord')
   landlordTenants(@Req() req: AuthenticatedRequest) {
     return this.reservationsService.landlordTenants(rlsCtx(req));
+  }
+
+  @Get('landlord-tenants/export')
+  @Roles('landlord')
+  async exportLandlordTenants(@Req() req: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
+    const tenants = await this.reservationsService.landlordTenants(rlsCtx(req));
+    const day = new Date().toISOString().slice(0, 10);
+    response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    response.setHeader('Content-Disposition', `attachment; filename="campushomes-tenants-${day}.xlsx"`);
+    return new StreamableFile(await tenantsWorkbook(tenants));
   }
 
   @Post(':id/payments')

@@ -73,7 +73,7 @@ export default async function LandlordReportsPage() {
         {income && tenants ? (
           <IncomeProjection total={income.total} byProperty={income.byProperty} tenants={tenants} />
         ) : (
-          <p role="alert" className="text-sm text-destructive">Couldn&apos;t load this term&apos;s income. Refresh the page to try again.</p>
+          <p role="alert" className="text-sm text-destructive">Couldn&apos;t load this semester&apos;s income. Refresh the page to try again.</p>
         )}
       </div>
 

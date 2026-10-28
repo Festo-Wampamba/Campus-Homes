@@ -60,6 +60,7 @@ function roomRowsFromProperty(property: Property | null): RoomCategoryRow[] {
   return property.proposedRoomCategories.map((row) => ({
     ...emptyRoomCategoryRow(),
     category: row.category,
+    customLabel: row.variantName ?? "",
     roomCount: String(row.roomCount),
     pricePerTermUgx: String(row.pricePerTermUgx),
     depositUgx: row.depositUgx != null ? String(row.depositUgx) : "",
@@ -164,6 +165,7 @@ function PropertyForm({
         bedsPerRoom: bedsPerRoom(row),
         ...(row.depositUgx ? { depositUgx: Number(row.depositUgx) } : {}),
         ...(row.photoKeys?.length ? { photoKeys: row.photoKeys } : {}),
+        ...(row.customLabel.trim() ? { variantName: row.customLabel.trim() } : {}),
       }));
       // Derived from the rows above, not entered separately — see the
       // comment on proposedRoomCategorySchema.selfContained.

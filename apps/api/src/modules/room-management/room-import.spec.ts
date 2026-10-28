@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
+import ExcelJS from 'exceljs';
 
-import { MAX_IMPORT_ROWS, parseRoomSheet, roomImportTemplate } from './room-import';
+import { MAX_IMPORT_ROWS, parseRoomSheet, roomImportTemplate, roomTypeListFormula } from './room-import';
 
 const csv = (text: string) => Buffer.from(text, 'utf8');
 
@@ -14,6 +15,22 @@ describe('parseRoomSheet', () => {
     const template = await roomImportTemplate('xlsx', ['Single Room']);
     const rows = await parseRoomSheet(template.buffer);
     expect(rows.map((row) => [row.roomCode, row.roomType])).toEqual([['A01', 'Single Room'], ['A02', 'Single Room']]);
+  });
+
+  it('offers the room types as a dropdown in the Excel template', async () => {
+    const template = await roomImportTemplate('xlsx', ['Single Room', 'Double Room']);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(template.buffer as unknown as ArrayBuffer);
+    expect(workbook.getWorksheet('Rooms')!.getCell('B2').dataValidation?.formulae).toEqual(['"Single Room,Double Room"']);
+  });
+
+  it('points a long room type list at the Room types sheet', () => {
+    const titles = Array.from({ length: 30 }, (_, i) => `Executive single variant ${i + 1}`);
+    expect(roomTypeListFormula(titles)).toBe("'Room types'!$A$2:$A$31");
+  });
+
+  it('keeps a room type name with a comma out of the inline list', () => {
+    expect(roomTypeListFormula(['Single, mini'])).toBe("'Room types'!$A$2:$A$2");
   });
 
   it('reads back the CSV template it hands out', async () => {

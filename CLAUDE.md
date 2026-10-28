@@ -1534,3 +1534,30 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     bed x listed rent; Expected = booked/moved-in rents; Achieved = recorded
     payments; Remaining = Expected - Achieved; Empty-bed gap = Target -
     Expected; per-property table and "Who still owes".
+
+- **Excel export, 10-minute idle, Semester wording, room type picker, template
+  dropdowns, room type variants (2026-10-28):**
+  - `IDLE_TIMEOUT_MS` is now **10 minutes** (was 5); API and web both read it.
+  - Tenant ledger download is Excel, built by the API
+    (`GET /reservations/landlord-tenants/export`, `tenants-export.ts`):
+    teal header, frozen row, money as numbers, phones as text, totals row,
+    owed balances red. The browser CSV (`tenantsCsv`) is gone.
+  - Landlord-facing "term" is "Semester" (Income this Semester, rent per semester).
+  - `RoomTypePicker` (`landlord/rooms/room-type-picker.tsx`) is the one room
+    type select for Add room and Bulk generate. `resolveRoomTypeId` always
+    lands on a real option: dialogs kept the id from when they first opened,
+    and once room types loaded later or the property changed the select
+    showed blank. Bulk generate's three modes are teal buttons (`aria-pressed`).
+  - Rooms template: the Room type dropdown is an inline list when it fits
+    Excel's 255-character limit and no name has a comma or quote
+    (`roomTypeListFormula`), else it points at the "Room types" sheet. Excel,
+    LibreOffice and Google Sheets show it; Apple Numbers doesn't import Excel
+    dropdowns, and CSV can't hold one (the dialog says so).
+  - Room type variants: `proposedRoomCategories[].variantName` ("Executive",
+    "Mini", "Deluxe") on any general type; the general type stays the
+    category. Ops publish carries it as `units.room_category_label` (any type
+    now, not just 'other') and names the room type
+    `roomTypeTitle()` = "Single Room - Executive"; a variant is its own room
+    type even at the same price, so it appears in the template dropdown.
+    The one-reservation-per-room-type rule still keys on category +
+    self-contained, so variants of one category count as the same type there.
