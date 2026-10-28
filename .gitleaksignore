@@ -1,0 +1,2 @@
+# False positive: generic-api-key matched a git commit SHA under the JSON key "stagingApiCommit" (renamed since).
+8096b10ed55ff588b0e599cab90699a6db409712:docs/legal/2026-10-23-uganda-review/staging-evidence/release.json:generic-api-key:6

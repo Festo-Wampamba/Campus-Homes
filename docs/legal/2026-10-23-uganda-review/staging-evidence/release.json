@@ -3,7 +3,7 @@
   "pullRequest": "https://github.com/Festo-Wampamba/Campus-Homes/pull/258",
   "releaseRun": "https://github.com/Festo-Wampamba/Campus-Homes/actions/runs/39921286689",
   "stagingWebCommit": "854423d0d305b2e664c7d7a089dde9c39d05d970",
-  "stagingApiCommit": "854423d0d305b2e664c7d7a089dde9c39d05d970",
+  "stagingBackendCommit": "854423d0d305b2e664c7d7a089dde9c39d05d970",
   "apiHealth": "ok",
   "database": "up",
   "redis": "up",
