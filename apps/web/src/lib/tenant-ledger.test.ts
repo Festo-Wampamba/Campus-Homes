@@ -23,7 +23,7 @@ const tenant = (overrides: Partial<LandlordTenant>): LandlordTenant => ({
 });
 
 // Two open beds at 900k and one blocked bed: target counts only the open two.
-const ROOMS = [{ propertyName: "Mirembe", pricePerTermUgx: 900_000, operationalStatus: "available", beds: [{ blocked: false }, { blocked: false }, { blocked: true }] }];
+const ROOMS = [{ propertyId: "00000000-0000-4000-8000-000000000003", propertyName: "Mirembe", pricePerTermUgx: 900_000, operationalStatus: "available", beds: [{ blocked: false }, { blocked: false }, { blocked: true }] }];
 
 it("sets the target to every open bed at its listed rent", () => {
   expect(incomeSummary(ROOMS, []).total.targetUgx).toBe(1_800_000);
@@ -51,8 +51,13 @@ it("shows target minus expected as the empty-bed gap", () => {
 });
 
 it("splits income by property", () => {
-  const other = tenant({ propertyName: "Kikoni", totalUgx: 500_000, paidUgx: 500_000, balanceUgx: 0 });
+  const other = tenant({ propertyId: "00000000-0000-4000-8000-000000000007", propertyName: "Kikoni", totalUgx: 500_000, paidUgx: 500_000, balanceUgx: 0 });
   expect(incomeSummary(ROOMS, [tenant({}), other]).byProperty.map((p) => p.propertyName)).toEqual(["Kikoni", "Mirembe"]);
+});
+
+it("keeps two properties with the same name apart", () => {
+  const twin = tenant({ propertyId: "00000000-0000-4000-8000-000000000008" });
+  expect(incomeSummary(ROOMS, [tenant({}), twin]).byProperty).toHaveLength(2);
 });
 
 it("has no percentage when there is nothing expected", () => {

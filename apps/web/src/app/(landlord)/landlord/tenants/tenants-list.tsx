@@ -147,6 +147,8 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
 function RecordPaymentDialog({ tenant, onClose }: { tenant: LandlordTenant; onClose: () => void }) {
   const router = useRouter();
   const [amount, setAmount] = useState("");
+  // One key per payment: a retry after a lost response can't record it twice.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [paymentMethod, setPaymentMethod] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +162,7 @@ function RecordPaymentDialog({ tenant, onClose }: { tenant: LandlordTenant; onCl
     try {
       await api(`/reservations/${tenant.reservationId}/payments`, {
         method: "POST",
-        body: JSON.stringify({ amountUgx, paymentMethod: paymentMethod || undefined }),
+        body: JSON.stringify({ amountUgx, paymentMethod: paymentMethod || undefined, idempotencyKey }),
       });
       router.refresh();
       onClose();

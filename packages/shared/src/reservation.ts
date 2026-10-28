@@ -89,6 +89,9 @@ export type PaymentReceipt = z.infer<typeof paymentReceiptSchema>;
 export const recordPaymentSchema = z.object({
   amountUgx: ugxAmount,
   paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  // One per payment, made in the browser: a retry with the same key returns
+  // the first receipt instead of recording the money twice.
+  idempotencyKey,
 });
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 
