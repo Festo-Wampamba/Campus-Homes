@@ -1510,3 +1510,27 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     linked `apps/api/.env` points that at the local dev DB (25432). To
     migrate the docker test DB, set BOTH `DATABASE_MIGRATIONS_URL` and
     `DATABASE_URL` to the test URL.
+
+- **Tenant records, later payments, income this term, walk-in Total/Balance
+  (2026-10-28):**
+  - `GET /reservations/landlord-tenants` (landlord): booked + moved-in students
+    on the landlord's own properties (service_role, scoped by
+    `p.landlord_id` in SQL) with name/phone/email/emergency contact, Total
+    (`reservations.price_per_term_ugx`, the rent stored at booking), Paid and
+    Balance. Paid = every `payment_receipts` row for the booking; a pre-0075
+    booking with no receipts falls back to its booking-row amounts.
+  - `POST /reservations/:id/payments` (landlord/custodian): a later payment,
+    one receipt per instalment in the new `payment_receipts.rent_ugx` column
+    (migration 0078; amount CHECK now covers all three columns). Locks the
+    reservation `FOR UPDATE`, refuses more than the balance and anything not
+    booked/moved in. Audited `reservation.payment_record`; receipt emailed.
+  - Walk-in form: Deposit removed; "Booking fee / Amount paid" + read-only
+    Total (the bed's room rent) + Balance (red). The API refuses a walk-in
+    amount above the room's rent.
+  - Tenants page: rooms with students open a name + phone dialog; "Tenant
+    records" table with Record payment; CSV download (`lib/tenant-ledger.ts`
+    `tenantsCsv` prefixes `= + - @` cells with `'` against formula injection).
+  - Reports: "Income this term" (`incomeSummary`): Target = every unblocked
+    bed x listed rent; Expected = booked/moved-in rents; Achieved = recorded
+    payments; Remaining = Expected - Achieved; Empty-bed gap = Target -
+    Expected; per-property table and "Who still owes".

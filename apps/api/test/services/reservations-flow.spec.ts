@@ -4,7 +4,7 @@
  * the 3-active-reservations-platform-wide cap, walk-in booking, release, and
  * expiry. Runs against the docker test DB through the real services.
  */
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Pool } from 'pg';
 import { MAX_ACTIVE_RESERVATIONS, ROOM_CATEGORIES } from '@campushomes/shared';
 import { eq } from 'drizzle-orm';
@@ -544,6 +544,83 @@ describe('payment receipts and student details (Festo, 2026-10-23)', () => {
     });
     const rows = await pool.query(`SELECT 1 FROM payment_receipts WHERE reservation_id = $1`, [result.reservationId]);
     expect(rows.rowCount).toBe(0);
+  });
+});
+
+describe('tenant records and later payments (Festo, 2026-10-28)', () => {
+  let reservationId: string;
+  let rentUgx: number;
+  type Tenant = { reservationId: string; name: string | null; phone: string | null; totalUgx: number; paidUgx: number; balanceUgx: number };
+  const tenantRow = async (landlord: string) =>
+    ((await reservationsService.landlordTenants(landlordCtx(landlord))) as Tenant[]).find((t) => t.reservationId === reservationId);
+
+  beforeAll(async () => {
+    const { bedId: bed } = await seedUnitWithBed('Tenant ledger');
+    reservationId = (await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Ledger Student', phone: '+256710000321', university: 'MUK', movedIn: false,
+      bookingFeeCollectedUgx: 100_000, paymentMethod: 'cash',
+    })).reservationId;
+    rentUgx = (await pool.query(`SELECT price_per_term_ugx FROM reservations WHERE id = $1`, [reservationId])).rows[0]
+      .price_per_term_ugx as number;
+  });
+
+  it("lists the booked student's name, phone and what they paid", async () => {
+    const row = await tenantRow(landlord1);
+    expect([row?.name, row?.phone, row?.paidUgx]).toEqual(['Ledger Student', '+256710000321', 100_000]);
+  });
+
+  it('works out the balance from the rent stored at booking', async () => {
+    expect((await tenantRow(landlord1))?.balanceUgx).toBe(rentUgx - 100_000);
+  });
+
+  it("keeps a landlord's tenants out of another landlord's list", async () => {
+    expect(await tenantRow(landlord2)).toBeUndefined();
+  });
+
+  it('counts a later payment towards what the student paid', async () => {
+    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 50_000, paymentMethod: 'mtn_momo' });
+    expect((await tenantRow(landlord1))?.paidUgx).toBe(150_000);
+  });
+
+  it('stores a later payment as its own rent receipt', async () => {
+    const rows = await pool.query(
+      `SELECT rent_ugx FROM payment_receipts WHERE reservation_id = $1 AND rent_ugx > 0`,
+      [reservationId],
+    );
+    expect(rows.rows).toEqual([{ rent_ugx: 50_000 }]);
+  });
+
+  it('refuses a payment above the remaining balance', async () => {
+    await expect(
+      reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: rentUgx }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("refuses another landlord recording a payment on this booking", async () => {
+    await expect(
+      reservationsService.recordPayment(landlordCtx(landlord2), reservationId, { amountUgx: 1_000 }),
+    ).rejects.toThrow();
+  });
+
+  it('refuses a payment on a released booking', async () => {
+    const { bedId: bed } = await seedUnitWithBed('Released ledger');
+    const walkIn = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Gone Student', phone: '+256710000322', university: 'MUK', movedIn: false,
+    });
+    await reservationsService.release(landlordCtx(landlord1), walkIn.reservationId, { reason: 'Did not take the room', refundRequired: false });
+    await expect(
+      reservationsService.recordPayment(landlordCtx(landlord1), walkIn.reservationId, { amountUgx: 1_000 }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it("refuses a walk-in amount above the room's rent", async () => {
+    const { bedId: bed } = await seedUnitWithBed('Overpaid walk-in');
+    await expect(
+      reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+        bedId: bed, name: 'Over Payer', phone: '+256710000323', university: 'MUK', movedIn: false,
+        bookingFeeCollectedUgx: rentUgx + 1,
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });
 
