@@ -16,10 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
-import { PropertyQrCode } from "@/components/property-qr-code";
 import { PhotoTile } from "@/components/listing/photo-tile";
 import { StatusChip } from "@/components/status-chip";
-import { TenantAgreementBuilderDialog } from "@/components/tenant-agreement-builder-dialog";
 import { ViewDocumentButton } from "@/components/view-document-button";
 import { ConfirmBookingDialog, PAYMENT_METHOD_LABEL } from "@/components/landlord/confirm-booking-dialog";
 import { api, ApiError } from "@/lib/api";
@@ -1198,7 +1196,6 @@ export function PropertyDetailDialog({
   onOpenChange: (open: boolean) => void;
   property: Property | null;
 }) {
-  const [builderOpen, setBuilderOpen] = useState(false);
   // The switch updates this right away; the property prop catches up on refresh.
   const [intentChange, setIntentChange] = useState<{ propertyId: string; value: ListingIntent } | null>(null);
   const listingIntent = property
@@ -1239,23 +1236,19 @@ export function PropertyDetailDialog({
               <div>
                 <p className="text-sm font-semibold text-foreground">Student registration form</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Design the form students fill out and sign after scanning this property&apos;s QR code below.
+                  Edit the form and print its QR code on the Tenants page.
                 </p>
               </div>
-              <Button type="button" variant="secondary" size="sm" onClick={() => setBuilderOpen(true)}>
-                Edit form
-              </Button>
+              <Link
+                href={`/landlord/tenants?property=${property.id}#registration-form-heading`}
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-semibold hover:bg-muted"
+              >
+                Open Tenants
+              </Link>
             </div>
-            <PropertyQrCode propertyId={property.id} propertyName={property.name} />
             <TenantAgreementsList propertyId={property.id} />
             <PropertyDetailBody propertyId={property.id} listingIntent={listingIntent} />
           </DialogBody>
-          <TenantAgreementBuilderDialog
-            open={builderOpen}
-            onOpenChange={setBuilderOpen}
-            propertyId={property.id}
-            propertyName={property.name}
-          />
         </>
       )}
     </Dialog>

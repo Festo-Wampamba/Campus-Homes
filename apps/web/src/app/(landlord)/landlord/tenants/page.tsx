@@ -5,14 +5,17 @@ import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { WalkInStudentButton } from "@/components/landlord/walk-in-student-dialog";
 import { formatUgx } from "@/lib/format";
+import { getMyProperties } from "@/lib/landlord";
 import { getLandlordTenants } from "@/lib/tenants";
 import { freeBedsForWalkIn } from "../bookings/room-lookup";
+import { RegistrationFormSection } from "./registration-form-section";
 import { TenantsList } from "./tenants-list";
 
 export const metadata: Metadata = { title: "Tenants" };
 
-export default async function LandlordTenantsPage() {
-  const [tenants, freeBeds] = await Promise.all([getLandlordTenants(), freeBedsForWalkIn()]);
+export default async function LandlordTenantsPage({ searchParams }: { searchParams: Promise<{ property?: string }> }) {
+  const { property: chosenPropertyId } = await searchParams;
+  const [tenants, freeBeds, properties] = await Promise.all([getLandlordTenants(), freeBedsForWalkIn(), getMyProperties()]);
   const list = tenants ?? [];
   const movedIn = list.filter((t) => t.status === "occupied").length;
   const paidUgx = list.reduce((sum, t) => sum + t.paidUgx, 0);
@@ -67,6 +70,13 @@ export default async function LandlordTenantsPage() {
         ) : (
           <TenantsList tenants={list} />
         )}
+      </div>
+
+      <div className="mt-8">
+        <RegistrationFormSection
+          properties={properties.map(({ id, name }) => ({ id, name }))}
+          initialPropertyId={chosenPropertyId}
+        />
       </div>
     </>
   );
