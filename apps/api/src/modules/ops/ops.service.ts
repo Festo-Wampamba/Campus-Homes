@@ -389,6 +389,7 @@ export class OpsService {
           label: units.label,
           capacity: units.capacity,
           roomCategory: units.roomCategory,
+          roomCategoryLabel: units.roomCategoryLabel,
           selfContained: units.selfContained,
           pricePerTermUgx: unitSemesterPricing.pricePerTermUgx,
           depositUgx: unitSemesterPricing.depositUgx,

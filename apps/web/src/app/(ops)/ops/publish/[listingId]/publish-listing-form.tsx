@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_PUBLISH_UNITS, PHOTO_CATEGORIES, withAmenity, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
 
-type PropertyRoom = {
+export type PropertyRoom = {
   id: string;
   label: string;
   capacity: number;
   roomCategory: RoomCategory;
+  // The landlord's variant ("Executive"), or the room type for 'other'.
+  roomCategoryLabel: string | null;
   selfContained: boolean;
   pricePerTermUgx: number | null;
   depositUgx: number | null;
@@ -62,6 +64,35 @@ function landlordRoomTypePhotos(property: Property, staged: VisitPhoto[]): Visit
       };
     }),
   );
+}
+
+/** The property's existing rooms as publish rows: one row per room type the
+ * landlord would recognise, so two variants at the same price stay apart and
+ * extra rooms added to a row keep that row's variant. */
+export function rowsFromExistingRooms(rooms: PropertyRoom[]): RoomCategoryRow[] {
+  const groups = new Map<string, RoomCategoryRow>();
+  for (const room of rooms) {
+    const variant = room.roomCategoryLabel?.trim() ?? "";
+    const key = JSON.stringify([room.roomCategory, room.capacity, room.pricePerTermUgx ?? null, room.selfContained, variant]);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.roomCount = String(Number(existing.roomCount) + 1);
+      existing.unitIds!.push(room.id);
+    } else {
+      groups.set(key, {
+        key,
+        category: room.roomCategory,
+        customLabel: variant,
+        roomCount: "1",
+        pricePerTermUgx: room.pricePerTermUgx != null ? String(room.pricePerTermUgx) : "",
+        depositUgx: room.depositUgx != null ? String(room.depositUgx) : "",
+        selfContained: room.selfContained,
+        bedsPerRoom: String(room.capacity),
+        unitIds: [room.id],
+      });
+    }
+  }
+  return [...groups.values()];
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -141,31 +172,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         if (cancelled) return;
 
         if (rooms.length > 0) {
-          const groups = new Map<string, RoomCategoryRow>();
-          for (const room of rooms) {
-            const key = `${room.roomCategory}-${room.capacity}-${room.pricePerTermUgx ?? "unpriced"}-${room.selfContained}`;
-            const existing = groups.get(key);
-            if (existing) {
-              existing.roomCount = String(Number(existing.roomCount) + 1);
-              existing.unitIds!.push(room.id);
-            } else {
-              groups.set(key, {
-                key,
-                category: room.roomCategory,
-                // ponytail: existing-room prefill drops any custom label (rare
-                // for 'other' rooms); the lead can retype it. Wire through
-                // PropertyRoom when that becomes a real need.
-                customLabel: "",
-                roomCount: "1",
-                pricePerTermUgx: room.pricePerTermUgx != null ? String(room.pricePerTermUgx) : "",
-                depositUgx: room.depositUgx != null ? String(room.depositUgx) : "",
-                selfContained: room.selfContained,
-                bedsPerRoom: String(room.capacity),
-                unitIds: [room.id],
-              });
-            }
-          }
-          setRoomCategoryRows([...groups.values()]);
+          setRoomCategoryRows(rowsFromExistingRooms(rooms));
           return;
         }
 
