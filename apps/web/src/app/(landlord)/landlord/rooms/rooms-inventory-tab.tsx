@@ -24,6 +24,7 @@ import { BedspaceDrawer } from "./bedspace-drawer";
 import { BatchEditRoomsDialog } from "./batch-edit-rooms-dialog";
 import { BulkRoomGeneratorDialog } from "./bulk-room-generator-dialog";
 import { UnitBlockDialog } from "./unit-block-dialog";
+import { resolveRoomTypeId, RoomTypePicker } from "./room-type-picker";
 
 interface RoomsInventoryTabProps {
   propertyId: string;
@@ -80,6 +81,7 @@ export function RoomsInventoryTab({
   // Single Room Form fields
   const [srCode, setSrCode] = useState("");
   const [srTypeId, setSrTypeId] = useState(roomTypes[0]?.id ?? "");
+  const roomTypeId = resolveRoomTypeId(roomTypes, srTypeId);
   const [srBuilding, setSrBuilding] = useState("");
   const [srFloor, setSrFloor] = useState("");
   const [srSubmitting, setSrSubmitting] = useState(false);
@@ -185,7 +187,7 @@ export function RoomsInventoryTab({
       setSrError("Room code is required.");
       return;
     }
-    if (!srTypeId) {
+    if (!roomTypeId) {
       setSrError("Select a room type first. Create one in the Room Types tab before adding physical rooms.");
       return;
     }
@@ -197,7 +199,7 @@ export function RoomsInventoryTab({
       if (editingRoom) {
         const payload = {
           roomCode: srCode.trim(),
-          roomTypeId: srTypeId,
+          roomTypeId,
           buildingName: srBuilding.trim() || null,
           floorLabel: srFloor.trim() || null,
         };
@@ -214,7 +216,7 @@ export function RoomsInventoryTab({
       } else {
         const payload = {
           roomCode: srCode.trim(),
-          roomTypeId: srTypeId,
+          roomTypeId,
           buildingName: srBuilding.trim() || null,
           floorLabel: srFloor.trim() || null,
         };
@@ -802,25 +804,7 @@ export function RoomsInventoryTab({
             </div>
             <div>
               <Label htmlFor="sr-type">Room Type</Label>
-              <select
-                id="sr-type"
-                value={srTypeId}
-                onChange={(e) => setSrTypeId(e.target.value)}
-                disabled={roomTypes.length === 0}
-                className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="" disabled>
-                  {roomTypes.length === 0 ? "No room types yet" : "Select a room type…"}
-                </option>
-                {roomTypes.map((rt) => {
-                  const t = rt.currentVersion?.title ?? rt.pendingVersion?.title ?? "Room";
-                  return (
-                    <option key={rt.id} value={rt.id}>
-                      {t}
-                    </option>
-                  );
-                })}
-              </select>
+              <RoomTypePicker id="sr-type" roomTypes={roomTypes} value={srTypeId} onChange={setSrTypeId} />
               {roomTypes.length === 0 && (
                 <p className="mt-1.5 text-sm text-muted-foreground">
                   Create a room type in the <span className="font-medium text-foreground">Room Types</span> tab first. A physical room must be linked to one.

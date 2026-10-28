@@ -6,7 +6,7 @@ import { ChevronRight, Phone } from "lucide-react";
 import type { LandlordTenant } from "@campushomes/shared";
 
 import { PAYMENT_METHOD_LABEL } from "@/components/landlord/confirm-booking-dialog";
-import { DownloadTenantsCsv } from "@/components/landlord/download-tenants-csv";
+import { DownloadTenantsExcel } from "@/components/landlord/download-tenants-excel";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -60,7 +60,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
       <section aria-labelledby="tenant-records-heading">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="tenant-records-heading" className="text-lg">Tenant records</h2>
-          <DownloadTenantsCsv tenants={tenants} />
+          <DownloadTenantsExcel />
         </div>
         <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full min-w-[56rem] text-left text-sm">

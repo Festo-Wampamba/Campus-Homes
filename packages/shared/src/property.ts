@@ -43,6 +43,11 @@ export const proposedRoomCategorySchema = z.object({
   // included for self-contained). Not public until Ops confirms them at
   // publish, where they arrive linked to this room type.
   photoKeys: z.array(z.string().min(1).max(500)).max(8).optional(),
+  // A landlord's own name for this variant of the general type, e.g.
+  // "Executive" or "Mini" on a single, "Deluxe" on a double (Festo,
+  // 2026-10-28). For 'other' it is the room type itself. Ops carries it to
+  // the rooms at publish, where it names the room type.
+  variantName: z.string().trim().max(40).optional(),
 });
 export type ProposedRoomCategory = z.infer<typeof proposedRoomCategorySchema>;
 

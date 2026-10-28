@@ -1,6 +1,6 @@
 import type { LandlordTenant } from "@campushomes/shared";
 
-import { incomeSummary, percent, tenantsByRoom, tenantsCsv } from "./tenant-ledger";
+import { incomeSummary, percent, tenantsByRoom } from "./tenant-ledger";
 
 const tenant = (overrides: Partial<LandlordTenant>): LandlordTenant => ({
   reservationId: "00000000-0000-4000-8000-000000000001",
@@ -67,9 +67,4 @@ it("has no percentage when there is nothing expected", () => {
 it("groups students sharing a room together", () => {
   const roommate = tenant({ reservationId: "00000000-0000-4000-8000-000000000009", bedLabel: "Bed 2" });
   expect(tenantsByRoom([tenant({}), roommate])[0]?.tenants).toHaveLength(2);
-});
-
-it("stops a name from running as a spreadsheet formula", () => {
-  const row = tenantsCsv([tenant({ name: "=HYPERLINK(\"x\")" })]).split("\r\n")[1];
-  expect(row).toContain("\"'=HYPERLINK(\"\"x\"\")\"");
 });
