@@ -1,3 +1,5 @@
+import { roomTypeImportLabels } from "@campushomes/shared";
+
 import { roomCategoryLabel } from "@/lib/format";
 import type { RoomType, RoomUnit } from "@/lib/room-management";
 
@@ -25,18 +27,25 @@ const BATCH_LIMIT = 200;
 const norm = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
 const roomKey = (code: string, building: string | null | undefined) => `${norm(code)}|${norm(building ?? "")}`;
 
-/** Finds the property room type a spreadsheet names: its exact title (approved
- * or a pending rename) first, otherwise a category ("Single") only one type
- * has. A name that fits several types is an error, never a guess. */
+/** Finds the property room type a spreadsheet names: its template name
+ * (roomTypeImportLabels, unique per type) first, then its exact title
+ * (approved or a pending rename), otherwise a category ("Single") only one
+ * type has. A name that fits several types is an error, never a guess. */
 function matchRoomType(text: string, roomTypes: RoomType[]): { id: string } | { error: string } {
   if (!text.trim()) {
     return roomTypes.length === 1 ? { id: roomTypes[0]!.id } : { error: "Add the room type" };
   }
   const wanted = norm(text);
+  const labels = roomTypeImportLabels(roomTypes);
+  const byLabel = [...labels].find(([, label]) => norm(label) === wanted);
+  if (byLabel) return { id: byLabel[0] };
   const versions = (type: RoomType) => [type.pendingVersion, type.currentVersion].filter((v) => !!v);
   const byTitle = roomTypes.filter((type) => versions(type).some((v) => norm(v.title) === wanted));
   if (byTitle.length === 1) return { id: byTitle[0]!.id };
-  if (byTitle.length > 1) return { error: `"${text}" fits several room types; rename them so each name is different` };
+  if (byTitle.length > 1) {
+    const choices = byTitle.map((type) => `"${labels.get(type.id)}"`).join(" or ");
+    return { error: `Several room types are called "${text}"; pick ${choices} from the template list` };
+  }
   const byCategory = roomTypes.filter((type) =>
     versions(type).some(
       (v) => norm(roomCategoryLabel(v.category)) === wanted || norm(v.category.replace(/_/g, " ")) === wanted,

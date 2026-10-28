@@ -70,11 +70,37 @@ export function BulkRoomGeneratorDialog({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<"xlsx" | "csv" | null>(null);
 
   const importPlan = useMemo(
     () => (importRows ? planRoomImport(importRows, roomTypes, existingRooms) : null),
     [importRows, roomTypes, existingRooms],
   );
+
+  /** One click, one request, one saved file. A plain link left the download to
+   * the browser, which saved the template twice for some landlords. */
+  async function downloadTemplate(format: "xlsx" | "csv") {
+    if (downloading) return;
+    setDownloading(format);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=${format}&semesterId=${semesterId}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `campushomes-rooms.${format}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not download the template. Try again.");
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   async function readFile(file: File | undefined) {
     setImportRows(null);
@@ -285,22 +311,27 @@ export function BulkRoomGeneratorDialog({
                   Other columns (tenants, payments) are ignored. Start from the template for this property:
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <a
-                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=xlsx&semesterId=${semesterId}`}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted"
-                  >
-                    <Download aria-hidden className="size-3.5" /> Excel template
-                  </a>
-                  <a
-                    href={`/api/v1/room-management/properties/${propertyId}/rooms/import/template?format=csv&semesterId=${semesterId}`}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted"
-                  >
-                    <Download aria-hidden className="size-3.5" /> CSV template
-                  </a>
+                  {(["xlsx", "csv"] as const).map((format) => (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => downloadTemplate(format)}
+                      disabled={downloading !== null}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted disabled:opacity-60"
+                    >
+                      {downloading === format ? (
+                        <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                      ) : (
+                        <Download aria-hidden className="size-3.5" />
+                      )}
+                      {format === "xlsx" ? "Excel template" : "CSV template"}
+                    </button>
+                  ))}
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
                   The Excel template has a Room type dropdown with this property&apos;s room types (Excel, LibreOffice and Google Sheets).
-                  A CSV file can&apos;t hold a dropdown, so type room types exactly as listed.
+                  A CSV file can&apos;t hold a dropdown, so type room types exactly as listed. Room types that share a
+                  name get what sets them apart added, like &quot;Double Room - self-contained&quot;.
                 </p>
               </div>
 

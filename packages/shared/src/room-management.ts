@@ -130,3 +130,56 @@ export interface RoomChangeReviewItem {
     after: { roomCode: string; buildingName: string | null; floorLabel: string | null; capacity: number } | null;
   }>;
 }
+
+type LabelledVersion = { title: string; capacity: number; bathroomType: string; pricePerTermUgx: number };
+type LabelledRoomType = { id: string; currentVersion?: LabelledVersion | null; pendingVersion?: LabelledVersion | null };
+
+const BATHROOM_LABELS: Record<string, string> = {
+  ensuite: 'self-contained',
+  shared: 'shared bathroom',
+  private_external: 'private bathroom outside',
+  unspecified: 'bathroom not set',
+};
+
+// "UGX 1.2M": short, and no comma, so a CSV cell needs no quotes.
+function shortUgx(amount: number): string {
+  if (amount >= 1_000_000) return `UGX ${Number((amount / 1_000_000).toFixed(2))}M`;
+  if (amount >= 1_000) return `UGX ${Number((amount / 1_000).toFixed(1))}k`;
+  return `UGX ${amount}`;
+}
+
+/** One spreadsheet name per room type (keyed by id). A title only one type
+ * uses stays as it is; types sharing a title get what tells them apart (beds,
+ * bathroom, rent), then a number if nothing does. The rooms template and the
+ * upload check both call this with the same room types, so every name in the
+ * template's dropdown matches exactly one room type. */
+export function roomTypeImportLabels(roomTypes: LabelledRoomType[]): Map<string, string> {
+  const versions = roomTypes.flatMap((type) => {
+    const version = type.pendingVersion ?? type.currentVersion;
+    return version ? [{ id: type.id, version }] : [];
+  });
+  const key = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
+  const labels = new Map<string, string>();
+  for (const { id, version } of versions) {
+    const twins = versions.filter((other) => key(other.version.title) === key(version.title));
+    if (twins.length === 1) { labels.set(id, version.title.trim()); continue; }
+    const differs = (pick: (v: LabelledVersion) => unknown) => new Set(twins.map((t) => pick(t.version))).size > 1;
+    const details = [
+      differs((v) => v.capacity) ? `${version.capacity} ${version.capacity === 1 ? 'bed' : 'beds'}` : null,
+      differs((v) => v.bathroomType) ? (BATHROOM_LABELS[version.bathroomType] ?? version.bathroomType) : null,
+      differs((v) => v.pricePerTermUgx) ? shortUgx(version.pricePerTermUgx) : null,
+    ].filter(Boolean);
+    labels.set(id, [version.title.trim(), ...details].join(' - '));
+  }
+  // Still the same (identical twins, or two rents that round alike): number them.
+  const counts = new Map<string, number>();
+  for (const label of labels.values()) counts.set(key(label), (counts.get(key(label)) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  for (const [id, label] of labels) {
+    if (counts.get(key(label))! < 2) continue;
+    const n = (seen.get(key(label)) ?? 0) + 1;
+    seen.set(key(label), n);
+    labels.set(id, `${label} #${n}`);
+  }
+  return labels;
+}
