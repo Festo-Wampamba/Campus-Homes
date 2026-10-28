@@ -549,6 +549,14 @@ export class ReservationsService {
         [reservationId, input.idempotencyKey],
       )).rows[0];
       if (earlier) {
+        // Same key with different details isn't a retry: the landlord changed
+        // the payment after the first one saved, so say so instead of
+        // reporting the edited payment as recorded.
+        if (earlier.rent_ugx !== input.amountUgx || earlier.payment_method !== (input.paymentMethod ?? null)) {
+          throw new ConflictException(
+            `This payment was already recorded as UGX ${earlier.rent_ugx.toLocaleString('en-UG')} (receipt ${earlier.receipt_number}). Close this window and record any other payment separately.`,
+          );
+        }
         receipt = earlier;
         replayed = true;
         return;

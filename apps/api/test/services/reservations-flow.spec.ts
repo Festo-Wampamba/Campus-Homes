@@ -635,6 +635,14 @@ describe('tenant records and later payments (Festo, 2026-10-28)', () => {
     expect(rows.rowCount).toBe(1);
   });
 
+  it('refuses a retry whose amount changed after the first one saved', async () => {
+    const key = 'retry-key-0002-0000000000';
+    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 5_000, idempotencyKey: key });
+    await expect(
+      reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 6_000, idempotencyKey: key }),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it("refuses a walk-in amount above the room's rent", async () => {
     const { bedId: bed } = await seedUnitWithBed('Overpaid walk-in');
     await expect(
