@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 
-import { bookReservationSchema, onboardWalkInSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
+import { bookReservationSchema, onboardWalkInSchema, recordPaymentSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
@@ -11,6 +11,7 @@ class ReserveDto extends createZodDto(reserveSchema) {}
 class BookDto extends createZodDto(bookReservationSchema) {}
 class OnboardWalkInDto extends createZodDto(onboardWalkInSchema) {}
 class ReleaseDto extends createZodDto(releaseReservationSchema) {}
+class RecordPaymentDto extends createZodDto(recordPaymentSchema) {}
 
 @Controller('reservations')
 @UseGuards(AuthGuard, RolesGuard)
@@ -42,6 +43,22 @@ export class ReservationsController {
   @Roles('landlord')
   landlordReceipts(@Req() req: AuthenticatedRequest) {
     return this.reservationsService.receipts(rlsCtx(req), 'landlord');
+  }
+
+  @Get('landlord-tenants')
+  @Roles('landlord')
+  landlordTenants(@Req() req: AuthenticatedRequest) {
+    return this.reservationsService.landlordTenants(rlsCtx(req));
+  }
+
+  @Post(':id/payments')
+  @Roles('landlord', 'custodian')
+  recordPayment(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RecordPaymentDto,
+  ) {
+    return this.reservationsService.recordPayment(rlsCtx(req), id, body);
   }
 
   @Get(':id/student')

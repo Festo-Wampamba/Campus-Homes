@@ -78,11 +78,41 @@ export const paymentReceiptSchema = z.object({
   studentName: z.string().nullable(),
   bookingFeeUgx: z.number().int().nonnegative(),
   depositUgx: z.number().int().nonnegative(),
+  rentUgx: z.number().int().nonnegative().default(0),
   totalUgx: z.number().int().nonnegative(),
   paymentMethod: z.enum(PAYMENT_METHODS).nullable(),
   recordedAt: z.string(),
 });
 export type PaymentReceipt = z.infer<typeof paymentReceiptSchema>;
+
+// A later payment on a live booking (0078): one receipt per instalment.
+export const recordPaymentSchema = z.object({
+  amountUgx: ugxAmount,
+  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+});
+export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+
+// One booked or moved-in student on the landlord's Tenants page. Total is the
+// rent stored when they booked; Paid adds up every receipt for the booking.
+export const landlordTenantSchema = z.object({
+  reservationId: uuid,
+  bedId: uuid,
+  status: z.enum(['booked', 'occupied']),
+  propertyId: uuid,
+  propertyName: z.string(),
+  unitId: uuid,
+  roomLabel: z.string(),
+  bedLabel: z.string(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  emergencyContactName: z.string().nullable(),
+  emergencyContactPhone: z.string().nullable(),
+  totalUgx: z.coerce.number().int().nonnegative(),
+  paidUgx: z.coerce.number().int().nonnegative(),
+  balanceUgx: z.coerce.number().int(),
+});
+export type LandlordTenant = z.infer<typeof landlordTenantSchema>;
 
 // What the landlord of a booked bed may see about the student. Never any
 // credential: passwords live in Logto and are reset by the student or a super admin.

@@ -11,7 +11,7 @@ import { UNIVERSITY_LABELS } from "@/components/university-select-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { api, apiErrorMessage } from "@/lib/api";
-import { roomCategoryLabel } from "@/lib/format";
+import { formatUgx, roomCategoryLabel } from "@/lib/format";
 
 const FIELD =
   "mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10";
@@ -42,12 +42,17 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
   const [university, setUniversity] = useState<University>("MUK");
   const [bedId, setBedId] = useState(beds[0]?.id ?? "");
   const [movedIn, setMovedIn] = useState(false);
-  const [bookingFee, setBookingFee] = useState("");
-  const [deposit, setDeposit] = useState("");
+  const [amountPaid, setAmountPaid] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<WalkInResult | null>(null);
+
+  // Total is the booked room's rent; Balance follows what was paid.
+  const totalUgx = beds.find((bed) => bed.id === bedId)?.pricePerTermUgx ?? 0;
+  const paidUgx = Number(amountPaid) || 0;
+  const balanceUgx = totalUgx - paidUgx;
+  const overpaid = balanceUgx < 0;
 
   const byProperty = new Map<string, WalkInBed[]>();
   for (const bed of beds) byProperty.set(bed.propertyName, [...(byProperty.get(bed.propertyName) ?? []), bed]);
@@ -66,8 +71,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
           email: email.trim() || undefined,
           university,
           movedIn,
-          bookingFeeCollectedUgx: bookingFee ? Number(bookingFee) : undefined,
-          depositCollectedUgx: deposit ? Number(deposit) : undefined,
+          bookingFeeCollectedUgx: paidUgx > 0 ? paidUgx : undefined,
           paymentMethod: paymentMethod || undefined,
         }),
       });
@@ -88,7 +92,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
           <p role="status" className="text-sm">
             {name.trim()} now has this room {done.status === "occupied" ? "and is recorded as moved in" : "booked"}. The bed is no longer offered on CampusHomes.
             {done.studentCreated ? " We created their CampusHomes account." : " They already had a CampusHomes account."}{" "}
-            {email.trim() ? `We emailed ${email.trim()} how to sign in and see the booking${bookingFee || deposit ? ", with a payment receipt" : ""}.` : `They sign in with ${phone.trim()} to see the booking.`}
+            {email.trim() ? `We emailed ${email.trim()} how to sign in and see the booking${paidUgx > 0 ? ", with a payment receipt" : ""}.` : `They sign in with ${phone.trim()} to see the booking.`}
           </p>
         </DialogBody>
         <DialogFooter>
@@ -169,13 +173,38 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
               <fieldset className="grid gap-3 sm:grid-cols-3">
                 <legend className="mb-2 font-display text-base font-semibold">Payment received (optional)</legend>
                 <label className="block text-sm font-semibold">
-                  Booking fee (UGX)
-                  <input type="number" min={0} value={bookingFee} onChange={(e) => setBookingFee(e.target.value)} className={FIELD} />
+                  Booking fee / Amount paid (UGX)
+                  <input
+                    type="number"
+                    min={0}
+                    max={totalUgx || undefined}
+                    inputMode="numeric"
+                    value={amountPaid}
+                    onChange={(e) => setAmountPaid(e.target.value)}
+                    aria-invalid={overpaid || undefined}
+                    aria-describedby={overpaid ? "walk-in-overpaid" : undefined}
+                    className={FIELD}
+                  />
                 </label>
                 <label className="block text-sm font-semibold">
-                  Deposit (UGX)
-                  <input type="number" min={0} value={deposit} onChange={(e) => setDeposit(e.target.value)} className={FIELD} />
+                  Total
+                  <input readOnly tabIndex={-1} value={formatUgx(totalUgx)} aria-describedby="walk-in-total-hint" className={`${FIELD} bg-muted/40`} />
+                  <span id="walk-in-total-hint" className="mt-1 block text-xs font-normal text-muted-foreground">This room&apos;s rent per term.</span>
                 </label>
+                <label className="block text-sm font-semibold">
+                  Balance
+                  <output
+                    aria-live="polite"
+                    className={`${FIELD} flex items-center bg-muted/40 font-semibold ${balanceUgx > 0 || overpaid ? "text-destructive" : "text-foreground"}`}
+                  >
+                    {formatUgx(Math.max(balanceUgx, 0))}
+                  </output>
+                </label>
+                {overpaid && (
+                  <p id="walk-in-overpaid" role="alert" className="text-sm text-destructive sm:col-span-3">
+                    Amount paid is more than the total. Enter at most {formatUgx(totalUgx)}.
+                  </p>
+                )}
                 <label className="block text-sm font-semibold">
                   Paid with
                   <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={FIELD}>
@@ -190,7 +219,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={pending || beds.length === 0}>{pending ? "Adding…" : "Add student and book bed"}</Button>
+          <Button type="submit" disabled={pending || beds.length === 0 || overpaid}>{pending ? "Adding…" : "Add student and book bed"}</Button>
         </DialogFooter>
       </form>
     </Dialog>

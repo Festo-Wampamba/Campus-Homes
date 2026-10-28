@@ -25,6 +25,7 @@ const BED = {
   bedLabel: "Bed 1",
   roomCategory: "single",
   selfContained: false,
+  pricePerTermUgx: 900_000,
 };
 
 let container: HTMLDivElement;
@@ -68,6 +69,44 @@ it("books the chosen bed for the walk-in student", async () => {
   expect(mockApi).toHaveBeenCalledWith("/reservations/walk-in", expect.objectContaining({
     body: JSON.stringify({ bedId: BED.id, name: "Amina Nakato", phone: "+256771234567", university: "MUK", movedIn: false }),
   }));
+});
+
+const amountPaid = () => container.querySelector<HTMLInputElement>("input[type=number]")!;
+const balance = () => container.querySelector("output")!.textContent;
+
+it("shows the room's rent as the balance before anything is paid", async () => {
+  await open();
+
+  expect(balance()).toBe("UGX\u00a0900,000");
+});
+
+it("takes the amount paid off the balance", async () => {
+  await open();
+  await act(async () => type(amountPaid(), "300000"));
+
+  expect(balance()).toBe("UGX\u00a0600,000");
+});
+
+it("blocks an amount paid above the room's rent", async () => {
+  await open();
+  await act(async () => type(amountPaid(), "900001"));
+
+  expect(button("Add student and book bed").disabled).toBe(true);
+});
+
+it("sends the amount paid as the booking fee", async () => {
+  await open();
+  const [name, phone] = Array.from(container.querySelectorAll<HTMLInputElement>("input:not([type=radio]):not([type=number])"));
+  await act(async () => {
+    type(name!, "Amina Nakato");
+    type(phone!, "+256771234567");
+    type(amountPaid(), "300000");
+  });
+  mockApi.mockResolvedValueOnce({ studentCreated: true, status: "booked" });
+
+  await act(async () => container.querySelector("form")!.requestSubmit());
+
+  expect(JSON.parse(mockApi.mock.calls[0][1].body).bookingFeeCollectedUgx).toBe(300_000);
 });
 
 it("explains there is nothing to book when no bed is free", async () => {

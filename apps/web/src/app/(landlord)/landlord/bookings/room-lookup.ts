@@ -12,6 +12,8 @@ export type WalkInBed = {
   bedLabel: string;
   roomCategory: string;
   selfContained: boolean;
+  /** The rent the student is booked at: the walk-in form's Total. */
+  pricePerTermUgx: number;
 };
 
 // One fetch per request, shared by every lookup below (React server cache).
@@ -55,6 +57,7 @@ export async function freeBedsForWalkIn(): Promise<WalkInBed[]> {
           bedLabel: bed.label,
           roomCategory: room.roomCategory,
           selfContained: room.selfContained,
+          pricePerTermUgx: room.pricePerTermUgx,
         });
       }
     }
