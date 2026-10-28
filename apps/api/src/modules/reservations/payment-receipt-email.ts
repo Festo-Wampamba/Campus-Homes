@@ -11,6 +11,8 @@ export type PaymentReceiptEmail = {
   roomLabel: string;
   bookingFeeUgx: number;
   depositUgx: number;
+  /** A later rent payment (0078); 0 on a booking receipt. */
+  rentUgx: number;
   paymentMethod: string | null;
   recordedAt: Date;
 };
@@ -28,7 +30,8 @@ const ugx = (amount: number) => `UGX ${amount.toLocaleString('en-UG')}`;
 // Same posture as listing-published-email.ts: plain fetch to Resend, dev
 // fallback logs instead of sending. Best-effort: the receipt row is the record.
 export async function sendPaymentReceiptEmail(env: Env, receipt: PaymentReceiptEmail): Promise<void> {
-  const subject = `CampusHomes receipt ${receipt.receiptNumber}: ${ugx(receipt.bookingFeeUgx + receipt.depositUgx)}`;
+  const total = receipt.bookingFeeUgx + receipt.depositUgx + receipt.rentUgx;
+  const subject = `CampusHomes receipt ${receipt.receiptNumber}: ${ugx(total)}`;
   const intro = receipt.audience === 'student'
     ? `${escapeHtml(receipt.propertyName)} recorded this payment from you.`
     : `You recorded this payment from ${escapeHtml(receipt.studentName)}.`;
@@ -37,9 +40,10 @@ export async function sendPaymentReceiptEmail(env: Env, receipt: PaymentReceiptE
     ['Student', receipt.studentName],
     ['Hostel', receipt.propertyName],
     ['Room', receipt.roomLabel],
-    ['Booking fee', ugx(receipt.bookingFeeUgx)],
-    ['Deposit', ugx(receipt.depositUgx)],
-    ['Total received', ugx(receipt.bookingFeeUgx + receipt.depositUgx)],
+    ...(receipt.bookingFeeUgx ? [['Booking fee', ugx(receipt.bookingFeeUgx)]] : []),
+    ...(receipt.depositUgx ? [['Deposit', ugx(receipt.depositUgx)]] : []),
+    ...(receipt.rentUgx ? [['Rent payment', ugx(receipt.rentUgx)]] : []),
+    ['Total received', ugx(total)],
     ['Paid with', receipt.paymentMethod ? (METHOD_LABEL[receipt.paymentMethod] ?? receipt.paymentMethod) : 'Not recorded'],
     ['Date', receipt.recordedAt.toLocaleString('en-UG', { timeZone: 'Africa/Kampala' })],
   ];

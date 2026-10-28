@@ -3,6 +3,8 @@ import { BedDouble, Building2, CalendarCheck, CalendarClock, Percent, Wallet } f
 
 import { getLandlordReservations, getMyProperties, getPropertyDetail } from "@/lib/landlord";
 import { formatUgx } from "@/lib/format";
+import { incomeSummary } from "@/lib/tenant-ledger";
+import { getLandlordTenants } from "@/lib/tenants";
 import {
   bookingOutcomes,
   bookingsTrend,
@@ -22,11 +24,12 @@ import { RoomCategoryChart } from "@/components/landlord/analytics/room-category
 import { RentValueChart } from "@/components/landlord/analytics/rent-value-chart";
 import { CampusChart } from "@/components/landlord/analytics/campus-chart";
 import { BookingOutcomesChart } from "@/components/landlord/analytics/booking-outcomes-chart";
+import { IncomeProjection } from "@/components/landlord/analytics/income-projection";
 
 export const metadata: Metadata = { title: "Reports & Analytics" };
 
 export default async function LandlordReportsPage() {
-  const [properties, reservations] = await Promise.all([getMyProperties(), getLandlordReservations()]);
+  const [properties, reservations, tenants] = await Promise.all([getMyProperties(), getLandlordReservations(), getLandlordTenants()]);
   const details = await Promise.all(properties.map((p) => getPropertyDetail(p.id)));
   const rooms = flattenRooms(details);
 
@@ -45,6 +48,7 @@ export default async function LandlordReportsPage() {
   const totalRentValueUgx = rentTrend.reduce((sum, m) => sum + m.rentValueUgx, 0);
   const campusMix = campusDistribution(properties);
   const outcomes = bookingOutcomes(reservations);
+  const income = tenants ? incomeSummary(rooms, tenants) : null;
 
   return (
     <>
@@ -63,6 +67,14 @@ export default async function LandlordReportsPage() {
         />
         <StatCard label="Active reservations" value={String(activeHolds)} icon={CalendarClock} tone="coral" href="/landlord/reservations?status=reserved" />
         <StatCard label="Confirmed bookings" value={String(confirmedBookings)} icon={CalendarCheck} tone="teal" href="/landlord/bookings?status=booked" />
+      </div>
+
+      <div className="mt-6">
+        {income && tenants ? (
+          <IncomeProjection total={income.total} byProperty={income.byProperty} tenants={tenants} />
+        ) : (
+          <p role="alert" className="text-sm text-destructive">Couldn&apos;t load this term&apos;s income. Refresh the page to try again.</p>
+        )}
       </div>
 
       <div className="mt-4">

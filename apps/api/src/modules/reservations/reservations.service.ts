@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -11,7 +12,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
@@ -36,9 +37,13 @@ type ReceiptRow = {
   room_label: string;
   booking_fee_ugx: number;
   deposit_ugx: number;
+  rent_ugx: number;
   payment_method: string | null;
   recorded_at: Date;
 };
+
+const RECEIPT_RETURNING = `RETURNING receipt_number, student_id, landlord_id, property_name, room_label,
+  booking_fee_ugx, deposit_ugx, rent_ugx, payment_method::text AS payment_method, recorded_at`;
 // A student already moved in (occupied) can't reserve a new bed until their
 // current term is within this many days of ending — reserving a second home
 // mid-semester makes no sense; reserving next semester's place as this one
@@ -328,6 +333,12 @@ export class ReservationsService {
         bedId = bedRes.rows[0].id as string;
         listingVersionId = bedRes.rows[0].current_version_id as string;
         walkInPrice = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
+        const recorded = (input.bookingFeeCollectedUgx ?? 0) + (input.depositCollectedUgx ?? 0);
+        if (recorded > Number(walkInPrice.price_per_term_ugx)) {
+          throw new BadRequestException(
+            `Amount paid is more than this room's rent (UGX ${Number(walkInPrice.price_per_term_ugx).toLocaleString('en-UG')})`,
+          );
+        }
 
         const studentRes = await client.query(
           `SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE u.phone = $1`,
@@ -404,8 +415,7 @@ export class ReservationsService {
            SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5, $6
            FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
            WHERE b.id = $7
-           RETURNING receipt_number, student_id, landlord_id, property_name, room_label,
-             booking_fee_ugx, deposit_ugx, payment_method::text AS payment_method, recorded_at`,
+           ${RECEIPT_RETURNING}`,
           [reservationRow!.id, studentId, bookingFee, deposit, input.paymentMethod ?? null, ctx.userId, bedId],
         )).rows[0] ?? null;
       }
@@ -439,7 +449,7 @@ export class ReservationsService {
       .then(async (people) => {
         const student = people.find((p) => p.id === receipt.student_id);
         const landlord = people.find((p) => p.id === receipt.landlord_id);
-        const total = receipt.booking_fee_ugx + receipt.deposit_ugx;
+        const total = receipt.booking_fee_ugx + receipt.deposit_ugx + receipt.rent_ugx;
         const summary = `UGX ${total.toLocaleString('en-UG')} for ${receipt.room_label} at ${receipt.property_name} (receipt ${receipt.receipt_number})`;
         const base = {
           receiptNumber: receipt.receipt_number,
@@ -448,6 +458,7 @@ export class ReservationsService {
           roomLabel: receipt.room_label,
           bookingFeeUgx: receipt.booking_fee_ugx,
           depositUgx: receipt.deposit_ugx,
+          rentUgx: receipt.rent_ugx,
           paymentMethod: receipt.payment_method,
           recordedAt: receipt.recorded_at,
         };
@@ -474,8 +485,8 @@ export class ReservationsService {
         `SELECT r.id, r.receipt_number AS "receiptNumber", r.reservation_id AS "reservationId",
                 r.property_name AS "propertyName", r.room_label AS "roomLabel",
                 NULLIF(btrim(u.name), '') AS "studentName",
-                r.booking_fee_ugx AS "bookingFeeUgx", r.deposit_ugx AS "depositUgx",
-                r.booking_fee_ugx + r.deposit_ugx AS "totalUgx",
+                r.booking_fee_ugx AS "bookingFeeUgx", r.deposit_ugx AS "depositUgx", r.rent_ugx AS "rentUgx",
+                r.booking_fee_ugx + r.deposit_ugx + r.rent_ugx AS "totalUgx",
                 r.payment_method::text AS "paymentMethod", r.recorded_at AS "recordedAt"
          FROM payment_receipts r JOIN users u ON u.id = r.student_id
          WHERE ${party} = $1
@@ -483,6 +494,99 @@ export class ReservationsService {
         [ctx.userId],
       )).rows,
     );
+  }
+
+  /** The landlord's booked and moved-in students with contact details and
+   * money: Total is the rent stored at booking, Paid adds up the receipts.
+   * Same student fields as studentDetails(); scoped to the landlord's own
+   * properties in the WHERE clause, since it runs as service_role. */
+  landlordTenants(ctx: RlsContext) {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const tenants = (await client.query<{ reservationId: string; totalUgx: number }>(
+        `SELECT r.id AS "reservationId", r.bed_id AS "bedId", r.status::text AS status,
+                p.id AS "propertyId", p.name AS "propertyName", un.id AS "unitId", un.label AS "roomLabel",
+                b.label AS "bedLabel", NULLIF(btrim(u.name), '') AS name,
+                COALESCE(u.phone, u.contact_phone) AS phone, u.email,
+                u.emergency_contact_name AS "emergencyContactName",
+                u.emergency_contact_phone AS "emergencyContactPhone",
+                r.price_per_term_ugx AS "totalUgx"
+         FROM reservations r
+         JOIN beds b ON b.id = r.bed_id
+         JOIN units un ON un.id = b.unit_id
+         JOIN properties p ON p.id = un.property_id
+         JOIN users u ON u.id = r.student_id
+         WHERE p.landlord_id = $1 AND r.status IN ('booked', 'occupied')
+         ORDER BY p.name, un.label, b.label`,
+        [ctx.userId],
+      )).rows;
+      const paid = await this.paidByReservation(client, tenants.map((t) => t.reservationId));
+      return tenants.map((t) => {
+        const paidUgx = paid.get(t.reservationId) ?? 0;
+        return { ...t, paidUgx, balanceUgx: Number(t.totalUgx) - paidUgx };
+      });
+    });
+  }
+
+  /** A later payment on a live booking (0078): one receipt per instalment,
+   * never more than the remaining balance. */
+  async recordPayment(ctx: RlsContext, reservationId: string, input: RecordPaymentInput) {
+    let receipt: ReceiptRow | null = null;
+    await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      // FOR UPDATE: two payments recorded at once can't both fit one balance.
+      const reservation = (await client.query<{ bed_id: string; student_id: string; status: string; total: number }>(
+        `SELECT bed_id, student_id, status::text AS status, price_per_term_ugx AS total
+         FROM reservations WHERE id = $1 FOR UPDATE`,
+        [reservationId],
+      )).rows[0];
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      await this.assertCanManageBed(client, ctx, reservation.bed_id);
+      if (reservation.status !== 'booked' && reservation.status !== 'occupied') {
+        throw new ConflictException('Payments can only be recorded for a booked or moved-in student');
+      }
+      const balance = Number(reservation.total) - ((await this.paidByReservation(client, [reservationId])).get(reservationId) ?? 0);
+      if (input.amountUgx > balance) {
+        throw new BadRequestException(`That is more than the balance of UGX ${Math.max(balance, 0).toLocaleString('en-UG')}`);
+      }
+      receipt = (await client.query<ReceiptRow>(
+        `INSERT INTO payment_receipts (reservation_id, student_id, landlord_id, property_name, room_label,
+           rent_ugx, payment_method, recorded_by)
+         SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5
+         FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
+         WHERE b.id = $6
+         ${RECEIPT_RETURNING}`,
+        [reservationId, reservation.student_id, input.amountUgx, input.paymentMethod ?? null, ctx.userId, reservation.bed_id],
+      )).rows[0] ?? null;
+    });
+    const recorded = receipt as ReceiptRow | null;
+    if (!recorded) throw new NotFoundException('Bed not found');
+    this.deliverReceipt(recorded);
+    await this.audit.record(ctx, 'reservation.payment_record', 'reservation', reservationId, {
+      amountUgx: input.amountUgx,
+      receiptNumber: recorded.receipt_number,
+    });
+    return { receiptNumber: recorded.receipt_number, amountUgx: input.amountUgx };
+  }
+
+  /** Money recorded per booking: every receipt. A booking recorded before
+   * receipts existed (pre-0075) has no booking-fee/deposit receipt, so its
+   * booking-row amounts count too, alongside any later rent receipts. */
+  private async paidByReservation(client: PoolClient, reservationIds: string[]): Promise<Map<string, number>> {
+    if (reservationIds.length === 0) return new Map();
+    const rows = (await client.query<{ id: string; paid: string }>(
+      `SELECT r.id,
+              (COALESCE(pr.paid, 0)
+                + CASE WHEN COALESCE(pr.has_booking_receipt, false) THEN 0
+                       ELSE COALESCE(r.booking_fee_collected_ugx, 0) + COALESCE(r.deposit_collected_ugx, 0) END)::text AS paid
+       FROM reservations r
+       LEFT JOIN (
+         SELECT reservation_id, SUM(booking_fee_ugx + deposit_ugx + rent_ugx) AS paid,
+                bool_or(booking_fee_ugx + deposit_ugx > 0) AS has_booking_receipt
+         FROM payment_receipts WHERE reservation_id = ANY($1::uuid[]) GROUP BY reservation_id
+       ) pr ON pr.reservation_id = r.id
+       WHERE r.id = ANY($1::uuid[])`,
+      [reservationIds],
+    )).rows;
+    return new Map(rows.map((row) => [row.id, Number(row.paid)]));
   }
 
   /** What a bed's landlord (or custodian/ops) may see about its student:
