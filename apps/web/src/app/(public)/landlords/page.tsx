@@ -147,7 +147,7 @@ export default async function LandlordsPage() {
         <div className="ch-landlords-container ch-landlords-signup">
           <div className="ch-landlords-signup__intro">
             <p className="ch-landlords-eyebrow">Create your landlord account</p>
-            <h2 id="onboarding-heading" className="ch-landlords-section__title">From sign-up to your dashboard in six steps</h2>
+            <h2 id="onboarding-heading" className="ch-landlords-section__title">From <span className="whitespace-nowrap">sign-up</span> to your dashboard in six steps</h2>
             <p className="ch-landlords-section__lede">The first four steps happen online and take one sitting. Then our team verifies your property, and your dashboard is ready.</p>
             <aside className="ch-landlords-signup__ready" aria-labelledby="signup-ready-heading">
               <h3 id="signup-ready-heading"><ListChecks aria-hidden="true" />Have these ready</h3>
