@@ -613,6 +613,20 @@ describe('tenant records and later payments (Festo, 2026-10-28)', () => {
     ).rejects.toThrow(ConflictException);
   });
 
+  it('keeps a pre-receipt booking payment after a later payment is recorded', async () => {
+    const { bedId: bed } = await seedUnitWithBed('Legacy ledger');
+    const legacy = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+      bedId: bed, name: 'Legacy Student', phone: '+256710000324', university: 'MUK', movedIn: false,
+      bookingFeeCollectedUgx: 100_000,
+    });
+    // Before 0075 the booking amount lived only on the reservation row.
+    await pool.query(`DELETE FROM payment_receipts WHERE reservation_id = $1`, [legacy.reservationId]);
+    await reservationsService.recordPayment(landlordCtx(landlord1), legacy.reservationId, { amountUgx: 50_000 });
+
+    const tenants = (await reservationsService.landlordTenants(landlordCtx(landlord1))) as Tenant[];
+    expect(tenants.find((t) => t.reservationId === legacy.reservationId)?.paidUgx).toBe(150_000);
+  });
+
   it("refuses a walk-in amount above the room's rent", async () => {
     const { bedId: bed } = await seedUnitWithBed('Overpaid walk-in');
     await expect(

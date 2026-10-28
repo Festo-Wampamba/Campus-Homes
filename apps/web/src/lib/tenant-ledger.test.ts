@@ -23,10 +23,15 @@ const tenant = (overrides: Partial<LandlordTenant>): LandlordTenant => ({
 });
 
 // Two open beds at 900k and one blocked bed: target counts only the open two.
-const ROOMS = [{ propertyName: "Mirembe", pricePerTermUgx: 900_000, beds: [{ blocked: false }, { blocked: false }, { blocked: true }] }];
+const ROOMS = [{ propertyName: "Mirembe", pricePerTermUgx: 900_000, operationalStatus: "available", beds: [{ blocked: false }, { blocked: false }, { blocked: true }] }];
 
 it("sets the target to every open bed at its listed rent", () => {
   expect(incomeSummary(ROOMS, []).total.targetUgx).toBe(1_800_000);
+});
+
+it("leaves rooms under maintenance out of the target", () => {
+  const closed = { ...ROOMS[0]!, operationalStatus: "under_maintenance" };
+  expect(incomeSummary([...ROOMS, closed], []).total.targetUgx).toBe(1_800_000);
 });
 
 it("expects the rent of booked and moved-in students", () => {

@@ -568,15 +568,19 @@ export class ReservationsService {
   }
 
   /** Money recorded per booking: every receipt. A booking recorded before
-   * receipts existed (pre-0075) has none, so its booking-row amounts count. */
+   * receipts existed (pre-0075) has no booking-fee/deposit receipt, so its
+   * booking-row amounts count too, alongside any later rent receipts. */
   private async paidByReservation(client: PoolClient, reservationIds: string[]): Promise<Map<string, number>> {
     if (reservationIds.length === 0) return new Map();
     const rows = (await client.query<{ id: string; paid: string }>(
       `SELECT r.id,
-              COALESCE(pr.paid, COALESCE(r.booking_fee_collected_ugx, 0) + COALESCE(r.deposit_collected_ugx, 0))::text AS paid
+              (COALESCE(pr.paid, 0)
+                + CASE WHEN COALESCE(pr.has_booking_receipt, false) THEN 0
+                       ELSE COALESCE(r.booking_fee_collected_ugx, 0) + COALESCE(r.deposit_collected_ugx, 0) END)::text AS paid
        FROM reservations r
        LEFT JOIN (
-         SELECT reservation_id, SUM(booking_fee_ugx + deposit_ugx + rent_ugx) AS paid
+         SELECT reservation_id, SUM(booking_fee_ugx + deposit_ugx + rent_ugx) AS paid,
+                bool_or(booking_fee_ugx + deposit_ugx > 0) AS has_booking_receipt
          FROM payment_receipts WHERE reservation_id = ANY($1::uuid[]) GROUP BY reservation_id
        ) pr ON pr.reservation_id = r.id
        WHERE r.id = ANY($1::uuid[])`,

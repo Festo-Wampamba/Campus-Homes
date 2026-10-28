@@ -1,7 +1,10 @@
 import type { LandlordTenant } from "@campushomes/shared";
 
-/** A room as the income projection needs it: its listed rent and its beds. */
-export type PricedRoom = { propertyName: string; pricePerTermUgx: number; beds: { blocked: boolean }[] };
+/** A room as the income projection needs it: its listed rent, status and beds. */
+export type PricedRoom = { propertyName: string; pricePerTermUgx: number; operationalStatus: string; beds: { blocked: boolean }[] };
+
+// A blocked or under-maintenance room can't be let, so it isn't income to chase.
+const UNLETTABLE = new Set(["blocked", "under_maintenance"]);
 
 export type IncomeFigures = {
   /** Every open bed let at its listed rent: the most this term can bring in. */
@@ -37,6 +40,7 @@ export function incomeSummary(rooms: PricedRoom[], tenants: LandlordTenant[]): {
     return row;
   };
   for (const room of rooms) {
+    if (UNLETTABLE.has(room.operationalStatus)) continue;
     entry(room.propertyName).target += room.beds.filter((bed) => !bed.blocked).length * room.pricePerTermUgx;
   }
   for (const tenant of tenants) {
