@@ -1,7 +1,7 @@
 import type { LandlordTenant } from "@campushomes/shared";
 
 /** A room as the income projection needs it: its listed rent, status and beds. */
-export type PricedRoom = { propertyName: string; pricePerTermUgx: number; operationalStatus: string; beds: { blocked: boolean }[] };
+export type PricedRoom = { propertyId: string; propertyName: string; pricePerTermUgx: number; operationalStatus: string; beds: { blocked: boolean }[] };
 
 // A blocked or under-maintenance room can't be let, so it isn't income to chase.
 const UNLETTABLE = new Set(["blocked", "under_maintenance"]);
@@ -19,7 +19,7 @@ export type IncomeFigures = {
   emptyBedGapUgx: number;
 };
 
-export type PropertyIncome = IncomeFigures & { propertyName: string };
+export type PropertyIncome = IncomeFigures & { propertyId: string; propertyName: string };
 
 function figures(targetUgx: number, expectedUgx: number, achievedUgx: number): IncomeFigures {
   return {
@@ -33,23 +33,24 @@ function figures(targetUgx: number, expectedUgx: number, achievedUgx: number): I
 
 /** This term's income per property and overall, from listed rooms and recorded payments. */
 export function incomeSummary(rooms: PricedRoom[], tenants: LandlordTenant[]): { total: IncomeFigures; byProperty: PropertyIncome[] } {
-  const sums = new Map<string, { target: number; expected: number; achieved: number }>();
-  const entry = (name: string) => {
-    let row = sums.get(name);
-    if (!row) sums.set(name, (row = { target: 0, expected: 0, achieved: 0 }));
+  // Keyed by id: two properties may share a name.
+  const sums = new Map<string, { name: string; target: number; expected: number; achieved: number }>();
+  const entry = (id: string, name: string) => {
+    let row = sums.get(id);
+    if (!row) sums.set(id, (row = { name, target: 0, expected: 0, achieved: 0 }));
     return row;
   };
   for (const room of rooms) {
     if (UNLETTABLE.has(room.operationalStatus)) continue;
-    entry(room.propertyName).target += room.beds.filter((bed) => !bed.blocked).length * room.pricePerTermUgx;
+    entry(room.propertyId, room.propertyName).target += room.beds.filter((bed) => !bed.blocked).length * room.pricePerTermUgx;
   }
   for (const tenant of tenants) {
-    const row = entry(tenant.propertyName);
+    const row = entry(tenant.propertyId, tenant.propertyName);
     row.expected += tenant.totalUgx;
     row.achieved += tenant.paidUgx;
   }
   const byProperty = [...sums]
-    .map(([propertyName, s]) => ({ propertyName, ...figures(s.target, s.expected, s.achieved) }))
+    .map(([propertyId, s]) => ({ propertyId, propertyName: s.name, ...figures(s.target, s.expected, s.achieved) }))
     .sort((a, b) => a.propertyName.localeCompare(b.propertyName));
   const sum = (key: "targetUgx" | "expectedUgx" | "achievedUgx") => byProperty.reduce((n, p) => n + p[key], 0);
   return { total: figures(sum("targetUgx"), sum("expectedUgx"), sum("achievedUgx")), byProperty };

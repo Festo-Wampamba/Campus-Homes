@@ -92,7 +92,7 @@ export function IncomeProjection({ total, byProperty, tenants }: { total: Income
                 {byProperty.map((p) => {
                   const rate = percent(p.achievedUgx, p.expectedUgx);
                   return (
-                    <tr key={p.propertyName}>
+                    <tr key={p.propertyId}>
                       <th scope="row" className="px-3 py-2 font-semibold text-foreground">{p.propertyName}</th>
                       <td className="px-3 py-2 text-right tabular-nums">{formatUgx(p.targetUgx)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatUgx(p.expectedUgx)}</td>

@@ -13,7 +13,7 @@ import type { BookingOutcomeRow } from "@/components/landlord/analytics/booking-
  * re-walk the property/detail nesting on its own. */
 export function flattenRooms(details: (PropertyDetail | null)[]) {
   return details.flatMap((d) =>
-    d ? d.rooms.map((room) => ({ ...room, propertyName: d.property.name })) : [],
+    d ? d.rooms.map((room) => ({ ...room, propertyId: d.property.id, propertyName: d.property.name })) : [],
   );
 }
 
