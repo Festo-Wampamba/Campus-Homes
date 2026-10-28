@@ -33,6 +33,12 @@ describe("planRoomImport", () => {
     );
   });
 
+  it("never numbers a twin into another room type's name", () => {
+    const twin = type("t-single-2", "Single Room", "single");
+    const numbered = type("t-numbered", "Single Room #1", "single");
+    expect(plan([row("A02", "Single Room #1")], [single, twin, numbered]).rows[0]!.roomTypeId).toBe("t-numbered");
+  });
+
   it("matches the template name of a room type that shares its title", () => {
     const withBathroom = (id: string, bathroomType: string) =>
       ({ id, currentVersion: { title: "Double Room", category: "double", capacity: 2, bathroomType, pricePerTermUgx: 1_200_000 }, pendingVersion: null }) as unknown as RoomType;

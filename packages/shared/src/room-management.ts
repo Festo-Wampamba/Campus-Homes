@@ -171,14 +171,16 @@ export function roomTypeImportLabels(roomTypes: LabelledRoomType[]): Map<string,
     ].filter(Boolean);
     labels.set(id, [version.title.trim(), ...details].join(' - '));
   }
-  // Still the same (identical twins, or two rents that round alike): number them.
+  // Still the same (identical twins, or two rents that round alike): number
+  // them, skipping any number another room type's name already uses.
   const counts = new Map<string, number>();
   for (const label of labels.values()) counts.set(key(label), (counts.get(key(label)) ?? 0) + 1);
-  const seen = new Map<string, number>();
+  const taken = new Set([...labels.values()].map(key));
   for (const [id, label] of labels) {
     if (counts.get(key(label))! < 2) continue;
-    const n = (seen.get(key(label)) ?? 0) + 1;
-    seen.set(key(label), n);
+    let n = 1;
+    while (taken.has(key(`${label} #${n}`))) n += 1;
+    taken.add(key(`${label} #${n}`));
     labels.set(id, `${label} #${n}`);
   }
   return labels;
