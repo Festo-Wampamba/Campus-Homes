@@ -116,7 +116,7 @@ export function ReserveButton({
         <DialogHeader title="Review your free reservation" description={`${propertyName} · ${roomLabel}`} onClose={() => setReview(false)} />
         <DialogBody><div className="space-y-4 text-base">
           {priceUgx !== undefined && <p className="font-semibold">{formatUgx(priceUgx)} per bed, per semester</p>}
-          <p>Deposit: {depositUgx == null ? "unstated — confirm with the landlord" : formatUgx(depositUgx)}.</p>
+          <p>Deposit: {depositUgx == null ? "not stated, confirm with the landlord" : formatUgx(depositUgx)}.</p>
           <p>This temporarily holds an available bed within your selected room category. A specific numbered room is allocated by the landlord.</p>
           <p className="text-muted-foreground">No payment is taken. Review the property’s charges and house rules, then agree rent, payment timing and tenancy terms directly with the landlord. The confirmation will show your actual expiry.</p>
         </div></DialogBody>

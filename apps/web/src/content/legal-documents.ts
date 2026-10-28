@@ -528,10 +528,6 @@ export const termsAndConditions: LegalDocument = {
         },
         {
           "type": "paragraph",
-          "text": "The standard landlord service terms are in the [CampusHomes landlord agreement draft](/landlord-agreement). It is a draft for review and is not signed or in force."
-        },
-        {
-          "type": "paragraph",
           "text": "The fee record must state the precise amount or percentage basis, cap if any, currency, taxes, activation, invoice timing, payment deadline and cancellation or refund treatment. Where rent is per semester, an assumed first-month basis must not be applied without an explicit agreed conversion. A CampusHomes commission payable by a landlord is distinct from a landlord's charge to a student. Free trials must not silently convert into paid services."
         },
         {

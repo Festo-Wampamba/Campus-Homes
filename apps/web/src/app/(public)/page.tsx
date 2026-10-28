@@ -284,7 +284,7 @@ async function HomeDiscovery() {
 
       <section id="how-it-works" className="ch-section" aria-labelledby="how-heading">
         <p className="ch-eyebrow">A calmer way to find a room</p>
-        <h2 id="how-heading" className="ch-section__title">From search to move-in, with the next step clear.</h2>
+        <h2 id="how-heading" className="ch-section__title">From search to <span className="whitespace-nowrap">move-in</span>, with the next step clear.</h2>
         <ol className="ch-steps">
           {HOW_IT_WORKS.map((step) => (
             <li key={step.number} className="ch-step">

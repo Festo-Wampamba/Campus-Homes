@@ -24,10 +24,11 @@ const INTROS: Record<LegalDocument["kind"], string> = {
   "landlord-agreement": "The standard terms between Akolet and a landlord who lists student accommodation on CampusHomes.",
 };
 
+// The landlord agreement links out to these two but isn't linked back yet:
+// it will sit in the landlord section instead (Festo, 28 October).
 const OTHER_DOCUMENTS: { kind: LegalDocument["kind"]; href: string; label: string }[] = [
   { kind: "terms", href: "/terms", label: "Read terms and conditions" },
   { kind: "privacy", href: "/privacy", label: "Read the privacy policy" },
-  { kind: "landlord-agreement", href: "/landlord-agreement", label: "Read the landlord agreement" },
 ];
 
 export function LegalPage({ document }: { document: LegalDocument }) {
