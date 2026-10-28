@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
+import { landlordAgreement } from "../content/landlord-agreement";
 import { privacyPolicy, termsAndConditions } from "../content/legal-documents";
 import { LegalPage } from "./legal-page";
 
@@ -20,15 +21,17 @@ afterEach(() => {
   container.remove();
 });
 
-it.each([privacyPolicy, termsAndConditions])("identifies $kind as a review draft with a downloadable copy", async (document) => {
+it.each([privacyPolicy, termsAndConditions, landlordAgreement])("labels $kind as a draft, not final", async (document) => {
   await act(async () => root.render(<LegalPage document={document} />));
-  expect(container.querySelector("h1")?.textContent).toBe(document.title);
-  expect(container.querySelector('[role="note"]')?.textContent).toContain("not effective legal terms");
-  expect(container.querySelector("a[download]")?.getAttribute("href")).toBe(document.downloadHref);
-  expect(container.textContent).toContain("23 October 2026");
+  expect(container.querySelector('[role="note"]')?.textContent).toContain("Draft, not final");
 });
 
-it.each([privacyPolicy, termsAndConditions])("gives every $kind contents link a unique visible section", async (document) => {
+it.each([privacyPolicy, termsAndConditions, landlordAgreement])("offers no file download on the $kind page", async (document) => {
+  await act(async () => root.render(<LegalPage document={document} />));
+  expect(container.querySelector("a[download]")).toBeNull();
+});
+
+it.each([privacyPolicy, termsAndConditions, landlordAgreement])("gives every $kind contents link a unique visible section", async (document) => {
   await act(async () => root.render(<LegalPage document={document} />));
   const links = container.querySelectorAll('nav[aria-label="On this page"] a');
   expect(links.length).toBeGreaterThan(10);
@@ -52,4 +55,9 @@ it("distinguishes a free hold from direct landlord payments and preserves statut
   expect(container.querySelector("#reservations")?.textContent).toContain("takes no reservation payment");
   expect(container.querySelector("#bookings")?.textContent).toContain("Pay rent, deposits and lawful landlord charges directly");
   expect(container.querySelector("#cancellation")?.textContent).toContain("Nothing in these terms waives or reduces a non-excludable right");
+});
+
+it("links the terms to the landlord agreement draft", async () => {
+  await act(async () => root.render(<LegalPage document={termsAndConditions} />));
+  expect(container.querySelector('#fees a[href="/landlord-agreement"]')).not.toBeNull();
 });
