@@ -182,3 +182,9 @@ export function bookingOutcomes(reservations: LandlordReservationView[]): Bookin
     .map(([status, count]) => ({ outcome: labels[status] ?? status, count }))
     .sort((a, b) => b.count - a.count);
 }
+
+/** Rent value over the most recent `months` buckets of a rentValueTrend
+ * (its last bucket is the current month). */
+export function rentValueForPeriod(points: RentValuePoint[], months: number): number {
+  return points.slice(-months).reduce((sum, point) => sum + point.rentValueUgx, 0);
+}

@@ -4,8 +4,14 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 
 export type BookingOutcomeRow = { outcome: string; count: number };
 
-const GOOD = new Set(["Fulfilled"]);
-const BAD = new Set(["Cancelled", "Expired", "Payment failed"]);
+// Red for bookings lost, peach for booked, green for moved in (Festo).
+const OUTCOME_COLORS: Record<string, string> = {
+  Expired: "var(--color-destructive)",
+  Cancelled: "var(--color-destructive)",
+  Refunded: "var(--color-destructive)",
+  Booked: "var(--color-coral-500)",
+  "Moved in": "var(--color-success)",
+};
 
 function TooltipContent({ active, payload }: { active?: boolean; payload?: { payload: BookingOutcomeRow }[] }) {
   if (!active || !payload?.length) return null;
@@ -49,16 +55,7 @@ export function BookingOutcomesChart({ data }: { data: BookingOutcomeRow[] }) {
           <Tooltip content={<TooltipContent />} cursor={{ fill: "var(--color-muted)" }} />
           <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
             {data.map((row) => (
-              <Cell
-                key={row.outcome}
-                fill={
-                  GOOD.has(row.outcome)
-                    ? "var(--color-teal-600)"
-                    : BAD.has(row.outcome)
-                      ? "var(--color-coral-500)"
-                      : "var(--color-warning)"
-                }
-              />
+              <Cell key={row.outcome} fill={OUTCOME_COLORS[row.outcome] ?? "var(--color-warning)"} />
             ))}
           </Bar>
         </BarChart>

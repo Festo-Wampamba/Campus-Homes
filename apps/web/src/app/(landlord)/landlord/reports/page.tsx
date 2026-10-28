@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { BedDouble, Building2, CalendarCheck, CalendarClock, Percent, Wallet } from "lucide-react";
+import { BedDouble, Building2, CalendarCheck, CalendarClock, Percent } from "lucide-react";
 
 import { getLandlordReservations, getMyProperties, getPropertyDetail } from "@/lib/landlord";
-import { formatUgx } from "@/lib/format";
 import { incomeSummary } from "@/lib/tenant-ledger";
 import { getLandlordTenants } from "@/lib/tenants";
 import {
@@ -22,6 +21,7 @@ import { RoomStatusChart } from "@/components/landlord/analytics/room-status-cha
 import { PropertyOccupancyChart } from "@/components/landlord/analytics/property-occupancy-chart";
 import { RoomCategoryChart } from "@/components/landlord/analytics/room-category-chart";
 import { RentValueChart } from "@/components/landlord/analytics/rent-value-chart";
+import { RentValuePeriods } from "@/components/landlord/analytics/rent-value-periods";
 import { CampusChart } from "@/components/landlord/analytics/campus-chart";
 import { BookingOutcomesChart } from "@/components/landlord/analytics/booking-outcomes-chart";
 import { IncomeProjection } from "@/components/landlord/analytics/income-projection";
@@ -45,7 +45,6 @@ export default async function LandlordReportsPage() {
   const categoryMix = roomCategoryMix(rooms);
   const trend = bookingsTrend(reservations);
   const rentTrend = rentValueTrend(reservations, rooms);
-  const totalRentValueUgx = rentTrend.reduce((sum, m) => sum + m.rentValueUgx, 0);
   const campusMix = campusDistribution(properties);
   const outcomes = bookingOutcomes(reservations);
   const income = tenants ? incomeSummary(rooms, tenants) : null;
@@ -78,13 +77,7 @@ export default async function LandlordReportsPage() {
       </div>
 
       <div className="mt-4">
-        <StatCard
-          label="Rent value, last 12 months"
-          value={formatUgx(totalRentValueUgx)}
-          detail="Collected by you directly. Not a CampusHomes payment"
-          icon={Wallet}
-          tone="coral"
-        />
+        <RentValuePeriods points={rentTrend} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

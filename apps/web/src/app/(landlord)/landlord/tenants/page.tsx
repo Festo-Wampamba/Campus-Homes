@@ -59,6 +59,13 @@ export default async function LandlordTenantsPage({ searchParams }: { searchPara
       </div>
 
       <div className="mt-6">
+        <RegistrationFormSection
+          properties={properties.map(({ id, name }) => ({ id, name }))}
+          initialPropertyId={chosenPropertyId}
+        />
+      </div>
+
+      <div className="mt-6">
         {tenants === null ? (
           <p role="alert" className="text-sm text-destructive">Couldn&apos;t load your tenants. Refresh the page to try again.</p>
         ) : list.length === 0 ? (
@@ -72,12 +79,6 @@ export default async function LandlordTenantsPage({ searchParams }: { searchPara
         )}
       </div>
 
-      <div className="mt-8">
-        <RegistrationFormSection
-          properties={properties.map(({ id, name }) => ({ id, name }))}
-          initialPropertyId={chosenPropertyId}
-        />
-      </div>
     </>
   );
 }
