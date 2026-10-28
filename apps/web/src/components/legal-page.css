@@ -16,7 +16,6 @@
 .ch-legal__review p { margin-top: 5px; color: var(--ch-ink-soft); font-size: .9375rem; line-height: 1.7; }
 .ch-legal__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 22px; }
 .ch-legal__actions a { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; font-size: .9375rem; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
-.ch-legal__actions .ch-legal__download { padding: 12px 20px; border-radius: 999px; color: #fff; background: #0f6667; text-decoration: none; }
 .ch-legal a:hover { text-decoration-thickness: 2px; }
 .ch-legal a:focus-visible { outline: 2px solid var(--ch-accent); outline-offset: 4px; border-radius: 4px; }
 .ch-legal__layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); align-items: start; gap: 64px; margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--ch-line); }
