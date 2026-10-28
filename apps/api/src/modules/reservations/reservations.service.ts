@@ -531,8 +531,10 @@ export class ReservationsService {
    * never more than the remaining balance. */
   async recordPayment(ctx: RlsContext, reservationId: string, input: RecordPaymentInput) {
     let receipt: ReceiptRow | null = null;
+    let replayed = false;
     await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
-      // FOR UPDATE: two payments recorded at once can't both fit one balance.
+      // FOR UPDATE: two payments recorded at once can't both fit one balance,
+      // and a retry waits here until the first attempt's receipt is visible.
       const reservation = (await client.query<{ bed_id: string; student_id: string; status: string; total: number }>(
         `SELECT bed_id, student_id, status::text AS status, price_per_term_ugx AS total
          FROM reservations WHERE id = $1 FOR UPDATE`,
@@ -540,6 +542,25 @@ export class ReservationsService {
       )).rows[0];
       if (!reservation) throw new NotFoundException('Reservation not found');
       await this.assertCanManageBed(client, ctx, reservation.bed_id);
+      const earlier = (await client.query<ReceiptRow>(
+        `SELECT receipt_number, student_id, landlord_id, property_name, room_label, booking_fee_ugx, deposit_ugx,
+                rent_ugx, payment_method::text AS payment_method, recorded_at
+         FROM payment_receipts WHERE reservation_id = $1 AND idempotency_key = $2`,
+        [reservationId, input.idempotencyKey],
+      )).rows[0];
+      if (earlier) {
+        // Same key with different details isn't a retry: the landlord changed
+        // the payment after the first one saved, so say so instead of
+        // reporting the edited payment as recorded.
+        if (earlier.rent_ugx !== input.amountUgx || earlier.payment_method !== (input.paymentMethod ?? null)) {
+          throw new ConflictException(
+            `This payment was already recorded as UGX ${earlier.rent_ugx.toLocaleString('en-UG')} (receipt ${earlier.receipt_number}). Close this window and record any other payment separately.`,
+          );
+        }
+        receipt = earlier;
+        replayed = true;
+        return;
+      }
       if (reservation.status !== 'booked' && reservation.status !== 'occupied') {
         throw new ConflictException('Payments can only be recorded for a booked or moved-in student');
       }
@@ -549,16 +570,18 @@ export class ReservationsService {
       }
       receipt = (await client.query<ReceiptRow>(
         `INSERT INTO payment_receipts (reservation_id, student_id, landlord_id, property_name, room_label,
-           rent_ugx, payment_method, recorded_by)
-         SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5
+           rent_ugx, payment_method, recorded_by, idempotency_key)
+         SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5, $7
          FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
          WHERE b.id = $6
          ${RECEIPT_RETURNING}`,
-        [reservationId, reservation.student_id, input.amountUgx, input.paymentMethod ?? null, ctx.userId, reservation.bed_id],
+        [reservationId, reservation.student_id, input.amountUgx, input.paymentMethod ?? null, ctx.userId, reservation.bed_id, input.idempotencyKey],
       )).rows[0] ?? null;
     });
     const recorded = receipt as ReceiptRow | null;
     if (!recorded) throw new NotFoundException('Bed not found');
+    // A replay already emailed and audited the first time.
+    if (replayed) return { receiptNumber: recorded.receipt_number, amountUgx: recorded.rent_ugx };
     this.deliverReceipt(recorded);
     await this.audit.record(ctx, 'reservation.payment_record', 'reservation', reservationId, {
       amountUgx: input.amountUgx,

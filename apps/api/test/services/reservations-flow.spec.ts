@@ -578,7 +578,7 @@ describe('tenant records and later payments (Festo, 2026-10-28)', () => {
   });
 
   it('counts a later payment towards what the student paid', async () => {
-    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 50_000, paymentMethod: 'mtn_momo' });
+    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 50_000, paymentMethod: 'mtn_momo', idempotencyKey: 'pay-key-0001-0000000000' });
     expect((await tenantRow(landlord1))?.paidUgx).toBe(150_000);
   });
 
@@ -592,13 +592,13 @@ describe('tenant records and later payments (Festo, 2026-10-28)', () => {
 
   it('refuses a payment above the remaining balance', async () => {
     await expect(
-      reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: rentUgx }),
+      reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: rentUgx, idempotencyKey: 'pay-key-0002-0000000000' }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("refuses another landlord recording a payment on this booking", async () => {
     await expect(
-      reservationsService.recordPayment(landlordCtx(landlord2), reservationId, { amountUgx: 1_000 }),
+      reservationsService.recordPayment(landlordCtx(landlord2), reservationId, { amountUgx: 1_000, idempotencyKey: 'pay-key-0003-0000000000' }),
     ).rejects.toThrow();
   });
 
@@ -609,7 +609,7 @@ describe('tenant records and later payments (Festo, 2026-10-28)', () => {
     });
     await reservationsService.release(landlordCtx(landlord1), walkIn.reservationId, { reason: 'Did not take the room', refundRequired: false });
     await expect(
-      reservationsService.recordPayment(landlordCtx(landlord1), walkIn.reservationId, { amountUgx: 1_000 }),
+      reservationsService.recordPayment(landlordCtx(landlord1), walkIn.reservationId, { amountUgx: 1_000, idempotencyKey: 'pay-key-0004-0000000000' }),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -621,10 +621,26 @@ describe('tenant records and later payments (Festo, 2026-10-28)', () => {
     });
     // Before 0075 the booking amount lived only on the reservation row.
     await pool.query(`DELETE FROM payment_receipts WHERE reservation_id = $1`, [legacy.reservationId]);
-    await reservationsService.recordPayment(landlordCtx(landlord1), legacy.reservationId, { amountUgx: 50_000 });
+    await reservationsService.recordPayment(landlordCtx(landlord1), legacy.reservationId, { amountUgx: 50_000, idempotencyKey: 'pay-key-0005-0000000000' });
 
     const tenants = (await reservationsService.landlordTenants(landlordCtx(landlord1))) as Tenant[];
     expect(tenants.find((t) => t.reservationId === legacy.reservationId)?.paidUgx).toBe(150_000);
+  });
+
+  it('records a retried payment only once', async () => {
+    const key = 'retry-key-0001-0000000000';
+    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 10_000, idempotencyKey: key });
+    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 10_000, idempotencyKey: key });
+    const rows = await pool.query(`SELECT 1 FROM payment_receipts WHERE reservation_id = $1 AND idempotency_key = $2`, [reservationId, key]);
+    expect(rows.rowCount).toBe(1);
+  });
+
+  it('refuses a retry whose amount changed after the first one saved', async () => {
+    const key = 'retry-key-0002-0000000000';
+    await reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 5_000, idempotencyKey: key });
+    await expect(
+      reservationsService.recordPayment(landlordCtx(landlord1), reservationId, { amountUgx: 6_000, idempotencyKey: key }),
+    ).rejects.toThrow(ConflictException);
   });
 
   it("refuses a walk-in amount above the room's rent", async () => {
