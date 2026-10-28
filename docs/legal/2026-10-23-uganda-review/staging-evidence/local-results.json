@@ -1,0 +1,77 @@
+{
+  "origin": "http://127.0.0.1:3111",
+  "results": [
+    {
+      "route": "privacy",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies"
+    },
+    {
+      "route": "terms",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations"
+    },
+    {
+      "route": "privacy",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies"
+    },
+    {
+      "route": "terms",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations"
+    },
+    {
+      "route": "privacy",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies"
+    },
+    {
+      "route": "terms",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations"
+    },
+    {
+      "route": "privacy",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "sections": 15,
+      "downloadBytes": 47170,
+      "anchor": "cookies"
+    },
+    {
+      "route": "terms",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "sections": 18,
+      "downloadBytes": 46727,
+      "anchor": "reservations"
+    }
+  ]
+}
