@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 
+import { roomTypeImportLabels } from '@campushomes/shared';
 import type {
   BedBlockInput,
   BatchRoomUpdateInput,
@@ -613,23 +614,16 @@ export class RoomManagementService {
     return room;
   }
 
-  /** Spreadsheet template for this property, listing its own room type names:
-   * each live type's approved title, plus a renamed title still in an open
-   * change set for the semester on screen (what the importer can match).
-   * Versions from a cancelled draft are left out. */
+  /** Spreadsheet template for this property, one name per room type: the same
+   * room types and open change set the Manage Rooms page shows for this
+   * semester, named by roomTypeImportLabels so two types sharing a title still
+   * get different names (the upload check matches them the same way). */
   async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv', semesterId?: string) {
     const titles = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
-      const { rows } = await client.query<{ title: string }>(
-        `SELECT v.title FROM room_types rt
-         JOIN room_type_versions v ON v.room_type_id = rt.id
-         LEFT JOIN room_inventory_change_sets cs ON cs.id = v.change_set_id
-         WHERE rt.property_id = $1 AND rt.archived_at IS NULL
-           AND (v.id = rt.current_version_id
-                OR (cs.semester_id = $2 AND cs.status IN ('draft','pending_review','visit_required','rejected')))`,
-        [propertyId, semesterId ?? null],
-      );
-      return [...new Set(rows.map((row) => row.title))].sort();
+      const changeSet = await this.openChangeSet(client, propertyId, semesterId);
+      const roomTypes = await this.loadRoomTypes(client, propertyId, changeSet?.id ?? null);
+      return [...roomTypeImportLabels(roomTypes).values()].sort((a, b) => a.localeCompare(b));
     });
     return roomImportTemplate(format, titles);
   }
