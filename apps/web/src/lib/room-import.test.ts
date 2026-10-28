@@ -29,8 +29,28 @@ describe("planRoomImport", () => {
   it("refuses to guess when two room types share a name", () => {
     const twin = type("t-single-2", "Single Room", "single");
     expect(plan([row("A02", "Single Room")], [single, twin]).rows[0]!.error).toBe(
-      '"Single Room" fits several room types; rename them so each name is different',
+      'Several room types are called "Single Room"; pick "Single Room #1" or "Single Room #2" from the template list',
     );
+  });
+
+  it("never numbers a twin into another room type's name", () => {
+    const twin = type("t-single-2", "Single Room", "single");
+    const numbered = type("t-numbered", "Single Room #1", "single");
+    expect(plan([row("A02", "Single Room #1")], [single, twin, numbered]).rows[0]!.roomTypeId).toBe("t-numbered");
+  });
+
+  it("matches the template name of a room type that shares its title", () => {
+    const withBathroom = (id: string, bathroomType: string) =>
+      ({ id, currentVersion: { title: "Double Room", category: "double", capacity: 2, bathroomType, pricePerTermUgx: 1_200_000 }, pendingVersion: null }) as unknown as RoomType;
+    const types = [withBathroom("t-shared", "shared"), withBathroom("t-ensuite", "ensuite")];
+    expect(plan([row("A02", "Double Room - self-contained")], types).rows[0]!.roomTypeId).toBe("t-ensuite");
+  });
+
+  it("names twins by their rent when only the rent differs", () => {
+    const withRent = (id: string, pricePerTermUgx: number) =>
+      ({ id, currentVersion: { title: "Double Room", category: "double", capacity: 2, bathroomType: "shared", pricePerTermUgx }, pendingVersion: null }) as unknown as RoomType;
+    const types = [withRent("t-cheap", 950_000), withRent("t-dear", 1_250_000)];
+    expect(plan([row("A02", "double room - ugx 1.25m")], types).rows[0]!.roomTypeId).toBe("t-dear");
   });
 
   it("matches a room type by its pending new name", () => {
