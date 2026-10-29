@@ -274,11 +274,28 @@ export class ListingsService {
       const rows = await db.select().from(properties).orderBy(desc(properties.createdAt));
       if (rows.length === 0) return [];
       const live = await db
-        .selectDistinct({ propertyId: listings.propertyId })
+        .select({ propertyId: listings.propertyId, versionId: listings.currentVersionId })
         .from(listings)
         .where(and(eq(listings.status, 'verified'), inArray(listings.propertyId, rows.map((p) => p.id))));
       const liveIds = new Set(live.map((l) => l.propertyId));
-      return rows.map((p) => ({ ...p, hasLiveListing: liveIds.has(p.id) }));
+      const versionIds = live.flatMap((l) => (l.versionId ? [l.versionId] : []));
+      const covers = versionIds.length
+        ? await db
+            .select({ versionId: listingPhotos.listingVersionId, storageKey: listingPhotos.storageKey })
+            .from(listingPhotos)
+            .where(and(inArray(listingPhotos.listingVersionId, versionIds), eq(listingPhotos.isPrimary, true)))
+        : [];
+      const coverByProperty = new Map(
+        live.flatMap((l) => {
+          const cover = covers.find((c) => c.versionId === l.versionId);
+          return cover ? [[l.propertyId, cover.storageKey] as const] : [];
+        }),
+      );
+      return rows.map((p) => ({
+        ...p,
+        hasLiveListing: liveIds.has(p.id),
+        listingCoverPhotoKey: coverByProperty.get(p.id) ?? null,
+      }));
     });
   }
 

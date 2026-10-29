@@ -198,6 +198,9 @@ export const propertySchema = z.object({
   // From GET /listings/properties/mine: true once a listing for this property
   // passed inspection and was published (status 'verified').
   hasLiveListing: z.boolean().optional(),
+  // Also from /mine: the live listing's cover (listing_photos primary), shown
+  // when the landlord uploaded no cover of their own.
+  listingCoverPhotoKey: z.string().nullable().optional(),
   name: z.string(),
   alternativeName: z.string().nullable(),
   streetAddress: z.string(),

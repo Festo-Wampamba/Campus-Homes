@@ -306,8 +306,7 @@ function PropertyForm({
             </div>
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
+        <div className="space-y-1.5">
             <Label>Room types & pricing (optional)</Label>
             <p className="text-xs text-muted-foreground">
               e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Ops
@@ -321,7 +320,6 @@ function PropertyForm({
               showBeds
               showPhotos
             />
-          </div>
         </div>
 
         <PropertyExtendedFields

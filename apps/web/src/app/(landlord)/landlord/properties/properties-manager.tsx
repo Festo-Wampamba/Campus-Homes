@@ -51,10 +51,12 @@ function PropertyStatusChip({ property }: { property: Property }) {
 function PropertyThumbnail({ property, className, whole = false }: { property: Property; className?: string; whole?: boolean }) {
   // Card covers fill their frame; the card click opens the detail dialog,
   // where the cover is shown at its own shape and opens full screen.
-  if (whole && property.coverPhotoKey) {
+  // The landlord's own cover wins; a live listing's cover fills in otherwise.
+  const coverKey = property.coverPhotoKey ?? property.listingCoverPhotoKey ?? null;
+  if (whole && coverKey) {
     return (
       <PhotoTile
-        photos={[{ storageKey: property.coverPhotoKey }]}
+        photos={[{ storageKey: coverKey }]}
         width={600}
         alt={`${property.name} cover photo`}
         interactive={false}
@@ -62,7 +64,7 @@ function PropertyThumbnail({ property, className, whole = false }: { property: P
       />
     );
   }
-  const url = property.coverPhotoKey ? listingPhotoUrl(property.coverPhotoKey, 100) : null;
+  const url = coverKey ? listingPhotoUrl(coverKey, 100) : null;
   if (url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- arbitrary-origin storage URL

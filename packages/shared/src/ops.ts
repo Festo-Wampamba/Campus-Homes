@@ -99,6 +99,20 @@ export function normalizeVisitPhotos(raw: unknown): VisitPhoto[] {
   });
 }
 
+/** The one cover rule, shared by the publish API and the Ops photo editor:
+ * the landlord's own cover photo wins; otherwise the first Exterior photo;
+ * otherwise the first photo. Returns the photos with the cover moved first
+ * (everything else keeps its order), so `isPrimary` = index 0. */
+export function orderPhotosCoverFirst<T extends { storageKey: string; category?: PhotoCategory | null }>(
+  photos: T[],
+  landlordCoverKey?: string | null,
+): T[] {
+  let index = landlordCoverKey ? photos.findIndex((p) => p.storageKey === landlordCoverKey) : -1;
+  if (index < 0) index = photos.findIndex((p) => p.category === 'exterior');
+  if (index <= 0) return photos;
+  return [photos[index]!, ...photos.slice(0, index), ...photos.slice(index + 1)];
+}
+
 // Offline-sync checklist submission (§9 flow 2). The client generates the
 // idempotency key when the visit starts; a retried sync can never double-submit.
 export const syncVisitSchema = z.object({
@@ -251,6 +265,8 @@ export const opsVisitMineSchema = z.object({
   property_id: uuid,
   property_name: z.string(),
   street_address: z.string(),
+  // The landlord's cover photo, so the inspector recognises the building.
+  cover_photo_key: z.string().nullable(),
   scheduled_at: z.string().nullable(),
   result: z.enum(VISIT_RESULTS),
 });
@@ -305,6 +321,7 @@ export const opsVisitDetailSchema = z.object({
   approvedBy: uuid.nullable(),
   approvedAt: z.string().nullable(),
   corrections: z.array(visitCorrectionSchema),
+  propertyCoverPhotoKey: z.string().nullable(),
 });
 export type OpsVisitDetail = z.infer<typeof opsVisitDetailSchema>;
 

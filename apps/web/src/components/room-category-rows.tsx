@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { roomCategoryLabel } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 export type RoomCategoryRow = {
   // Local-only key for React reconciliation — never sent to the API.
@@ -134,115 +133,117 @@ export function RoomCategoryRows({
         number you&apos;d quote a student moving into just one space in that room.
       </p>
       {rows.map((row, i) => (
-        <div
-          key={row.key}
-          className={cn(
-            "grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3",
-            showBeds
-              ? "sm:grid-cols-3"
-              : showSelfContained
-                ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
-                : "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
-          )}
-        >
-          <div className="col-span-2 space-y-1.5 sm:col-span-1">
-            <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>
-            <select
-              id={`${idPrefix}-category-${i}`}
-              value={row.category}
-              onChange={(e) => update(row.key, { category: e.target.value as RoomCategory })}
-              className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10"
-            >
-              {[...SELECTABLE_ROOM_CATEGORIES, ...(row.category === "bedsitter" ? ["bedsitter" as const] : [])].filter(
-                // The self-contained checkbox already covers this; keep the
-                // option only for a legacy row that already uses it.
-                (category) => !showSelfContained || category !== "self_contained" || category === row.category,
-              ).map((category) => (
-                <option key={category} value={category}>
-                  {roomCategoryLabel(category)}
-                </option>
-              ))}
-            </select>
-            <Input
-              aria-label={row.category === "other" ? "Custom room type" : "Variant name (optional)"}
-              value={row.customLabel}
-              maxLength={40}
-              placeholder={row.category === "other" ? "e.g. Penthouse suite" : "Variant (optional), e.g. Executive, Mini"}
-              onChange={(e) => update(row.key, { customLabel: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-count-${i}`}>Rooms</Label>
-            <Input
-              id={`${idPrefix}-count-${i}`}
-              type="number"
-              min={1}
-              max={500}
-              inputMode="numeric"
-              value={row.roomCount}
-              onChange={(e) => update(row.key, { roomCount: e.target.value })}
-            />
-          </div>
-          {showBeds && (
-            <div className="space-y-1.5">
-              <Label htmlFor={`${idPrefix}-beds-${i}`}>Beds per room</Label>
+        // Container queries, not viewport breakpoints: the same card sits in a
+        // resizable dialog, the onboarding wizard and the Ops publish page.
+        <div key={row.key} className="@container rounded-md border border-border p-3">
+          <div className="grid grid-cols-2 items-end gap-x-3 gap-y-3 @4xl:grid-cols-4">
+            <div className="col-span-2 space-y-1.5 @lg:col-span-1 @4xl:col-span-2">
+              <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>
+              <select
+                id={`${idPrefix}-category-${i}`}
+                value={row.category}
+                onChange={(e) => update(row.key, { category: e.target.value as RoomCategory })}
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10"
+              >
+                {[...SELECTABLE_ROOM_CATEGORIES, ...(row.category === "bedsitter" ? ["bedsitter" as const] : [])].filter(
+                  // The self-contained checkbox already covers this; keep the
+                  // option only for a legacy row that already uses it.
+                  (category) => !showSelfContained || category !== "self_contained" || category === row.category,
+                ).map((category) => (
+                  <option key={category} value={category}>
+                    {roomCategoryLabel(category)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2 space-y-1.5 @lg:col-span-1 @4xl:col-span-2">
+              <Label htmlFor={`${idPrefix}-variant-${i}`}>
+                {row.category === "other" ? "Custom room type" : "Variant (optional)"}
+              </Label>
               <Input
-                id={`${idPrefix}-beds-${i}`}
-                type="number"
-                min={1}
-                max={20}
-                inputMode="numeric"
-                // Fixed types always sleep their named count; existing rooms
-                // keep their beds (change those through room management).
-                disabled={FIXED_BEDS_PER_ROOM[row.category] !== undefined || Boolean(row.unitIds?.length)}
-                value={FIXED_BEDS_PER_ROOM[row.category] ?? row.bedsPerRoom ?? "1"}
-                onChange={(e) => update(row.key, { bedsPerRoom: e.target.value })}
+                id={`${idPrefix}-variant-${i}`}
+                value={row.customLabel}
+                maxLength={40}
+                placeholder={row.category === "other" ? "e.g. Penthouse suite" : "e.g. Executive, Mini"}
+                onChange={(e) => update(row.key, { customLabel: e.target.value })}
               />
             </div>
-          )}
-          <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-price-${i}`}>Price per bed / semester (UGX)</Label>
-            <Input
-              id={`${idPrefix}-price-${i}`}
-              type="number"
-              min={1}
-              inputMode="numeric"
-              value={row.pricePerTermUgx}
-              onChange={(e) => update(row.key, { pricePerTermUgx: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-deposit-${i}`}>Deposit (UGX, optional)</Label>
-            <Input
-              id={`${idPrefix}-deposit-${i}`}
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={row.depositUgx}
-              onChange={(e) => update(row.key, { depositUgx: e.target.value })}
-            />
-          </div>
-          <div className={cn("col-span-2 flex items-center justify-between gap-2", !showBeds && "contents")}>
-            {showSelfContained && (
-              <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">
-                <input
-                  type="checkbox"
-                  checked={row.selfContained}
-                  onChange={(e) => update(row.key, { selfContained: e.target.checked })}
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idPrefix}-count-${i}`} className="whitespace-nowrap">Rooms</Label>
+              <Input
+                id={`${idPrefix}-count-${i}`}
+                type="number"
+                min={1}
+                max={500}
+                inputMode="numeric"
+                value={row.roomCount}
+                onChange={(e) => update(row.key, { roomCount: e.target.value })}
+              />
+            </div>
+            {showBeds && (
+              <div className="space-y-1.5">
+                <Label htmlFor={`${idPrefix}-beds-${i}`} className="whitespace-nowrap">Beds per room</Label>
+                <Input
+                  id={`${idPrefix}-beds-${i}`}
+                  type="number"
+                  min={1}
+                  max={20}
+                  inputMode="numeric"
+                  // Fixed types always sleep their named count; existing rooms
+                  // keep their beds (change those through room management).
+                  disabled={FIXED_BEDS_PER_ROOM[row.category] !== undefined || Boolean(row.unitIds?.length)}
+                  value={FIXED_BEDS_PER_ROOM[row.category] ?? row.bedsPerRoom ?? "1"}
+                  onChange={(e) => update(row.key, { bedsPerRoom: e.target.value })}
                 />
-                Self-contained
-              </label>
+              </div>
             )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Remove room type"
-              onClick={() => remove(row.key)}
-            >
-              <Trash2 aria-hidden className="size-4" />
-            </Button>
-          </div>
+            <div className="col-span-2 space-y-1.5 @lg:col-span-1">
+              <Label htmlFor={`${idPrefix}-price-${i}`} className="whitespace-nowrap">Price per bed / semester (UGX)</Label>
+              <Input
+                id={`${idPrefix}-price-${i}`}
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={row.pricePerTermUgx}
+                onChange={(e) => update(row.key, { pricePerTermUgx: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2 space-y-1.5 @lg:col-span-1">
+              <Label htmlFor={`${idPrefix}-deposit-${i}`} className="whitespace-nowrap">Deposit (UGX, optional)</Label>
+              <Input
+                id={`${idPrefix}-deposit-${i}`}
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={row.depositUgx}
+                onChange={(e) => update(row.key, { depositUgx: e.target.value })}
+              />
+            </div>
+            <div className="col-span-full flex min-h-11 items-center justify-between gap-2">
+              {showSelfContained ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4"
+                    checked={row.selfContained}
+                    onChange={(e) => update(row.key, { selfContained: e.target.checked })}
+                  />
+                  Self-contained (own bathroom)
+                </label>
+              ) : (
+                <span />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => remove(row.key)}
+              >
+                <Trash2 aria-hidden className="size-4" />
+                Remove
+              </Button>
+            </div>
           {showPhotos && (
             <div className="col-span-full space-y-1.5 border-t border-border pt-2.5">
               <p className="text-xs text-muted-foreground">
@@ -287,6 +288,7 @@ export function RoomCategoryRows({
               </div>
             </div>
           )}
+          </div>
         </div>
       ))}
       {photoError && <p className="text-sm font-semibold text-destructive">{photoError}</p>}
