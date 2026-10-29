@@ -31,7 +31,7 @@ const OTHER_DOCUMENTS: { kind: LegalDocument["kind"]; href: string; label: strin
   { kind: "privacy", href: "/privacy", label: "Read the privacy policy" },
 ];
 
-export function LegalPage({ document }: { document: LegalDocument }) {
+export function LegalPage({ document, supportEmail }: { document: LegalDocument; supportEmail: string }) {
   const Icon = document.kind === "privacy" ? ShieldCheck : FileText;
   return (
     <article className="ch-legal" aria-labelledby="legal-title">
@@ -73,7 +73,7 @@ export function LegalPage({ document }: { document: LegalDocument }) {
           <div className="ch-legal__help">
             <h2>Have a question?</h2>
             <p>Contact the CampusHomes team about this draft or a privacy request.</p>
-            <a href="mailto:info@akolet.co.ug">info@akolet.co.ug</a>
+            <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
             <Link href="/contact">Contact Us <ArrowUpRight aria-hidden="true" size={16} /></Link>
           </div>
         </aside>

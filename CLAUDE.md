@@ -1561,3 +1561,17 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     type even at the same price, so it appears in the template dropdown.
     The one-reservation-per-room-type rule still keys on category +
     self-contained, so variants of one category count as the same type there.
+
+- **Legal review drafts gated to staging (2026-10-29):** the 23 Oct privacy/terms
+  review drafts (PR #258 onward) had replaced the in-force pages everywhere — prod
+  `/privacy` showed "Draft, not final" while sign-in still says continuing means
+  agreeing to the Terms and Privacy policy, and the draft text carries unverified
+  company details and "before publication" notes. Now `/privacy` and `/terms` serve
+  the in-force 29 Sep policy unless the runtime env `LEGAL_DRAFT_PREVIEW=true`
+  (`lib/legal-draft.ts`, pages are `force-dynamic`); only the draft view is
+  noindex. **Staging's web service must set `LEGAL_DRAFT_PREVIEW=true` as a Dokploy
+  Environment var (not a build arg) to keep showing the drafts.** Both views use
+  `getSupportEmail()` (Platform settings) instead of a hardcoded address. The
+  `/landlord-agreement` draft is not gated (no in-force version exists; landlord
+  onboarding links to it). Activating the drafts = updating `legal-article`-based
+  pages with approved text, not flipping the flag on prod.
