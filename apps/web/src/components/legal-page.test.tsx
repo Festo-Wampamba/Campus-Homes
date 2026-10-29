@@ -22,17 +22,17 @@ afterEach(() => {
 });
 
 it.each([privacyPolicy, termsAndConditions, landlordAgreement])("labels $kind as a draft, not final", async (document) => {
-  await act(async () => root.render(<LegalPage document={document} />));
+  await act(async () => root.render(<LegalPage document={document} supportEmail="help@example.test" />));
   expect(container.querySelector('[role="note"]')?.textContent).toContain("Draft, not final");
 });
 
 it.each([privacyPolicy, termsAndConditions, landlordAgreement])("offers no file download on the $kind page", async (document) => {
-  await act(async () => root.render(<LegalPage document={document} />));
+  await act(async () => root.render(<LegalPage document={document} supportEmail="help@example.test" />));
   expect(container.querySelector("a[download]")).toBeNull();
 });
 
 it.each([privacyPolicy, termsAndConditions, landlordAgreement])("gives every $kind contents link a unique visible section", async (document) => {
-  await act(async () => root.render(<LegalPage document={document} />));
+  await act(async () => root.render(<LegalPage document={document} supportEmail="help@example.test" />));
   const links = container.querySelectorAll('nav[aria-label="On this page"] a');
   expect(links.length).toBeGreaterThan(10);
   for (const link of links) {
@@ -43,7 +43,7 @@ it.each([privacyPolicy, termsAndConditions, landlordAgreement])("gives every $ki
 });
 
 it("discloses the AI recipient and stored search terms and preserves the cookies anchor", async () => {
-  await act(async () => root.render(<LegalPage document={privacyPolicy} />));
+  await act(async () => root.render(<LegalPage document={privacyPolicy} supportEmail="help@example.test" />));
   expect(container.querySelector("#ai")?.textContent).toContain("Groq");
   expect(container.querySelector("#what-we-collect")?.textContent).toContain("records submitted search text");
   expect(container.querySelector("#sensitive-data")?.textContent).toContain("financial information");
@@ -51,13 +51,18 @@ it("discloses the AI recipient and stored search terms and preserves the cookies
 });
 
 it("distinguishes a free hold from direct landlord payments and preserves statutory rights", async () => {
-  await act(async () => root.render(<LegalPage document={termsAndConditions} />));
+  await act(async () => root.render(<LegalPage document={termsAndConditions} supportEmail="help@example.test" />));
   expect(container.querySelector("#reservations")?.textContent).toContain("takes no reservation payment");
   expect(container.querySelector("#bookings")?.textContent).toContain("Pay rent, deposits and lawful landlord charges directly");
   expect(container.querySelector("#cancellation")?.textContent).toContain("Nothing in these terms waives or reduces a non-excludable right");
 });
 
 it.each([privacyPolicy, termsAndConditions])("does not link $kind to the landlord agreement", async (document) => {
-  await act(async () => root.render(<LegalPage document={document} />));
+  await act(async () => root.render(<LegalPage document={document} supportEmail="help@example.test" />));
   expect(container.querySelector('a[href^="/landlord-agreement"]')).toBeNull();
+});
+
+it("links the configured support email instead of a fixed address", async () => {
+  await act(async () => root.render(<LegalPage document={privacyPolicy} supportEmail="help@example.test" />));
+  expect(container.querySelector('a[href="mailto:help@example.test"]')).not.toBeNull();
 });
