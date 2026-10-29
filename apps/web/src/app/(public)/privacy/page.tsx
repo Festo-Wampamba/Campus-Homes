@@ -30,7 +30,7 @@ export default async function PrivacyPage() {
   const email = await getSupportEmail();
   if (isLegalDraftPreview()) return <LegalPage document={privacyPolicy} supportEmail={email} />;
   return (
-    <LegalArticle title="Privacy policy" updated="29 September 2026">
+    <LegalArticle title="Privacy policy" updated="29 October 2026">
       <p>
         CampusHomes helps students find inspected hostels near their university and helps landlords list
         them. This policy explains what personal data we collect, why, and what you can ask us to do with
@@ -47,7 +47,8 @@ export default async function PrivacyPage() {
         <li><strong>Student profile:</strong> your university and year of study, plus any details you choose to add to your profile, such as date of birth, gender, nationality, address and an emergency contact.</li>
         <li><strong>Landlord verification:</strong> your legal name, an identity document, property details, property documents and photos.</li>
         <li><strong>Activity on the platform:</strong> reservations, saved listings, messages with landlords, enquiries and support requests, reviews, calendar entries and signed tenant agreements.</li>
-        <li><strong>Usage data:</strong> which pages are visited and which main buttons are clicked. We record only the page address (never search text or other query details), and these records are not linked to your account.</li>
+        <li><strong>Tenant agreement forms:</strong> the details a landlord&apos;s form asks for, which can include your National ID or passport number, next-of-kin contacts and, if you choose to give them, medical conditions or allergies. These are shared with the landlord whose form you complete.</li>
+        <li><strong>Usage data:</strong> which pages are visited and which main buttons are clicked, and the searches made on the site, including the search text you type and the filters you choose. These records are not linked to your account, but please do not type private information into a hostel search.</li>
         <li><strong>Technical data:</strong> server logs that include IP addresses, kept for security and troubleshooting.</li>
       </ul>
       <p>We do not collect card or mobile-money details. Rent and deposits are paid directly to the landlord, outside CampusHomes.</p>
@@ -66,7 +67,7 @@ export default async function PrivacyPage() {
       <p>We do not sell personal data. We share it only as needed to run the service:</p>
       <ul>
         <li><strong>Landlords</strong> see the reservation and messages you send about their property.</li>
-        <li><strong>Service providers</strong> that process data for us: Africa&apos;s Talking (SMS sign-in codes), Resend (email), Backblaze and Cloudinary (photo and document storage), Google (only if you choose Google sign-in), and Cloudflare (network security).</li>
+        <li><strong>Service providers</strong> that process data for us: Africa&apos;s Talking (SMS sign-in codes), Resend (email), Backblaze and Cloudinary (photo and document storage), Google (only if you choose Google sign-in), Groq (only if you use the CampusHomes AI assistant: it receives your question and the recent messages in that chat), and Cloudflare (network security).</li>
         <li><strong>Map tiles</strong> are loaded from OpenStreetMap servers, which receive your IP address when a map is displayed.</li>
         <li><strong>Authorities</strong>, when the law requires it.</li>
       </ul>
