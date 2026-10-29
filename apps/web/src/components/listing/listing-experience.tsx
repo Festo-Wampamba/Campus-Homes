@@ -20,6 +20,7 @@ import { CAMPUS_LOCATIONS, ENABLED_CAMPUSES, UGANDA_BOUNDS } from "@/lib/campuse
 import { formatUgx, GENDER_ARRANGEMENT_LABELS } from "@/lib/format";
 import { RoomCategoryList, groupByCategory, roomDisplayLabel, type CategoryGroup } from "@/components/room-category-list";
 import { ReserveButton } from "@/components/reserve-button";
+import { SignUpToReserveDialog } from "@/components/listing/sign-up-to-reserve-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { AskLandlordDialog } from "@/components/listing/ask-landlord-dialog";
 import { ListingShare } from "@/components/listing/listing-share";
@@ -202,11 +203,23 @@ export function ListingExperience({
     window.history.replaceState(null, "", url);
   }
 
-  function signIn(intent: string) {
+  function returnPath(intent: string, roomKey = selected?.key) {
     const next = new URLSearchParams();
-    if (selected) next.set("room", selected.key);
+    if (roomKey) next.set("room", roomKey);
     next.set("intent", intent);
-    return `/sign-in?next=${encodeURIComponent(`/listings/${listing.id}?${next}`)}`;
+    return `/listings/${listing.id}?${next}`;
+  }
+
+  function signIn(intent: string) {
+    return `/sign-in?next=${encodeURIComponent(returnPath(intent))}`;
+  }
+
+  // Signed-out Reserve: pick the room, then ask them to sign up. The room key
+  // is kept here because `selected` only updates on the next render.
+  const [signUpRoomKey, setSignUpRoomKey] = useState<string | null>(null);
+  function reserveSignedOut(group: CategoryGroup) {
+    select(group);
+    setSignUpRoomKey(group.key);
   }
 
   const roomLabel = selected ? roomDisplayLabel(selected) : "Choose your room";
@@ -224,7 +237,7 @@ export function ListingExperience({
             : selected.myStatus ? <Link href="/reservations" className={primaryClass}>View your reservation</Link>
               : !selected.firstAvailableBedId ? <Button disabled>Currently unavailable</Button>
                 : canReserve ? <ReserveButton bedId={selected.firstAvailableBedId} listingId={listing.id} needsProfile={needsProfile} propertyName={property.name} roomLabel={roomLabel} priceUgx={selected.pricePerTermUgx} depositUgx={selected.depositUgx} />
-                  : !signedIn ? <Link className={primaryClass} href={signIn("reserve")}>Sign in to reserve</Link> : <p className="text-sm">A student account is required.</p>}
+                  : !signedIn ? <Button type="button" className={primaryClass} onClick={() => reserveSignedOut(selected)}>Reserve</Button> : <p className="text-sm">A student account is required.</p>}
           {!compact && <p className="text-sm text-muted-foreground">Free reservation. No payment is taken on CampusHomes.</p>}
         </div>
         {!compact && selected && <p className="border-t border-border pt-3 text-sm text-muted-foreground">Deposit: {selected.depositUgx == null ? "unstated; confirm with the landlord." : formatUgx(selected.depositUgx)}</p>}
@@ -272,7 +285,7 @@ export function ListingExperience({
           <section id="room-choices" className="scroll-mt-24" aria-labelledby="room-choices-heading">
             <h2 id="room-choices-heading" className="text-2xl">Choose your room</h2>
             <p className="mt-3 text-muted-foreground">{property.gender_arrangement ? `${GENDER_ARRANGEMENT_LABELS[property.gender_arrangement]}. ` : "Gender arrangement unstated. "}Your free reservation holds an available bed within the selected category.</p>
-            <RoomCategoryList listingId={listing.id} units={units} availability={availability} photos={photos} unitPhotos={unitPhotos} propertyName={property.name} canReserve={canReserve} needsProfile={needsProfile} myLiveBeds={new Map(heldBeds)} selectedKey={selected?.key} onSelect={select} publicPresentation />
+            <RoomCategoryList listingId={listing.id} units={units} availability={availability} photos={photos} unitPhotos={unitPhotos} propertyName={property.name} canReserve={canReserve} needsProfile={needsProfile} myLiveBeds={new Map(heldBeds)} selectedKey={selected?.key} onSelect={signedIn ? select : reserveSignedOut} publicPresentation />
           </section>
 
           <DistanceEstimator currentHostel={{id:listing.id,name:property.name,lat:property.gps_lat,lon:property.gps_lon}} studentUniversity={studentUniversity}/>
@@ -294,6 +307,13 @@ export function ListingExperience({
       </div>
       {related.data?.length ? <section className="mt-16" aria-labelledby="related-heading"><h2 id="related-heading" className="text-2xl">More available hostels</h2><div className="mt-6 grid gap-6 md:grid-cols-3">{related.data.map((row) => <HostelCard key={row.id} listing={row} canSave={canReserve} saved={savedIds.includes(row.id)} />)}</div></section> : null}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card p-3 pb-[max(.75rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden">{action(true)}</div><div className="h-36 lg:hidden" aria-hidden />
+      {!signedIn && (
+        <SignUpToReserveDialog
+          open={signUpRoomKey !== null}
+          onOpenChange={(open) => { if (!open) setSignUpRoomKey(null); }}
+          next={returnPath("reserve", signUpRoomKey ?? undefined)}
+        />
+      )}
     </>
   );
 }

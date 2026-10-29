@@ -292,6 +292,37 @@ describe('OpsService.publishListing re-publish', () => {
     );
     expect(rows).toEqual([{ room_category: 'double', captured_by: null }]);
   });
+
+  it('makes the first Exterior photo the cover when the landlord set none', async () => {
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: await currentUnits(),
+      photos: [
+        { storageKey: 'photo-k1', category: 'bedroom' },
+        { storageKey: `uploads/${opsLeadId}/front.jpg`, category: 'exterior' },
+      ],
+    });
+    expect(await coverKey()).toBe(`uploads/${opsLeadId}/front.jpg`);
+  });
+
+  it("uses the landlord's own cover photo as the listing cover", async () => {
+    const cover = `uploads/${landlordId}/cover.jpg`;
+    await pool.query(
+      `UPDATE properties SET cover_photo_key = $2 WHERE id = (SELECT property_id FROM listings WHERE id = $1)`,
+      [listingId, cover],
+    );
+    await ops.publishListing(leadCtx(), {
+      listingId,
+      amenities: { water: true },
+      units: await currentUnits(),
+      photos: [
+        { storageKey: `uploads/${opsLeadId}/front.jpg`, category: 'exterior' },
+        { storageKey: cover, category: 'exterior' },
+      ],
+    });
+    expect(await coverKey()).toBe(cover);
+  });
 });
 
 async function currentUnits() {
@@ -303,4 +334,14 @@ async function currentUnits() {
   return rows.map((r: { id: string; label: string }) => ({
     unitId: r.id, label: r.label, capacity: 1, roomCategory: 'single' as const, pricePerTermUgx: 400_000,
   }));
+}
+
+async function coverKey() {
+  const { rows } = await pool.query(
+    `SELECT p.storage_key FROM listing_photos p
+     JOIN listings l ON l.current_version_id = p.listing_version_id
+     WHERE l.id = $1 AND p.is_primary`,
+    [listingId],
+  );
+  return rows.map((r: { storage_key: string }) => r.storage_key).join(',');
 }

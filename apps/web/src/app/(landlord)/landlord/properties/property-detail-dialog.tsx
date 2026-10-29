@@ -103,10 +103,11 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 function CoverPhoto({ property }: { property: Property }) {
-  if (!property.coverPhotoKey) return null;
+  const coverKey = property.coverPhotoKey ?? property.listingCoverPhotoKey;
+  if (!coverKey) return null;
   return (
     <PhotoTile
-      photos={[{ storageKey: property.coverPhotoKey }]}
+      photos={[{ storageKey: coverKey }]}
       width={1200}
       alt={`${property.name} cover photo`}
       fit="natural"
