@@ -39,10 +39,9 @@ async function posterDataUrl(targetUrl: string): Promise<string> {
 }
 
 // One QR per property, printed and posted on-site: scanning it opens
-// /agreement/:propertyId, which gates through sign-in/profile-completion
-// before showing the tenant agreement form; see that route for the rest of
-// the flow. Generated client-side (no backend endpoint needed): the target
-// URL is just the property id, which is already public via the listing page.
+// /agreement/:propertyId, which sends the student to create their account.
+// Generated client-side (no backend endpoint needed): the target URL is just
+// the property id, which is already public via the listing page.
 export function PropertyQrCode({
   propertyId,
   propertyName,
@@ -98,10 +97,10 @@ export function PropertyQrCode({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-foreground">Student registration form QR code</p>
+        <p className="text-sm font-semibold text-foreground">Student sign-up QR code</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Print and post this at the property. Scanning it takes a student straight to the student
-          registration form for {propertyName}. If a phone can&apos;t read the code, the student can
+          Print and post this at {propertyName}. Scanning it takes a student straight to creating
+          their CampusHomes student account. If a phone can&apos;t read the code, the student can
           open the link instead. It&apos;s printed under the code on the downloaded poster.
         </p>
         {targetUrl && (
