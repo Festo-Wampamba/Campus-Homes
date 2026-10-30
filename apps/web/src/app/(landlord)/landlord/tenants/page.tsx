@@ -8,7 +8,7 @@ import { formatUgx } from "@/lib/format";
 import { getMyProperties } from "@/lib/landlord";
 import { getLandlordTenants } from "@/lib/tenants";
 import { freeBedsForWalkIn } from "../bookings/room-lookup";
-import { RegistrationFormSection } from "./registration-form-section";
+import { SignUpQrSection } from "./sign-up-qr-section";
 import { TenantsList } from "./tenants-list";
 
 export const metadata: Metadata = { title: "Tenants" };
@@ -59,7 +59,7 @@ export default async function LandlordTenantsPage({ searchParams }: { searchPara
       </div>
 
       <div className="mt-6">
-        <RegistrationFormSection
+        <SignUpQrSection
           properties={properties.map(({ id, name }) => ({ id, name }))}
           initialPropertyId={chosenPropertyId}
         />

@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import { RegistrationFormSection } from "./registration-form-section";
+import { SignUpQrSection } from "./sign-up-qr-section";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -25,11 +25,11 @@ afterEach(() => {
 });
 
 it("opens on the property a property window linked from", async () => {
-  await act(async () => root.render(<RegistrationFormSection properties={properties} initialPropertyId="p-2" />));
+  await act(async () => root.render(<SignUpQrSection properties={properties} initialPropertyId="p-2" />));
   expect(container.querySelector<HTMLSelectElement>('select[aria-label="Property"]')?.value).toBe("p-2");
 });
 
 it("shows no property picker when the landlord has one property", async () => {
-  await act(async () => root.render(<RegistrationFormSection properties={properties.slice(0, 1)} />));
+  await act(async () => root.render(<SignUpQrSection properties={properties.slice(0, 1)} />));
   expect(container.querySelector("select")).toBeNull();
 });

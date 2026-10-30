@@ -1234,13 +1234,13 @@ export function PropertyDetailDialog({
             </div>
             <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-foreground">Student registration form</p>
+                <p className="text-sm font-semibold text-foreground">Student sign-up QR code</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Edit the form and print its QR code on the Tenants page.
+                  Print the QR code that takes students to create their account on the Tenants page.
                 </p>
               </div>
               <Link
-                href={`/landlord/tenants?property=${property.id}#registration-form-heading`}
+                href={`/landlord/tenants?property=${property.id}#sign-up-qr`}
                 className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-semibold hover:bg-muted"
               >
                 Open Tenants
