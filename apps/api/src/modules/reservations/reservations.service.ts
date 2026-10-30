@@ -53,6 +53,18 @@ const REBOOK_WINDOW_DAYS = 21;
 
 const SERVICE = (userId: string): RlsContext => ({ userId, role: 'service_role' });
 
+/** A free bed booked straight to a student account onboardWalkIn just
+ * created. Server-internal: the HTTP schema has no student field, so a client
+ * can never pick whose account a booking lands on. */
+type WalkInBooking = Omit<BookReservationInput, 'reservationId'> & { bedId: string; studentId: string };
+
+/** Why a walk-in can't use this phone number, and what the landlord does instead. */
+function existingAccountMessage(account: { role: string; deleted: boolean }): string {
+  if (account.deleted) return 'This phone number belongs to a closed CampusHomes account. Contact CampusHomes support.';
+  if (account.role !== 'student') return 'This phone number belongs to a landlord or staff account, not a student';
+  return 'This student already has a CampusHomes account. Ask them to reserve this room from their account, then confirm the booking under Reservations.';
+}
+
 /**
  * Reserve -> Book -> Move-in (§4-8 of the bed-level redesign doc, 2026-09) —
  * the only write path to reservations/reservation_releases/move_ins (RLS:
@@ -283,160 +295,171 @@ export class ReservationsService {
    * prior Reserve step at all (the walk-in path, identified by the
    * student's phone). Booking payment is offline; this just records what
    * was reported collected. */
-  async book(ctx: RlsContext, input: BookReservationInput) {
+  async book(ctx: RlsContext, input: BookReservationInput | WalkInBooking) {
+    const { reservation, receipt } = await this.rlsDb.run(SERVICE(ctx.userId), (db, client) =>
+      this.bookInTransaction(db, client, ctx, input),
+    );
+    await this.afterBook(ctx, reservation, receipt, 'studentId' in input);
+    return reservation;
+  }
+
+  /** The booking writes, on the caller's open transaction so onboardWalkIn
+   * can create the account and book the bed atomically. */
+  private async bookInTransaction(db: Db, client: PoolClient, ctx: RlsContext, input: BookReservationInput | WalkInBooking) {
     let receipt: ReceiptRow | null = null;
-    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
-      let bedId: string;
-      let existingReservationId: string | null = null;
-      let studentId: string;
-      let listingVersionId: string;
-      let walkInPrice: { price_per_term_ugx: number; deposit_ugx: number | null } | null = null;
+    let bedId: string;
+    let existingReservationId: string | null = null;
+    let studentId: string;
+    let listingVersionId: string;
+    let walkInPrice: { price_per_term_ugx: number; deposit_ugx: number | null } | null = null;
 
-      if (input.reservationId) {
-        const reservation = await db.query.reservations.findFirst({
-          where: eq(reservations.id, input.reservationId),
-        });
-        if (!reservation) throw new NotFoundException('Reservation not found');
-        await this.assertCanManageBed(client, ctx, reservation.bedId);
-        if (reservation.status !== 'reserved') {
-          throw new ConflictException(`Cannot book a reservation that is ${reservation.status}`);
-        }
-        bedId = reservation.bedId;
-        existingReservationId = reservation.id;
-        studentId = reservation.studentId;
-        listingVersionId = reservation.listingVersionId;
-      } else {
-        // The schema guarantees bedId here; this only narrows the type.
-        if (!input.bedId) throw new NotFoundException('Bed not found');
-        await this.assertCanManageBed(client, ctx, input.bedId);
-        // Walk-in: book an Available bed directly, no prior Reserve. Rooms
-        // are permanent/property-level (2026-09) — a unit can carry pricing
-        // for more than one semester, so this picks whichever verified
-        // listing was most recently published for the bed's property (same
-        // "prefer the current listing" precedent as ListingsService.
-        // propertyDetail, the landlord's own view this walk-in flow is
-        // driven from).
-        const bedRes = await client.query(
-          `SELECT b.id, l.id AS listing_id, l.current_version_id,
-                  usp.price_per_term_ugx, usp.deposit_ugx
-           FROM beds b
-           JOIN units u ON u.id = b.unit_id
-           JOIN listings l ON l.property_id = u.property_id AND l.status = 'verified'
-           JOIN unit_semester_pricing usp ON usp.unit_id = u.id AND usp.semester_id = l.semester_id
-           WHERE b.id = $1 AND b.blocked = false
-           ORDER BY l.created_at DESC
-           LIMIT 1`,
-          [input.bedId],
+    if (!('studentId' in input)) {
+      const reservation = await db.query.reservations.findFirst({
+        where: eq(reservations.id, input.reservationId),
+      });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      await this.assertCanManageBed(client, ctx, reservation.bedId);
+      if (reservation.status !== 'reserved') {
+        throw new ConflictException(`Cannot book a reservation that is ${reservation.status}`);
+      }
+      bedId = reservation.bedId;
+      existingReservationId = reservation.id;
+      studentId = reservation.studentId;
+      listingVersionId = reservation.listingVersionId;
+    } else {
+      await this.assertCanManageBed(client, ctx, input.bedId);
+      // Walk-in: book an Available bed directly, no prior Reserve. Rooms
+      // are permanent/property-level (2026-09) — a unit can carry pricing
+      // for more than one semester, so this picks whichever verified
+      // listing was most recently published for the bed's property (same
+      // "prefer the current listing" precedent as ListingsService.
+      // propertyDetail, the landlord's own view this walk-in flow is
+      // driven from).
+      const bedRes = await client.query(
+        `SELECT b.id, l.id AS listing_id, l.current_version_id,
+                usp.price_per_term_ugx, usp.deposit_ugx
+         FROM beds b
+         JOIN units u ON u.id = b.unit_id
+         JOIN listings l ON l.property_id = u.property_id AND l.status = 'verified'
+         JOIN unit_semester_pricing usp ON usp.unit_id = u.id AND usp.semester_id = l.semester_id
+         WHERE b.id = $1 AND b.blocked = false
+         ORDER BY l.created_at DESC
+         LIMIT 1`,
+        [input.bedId],
+      );
+      if (bedRes.rowCount === 0) {
+        throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
+      }
+      bedId = bedRes.rows[0].id as string;
+      listingVersionId = bedRes.rows[0].current_version_id as string;
+      walkInPrice = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
+      const recorded = (input.bookingFeeCollectedUgx ?? 0) + (input.depositCollectedUgx ?? 0);
+      if (recorded > Number(walkInPrice.price_per_term_ugx)) {
+        throw new BadRequestException(
+          `Amount paid is more than this room's rent (UGX ${Number(walkInPrice.price_per_term_ugx).toLocaleString('en-UG')})`,
         );
-        if (bedRes.rowCount === 0) {
-          throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
-        }
-        bedId = bedRes.rows[0].id as string;
-        listingVersionId = bedRes.rows[0].current_version_id as string;
-        walkInPrice = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
-        const recorded = (input.bookingFeeCollectedUgx ?? 0) + (input.depositCollectedUgx ?? 0);
-        if (recorded > Number(walkInPrice.price_per_term_ugx)) {
-          throw new BadRequestException(
-            `Amount paid is more than this room's rent (UGX ${Number(walkInPrice.price_per_term_ugx).toLocaleString('en-UG')})`,
-          );
-        }
-
-        const studentRes = await client.query(
-          `SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE u.phone = $1`,
-          [input.studentPhone],
-        );
-        if (studentRes.rowCount === 0) {
-          throw new NotFoundException(
-            'No student account with a completed profile found for that phone number',
-          );
-        }
-        studentId = studentRes.rows[0].user_id as string;
-
-        await this.assertNotLockedInByCurrentOccupancy(client, studentId);
-
-        // Walk-in creates a brand-new active reservation for this student, so
-        // the same per-student rules as reserve() apply (§12-13).
-        await this.assertStudentCanTakeRoom(client, studentId, bedId, 'landlord');
       }
 
-      const now = new Date();
-      let reservationRow;
-      if (existingReservationId) {
+      const studentRes = await client.query(
+        `SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id
+         WHERE s.user_id = $1 AND u.deleted_at IS NULL`,
+        [input.studentId],
+      );
+      if (studentRes.rowCount === 0) throw new NotFoundException('Student account not found');
+      studentId = input.studentId;
+
+      await this.assertNotLockedInByCurrentOccupancy(client, studentId);
+
+      // Walk-in creates a brand-new active reservation for this student, so
+      // the same per-student rules as reserve() apply (§12-13).
+      await this.assertStudentCanTakeRoom(client, studentId, bedId, 'landlord');
+    }
+
+    const now = new Date();
+    let reservationRow;
+    if (existingReservationId) {
+      await db
+        .update(reservations)
+        .set({
+          status: 'booked',
+          bookedAt: now,
+          bookedBy: ctx.userId,
+          reservedExpiresAt: null,
+          bookingFeeCollectedUgx: input.bookingFeeCollectedUgx ?? null,
+          depositCollectedUgx: input.depositCollectedUgx ?? null,
+          paymentMethod: input.paymentMethod ?? null,
+          paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
+          updatedAt: now,
+        })
+        .where(eq(reservations.id, existingReservationId));
+      reservationRow = await this.selectById(db, existingReservationId);
+    } else {
+      const inserted = firstRow(
         await db
-          .update(reservations)
-          .set({
+          .insert(reservations)
+          .values({
+            studentId,
+            bedId,
+            listingVersionId,
             status: 'booked',
             bookedAt: now,
             bookedBy: ctx.userId,
-            reservedExpiresAt: null,
             bookingFeeCollectedUgx: input.bookingFeeCollectedUgx ?? null,
             depositCollectedUgx: input.depositCollectedUgx ?? null,
             paymentMethod: input.paymentMethod ?? null,
             paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
-            updatedAt: now,
+            idempotencyKey: `walkin-${bedId}-${now.getTime()}`,
+            pricePerTermUgx: Number(walkInPrice!.price_per_term_ugx),
+            depositUgx: walkInPrice!.deposit_ugx != null ? Number(walkInPrice!.deposit_ugx) : null,
           })
-          .where(eq(reservations.id, existingReservationId));
-        reservationRow = await this.selectById(db, existingReservationId);
-      } else {
-        const inserted = firstRow(
-          await db
-            .insert(reservations)
-            .values({
-              studentId,
-              bedId,
-              listingVersionId,
-              status: 'booked',
-              bookedAt: now,
-              bookedBy: ctx.userId,
-              bookingFeeCollectedUgx: input.bookingFeeCollectedUgx ?? null,
-              depositCollectedUgx: input.depositCollectedUgx ?? null,
-              paymentMethod: input.paymentMethod ?? null,
-              paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
-              idempotencyKey: `walkin-${bedId}-${now.getTime()}`,
-              pricePerTermUgx: Number(walkInPrice!.price_per_term_ugx),
-              depositUgx: walkInPrice!.deposit_ugx != null ? Number(walkInPrice!.deposit_ugx) : null,
-            })
-            .returning()
-            .catch((err: { code?: string; cause?: { code?: string } }) => {
-              if (err.code === '23505' || err.cause?.code === '23505') {
-                throw new ConflictException('Bed already has a live reservation');
-              }
-              throw err;
-            }),
-        );
-        reservationRow = inserted;
-      }
-      // Money recorded at booking gets a receipt both sides keep (0075).
-      const bookingFee = input.bookingFeeCollectedUgx ?? 0;
-      const deposit = input.depositCollectedUgx ?? 0;
-      if (bookingFee + deposit > 0) {
-        receipt = (await client.query<ReceiptRow>(
-          `INSERT INTO payment_receipts (reservation_id, student_id, landlord_id, property_name, room_label,
-             booking_fee_ugx, deposit_ugx, payment_method, recorded_by)
-           SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5, $6
-           FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
-           WHERE b.id = $7
-           ${RECEIPT_RETURNING}`,
-          [reservationRow!.id, studentId, bookingFee, deposit, input.paymentMethod ?? null, ctx.userId, bedId],
-        )).rows[0] ?? null;
-      }
-      return reservationRow;
-    });
+          .returning()
+          .catch((err: { code?: string; cause?: { code?: string } }) => {
+            if (err.code === '23505' || err.cause?.code === '23505') {
+              throw new ConflictException('Bed already has a live reservation');
+            }
+            throw err;
+          }),
+      );
+      reservationRow = inserted;
+    }
+    // Money recorded at booking gets a receipt both sides keep (0075).
+    const bookingFee = input.bookingFeeCollectedUgx ?? 0;
+    const deposit = input.depositCollectedUgx ?? 0;
+    if (bookingFee + deposit > 0) {
+      receipt = (await client.query<ReceiptRow>(
+        `INSERT INTO payment_receipts (reservation_id, student_id, landlord_id, property_name, room_label,
+           booking_fee_ugx, deposit_ugx, payment_method, recorded_by)
+         SELECT $1, $2, p.landlord_id, p.name, u.label, $3, $4, $5, $6
+         FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
+         WHERE b.id = $7
+         ${RECEIPT_RETURNING}`,
+        [reservationRow!.id, studentId, bookingFee, deposit, input.paymentMethod ?? null, ctx.userId, bedId],
+      )).rows[0] ?? null;
+    }
+    return { reservation: reservationRow!, receipt };
+  }
+
+  /** After commit: receipt delivery, audit and the student's notice. */
+  private async afterBook(
+    ctx: RlsContext,
+    reservation: typeof reservations.$inferSelect,
+    receipt: ReceiptRow | null,
+    walkIn: boolean,
+  ) {
     if (receipt) this.deliverReceipt(receipt);
 
-    await this.audit.record(ctx, 'reservation.book', 'reservation', result!.id, {
-      bedId: result!.bedId,
-      walkIn: !input.reservationId,
+    await this.audit.record(ctx, 'reservation.book', 'reservation', reservation.id, {
+      bedId: reservation.bedId,
+      walkIn,
     });
     // The student's booking tracker moves to "Landlord confirmed"; tell them.
     this.notifications
-      ?.notify(result!.studentId, 'reservation.booked', 'in_app', {
-        reservationId: result!.id,
+      ?.notify(reservation.studentId, 'reservation.booked', 'in_app', {
+        reservationId: reservation.id,
         message: 'Your landlord confirmed your booking. Move in and confirm it in My reservations.',
         href: '/reservations',
       })
       .catch((err: unknown) => console.error('[reservations] booking confirmed notify failed:', err));
-    return result;
   }
 
   /** Emails the receipt to the student and the landlord and leaves each an
@@ -637,69 +660,69 @@ export class ReservationsService {
     });
   }
 
-  /** A student who walked in without CampusHomes (Festo, 2026-10-23): find
-   * their student account by phone or create one, then book() the bed like any
-   * walk-in. They claim the account when they first sign in with this phone
-   * (ProvisioningService links by verified phone). The account is committed
-   * before the booking, so a failed booking can leave an account with no room;
-   * the bed checks run first to keep that rare. */
+  /** A student who walked in without CampusHomes (Festo, 2026-10-23): create
+   * their student account and book the bed in one transaction. They claim the
+   * account when they first sign in with this phone (ProvisioningService links
+   * by verified phone).
+   *
+   * A phone that already has an account is refused (2026-10-30): booking it
+   * would let anyone who knows a student's number attach them to a bed and read
+   * their contact details. That student reserves the bed from their own
+   * account and the landlord confirms it. Atomic so a failed booking never
+   * leaves behind an account that the retry would then refuse. */
   async onboardWalkIn(ctx: RlsContext, input: OnboardWalkInInput) {
-    const account = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+    const { account, booked, receipt } = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
       await this.assertCanManageBed(client, ctx, input.bedId);
       const property = (await client.query<{ name: string; room_label: string }>(
         `SELECT p.name, u.label AS room_label FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id WHERE b.id = $1`,
         [input.bedId],
       )).rows[0];
-      const existing = (await client.query<{ id: string; role: string; has_profile: boolean }>(
-        `SELECT u.id, u.role::text AS role, EXISTS (SELECT 1 FROM students s WHERE s.user_id = u.id) AS has_profile
-         FROM users u WHERE u.phone = $1 AND u.deleted_at IS NULL`,
+      const existing = (await client.query<{ role: string; deleted: boolean }>(
+        `SELECT role::text AS role, deleted_at IS NOT NULL AS deleted FROM users WHERE phone = $1`,
         [input.phone],
       )).rows[0];
-      if (existing && existing.role !== 'student') {
-        throw new ConflictException('This phone number belongs to a landlord or staff account, not a student');
-      }
+      if (existing) throw new ConflictException(existingAccountMessage(existing));
       if (input.email) {
         const taken = await client.query(
-          `SELECT 1 FROM users WHERE lower(btrim(email)) = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR id <> $2)`,
-          [input.email, existing?.id ?? null],
+          `SELECT 1 FROM users WHERE lower(btrim(email)) = $1 AND deleted_at IS NULL`,
+          [input.email],
         );
         if (taken.rowCount) throw new ConflictException('That email already belongs to another CampusHomes account');
-        // Never attach a landlord-typed email to an account that already
-        // exists: sign-in claims by email, so it could hand over someone
-        // else's account. Only a brand-new walk-in account takes it.
       }
-      const studentId = existing?.id ?? (await client.query<{ id: string }>(
+      const studentId = (await client.query<{ id: string }>(
         `INSERT INTO users (phone, contact_phone, email, name, role, status)
          VALUES ($1, $1, $2, $3, 'student', 'active') RETURNING id`,
         [input.phone, input.email ?? null, input.name],
-      )).rows[0]!.id;
-      if (!existing?.has_profile) {
-        await client.query(
-          `INSERT INTO students (user_id, university) VALUES ($1, $2::university) ON CONFLICT (user_id) DO NOTHING`,
-          [studentId, input.university],
-        );
-      }
-      const email = (await client.query<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [studentId])).rows[0]?.email ?? null;
-      return {
+      ).catch((err: { code?: string }) => {
+        // A concurrent walk-in for the same phone or email committed first.
+        if (err.code === '23505') throw new ConflictException(existingAccountMessage({ role: 'student', deleted: false }));
+        throw err;
+      })).rows[0]!.id;
+      await client.query(
+        `INSERT INTO students (user_id, university) VALUES ($1, $2::university)`,
+        [studentId, input.university],
+      );
+      const { reservation, receipt } = await this.bookInTransaction(db, client, ctx, {
+        bedId: input.bedId,
         studentId,
-        email,
-        created: !existing,
-        propertyName: property?.name ?? 'Your hostel',
-        roomLabel: property?.room_label ?? 'your room',
+        bookingFeeCollectedUgx: input.bookingFeeCollectedUgx,
+        depositCollectedUgx: input.depositCollectedUgx,
+        paymentMethod: input.paymentMethod,
+      });
+      return {
+        account: {
+          studentId,
+          email: input.email ?? null,
+          propertyName: property?.name ?? 'Your hostel',
+          roomLabel: property?.room_label ?? 'your room',
+        },
+        booked: reservation,
+        receipt,
       };
     });
-
-    // book() always returns the row it wrote or throws.
-    const booked = (await this.book(ctx, {
-      bedId: input.bedId,
-      studentPhone: input.phone,
-      bookingFeeCollectedUgx: input.bookingFeeCollectedUgx,
-      depositCollectedUgx: input.depositCollectedUgx,
-      paymentMethod: input.paymentMethod,
-    }))!;
+    await this.afterBook(ctx, booked, receipt, true);
     if (input.movedIn) await this.confirmMoveIn(ctx, booked.id);
     await this.audit.record(ctx, 'reservation.walk_in_onboard', 'reservation', booked.id, {
-      studentCreated: account.created,
       movedIn: input.movedIn,
     });
     this.notifications
@@ -722,7 +745,7 @@ export class ReservationsService {
     return {
       reservationId: booked.id,
       studentId: account.studentId,
-      studentCreated: account.created,
+      studentCreated: true,
       status: input.movedIn ? 'occupied' as const : 'booked' as const,
     };
   }

@@ -4,9 +4,10 @@
  * the 3-active-reservations-platform-wide cap, walk-in booking, release, and
  * expiry. Runs against the docker test DB through the real services.
  */
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Pool } from 'pg';
-import { MAX_ACTIVE_RESERVATIONS, ROOM_CATEGORIES } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, ROOM_CATEGORIES, bookReservationSchema } from '@campushomes/shared';
 import { eq } from 'drizzle-orm';
 
 import { createDbPool } from '../../src/db/client';
@@ -393,7 +394,7 @@ describe('walk-in booking (Book directly on an Available bed, §7)', () => {
     const { bedId: bed3 } = await seedUnitWithBed('Room 1C');
     const booked = (await reservationsService.book(landlordCtx(landlord1), {
       bedId: bed3,
-      studentPhone: '+256710000006', // student3
+      studentId: student3,
       depositCollectedUgx: 100_000,
       paymentMethod: 'mtn_momo',
     }))!;
@@ -402,14 +403,16 @@ describe('walk-in booking (Book directly on an Available bed, §7)', () => {
     expect(booked.depositCollectedUgx).toBe(100_000);
   });
 
-  it('rejects walk-in booking for a phone number with no student profile', async () => {
+  it('rejects a direct booking for an account with no student profile', async () => {
     const { bedId: bed4 } = await seedUnitWithBed('Room 1D');
     await expect(
-      reservationsService.book(landlordCtx(landlord1), {
-        bedId: bed4,
-        studentPhone: '+256799999999',
-      }),
-    ).rejects.toThrow(/no student account/i);
+      reservationsService.book(landlordCtx(landlord1), { bedId: bed4, studentId: landlord2 }),
+    ).rejects.toThrow(/student account not found/i);
+  });
+
+  it('the Book request no longer accepts a bed and a phone number', () => {
+    const parsed = bookReservationSchema.safeParse({ bedId: randomUUID(), studentPhone: '+256710000006' });
+    expect(parsed.success).toBe(false);
   });
 });
 
@@ -422,16 +425,32 @@ describe('walk-in onboarding (student who never used CampusHomes)', () => {
     expect([result.studentCreated, result.status]).toEqual([true, 'booked']);
   });
 
-  it('reuses the student account that already has this phone', async () => {
+  it('refuses a phone that already has a student account and books nothing', async () => {
     const existing = await seed(
       `INSERT INTO users (phone, role, status, name) VALUES ('+256710000302', 'student', 'active', 'Known Student') RETURNING id`,
     );
     await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [existing]);
     const { bedId: bed } = await seedUnitWithBed('Walk-in known student');
-    const result = await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
-      bedId: bed, name: 'Known Student', phone: '+256710000302', university: 'MUK', movedIn: false,
-    });
-    expect(result.studentId).toBe(existing);
+    await expect(
+      reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+        bedId: bed, name: 'Known Student', phone: '+256710000302', university: 'MUK', movedIn: false,
+      }),
+    ).rejects.toThrow(/already has a CampusHomes account/i);
+    const booked = await pool.query(`SELECT 1 FROM reservations WHERE student_id = $1 OR bed_id = $2`, [existing, bed]);
+    expect(booked.rowCount).toBe(0);
+  });
+
+  it('a failed booking leaves no account behind, so the retry still works', async () => {
+    const { bedId: bed } = await seedUnitWithBed('Walk-in blocked bed');
+    await pool.query(`UPDATE beds SET blocked = true WHERE id = $1`, [bed]);
+    const input = { bedId: bed, name: 'Retry Student', phone: '+256710000305', university: 'MUK' as const, movedIn: false };
+    await expect(reservationsService.onboardWalkIn(landlordCtx(landlord1), input)).rejects.toThrow(/blocked/i);
+    const users = await pool.query(`SELECT 1 FROM users WHERE phone = '+256710000305'`);
+    expect(users.rowCount).toBe(0);
+
+    await pool.query(`UPDATE beds SET blocked = false WHERE id = $1`, [bed]);
+    const result = await reservationsService.onboardWalkIn(landlordCtx(landlord1), input);
+    expect(result.status).toBe('booked');
   });
 
   it('records the move-in when the student moves in on the spot', async () => {
@@ -782,17 +801,16 @@ describe('active reservations per student, platform-wide (§12-13)', () => {
       `INSERT INTO users (phone, role, status) VALUES ('+256710000098', 'student', 'active') RETURNING id`,
     );
     await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
-    const phone = '+256710000098';
 
     const beds = [];
     for (let i = 0; i <= MAX_ACTIVE_RESERVATIONS; i++) beds.push(await seedUnitWithBed(`Walk ${i}`));
     const extra = beds.pop()!;
     for (const bed of beds) {
-      await reservationsService.book(landlordCtx(landlord1), { bedId: bed.bedId, studentPhone: phone });
+      await reservationsService.book(landlordCtx(landlord1), { bedId: bed.bedId, studentId: freshStudent });
     }
 
     await expect(
-      reservationsService.book(landlordCtx(landlord1), { bedId: extra.bedId, studentPhone: phone }),
+      reservationsService.book(landlordCtx(landlord1), { bedId: extra.bedId, studentId: freshStudent }),
     ).rejects.toThrow(new RegExp(`${MAX_ACTIVE_RESERVATIONS} active reservations`, 'i'));
   });
 });
@@ -858,7 +876,7 @@ describe('one live reservation per room type per hostel', () => {
   it('a walk-in Book of the same room type is refused too', async () => {
     const walkIn = await sameTypeRoom('Same type walk-in');
     await expect(
-      reservationsService.book(landlordCtx(landlord1), { bedId: walkIn.bedId, studentPhone: '+256710000081' }),
+      reservationsService.book(landlordCtx(landlord1), { bedId: walkIn.bedId, studentId: ctx.userId }),
     ).rejects.toThrow(/already holds a room of this type/i);
   });
 
@@ -1064,7 +1082,7 @@ describe('occupancy lock-in: an occupied student can only rebook within 3 weeks 
     await expect(
       reservationsService.book(landlordCtx(landlord1), {
         bedId: nextBed,
-        studentPhone: '+256710000092',
+        studentId: student,
       }),
     ).rejects.toThrow(/already moved into a bed/i);
   });
@@ -1241,6 +1259,7 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
 describe('unauthorized landlord is refused before any reservation data is consulted', () => {
   const OUTSIDER_ID = () => landlord2;
   let outsiderBed: string;
+  let outsiderStudent: string;
   const reservationByStatus: Record<string, string> = {};
 
   beforeAll(async () => {
@@ -1258,10 +1277,10 @@ describe('unauthorized landlord is refused before any reservation data is consul
     outsiderBed = (await seedUnitWithBed('Authz walk-in')).bedId;
     // No active reservations, so pre-fix code got past its cap check and
     // reached the nested authorization run.
-    const freshStudent = await seed(
+    outsiderStudent = await seed(
       `INSERT INTO users (phone, role, status) VALUES ('+256710000008', 'student', 'active') RETURNING id`,
     );
-    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [freshStudent]);
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [outsiderStudent]);
   });
 
   it('twelve parallel unauthorized Book calls all settle Forbidden without exhausting the pool', async () => {
@@ -1272,7 +1291,7 @@ describe('unauthorized landlord is refused before any reservation data is consul
     try {
       const results = await Promise.allSettled(
         Array.from({ length: 12 }, () =>
-          wideService.book(landlordCtx(OUTSIDER_ID()), { bedId: outsiderBed, studentPhone: '+256710000008' }),
+          wideService.book(landlordCtx(OUTSIDER_ID()), { bedId: outsiderBed, studentId: outsiderStudent }),
         ),
       );
 
@@ -1284,16 +1303,16 @@ describe('unauthorized landlord is refused before any reservation data is consul
     }
   }, 15_000);
 
-  it('Book gives the same refusal whether or not the phone has a student profile', async () => {
-    const attempt = (studentPhone: string) =>
+  it('walk-in onboarding gives the same refusal whether or not the phone has an account', async () => {
+    const attempt = (phone: string) =>
       reservationsService
-        .book(landlordCtx(OUTSIDER_ID()), { bedId: outsiderBed, studentPhone })
+        .onboardWalkIn(landlordCtx(OUTSIDER_ID()), { bedId: outsiderBed, name: 'Probe', phone, university: 'MUK', movedIn: false })
         .catch((e: Error) => ({ name: e.constructor.name, message: e.message }));
 
-    const withProfile = await attempt('+256710000001');
-    const withoutProfile = await attempt('+256799999999');
+    const withAccount = await attempt('+256710000008');
+    const withoutAccount = await attempt('+256799999999');
 
-    expect(withProfile).toEqual({ ...withoutProfile, name: 'ForbiddenException' });
+    expect(withAccount).toEqual({ ...withoutAccount, name: 'ForbiddenException' });
   });
 
   it.each(['reserved', 'booked', 'released', 'occupied'])(

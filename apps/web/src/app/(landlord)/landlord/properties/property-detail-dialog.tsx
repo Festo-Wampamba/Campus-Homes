@@ -19,7 +19,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PhotoTile } from "@/components/listing/photo-tile";
 import { StatusChip } from "@/components/status-chip";
 import { ViewDocumentButton } from "@/components/view-document-button";
-import { ConfirmBookingDialog, PAYMENT_METHOD_LABEL } from "@/components/landlord/confirm-booking-dialog";
+import { ConfirmBookingDialog } from "@/components/landlord/confirm-booking-dialog";
 import { api, ApiError } from "@/lib/api";
 import { uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { formatUgx } from "@/lib/format";
@@ -311,146 +311,6 @@ function RoomOccupancyControl({
 }
 
 
-/** Book an Available bed directly with no prior Reserve — the walk-in path
- * (§7 of the redesign doc): a landlord covering a tenant who showed up
- * in person rather than through the app. */
-function WalkInBookDialog({
-  bedId,
-  bedLabel,
-  open,
-  onOpenChange,
-  onBooked,
-}: {
-  bedId: string;
-  bedLabel: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onBooked: () => void;
-}) {
-  const [studentPhone, setStudentPhone] = useState("");
-  const [bookingFeeCollectedUgx, setBookingFeeCollectedUgx] = useState("");
-  const [depositCollectedUgx, setDepositCollectedUgx] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!studentPhone.trim()) return;
-    setPending(true);
-    setError(null);
-    try {
-      await api("/reservations/book", {
-        method: "POST",
-        body: JSON.stringify({
-          bedId,
-          studentPhone: studentPhone.trim(),
-          bookingFeeCollectedUgx: bookingFeeCollectedUgx ? Number(bookingFeeCollectedUgx) : undefined,
-          depositCollectedUgx: depositCollectedUgx ? Number(depositCollectedUgx) : undefined,
-          paymentMethod: paymentMethod || undefined,
-        }),
-      });
-      onOpenChange(false);
-      setStudentPhone("");
-      setBookingFeeCollectedUgx("");
-      setDepositCollectedUgx("");
-      setPaymentMethod("");
-      onBooked();
-    } catch (err) {
-      setError(errorMessage(err, "Couldn't book this bed. Try again."));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  // Portaled to <body> — this dialog is invoked from inside the outer
-  // property dialog's own native <dialog>, and two nested <dialog>
-  // elements calling showModal()/close() on each other causes the browser
-  // to close the OUTER one too (a real bug caught live-testing this).
-  // Portaling makes this a DOM sibling instead of a descendant; it still
-  // promotes to the top layer via its own showModal() call, so it stacks
-  // above the outer dialog correctly.
-  return createPortal(
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogHeader
-        title={`Book ${bedLabel}`}
-        description="For a tenant who showed up in person. No prior Reserve needed. The student must already have a CampusHomes account with their university set."
-        onClose={() => onOpenChange(false)}
-      />
-      <DialogBody>
-        <form id={`walkin-book-form-${bedId}`} onSubmit={submit} className="space-y-3">
-          <label className="block text-sm font-semibold text-foreground">
-            Student&apos;s phone number
-            <input
-              required
-              autoFocus
-              type="tel"
-              value={studentPhone}
-              onChange={(e) => setStudentPhone(e.target.value)}
-              placeholder="+2567…"
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm font-semibold text-foreground">
-              Booking fee collected (UGX)
-              <input
-                type="number"
-                min={0}
-                value={bookingFeeCollectedUgx}
-                onChange={(e) => setBookingFeeCollectedUgx(e.target.value)}
-                placeholder="Optional"
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              />
-            </label>
-            <label className="block text-sm font-semibold text-foreground">
-              Deposit collected (UGX)
-              <input
-                type="number"
-                min={0}
-                value={depositCollectedUgx}
-                onChange={(e) => setDepositCollectedUgx(e.target.value)}
-                placeholder="Optional"
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              />
-            </label>
-          </div>
-          <label className="block text-sm font-semibold text-foreground">
-            Payment method
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <option value="">Not recorded</option>
-              {Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {error && <p className="text-sm font-semibold text-destructive">{error}</p>}
-        </form>
-      </DialogBody>
-      <DialogFooter>
-        <Button
-          type="submit"
-          form={`walkin-book-form-${bedId}`}
-          disabled={pending || !studentPhone.trim()}
-          // This dialog is nested inside the outer property dialog's native
-          // <dialog> — without stopping propagation, submitting closes this
-          // dialog AND bubbles a click into the outer one, closing that too.
-          onClick={(e) => e.stopPropagation()}
-        >
-          {pending ? "Booking…" : "Book bed"}
-        </Button>
-      </DialogFooter>
-    </Dialog>,
-    document.body,
-  );
-}
-
 /** Frees a Reserved or Booked bed back up — always with a reason (§15-16). */
 function ReleaseBedDialog({
   reservationId,
@@ -491,7 +351,13 @@ function ReleaseBedDialog({
     }
   }
 
-  // Portaled — same nested-<dialog> reasoning as WalkInBookDialog above.
+  // Portaled to <body> — this dialog is invoked from inside the outer
+  // property dialog's own native <dialog>, and two nested <dialog>
+  // elements calling showModal()/close() on each other causes the browser
+  // to close the OUTER one too (a real bug caught live-testing this).
+  // Portaling makes this a DOM sibling instead of a descendant; it still
+  // promotes to the top layer via its own showModal() call, so it stacks
+  // above the outer dialog correctly.
   return createPortal(
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader
@@ -528,7 +394,9 @@ function ReleaseBedDialog({
           type="submit"
           form={`release-form-${reservationId}`}
           disabled={pending || !reason.trim()}
-          // Same nested-<dialog> propagation fix as WalkInBookDialog's submit.
+          // This dialog is nested inside the outer property dialog's native
+          // <dialog> — without stopping propagation, submitting closes this
+          // dialog AND bubbles a click into the outer one, closing that too.
           onClick={(e) => e.stopPropagation()}
         >
           {pending ? "Releasing…" : "Release bed"}
@@ -559,7 +427,9 @@ function ConfirmMoveInButton({ reservationId, onConfirmed }: { reservationId: st
   );
 }
 
-/** Per-bed action row (0033) — Available beds can be walk-in Booked;
+/** Per-bed action row (0033) — Available beds point to "Add walk-in student"
+ * (a student with an account reserves the bed themselves; booking an existing
+ * account by phone was removed 2026-10-30);
  * Reserved/Booked beds can be Released (and Booked ones moved in); an
  * Occupied bed has no action here (future tenancy rules are out of scope,
  * §19). A manually blocked bed has none either — unblock via operational
@@ -578,18 +448,9 @@ function BedActions({
 
   if (bed.status === null) {
     return (
-      <>
-        <Button type="button" variant="secondary" size="sm" onClick={() => setShowBook(true)}>
-          Book
-        </Button>
-        <WalkInBookDialog
-          bedId={bed.id}
-          bedLabel={bed.label}
-          open={showBook}
-          onOpenChange={setShowBook}
-          onBooked={onChanged}
-        />
-      </>
+      <Link href="/landlord/bookings" className="text-xs font-semibold text-foreground underline underline-offset-2">
+        Add walk-in student
+      </Link>
     );
   }
 
