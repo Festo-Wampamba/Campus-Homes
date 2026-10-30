@@ -6,7 +6,6 @@ import { Images, Search, SquarePen } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
-import { TenantAgreementBuilderDialog } from "@/components/tenant-agreement-builder-dialog";
 
 // A subset of AdminDashboardService.properties()'s row shape — only what
 // this picker needs to search/display, not the full admin inventory view.
@@ -22,7 +21,6 @@ export type OpsPropertyRow = {
 
 export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<OpsPropertyRow | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -77,13 +75,6 @@ export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
                     </Link>
                   </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setEditing(row)}
-                  className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-                >
-                  Registration form
-                </button>
               </div>
             </CardContent>
           </Card>
@@ -92,15 +83,6 @@ export function OpsPropertiesList({ rows }: { rows: OpsPropertyRow[] }) {
           <p className="py-10 text-center text-sm text-muted-foreground">No properties match this search.</p>
         )}
       </div>
-
-      {editing && (
-        <TenantAgreementBuilderDialog
-          open={editing !== null}
-          onOpenChange={(open) => !open && setEditing(null)}
-          propertyId={editing.id}
-          propertyName={editing.name}
-        />
-      )}
     </div>
   );
 }

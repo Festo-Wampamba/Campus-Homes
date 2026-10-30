@@ -10,7 +10,6 @@ import { roomCategoryLabel } from "@/lib/format";
 import { AdminField, AdminModal, adminFieldClass, adminTextareaClass } from "@/components/admin/admin-modal";
 import { StatusBadge } from "@/components/admin/admin-ui";
 import { PaginationControls } from "@/components/pagination-controls";
-import { TenantAgreementBuilderDialog } from "@/components/tenant-agreement-builder-dialog";
 import { ViewToggle, type ViewMode } from "@/components/view-toggle";
 import { api, apiErrorMessage } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
@@ -73,7 +72,6 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [agreementOpen, setAgreementOpen] = useState(false);
   const filtered = useMemo(() => rows.filter((row) => (intentFilter === "all" || row.listingIntent === intentFilter) && JSON.stringify(row).toLowerCase().includes(query.toLowerCase())), [rows, query, intentFilter]);
   const { page, setPage, totalPages, pageItems, total, pageSize } = usePagination(filtered, 10);
   const applicableSemesters = useMemo(() => semesters.filter((semester) => !semester.university || semester.university === form.catchment), [semesters, form.catchment]);
@@ -328,13 +326,6 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
     </AdminModal>
 
     <AdminModal open={mode === "detail"} onClose={close} title={selected?.name ?? "Property inventory"} description="Operational inventory and scoped property team." wide><div className="space-y-5 p-5">{notice && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{notice}</p>}
-      <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-4 dark:border-border">
-        <div>
-          <h3 className="text-sm font-bold">Student registration form</h3>
-          <p className="mt-1 text-[11px] text-slate-500">The form students fill out and sign after scanning this property&apos;s QR code.</p>
-        </div>
-        <button type="button" onClick={() => setAgreementOpen(true)} className={fieldButton}>Edit form</button>
-      </section>
       {selected && <section className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-border">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-bold">Purpose <IntentBadge value={selected.listingIntent} /></h3>
@@ -344,13 +335,5 @@ export function PropertiesManager({ rows, landlords, semesters, permissions }: {
       </section>}
       <section><h3 className="mb-3 text-sm font-bold">Property media</h3><div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">{detail?.media.map((item) => { const url = listingPhotoUrl(item.storageKey, 400); return <div key={item.id} className="overflow-hidden rounded-lg border border-slate-200 dark:border-border">{url ? <img src={url} alt={item.caption ?? "Property media"} className="h-28 w-full object-cover" /> : <div className="grid h-28 place-items-center bg-slate-100 text-xs text-slate-500 dark:bg-muted">{item.mediaType}</div>}<div className="flex items-center gap-2 p-2"><span className="min-w-0 flex-1 truncate text-[10px]">{item.caption || item.storageKey}</span>{canUpdate && <button title="Remove media" onClick={() => removeMedia(item.id)} className="text-red-700"><Trash2 className="size-3.5" /></button>}</div></div>; })}{!detail?.media.length && <p className="text-xs text-slate-500">No supplementary media.</p>}</div></section><section><h3 className="mb-3 text-sm font-bold">Units ({detail?.units.length ?? 0})</h3><div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-border"><table className="w-full min-w-[850px] text-left text-xs"><thead className="bg-slate-50 dark:bg-muted"><tr>{["Unit", "Building", "Floor", "Type", "Capacity", "Price / bed / term", "Deposit", "Electricity", "Status"].map((item) => <th key={item} className="px-3 py-2">{item}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-border">{detail?.units.map((unit) => <tr key={unit.id}><td className="px-3 py-2 font-bold">{unit.label}</td><td className="px-3 py-2">{unit.buildingName || "N/A"}</td><td className="px-3 py-2">{unit.floorLabel || "N/A"}</td><td className="px-3 py-2 capitalize">{unit.roomCategory.replaceAll("_", " ")}</td><td className="px-3 py-2">{unit.capacity}</td><td className="px-3 py-2">UGX {Number(unit.pricePerTermUgx).toLocaleString()}</td><td className="px-3 py-2">{unit.depositUgx != null ? `UGX ${Number(unit.depositUgx).toLocaleString()}` : "N/A"}</td><td className="px-3 py-2">{unit.electricityMeterType || "N/A"}</td><td className="px-3 py-2"><StatusBadge value={unit.operationalStatus} /></td></tr>)}</tbody></table></div></section><section><h3 className="mb-3 text-sm font-bold">Scoped property team</h3><div className="grid gap-2 sm:grid-cols-2">{detail?.memberships.map((member) => <div key={member.id} className="rounded-lg border border-slate-200 p-3 text-xs dark:border-border"><p className="font-bold">{member.name}</p><p className="mt-1 capitalize text-slate-500">{member.role.replaceAll("_", " ")}{member.workerType ? ` · ${member.workerType.replaceAll("_", " ")}` : ""}</p></div>)}</div></section></div></AdminModal>
 
-    {selected && (
-      <TenantAgreementBuilderDialog
-        open={agreementOpen}
-        onOpenChange={setAgreementOpen}
-        propertyId={selected.id}
-        propertyName={selected.name}
-      />
-    )}
   </>;
 }
