@@ -1,0 +1,51 @@
+name: Mirror to Akolet
+
+# Keeps akoletco/Campus-Homes (Akolet's company copy) in step with this
+# repository. Local `git push` already goes to both remotes, but PR merges
+# happen on GitHub's side and never pass through a local push, so the copy
+# fell behind on main/development after every merge. This replays each update
+# of the shared branches and tags there.
+on:
+  push:
+    branches: [main, development, preview]
+    tags: ["*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-akolet-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    # Actions are off in the copy, but guard anyway so a fork never tries.
+    if: github.repository == 'Festo-Wampamba/Campus-Homes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Push to akoletco/Campus-Homes
+        shell: bash
+        env:
+          # Write deploy key on akoletco/Campus-Homes only; it can't reach any
+          # other repository.
+          SSH_KEY: ${{ secrets.AKOLET_MIRROR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::AKOLET_MIRROR_SSH_KEY secret is not set"
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/akolet
+          chmod 600 ~/.ssh/akolet
+          # GitHub's published host key, pinned instead of trusted on first use.
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/akolet -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          # No force: if the copy ever diverges, fail loudly instead of
+          # overwriting it.
+          git push git@github.com:akoletco/Campus-Homes.git "$GITHUB_SHA:$GITHUB_REF"
