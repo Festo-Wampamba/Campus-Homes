@@ -34,6 +34,8 @@ import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../ops/audit.service';
 import { dropVisitRequirement } from '../room-management/visit-requirement';
+import { loadEnv } from '../../config/env';
+import { managedPropertyReviewers, sendManagedPropertyEmail } from './managed-property-alert';
 import { assertOwnedStorageKeys } from '../uploads/storage-key';
 import {
   buildListingSearchQuery,
@@ -178,7 +180,34 @@ export class ListingsService {
         );
       }
     }
+    if (property.listingIntent === 'manage_only') await this.alertOpsOfManagedProperty(property.id, property.name);
     return property;
+  }
+
+  /** A manage-only property never enters the verification queue, so without
+   * this nothing reached Ops (Festo, 2026-11-01). In-app plus email to the
+   * leads and inspectors covering it. Best-effort: the property is committed. */
+  private async alertOpsOfManagedProperty(propertyId: string, name: string) {
+    try {
+      const reviewers = await this.rlsDb.run(SERVICE_CTX, (_db, client) => managedPropertyReviewers(client, propertyId));
+      await Promise.all(reviewers.map((reviewer) =>
+        this.notifications?.notify(reviewer.userId, 'property.manage_submitted', 'in_app', {
+          message: `A landlord registered ${name} to manage on CampusHomes. Check its location and approve it.`,
+          href: '/ops/managed-properties',
+          propertyId,
+        }),
+      ));
+      const to = reviewers.flatMap((reviewer) => (reviewer.email ? [reviewer.email] : []));
+      void Promise.resolve()
+        .then(() => sendManagedPropertyEmail(loadEnv(), to, name))
+        .catch((err: unknown) => this.logger.error(
+          `Managed property email failed for ${propertyId}: ${err instanceof Error ? err.message : 'unknown error'}`,
+        ));
+    } catch (err) {
+      this.logger.error(
+        `Managed property alert failed for ${propertyId}: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
+    }
   }
 
   // RLS (`properties_landlord_update`) already scopes this to the caller's
@@ -262,6 +291,9 @@ export class ListingsService {
     });
     if (from !== listingIntent) {
       await this.audit?.record(ctx, 'properties.listing_intent', 'property', propertyId, { from, to: listingIntent });
+      if (listingIntent === 'manage_only' && property.manageReviewStatus !== 'approved') {
+        await this.alertOpsOfManagedProperty(propertyId, property.name);
+      }
     }
     return property;
   }

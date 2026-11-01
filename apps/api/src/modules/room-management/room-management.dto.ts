@@ -6,6 +6,7 @@ import {
   batchRoomUpdateSchema,
   bedBlockInputSchema,
   bulkRoomInputSchema,
+  rejectManagedPropertySchema,
   rejectRoomChangeSetSchema,
   reviewRoomChangeSetSchema,
   roomTypeInputSchema,
@@ -30,3 +31,4 @@ export class BedBlockInputDto extends createZodDto(bedBlockInputSchema) {}
 export class SubmitRoomChangeSetDto extends createZodDto(submitRoomChangeSetSchema) {}
 export class ReviewRoomChangeSetDto extends createZodDto(reviewRoomChangeSetSchema) {}
 export class RejectRoomChangeSetDto extends createZodDto(rejectRoomChangeSetSchema) {}
+export class RejectManagedPropertyDto extends createZodDto(rejectManagedPropertySchema) {}

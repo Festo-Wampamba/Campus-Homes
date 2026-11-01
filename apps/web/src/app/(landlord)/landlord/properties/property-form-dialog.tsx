@@ -102,6 +102,8 @@ function PropertyForm({
     emptyPropertyDeclarationFields(),
   );
   const [listingIntent, setListingIntent] = useState<ListingIntent>("list");
+  // Manage-only properties need no photos: nothing is shown to students.
+  const managedOnly = (isEdit ? property.listingIntent : listingIntent) === "manage_only";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -309,8 +311,9 @@ function PropertyForm({
         <div className="space-y-1.5">
           <Label>Room types & pricing (optional)</Label>
           <p className="text-xs text-muted-foreground">
-            e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Ops
-            confirms exact pricing and room counts during verification.
+            {managedOnly
+              ? "e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. These become your rooms in Manage Rooms once Operations approves the property. No photos needed."
+              : "e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Ops confirms exact pricing and room counts during verification."}
           </p>
           <RoomCategoryRows
             rows={roomCategoryRows}
@@ -318,7 +321,7 @@ function PropertyForm({
             idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
             showSelfContained
             showBeds
-            showPhotos
+            showPhotos={!managedOnly}
           />
         </div>
 

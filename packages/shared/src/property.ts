@@ -5,6 +5,7 @@ import {
   GENDER_ARRANGEMENTS,
   LISTING_INTENTS,
   LISTING_STATUSES,
+  MANAGE_REVIEW_STATUSES,
   PROPERTY_AUTHORITY_ROLES,
   PROPERTY_STATUSES,
   PROPERTY_TYPES,
@@ -234,8 +235,16 @@ export const propertySchema = z.object({
   declaredConsentToProcessing: z.boolean(),
   coverPhotoKey: z.string().nullable(),
   listingIntent: z.enum(LISTING_INTENTS),
+  // Ops approval of a manage-only property (0080); optional so older
+  // responses still parse.
+  manageReviewStatus: z.enum(MANAGE_REVIEW_STATUSES).optional(),
+  manageRejectionReason: z.string().nullable().optional(),
 });
 export type Property = z.infer<typeof propertySchema>;
+
+// Ops sends a manage-only property back with a reason the landlord sees.
+export const rejectManagedPropertySchema = z.object({ reason: z.string().trim().min(3).max(500) });
+export type RejectManagedPropertyInput = z.infer<typeof rejectManagedPropertySchema>;
 
 // Switching a property between "manage only" and "manage and list" (0076):
 // PATCH /listings/properties/:id/listing-intent (landlord) and

@@ -416,9 +416,9 @@ export function OnboardingWizard({
               <div className="space-y-1.5">
                 <Label>Room types & pricing (optional)</Label>
                 <p className="text-xs text-muted-foreground">
-                  Tell us what you have in mind, e.g. 30 singles at UGX
-                  300,000, 40 doubles at UGX 700,000. Our team confirms exact
-                  pricing and room counts during the verification visit.
+                  {listingIntent === "manage_only"
+                    ? "Tell us the rooms you have, e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. They become your rooms in Manage Rooms once Operations approves the property. No photos needed."
+                    : "Tell us what you have in mind, e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Our team confirms exact pricing and room counts during the verification visit."}
                 </p>
                 <RoomCategoryRows
                   rows={roomCategoryRows}
@@ -426,7 +426,8 @@ export function OnboardingWizard({
                   idPrefix="onboarding-room"
                   showSelfContained
                   showBeds
-                  showPhotos
+                  // Manage-only properties need no photos: nothing is shown to students.
+                  showPhotos={listingIntent === "list"}
                 />
               </div>
 
