@@ -721,7 +721,9 @@ export class RoomManagementService {
     const rows = property?.proposed ?? [];
     if (rows.length === 0) return 0;
     const existing = await client.query(
-      `SELECT 1 FROM room_types WHERE property_id=$1 UNION ALL SELECT 1 FROM units WHERE property_id=$1 LIMIT 1`, [propertyId],
+      // Archived ones don't count: a cancelled draft type leaves its row behind.
+      `SELECT 1 FROM room_types WHERE property_id=$1 AND archived_at IS NULL
+       UNION ALL SELECT 1 FROM units WHERE property_id=$1 AND archived_at IS NULL LIMIT 1`, [propertyId],
     );
     if (existing.rows.length) return 0;
     // Same choice as the Manage Rooms page's default semester.
@@ -755,10 +757,12 @@ export class RoomManagementService {
         );
       }
       // "Single 1", "Single 2", or the variant's name; numbering continues
-      // when two rows share a name so codes never collide.
+      // when two rows share a name so codes never collide. Keyed case-blind,
+      // like assertRoomCodeAvailable compares codes.
       const prefix = variant ?? roomTypeTitle(row.category).replace(/ Room$/, '');
-      const first = (lastNumber.get(prefix) ?? 0) + 1;
-      lastNumber.set(prefix, first + row.roomCount - 1);
+      const numberKey = prefix.toLocaleLowerCase();
+      const first = (lastNumber.get(numberKey) ?? 0) + 1;
+      lastNumber.set(numberKey, first + row.roomCount - 1);
       const unitIds = (await client.query<{ id: string }>(
         `INSERT INTO units(property_id, room_type_id, label, capacity, room_category, room_category_label, self_contained)
          SELECT $1, $2, $3 || ' ' || n, $4, $5::room_category, $6, $7 FROM generate_series($8::int, $9::int) n

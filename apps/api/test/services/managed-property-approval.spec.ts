@@ -174,6 +174,31 @@ describe('the approval', () => {
     expect((await overview(propertyId)).summary).toMatchObject({ totalRooms: 5, totalBeds: 7 });
   });
 
+  it('still creates the declared rooms after a cancelled draft room type', async () => {
+    const propertyId = await submit('Cancelled Draft Hostel');
+    await roomType(propertyId);
+    await rooms.cancelChangeSet(landlordCtx, (await overview(propertyId)).changeSet!.id);
+
+    await rooms.approveManagedProperty(opsLeadCtx, propertyId);
+
+    expect((await overview(propertyId)).summary.totalRooms).toBe(5);
+  });
+
+  it('numbers variants that differ only by case as one sequence', async () => {
+    const propertyId = (await listings.submitProperty(landlordCtx, {
+      ...submitInput('Case Variant Hostel'),
+      proposedRoomCategories: [
+        { category: 'single', roomCount: 2, pricePerTermUgx: 800000, selfContained: false, variantName: 'Deluxe' },
+        { category: 'single', roomCount: 2, pricePerTermUgx: 900000, selfContained: false, variantName: 'deluxe' },
+      ],
+    })).id;
+
+    await rooms.approveManagedProperty(opsLeadCtx, propertyId);
+
+    const codes = (await overview(propertyId)).rooms.map((room) => room.roomCode.toLowerCase());
+    expect(new Set(codes).size).toBe(4);
+  });
+
   it('applies room changes that were waiting for review', async () => {
     const propertyId = await submit('Waiting Changes Hostel');
     const typeId = await roomType(propertyId);
