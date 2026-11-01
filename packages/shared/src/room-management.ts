@@ -69,6 +69,15 @@ export const batchRoomUpdateSchema = z.object({
 );
 export type BatchRoomUpdateInput = z.infer<typeof batchRoomUpdateSchema>;
 
+// Delete one or many rooms (Festo, 2026-11-01). A staged room is discarded at
+// once; an approved room is staged for removal and Ops reviews it.
+export const batchRoomDeleteSchema = z.object({
+  roomIds: z.array(uuid).min(1).max(500),
+}).refine((value) => new Set(value.roomIds).size === value.roomIds.length, {
+  path: ['roomIds'], message: 'A room is listed twice',
+});
+export type BatchRoomDeleteInput = z.infer<typeof batchRoomDeleteSchema>;
+
 export const bulkRoomInputSchema = z.object({
   roomTypeId: uuid,
   buildingName: z.string().trim().max(120).nullable().optional(),

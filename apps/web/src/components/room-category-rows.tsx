@@ -128,7 +128,10 @@ export function RoomCategoryRows({
   }
 
   return (
-    <div className="space-y-3">
+    // Container queries, not screen breakpoints: the same rows sit in a wide
+    // dialog, the onboarding card and the Ops form, and only their own width
+    // says how many fields fit side by side.
+    <div className="@container space-y-3">
       <p className="text-xs text-muted-foreground">
         Price is per bed, not per room. For a Double or Triple, enter what one bed costs, the same
         number you&apos;d quote a student moving into just one space in that room.
@@ -139,13 +142,13 @@ export function RoomCategoryRows({
           className={cn(
             "grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3",
             showBeds
-              ? "sm:grid-cols-3"
+              ? "@xl:grid-cols-3 @4xl:grid-cols-[minmax(0,1.6fr)_minmax(0,6rem)_minmax(0,6rem)_minmax(0,1fr)_minmax(0,1fr)_auto]"
               : showSelfContained
-                ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
-                : "sm:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
+                ? "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
+                : "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
           )}
         >
-          <div className="col-span-2 space-y-1.5 sm:col-span-1">
+          <div className="col-span-2 space-y-1.5 @xl:col-span-1">
             <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>
             <select
               id={`${idPrefix}-category-${i}`}
@@ -222,9 +225,9 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { depositUgx: e.target.value })}
             />
           </div>
-          <div className={cn("col-span-2 flex items-center justify-between gap-2", !showBeds && "contents")}>
+          <div className={cn("col-span-2 flex h-10 items-center justify-between gap-2 @xl:col-span-1", !showBeds && "contents")}>
             {showSelfContained && (
-              <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">
+              <label className="col-span-2 flex items-center gap-2 text-sm whitespace-nowrap @3xl:col-span-1">
                 <input
                   type="checkbox"
                   checked={row.selfContained}

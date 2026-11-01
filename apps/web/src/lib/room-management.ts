@@ -120,6 +120,8 @@ export interface RoomUnit {
   derivedStatus: DerivedOccupancyStatus;
   activeBlock?: UnitBlock | null;
   pendingChanges?: boolean;
+  // Deleted by the landlord; leaves the listing once Ops approves.
+  pendingRemoval?: boolean;
   beds: Bedspace[];
 }
 
