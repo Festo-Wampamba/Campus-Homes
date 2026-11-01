@@ -10,6 +10,7 @@ import type { PoolClient } from 'pg';
 import { roomTypeImportLabels } from '@campushomes/shared';
 import type {
   BedBlockInput,
+  BatchRoomDeleteInput,
   BatchRoomUpdateInput,
   BulkRoomInput,
   RoomTypeInput,
@@ -298,28 +299,56 @@ export class RoomManagementService {
       return unit.property_id;
   }
 
-  async archiveRoom(ctx: RlsContext, unitId: string) {
-    const propertyId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
-      const unit = await this.assertUnitOwner(client, unitId, ctx.userId);
-      const live = await client.query(
-        `SELECT 1 FROM reservations r JOIN beds b ON b.id=r.bed_id
-         WHERE b.unit_id=$1 AND r.status IN ('reserved','booked','occupied') LIMIT 1`, [unitId],
-      );
-      if (live.rows.length) throw new ConflictException('A room with a live reservation cannot be archived');
-      const semester = await client.query<{ semester_id: string }>(
-        `SELECT semester_id FROM unit_semester_pricing WHERE unit_id=$1 ORDER BY created_at DESC LIMIT 1`, [unitId],
-      );
-      if (!semester.rows[0]) throw new BadRequestException('Room has no semester pricing');
-      const changeSet = await this.getOrCreateDraft(client, unit.property_id, semester.rows[0].semester_id, ctx.userId);
-      await client.query(
-        `INSERT INTO room_unit_changes(change_set_id, action, unit_id, room_type_id, proposed_data, created_by)
-         VALUES ($1,'archive',$2,$3,'{}'::jsonb,$4)`,
-        [changeSet.id, unitId, unit.room_type_id, ctx.userId],
-      );
-      return unit.property_id;
+  /** Deletes rooms, all or nothing. A staged room that was never approved is
+   * discarded at once; an approved room gets an archive change that Ops
+   * reviews, so its reservation history stays and students see it until then. */
+  async deleteRooms(ctx: RlsContext, propertyId: string, input: BatchRoomDeleteInput) {
+    const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await this.assertPropertyOwner(client, propertyId, ctx.userId);
+      let discarded = 0;
+      let staged = 0;
+      for (const roomId of input.roomIds) {
+        const draft = await client.query(
+          `DELETE FROM room_unit_changes c USING room_inventory_change_sets cs
+           WHERE c.id=$1 AND c.action='create' AND cs.id=c.change_set_id
+             AND cs.property_id=$2 AND cs.status IN ('draft','rejected')`, [roomId, propertyId],
+        );
+        if (draft.rowCount) {
+          discarded += 1;
+          continue;
+        }
+        if (await this.stageRoomArchive(client, ctx, roomId) !== propertyId) {
+          throw new BadRequestException('Every room must belong to this property');
+        }
+        staged += 1;
+      }
+      return { discarded, staged };
     });
-    await this.audit.record(ctx, 'room.archive_request', 'unit', unitId, { propertyId });
-    return { staged: true };
+    await this.audit.record(ctx, 'room.delete', 'property', propertyId, { ...result, roomIds: input.roomIds });
+    return result;
+  }
+
+  /** Stages one approved room's removal inside the caller's transaction; returns its property. */
+  private async stageRoomArchive(client: PoolClient, ctx: RlsContext, unitId: string) {
+    const unit = await this.assertUnitOwner(client, unitId, ctx.userId);
+    const live = await client.query(
+      `SELECT 1 FROM reservations r JOIN beds b ON b.id=r.bed_id
+       WHERE b.unit_id=$1 AND r.status IN ('reserved','booked','occupied') LIMIT 1`, [unitId],
+    );
+    if (live.rows.length) throw new ConflictException(`Room ${unit.label} has a current reservation, so it can't be deleted`);
+    const semester = await client.query<{ semester_id: string }>(
+      `SELECT semester_id FROM unit_semester_pricing WHERE unit_id=$1 ORDER BY created_at DESC LIMIT 1`, [unitId],
+    );
+    if (!semester.rows[0]) throw new BadRequestException(`Room ${unit.label} has no semester pricing`);
+    const changeSet = await this.getOrCreateDraft(client, unit.property_id, semester.rows[0].semester_id, ctx.userId);
+    // Removal supersedes any edit to this room still waiting in the draft.
+    await client.query(`DELETE FROM room_unit_changes WHERE change_set_id=$1 AND unit_id=$2`, [changeSet.id, unitId]);
+    await client.query(
+      `INSERT INTO room_unit_changes(change_set_id, action, unit_id, room_type_id, proposed_data, created_by)
+       VALUES ($1,'archive',$2,$3,'{}'::jsonb,$4)`,
+      [changeSet.id, unitId, unit.room_type_id, ctx.userId],
+    );
+    return unit.property_id;
   }
 
   async blockRoom(ctx: RlsContext, unitId: string, input: UnitBlockInput) {
@@ -644,8 +673,8 @@ export class RoomManagementService {
   }
 
   private async assertUnitOwner(client: PoolClient, unitId: string, userId: string) {
-    const result = await client.query<{ id: string; property_id: string; room_type_id: string }>(
-      `SELECT u.id, u.property_id, u.room_type_id FROM units u JOIN properties p ON p.id=u.property_id
+    const result = await client.query<{ id: string; property_id: string; room_type_id: string; label: string }>(
+      `SELECT u.id, u.property_id, u.room_type_id, u.label FROM units u JOIN properties p ON p.id=u.property_id
        WHERE u.id=$1 AND p.landlord_id=$2 AND u.archived_at IS NULL`, [unitId, userId],
     );
     if (!result.rows[0]) throw new ForbiddenException('Room does not belong to your property');
@@ -883,12 +912,15 @@ export class RoomManagementService {
     const units = await client.query<{
       id: string; property_id: string; room_type_id: string; label: string; capacity: number; room_category: string;
       building_name: string | null; floor_label: string | null; operational_status: string;
-      type_title: string; pending: boolean;
+      type_title: string; pending: boolean; pending_removal: boolean;
     }>(
       `SELECT u.id,u.property_id,u.room_type_id,u.label,u.capacity,u.room_category::text,u.building_name,u.floor_label,
         u.operational_status, COALESCE(cv.title, initcap(replace(u.room_category::text,'_',' ')) || ' Room') type_title,
         EXISTS(SELECT 1 FROM room_unit_changes c JOIN room_inventory_change_sets cs ON cs.id=c.change_set_id
-               WHERE c.unit_id=u.id AND cs.status IN ('draft','pending_review','visit_required','rejected')) pending
+               WHERE c.unit_id=u.id AND cs.status IN ('draft','pending_review','visit_required','rejected')) pending,
+        EXISTS(SELECT 1 FROM room_unit_changes c JOIN room_inventory_change_sets cs ON cs.id=c.change_set_id
+               WHERE c.unit_id=u.id AND c.action='archive'
+                 AND cs.status IN ('draft','pending_review','visit_required','rejected')) pending_removal
        FROM units u JOIN room_types rt ON rt.id=u.room_type_id
        LEFT JOIN room_type_versions cv ON cv.id=rt.current_version_id
        WHERE u.property_id=$1 AND u.archived_at IS NULL ORDER BY u.building_name NULLS FIRST,u.floor_label NULLS FIRST,u.label`, [propertyId],
@@ -896,6 +928,7 @@ export class RoomManagementService {
     const output = [];
     for (const unit of units.rows) {
       const mapped = await this.mapUnit(client, unit);
+      if (unit.pending_removal) Object.assign(mapped, { pendingRemoval: true });
       if (changeSetId) {
         const pending = await client.query<{ room_type_id: string; proposed_data: JsonRecord }>(
           `SELECT room_type_id,proposed_data FROM room_unit_changes

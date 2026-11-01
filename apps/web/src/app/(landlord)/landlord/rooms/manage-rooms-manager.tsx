@@ -200,8 +200,9 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
     router.refresh();
   }
 
-  function onRoomArchived(roomId: string) {
-    setRooms((prev) => prev.filter((r) => r.id !== roomId));
+  // Staged rooms vanish and approved ones gain "Removal pending"; the
+  // server's view is the only one that knows which was which.
+  function onRoomsDeleted() {
     router.refresh();
   }
 
@@ -465,7 +466,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               rooms={rooms}
               onRoomUpdated={onRoomUpdated}
               onRoomsAdded={onRoomsAdded}
-              onRoomArchived={onRoomArchived}
+              onRoomsDeleted={onRoomsDeleted}
               filterStatus={roomStatusFilter}
               onFilterStatusChange={setRoomStatusFilter}
             />
