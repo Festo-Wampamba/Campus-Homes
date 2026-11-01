@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Archive, Bed, Edit, Layers, Lock, Plus, Search, Unlock } from "lucide-react";
+import { Bed, Edit, Layers, Lock, Plus, Search, Trash2, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/status-chip";
 import {
@@ -33,10 +33,15 @@ interface RoomsInventoryTabProps {
   rooms: RoomUnit[];
   onRoomUpdated: (updatedRoom: RoomUnit) => void;
   onRoomsAdded: (newRooms: RoomUnit[]) => void;
-  onRoomArchived?: (roomId: string) => void;
+  onRoomsDeleted: () => void;
   /** Controlled by Manage Rooms so its stat cards can filter this table. */
   filterStatus: string;
   onFilterStatusChange: (status: string) => void;
+}
+
+/** A room a student is in (or holds) can't go; one already deleted is waiting on Ops. */
+export function canDeleteRoom(room: Pick<RoomUnit, "occupiedBeds" | "pendingRemoval">): boolean {
+  return room.occupiedBeds === 0 && !room.pendingRemoval;
 }
 
 /** "has_free_beds" is what the Available Beds card means: any room a student
@@ -54,7 +59,7 @@ export function RoomsInventoryTab({
   rooms,
   onRoomUpdated,
   onRoomsAdded,
-  onRoomArchived,
+  onRoomsDeleted,
   filterStatus,
   onFilterStatusChange: setFilterStatus,
 }: RoomsInventoryTabProps) {
@@ -77,6 +82,11 @@ export function RoomsInventoryTab({
   // Rooms ticked for a batch edit (codes, building, floor).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [batchEditOpen, setBatchEditOpen] = useState(false);
+
+  // Rooms waiting on the delete confirmation (one, or the ticked ones).
+  const [roomsToDelete, setRoomsToDelete] = useState<RoomUnit[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Single Room Form fields
   const [srCode, setSrCode] = useState("");
@@ -136,6 +146,7 @@ export function RoomsInventoryTab({
   }, [rooms, searchQuery, filterType, filterBuilding, filterFloor, filterStatus]);
 
   const selectedRooms = filteredRooms.filter((room) => selectedIds.has(room.id));
+  const deletableSelected = selectedRooms.filter(canDeleteRoom);
   const allShownSelected = filteredRooms.length > 0 && filteredRooms.every((room) => selectedIds.has(room.id));
 
   function toggleSelected(roomId: string) {
@@ -240,25 +251,26 @@ export function RoomsInventoryTab({
     }
   }
 
-  async function handleArchiveRoom(room: RoomUnit) {
-    if (
-      !window.confirm(
-        `Submit archive request for ${room.roomCode}? Once confirmed by Operations, this room will be retired from future listings. Historical reservation records are preserved.`,
-      )
-    ) {
-      return;
-    }
+  function openDelete(rooms: RoomUnit[]) {
+    setDeleteError(null);
+    setRoomsToDelete(rooms);
+  }
 
+  async function confirmDelete() {
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      await api(`/room-management/rooms/${room.id}/archive`, {
+      await api(`/room-management/properties/${propertyId}/rooms/delete`, {
         method: "POST",
+        body: JSON.stringify({ roomIds: roomsToDelete.map((room) => room.id) }),
       });
-
-      if (onRoomArchived) {
-        onRoomArchived(room.id);
-      }
+      setSelectedIds(new Set());
+      setRoomsToDelete([]);
+      onRoomsDeleted();
     } catch (err) {
-      alert(apiErrorMessage(err, "Could not request archive for this room."));
+      setDeleteError(apiErrorMessage(err, "Couldn't delete these rooms. Try again."));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -321,14 +333,24 @@ export function RoomsInventoryTab({
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Manage individual room numbers, locations, live bedspace occupancy, and maintenance blocks.
-            Tick several rooms to edit their codes together.
+            Tick several rooms to edit or delete them together.
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {selectedRooms.length > 0 && (
             <Button variant="secondary" onClick={() => setBatchEditOpen(true)} className="gap-1.5">
               <Edit className="size-4" />
               Edit selected ({selectedRooms.length})
+            </Button>
+          )}
+          {deletableSelected.length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={() => openDelete(deletableSelected)}
+              className="gap-1.5 text-destructive hover:bg-destructive-subtle"
+            >
+              <Trash2 className="size-4" />
+              Delete selected ({deletableSelected.length})
             </Button>
           )}
           <Button variant="secondary" onClick={openAddSingleRoom} className="gap-1.5">
@@ -510,7 +532,11 @@ export function RoomsInventoryTab({
                       {/* Code */}
                       <td className="py-3.5 px-4 font-mono font-bold text-foreground">
                         {room.roomCode}
-                        {room.pendingChanges && (
+                        {room.pendingRemoval ? (
+                          <span className="ml-2 inline-flex items-center rounded bg-destructive-subtle px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                            Removal pending
+                          </span>
+                        ) : room.pendingChanges && (
                           <span className="ml-2 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                             Staged
                           </span>
@@ -623,12 +649,13 @@ export function RoomsInventoryTab({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleArchiveRoom(room)}
-                            disabled={room.pendingChanges}
+                            onClick={() => openDelete([room])}
+                            disabled={!canDeleteRoom(room)}
                             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            title="Archive Room"
+                            title={room.occupiedBeds > 0 ? "A student is in this room" : "Delete room"}
+                            aria-label={`Delete room ${room.roomCode}`}
                           >
-                            <Archive className="size-3.5" />
+                            <Trash2 className="size-3.5" />
                           </Button>
                         </div>
                       </td>
@@ -664,6 +691,9 @@ export function RoomsInventoryTab({
                         {room.roomTypeTitle} · {room.buildingName || "Main building"}
                         {room.floorLabel ? `, ${room.floorLabel}` : ""}
                       </p>
+                      {room.pendingRemoval && (
+                        <p className="mt-1 font-semibold text-destructive">Removal pending</p>
+                      )}
                     </div>
                     {renderStatusBadge(room.derivedStatus)}
                   </div>
@@ -719,8 +749,19 @@ export function RoomsInventoryTab({
                       size="sm"
                       onClick={() => openEditSingleRoom(room)}
                       className="h-11 px-3.5"
+                      aria-label={`Edit room ${room.roomCode}`}
                     >
                       <Edit className="size-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openDelete([room])}
+                      disabled={!canDeleteRoom(room)}
+                      className="h-11 px-3.5 text-destructive"
+                      aria-label={`Delete room ${room.roomCode}`}
+                    >
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </div>
@@ -773,6 +814,35 @@ export function RoomsInventoryTab({
           }
         }}
       />
+
+      <Dialog open={roomsToDelete.length > 0} onOpenChange={(open) => !open && !deleting && setRoomsToDelete([])} size="sm">
+        <DialogHeader
+          title={roomsToDelete.length === 1 ? `Delete room ${roomsToDelete[0]?.roomCode}?` : `Delete ${roomsToDelete.length} rooms?`}
+          onClose={() => !deleting && setRoomsToDelete([])}
+        />
+        <DialogBody className="space-y-3 text-sm">
+          {deleteError && (
+            <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive-subtle p-3 text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <p>
+            Rooms you added but haven&apos;t sent for review are removed straight away.
+          </p>
+          <p className="text-muted-foreground">
+            Approved rooms are marked <span className="font-semibold text-destructive">Removal pending</span> and
+            leave your listing once Operations approves, after you submit your changes. Past bookings stay on record.
+          </p>
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => setRoomsToDelete([])} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={confirmDelete} disabled={deleting}>
+            {deleting ? "Deleting…" : roomsToDelete.length === 1 ? "Delete room" : `Delete ${roomsToDelete.length} rooms`}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       {/* Single Room Add/Edit Dialog */}
       <Dialog open={singleRoomDialogOpen} onOpenChange={setSingleRoomDialogOpen} size="sm">

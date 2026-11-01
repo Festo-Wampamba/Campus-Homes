@@ -306,22 +306,20 @@ function PropertyForm({
             </div>
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Room types & pricing (optional)</Label>
-            <p className="text-xs text-muted-foreground">
-              e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Ops
-              confirms exact pricing and room counts during verification.
-            </p>
-            <RoomCategoryRows
-              rows={roomCategoryRows}
-              onChange={setRoomCategoryRows}
-              idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
-              showSelfContained
-              showBeds
-              showPhotos
-            />
-          </div>
+        <div className="space-y-1.5">
+          <Label>Room types & pricing (optional)</Label>
+          <p className="text-xs text-muted-foreground">
+            e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Ops
+            confirms exact pricing and room counts during verification.
+          </p>
+          <RoomCategoryRows
+            rows={roomCategoryRows}
+            onChange={setRoomCategoryRows}
+            idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
+            showSelfContained
+            showBeds
+            showPhotos
+          />
         </div>
 
         <PropertyExtendedFields

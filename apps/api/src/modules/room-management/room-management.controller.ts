@@ -5,6 +5,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
+  BatchRoomDeleteDto,
   BatchRoomUpdateDto,
   BedBlockInputDto,
   BulkRoomInputDto,
@@ -50,6 +51,11 @@ export class RoomManagementController {
     return this.rooms.batchUpdateRooms(rlsCtx(req), propertyId, body);
   }
 
+  @Post('properties/:propertyId/rooms/delete')
+  deleteRooms(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: BatchRoomDeleteDto) {
+    return this.rooms.deleteRooms(rlsCtx(req), propertyId, body);
+  }
+
   @Post('properties/:propertyId/rooms/bulk')
   bulkRooms(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: BulkRoomInputDto) {
     return this.rooms.bulkCreateRooms(rlsCtx(req), propertyId, body);
@@ -81,11 +87,6 @@ export class RoomManagementController {
   @Patch('rooms/:roomId')
   updateRoom(@Req() req: AuthenticatedRequest, @Param('roomId', ParseUUIDPipe) roomId: string, @Body() body: RoomUnitInputDto) {
     return this.rooms.updateRoom(rlsCtx(req), roomId, body);
-  }
-
-  @Post('rooms/:roomId/archive')
-  archiveRoom(@Req() req: AuthenticatedRequest, @Param('roomId', ParseUUIDPipe) roomId: string) {
-    return this.rooms.archiveRoom(rlsCtx(req), roomId);
   }
 
   @Post('rooms/:roomId/blocks')
