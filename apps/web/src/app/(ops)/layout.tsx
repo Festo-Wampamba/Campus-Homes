@@ -1,4 +1,4 @@
-import { Building2, ClipboardCheck, ClipboardList, DoorOpen, Image as ImageIcon, LifeBuoy, ShieldAlert, UserCheck, UserPlus, Users } from "lucide-react";
+import { Building, Building2, ClipboardCheck, ClipboardList, DoorOpen, Image as ImageIcon, LifeBuoy, ShieldAlert, UserCheck, UserPlus, Users } from "lucide-react";
 
 import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
@@ -20,7 +20,10 @@ export default async function OpsLayout({
       notificationsEndpoint="/notifications"
       nav={
         isInspector
-          ? [{ label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> }]
+          ? [
+              { label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> },
+              { label: "Managed properties", href: "/ops/managed-properties", icon: <Building aria-hidden className="size-4 shrink-0" /> },
+            ]
           : [
               { label: "Verification queue", href: "/ops", icon: <ClipboardCheck aria-hidden className="size-4 shrink-0" /> },
               // Lets a lead self-assign and run a visit end-to-end with no
@@ -29,6 +32,7 @@ export default async function OpsLayout({
               // lead's own nav instead of being inspector-only.
               { label: "My visits", href: "/ops/inspect", icon: <ClipboardList aria-hidden className="size-4 shrink-0" /> },
               { label: "Properties", href: "/ops/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
+              { label: "Managed properties", href: "/ops/managed-properties", icon: <Building aria-hidden className="size-4 shrink-0" /> },
               { label: "Room changes", href: "/ops/room-changes", icon: <DoorOpen aria-hidden className="size-4 shrink-0" /> },
               { label: "Landlord accounts", href: "/ops/landlord-accounts", icon: <Users aria-hidden className="size-4 shrink-0" /> },
               { label: "Landlord identity review", href: "/ops/landlords", icon: <UserCheck aria-hidden className="size-4 shrink-0" /> },

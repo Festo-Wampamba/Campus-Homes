@@ -9,6 +9,7 @@ import type { PoolClient } from 'pg';
 
 import { roomTypeImportLabels } from '@campushomes/shared';
 import type {
+  ProposedRoomCategory,
   BedBlockInput,
   BatchRoomDeleteInput,
   BatchRoomUpdateInput,
@@ -22,6 +23,7 @@ import type { RlsContext } from '../../db/rls-context';
 import { RlsDb } from '../../db/db.module';
 import { assertStaffScope } from '../auth/staff-scope';
 import { AuditService } from '../ops/audit.service';
+import { roomTypeTitle } from '../ops/ops.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isOwnedStorageKey } from '../uploads/storage-key';
 import { loadEnv } from '../../config/env';
@@ -29,6 +31,9 @@ import { sendRoomChangeEmail } from './room-change-email';
 import { roomImportTemplate } from './room-import';
 
 type JsonRecord = Record<string, unknown>;
+
+// Beds per room are implied for these types; other types use the landlord's own count.
+const FIXED_BEDS_PER_ROOM: Partial<Record<string, number>> = { single: 1, double: 2, triple: 3, quad: 4 };
 
 interface ChangeSetRow {
   id: string;
@@ -135,6 +140,7 @@ export class RoomManagementService {
       const id = type.rows[0]!.id;
       const versionId = await this.insertVersion(client, id, changeSet.id, 1, ctx.userId, input);
       await this.replacePhotos(client, versionId, ctx.userId, input.photos);
+      await this.applyIfManaged(client, propertyId, ctx.userId);
       return id;
     });
     await this.audit.record(ctx, 'room_type.draft_create', 'room_type', roomTypeId, { propertyId });
@@ -174,6 +180,7 @@ export class RoomManagementService {
         versionId = await this.insertVersion(client, roomTypeId, changeSet.id, Number(next.rows[0]!.value), ctx.userId, input);
       }
       await this.replacePhotos(client, versionId, ctx.userId, input.photos);
+      await this.applyIfManaged(client, type.property_id, ctx.userId);
     });
     await this.audit.record(ctx, 'room_type.draft_update', 'room_type', roomTypeId, {});
     return this.roomType(ctx, roomTypeId);
@@ -203,7 +210,9 @@ export class RoomManagementService {
          VALUES ($1, 'create', $2, $3::jsonb, $4) RETURNING id`,
         [changeSet.id, type.id, JSON.stringify({ ...input, capacity }), ctx.userId],
       );
-      return created.rows[0]!.id;
+      const createdId = created.rows[0]!.id;
+      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      return applied?.get(createdId) ?? createdId;
     });
     await this.audit.record(ctx, 'room.draft_create', 'room_unit_change', changeId, { propertyId });
     return this.pendingRoom(ctx, propertyId, changeId);
@@ -238,31 +247,42 @@ export class RoomManagementService {
         );
         ids.push(created.rows[0]!.id);
       }
-      return ids;
+      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      return ids.map((id) => applied?.get(id) ?? id);
     });
     await this.audit.record(ctx, 'room.bulk_draft_create', 'property', propertyId, { count: changeIds.length });
     const overview = await this.overviewForProperty(ctx, propertyId);
-    return overview.rooms.filter((room: { id: string }) => changeIds.includes(room.id));
+    // A replayed batch on a managed property returns change ids of rooms
+    // already applied, so match on the codes too.
+    const codes = new Set(input.roomCodes.map((code) => code.trim().toLocaleLowerCase()));
+    return overview.rooms.filter((room) =>
+      changeIds.includes(room.id)
+      || (codes.has(room.roomCode.toLocaleLowerCase()) && (room.buildingName ?? null) === (input.buildingName ?? null)));
   }
 
   async updateRoom(ctx: RlsContext, roomOrChangeId: string, input: RoomUnitInput) {
-    const propertyId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, (_db, client) =>
-      this.stageRoomUpdate(client, ctx, roomOrChangeId, input));
+    const { propertyId, roomId } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      const propertyId = await this.stageRoomUpdate(client, ctx, roomOrChangeId, input);
+      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      return { propertyId, roomId: applied?.get(roomOrChangeId) ?? roomOrChangeId };
+    });
     await this.audit.record(ctx, 'room.draft_update', 'unit', roomOrChangeId, {});
-    return this.pendingRoom(ctx, propertyId, roomOrChangeId);
+    return this.pendingRoom(ctx, propertyId, roomId);
   }
 
   /** Many room edits in one draft change set, all or nothing. */
   async batchUpdateRooms(ctx: RlsContext, propertyId: string, input: BatchRoomUpdateInput) {
-    await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+    const roomIds = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
       for (const { roomId, ...room } of input.rooms) {
         const roomPropertyId = await this.stageRoomUpdate(client, ctx, roomId, room);
         if (roomPropertyId !== propertyId) throw new BadRequestException('Every room must belong to this property');
       }
+      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      return input.rooms.map((room) => applied?.get(room.roomId) ?? room.roomId);
     });
     await this.audit.record(ctx, 'room.batch_draft_update', 'property', propertyId, { count: input.rooms.length });
-    const ids = new Set(input.rooms.map((room) => room.roomId));
+    const ids = new Set(roomIds);
     const overview = await this.overviewForProperty(ctx, propertyId);
     return overview.rooms.filter((room: { id: string }) => ids.has(room.id));
   }
@@ -301,7 +321,8 @@ export class RoomManagementService {
 
   /** Deletes rooms, all or nothing. A staged room that was never approved is
    * discarded at once; an approved room gets an archive change that Ops
-   * reviews, so its reservation history stays and students see it until then. */
+   * reviews, so its reservation history stays and students see it until then.
+   * On an approved manage-only property the archive applies at once. */
   async deleteRooms(ctx: RlsContext, propertyId: string, input: BatchRoomDeleteInput) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
@@ -322,7 +343,8 @@ export class RoomManagementService {
         }
         staged += 1;
       }
-      return { discarded, staged };
+      const applied = staged > 0 && (await this.applyIfManaged(client, propertyId, ctx.userId)) !== null;
+      return { discarded, staged, applied };
     });
     await this.audit.record(ctx, 'room.delete', 'property', propertyId, { ...result, roomIds: input.roomIds });
     return result;
@@ -551,22 +573,7 @@ export class RoomManagementService {
 
       // Read before applying, so renames still show the old code.
       const summary = await this.changeSummary(client, changeSetId, row.property_id);
-      const versions = await client.query<RoomTypeVersionRow>(
-        `SELECT * FROM room_type_versions WHERE change_set_id=$1 ORDER BY version_number`, [changeSetId],
-      );
-      for (const version of versions.rows) {
-        await this.applyRoomTypeVersion(client, version, row.semester_id, ctx.userId, notes ?? null);
-      }
-      const changes = await client.query<{ id: string; action: string; unit_id: string | null; room_type_id: string | null; proposed_data: JsonRecord }>(
-        `SELECT * FROM room_unit_changes WHERE change_set_id=$1 ORDER BY created_at`, [changeSetId],
-      );
-      for (const change of changes.rows) await this.applyUnitChange(client, change, row.semester_id);
-
-      await client.query(
-        `UPDATE room_inventory_change_sets SET status='approved', reviewed_by=$2, reviewed_at=now(),
-           reviewer_notes=$3, rejection_reason=NULL, updated_at=now() WHERE id=$1`,
-        [changeSetId, ctx.userId, notes ?? null],
-      );
+      await this.applyChangeSet(client, row, ctx.userId, notes ?? null);
       return { landlordId: row.landlord_id, propertyId: row.property_id, summary };
     });
     await this.audit.record(ctx, 'room_change_set.approve', 'room_inventory_change_set', changeSetId, { notes });
@@ -617,6 +624,163 @@ export class RoomManagementService {
       action: 'Review your changes',
     });
     return { rejected: true };
+  }
+
+  /** Manage-only properties waiting for (or sent back from) Ops approval, in
+   * the caller's staff scope. Inspectors see them too, to check the location. */
+  async managedPropertyQueue(ctx: RlsContext) {
+    return this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      const result = await client.query(
+        `SELECT p.id, p.name, p.street_address AS "streetAddress", p.location_details AS "locationDetails",
+           p.catchment, p.created_at AS "createdAt", p.manage_review_status AS "reviewStatus",
+           p.manage_rejection_reason AS "rejectionReason", p.authority_role AS "authorityRole",
+           p.proposed_room_categories AS "proposedRoomCategories", p.cover_photo_key AS "coverPhotoKey",
+           u.name AS "landlordName", coalesce(u.contact_phone, u.phone) AS "landlordPhone", u.email AS "landlordEmail",
+           l.kyc_status AS "landlordKycStatus"
+         FROM properties p JOIN users u ON u.id=p.landlord_id JOIN landlords l ON l.user_id=p.landlord_id
+         WHERE p.listing_intent='manage_only' AND p.manage_review_status <> 'approved'
+           AND public.app_staff_scope_for($1::uuid, $2::text, $3::boolean, p.id, false)
+         ORDER BY p.manage_review_status, p.created_at`,
+        [ctx.userId, ctx.role, ctx.mfaVerified === true],
+      );
+      return result.rows as unknown[];
+    });
+  }
+
+  /** Ops approves a manage-only property after checking the basics (Festo,
+   * 2026-11-01). The room types the landlord declared become real rooms now,
+   * changes already made wait no longer, and later changes apply at once. */
+  async approveManagedProperty(ctx: RlsContext, propertyId: string) {
+    const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await assertStaffScope(client, ctx, propertyId);
+      const property = (await client.query<{ landlord_id: string; name: string; listing_intent: string; manage_review_status: string }>(
+        `SELECT landlord_id, name, listing_intent, manage_review_status FROM properties WHERE id=$1 FOR UPDATE`, [propertyId],
+      )).rows[0];
+      if (!property) throw new NotFoundException('Property not found');
+      if (property.listing_intent !== 'manage_only') {
+        throw new ConflictException('This property is listed to students, so it goes through the verification visit instead');
+      }
+      if (property.manage_review_status === 'approved') throw new ConflictException('This property is already approved');
+      await client.query(
+        `UPDATE properties SET manage_review_status='approved', manage_reviewed_at=now(), manage_reviewed_by=$2,
+           manage_rejection_reason=NULL WHERE id=$1`, [propertyId, ctx.userId],
+      );
+      const roomsCreated = await this.createDeclaredRooms(client, propertyId, property.landlord_id, ctx.userId);
+      await this.applyOpenChangeSets(client, propertyId, ctx.userId, ['draft', 'pending_review', 'visit_required'],
+        'Applied when Operations approved this managed property');
+      return { landlordId: property.landlord_id, name: property.name, roomsCreated };
+    });
+    await this.audit.record(ctx, 'properties.manage_approve', 'property', propertyId, { roomsCreated: result.roomsCreated });
+    const message = `Operations approved ${result.name}. Your rooms are ready in Manage Rooms, and the changes you make there now apply at once.`;
+    await this.notifications.notify(result.landlordId, 'property.manage_approved', 'in_app', {
+      message, href: `/landlord/rooms?propertyId=${propertyId}`, propertyId,
+    });
+    this.emailUsers([result.landlordId], {
+      subject: 'Your property is approved on CampusHomes',
+      message,
+      path: `/landlord/rooms?propertyId=${propertyId}`,
+      action: 'Open Manage Rooms',
+    });
+    return { approved: true, roomsCreated: result.roomsCreated };
+  }
+
+  async rejectManagedProperty(ctx: RlsContext, propertyId: string, reason: string) {
+    const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await assertStaffScope(client, ctx, propertyId);
+      const updated = await client.query<{ landlord_id: string; name: string }>(
+        `UPDATE properties SET manage_review_status='rejected', manage_reviewed_at=now(), manage_reviewed_by=$2,
+           manage_rejection_reason=$3
+         WHERE id=$1 AND listing_intent='manage_only' AND manage_review_status <> 'approved'
+         RETURNING landlord_id, name`, [propertyId, ctx.userId, reason],
+      );
+      if (!updated.rows[0]) throw new ConflictException('This property is not waiting for approval');
+      return updated.rows[0];
+    });
+    await this.audit.record(ctx, 'properties.manage_reject', 'property', propertyId, { reason });
+    const message = `Operations could not approve ${result.name} yet: ${reason}`;
+    await this.notifications.notify(result.landlord_id, 'property.manage_rejected', 'in_app', {
+      message, href: '/landlord/properties', propertyId,
+    });
+    this.emailUsers([result.landlord_id], {
+      subject: 'Your property needs a change before approval',
+      message,
+      path: '/landlord/properties',
+      action: 'Open your properties',
+    });
+    return { rejected: true };
+  }
+
+  /** Turns the room types a landlord declared on the property form into real
+   * rooms, beds and prices for the current semester. Skipped once the
+   * property has any room type or room: those the landlord built in Manage
+   * Rooms are the real inventory then. Returns the number of rooms made. */
+  private async createDeclaredRooms(client: PoolClient, propertyId: string, landlordId: string, reviewerId: string) {
+    const property = (await client.query<{ catchment: string; proposed: ProposedRoomCategory[] | null }>(
+      `SELECT catchment, proposed_room_categories AS proposed FROM properties WHERE id=$1`, [propertyId],
+    )).rows[0];
+    const rows = property?.proposed ?? [];
+    if (rows.length === 0) return 0;
+    const existing = await client.query(
+      // Archived ones don't count: a cancelled draft type leaves its row behind.
+      `SELECT 1 FROM room_types WHERE property_id=$1 AND archived_at IS NULL
+       UNION ALL SELECT 1 FROM units WHERE property_id=$1 AND archived_at IS NULL LIMIT 1`, [propertyId],
+    );
+    if (existing.rows.length) return 0;
+    // Same choice as the Manage Rooms page's default semester.
+    const semester = (await client.query<{ id: string }>(
+      `SELECT id FROM semesters WHERE archived_at IS NULL AND ends_on >= current_date
+         AND (university IS NULL OR university::text = $1)
+       ORDER BY starts_on LIMIT 1`, [property!.catchment],
+    )).rows[0];
+    if (!semester) throw new ConflictException("No current semester is set up for this property's university, so its rooms can't be created");
+
+    const lastNumber = new Map<string, number>();
+    let total = 0;
+    for (const row of rows) {
+      const capacity = FIXED_BEDS_PER_ROOM[row.category] ?? row.bedsPerRoom ?? 1;
+      const variant = row.variantName?.trim() || null;
+      const typeId = (await client.query<{ id: string }>(
+        `INSERT INTO room_types(property_id, created_by) VALUES ($1,$2) RETURNING id`, [propertyId, landlordId],
+      )).rows[0]!.id;
+      const versionId = (await client.query<{ id: string }>(
+        `INSERT INTO room_type_versions(room_type_id, version_number, title, category, bathroom_type, capacity,
+           amenities, semester_id, price_per_term_ugx, deposit_ugx, status, submitted_at, reviewed_by, reviewed_at, created_by)
+         VALUES ($1,1,$2,$3,$4,$5,'[]'::jsonb,$6,$7,$8,'approved',now(),$9,now(),$10) RETURNING id`,
+        [typeId, roomTypeTitle(row.category, variant), row.category, row.selfContained ? 'ensuite' : 'unspecified',
+          capacity, semester.id, row.pricePerTermUgx, row.depositUgx ?? null, reviewerId, landlordId],
+      )).rows[0]!.id;
+      await client.query(`UPDATE room_types SET current_version_id=$2 WHERE id=$1`, [typeId, versionId]);
+      for (const [index, key] of (row.photoKeys ?? []).entries()) {
+        await client.query(
+          `INSERT INTO room_type_photos(room_type_version_id, storage_key, sort_order, is_primary, uploaded_by)
+           VALUES ($1,$2,$3,$4,$5)`, [versionId, key, index, index === 0, landlordId],
+        );
+      }
+      // "Single 1", "Single 2", or the variant's name; numbering continues
+      // when two rows share a name so codes never collide. Keyed case-blind,
+      // like assertRoomCodeAvailable compares codes.
+      const prefix = variant ?? roomTypeTitle(row.category).replace(/ Room$/, '');
+      const numberKey = prefix.toLocaleLowerCase();
+      const first = (lastNumber.get(numberKey) ?? 0) + 1;
+      lastNumber.set(numberKey, first + row.roomCount - 1);
+      const unitIds = (await client.query<{ id: string }>(
+        `INSERT INTO units(property_id, room_type_id, label, capacity, room_category, room_category_label, self_contained)
+         SELECT $1, $2, $3 || ' ' || n, $4, $5::room_category, $6, $7 FROM generate_series($8::int, $9::int) n
+         RETURNING id`,
+        [propertyId, typeId, prefix, capacity, row.category, variant, row.selfContained ?? false, first, first + row.roomCount - 1],
+      )).rows.map((unit) => unit.id);
+      await client.query(
+        `INSERT INTO beds(unit_id, label) SELECT unit_id, 'Bed ' || n FROM unnest($1::uuid[]) unit_id, generate_series(1, $2::int) n`,
+        [unitIds, capacity],
+      );
+      await client.query(
+        `INSERT INTO unit_semester_pricing(unit_id, semester_id, price_per_term_ugx, deposit_ugx)
+         SELECT unit_id, $2, $3, $4 FROM unnest($1::uuid[]) unit_id`,
+        [unitIds, semester.id, row.pricePerTermUgx, row.depositUgx ?? null],
+      );
+      total += unitIds.length;
+    }
+    return total;
   }
 
   private async overviewForProperty(ctx: RlsContext, propertyId: string) {
@@ -1056,6 +1220,57 @@ export class RoomManagementService {
     return { physicalRoomChangesCount: Number(result.rows[0]?.rooms ?? 0), roomTypeChangesCount: Number(result.rows[0]?.types ?? 0) };
   }
 
+  /** Applies every change in the set and marks it approved. Returns the new
+   * unit id of each 'create' change, keyed by change id. */
+  private async applyChangeSet(client: PoolClient, set: ChangeSetRow, reviewerId: string, notes: string | null) {
+    const versions = await client.query<RoomTypeVersionRow>(
+      `SELECT * FROM room_type_versions WHERE change_set_id=$1 ORDER BY version_number`, [set.id],
+    );
+    for (const version of versions.rows) {
+      await this.applyRoomTypeVersion(client, version, set.semester_id, reviewerId, notes);
+    }
+    const changes = await client.query<{ id: string; action: string; unit_id: string | null; room_type_id: string | null; proposed_data: JsonRecord }>(
+      `SELECT * FROM room_unit_changes WHERE change_set_id=$1 ORDER BY created_at`, [set.id],
+    );
+    const created = new Map<string, string>();
+    for (const change of changes.rows) {
+      const unitId = await this.applyUnitChange(client, change, set.semester_id);
+      if (unitId) created.set(change.id, unitId);
+    }
+    await client.query(
+      `UPDATE room_inventory_change_sets SET status='approved', submitted_at=COALESCE(submitted_at, now()),
+         reviewed_by=$2, reviewed_at=now(), reviewer_notes=$3, rejection_reason=NULL, updated_at=now() WHERE id=$1`,
+      [set.id, reviewerId, notes],
+    );
+    return created;
+  }
+
+  /** Applies this property's open change sets in the given statuses, oldest first. */
+  private async applyOpenChangeSets(client: PoolClient, propertyId: string, reviewerId: string, statuses: string[], notes: string) {
+    const sets = await client.query<ChangeSetRow>(
+      `SELECT * FROM room_inventory_change_sets WHERE property_id=$1 AND status = ANY($2::text[])
+       ORDER BY created_at FOR UPDATE`, [propertyId, statuses],
+    );
+    const created = new Map<string, string>();
+    for (const set of sets.rows) {
+      for (const [changeId, unitId] of await this.applyChangeSet(client, set, reviewerId, notes)) created.set(changeId, unitId);
+    }
+    return created;
+  }
+
+  /** Once Ops has approved a manage-only property, its landlord's room
+   * changes apply at once instead of waiting for review (Festo, 2026-11-01):
+   * nothing there is shown to students. Returns null while changes still
+   * wait (a listed property, or a manage-only one not yet approved). */
+  private async applyIfManaged(client: PoolClient, propertyId: string, landlordId: string) {
+    const managed = await client.query(
+      `SELECT 1 FROM properties WHERE id=$1 AND listing_intent='manage_only' AND manage_review_status='approved'`,
+      [propertyId],
+    );
+    if (!managed.rows.length) return null;
+    return this.applyOpenChangeSets(client, propertyId, landlordId, ['draft'], 'Applied at once: Operations approved this managed property');
+  }
+
   private async applyRoomTypeVersion(client: PoolClient, version: RoomTypeVersionRow, semesterId: string, reviewerId: string, notes: string | null) {
     await client.query(
       `UPDATE room_type_versions SET status='approved', reviewed_by=$2, reviewed_at=now(), reviewer_notes=$3,
@@ -1077,15 +1292,16 @@ export class RoomManagementService {
     }
   }
 
+  /** Returns the new unit's id for a 'create' change. */
   private async applyUnitChange(client: PoolClient, change: {
     id: string; action: string; unit_id: string | null; room_type_id: string | null; proposed_data: JsonRecord;
-  }, semesterId: string) {
+  }, semesterId: string): Promise<string | null> {
     if (change.action === 'archive' && change.unit_id) {
       const live = await client.query(`SELECT 1 FROM reservations r JOIN beds b ON b.id=r.bed_id
         WHERE b.unit_id=$1 AND r.status IN ('reserved','booked','occupied') LIMIT 1`, [change.unit_id]);
       if (live.rows.length) throw new ConflictException('A room gained a live reservation and can no longer be archived');
       await client.query(`UPDATE units SET archived_at=now(),operational_status='blocked' WHERE id=$1`, [change.unit_id]);
-      return;
+      return null;
     }
     if (!change.room_type_id) throw new BadRequestException('Room change has no room type');
     const spec = await client.query<{ capacity: number; category: string; price_per_term_ugx: number; deposit_ugx: number | null }>(
@@ -1105,7 +1321,7 @@ export class RoomManagementService {
       await this.resizeBeds(client, unitId, 0, Number(version.capacity));
       await client.query(`INSERT INTO unit_semester_pricing(unit_id,semester_id,price_per_term_ugx,deposit_ugx) VALUES($1,$2,$3,$4)`,
         [unitId, semesterId, version.price_per_term_ugx, version.deposit_ugx]);
-      return;
+      return unitId;
     }
     if (change.action === 'update' && change.unit_id) {
       const current = await client.query<{ capacity: number }>(`SELECT capacity FROM units WHERE id=$1 FOR UPDATE`, [change.unit_id]);
@@ -1121,6 +1337,7 @@ export class RoomManagementService {
         [change.unit_id, semesterId, version.price_per_term_ugx, version.deposit_ugx],
       );
     }
+    return null;
   }
 
   private async resizeBeds(client: PoolClient, unitId: string, oldCapacity: number, newCapacity: number) {

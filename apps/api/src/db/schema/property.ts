@@ -69,6 +69,13 @@ export const properties = pgTable('properties', {
   // Set by trigger on manage_only -> list: publishing then needs an
   // inspection completed after it (0076).
   listingRequestedAt: timestamp('listing_requested_at', { withTimezone: true }),
+  // Ops approval of a manage-only property (0080): once 'approved', its room
+  // changes apply without per-change review. Only a service_role write may
+  // change these (trigger properties_manage_review_guard).
+  manageReviewStatus: text('manage_review_status').notNull().default('pending'),
+  manageReviewedAt: timestamp('manage_reviewed_at', { withTimezone: true }),
+  manageReviewedBy: uuid('manage_reviewed_by').references(() => users.id),
+  manageRejectionReason: text('manage_rejection_reason'),
   amenities: jsonb('amenities').notNull().default({}),
   utilities: jsonb('utilities').notNull().default({}),
   houseRules: jsonb('house_rules').notNull().default([]),
