@@ -1575,3 +1575,31 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
   `/landlord-agreement` draft is not gated (no in-force version exists; landlord
   onboarding links to it). Activating the drafts = updating `legal-article`-based
   pages with approved text, not flipping the flag on prod.
+
+- **Ops approval of manage-only properties; room changes apply at once after it
+  (2026-11-01, Festo; changes the 2026-10-26 "manage-only room changes go to
+  pending_review" rule):**
+  - Migration 0080: `properties.manage_review_status` ('pending' default |
+    'approved' | 'rejected') + `manage_reviewed_at/by` +
+    `manage_rejection_reason`. Trigger `properties_manage_review_guard` lets
+    only a service_role write change them (landlords can UPDATE their own row
+    under RLS, so an insert starts pending and any other update keeps them).
+  - Submitting a manage-only property (or the landlord switching one to
+    manage-only) alerts active `ops_lead`/`ops_inspector` assignments whose
+    scope covers it (platform-wide, its catchment or 'all', or the property):
+    in-app `property.manage_submitted` + best-effort email
+    (`listings/managed-property-alert.ts`).
+  - Ops page `/ops/managed-properties` (`GET/POST /ops/managed-properties`,
+    `room_changes.review` to decide, inspectors read-only with
+    `visits.inspect`; `assertStaffScope` on decide). Approve turns the
+    declared `proposed_room_categories` into room types, rooms ("Single 1",
+    or the variant name), beds and prices for the catchment's current
+    semester (skipped if the property already has room types or rooms), then
+    applies any draft/pending change sets. Reject stores a reason the landlord
+    sees in Manage Rooms; a rejected property can still be approved later.
+  - `RoomManagementService.applyIfManaged`: on an approved manage-only
+    property every landlord room write (types, add, bulk, edit, batch edit,
+    delete) applies its draft in the same transaction (change set marked
+    approved, reviewed_by = landlord). Listed properties and unapproved
+    manage-only ones keep the review flow. `listings_intent_guard` unchanged.
+  - Property form / onboarding hide room-type photo pickers for manage-only.

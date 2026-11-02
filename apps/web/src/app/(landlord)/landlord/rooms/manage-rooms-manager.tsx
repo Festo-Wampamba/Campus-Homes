@@ -262,6 +262,25 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
         </div>
       </div>
 
+      {/* A manage-only property waits for one Ops approval; after it, room changes apply at once. */}
+      {property.listingIntent === "manage_only" && property.manageReviewStatus && property.manageReviewStatus !== "approved" && (
+        <div
+          role="status"
+          className={property.manageReviewStatus === "rejected"
+            ? "flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
+            : "flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"}
+        >
+          {property.manageReviewStatus === "rejected"
+            ? <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
+            : <Clock aria-hidden className="mt-0.5 size-4 shrink-0" />}
+          <p>
+            {property.manageReviewStatus === "rejected"
+              ? `CampusHomes Operations sent this property back: ${property.manageRejectionReason ?? "contact support for details"}. Fix it, then contact support so they can approve it.`
+              : "CampusHomes Operations is checking this property. Once they approve it, the rooms you declared appear here and every change you make applies at once. Until then, room changes wait for their review."}
+          </p>
+        </div>
+      )}
+
       {/* Pending Review / Draft Change-Set Banner */}
       {changeSet && (
         <div className="rounded-xl border overflow-hidden shadow-xs transition-all animate-in fade-in">

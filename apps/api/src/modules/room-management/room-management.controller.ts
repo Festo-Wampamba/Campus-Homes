@@ -2,13 +2,14 @@ import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch
 import type { Response } from 'express';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
-import { PermissionsGuard, RequirePermission } from '../auth/permissions';
+import { PermissionsGuard, RequireAnyPermission, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   BatchRoomDeleteDto,
   BatchRoomUpdateDto,
   BedBlockInputDto,
   BulkRoomInputDto,
+  RejectManagedPropertyDto,
   RejectRoomChangeSetDto,
   ReviewRoomChangeSetDto,
   RoomManagementQueryDto,
@@ -139,5 +140,34 @@ export class RoomManagementOpsController {
   @RequirePermission('room_changes.review')
   reject(@Req() req: AuthenticatedRequest, @Param('changeSetId', ParseUUIDPipe) changeSetId: string, @Body() body: RejectRoomChangeSetDto) {
     return this.rooms.rejectChangeSet(rlsCtx(req), changeSetId, body.reason);
+  }
+}
+
+// Ops approval of manage-only properties (Festo, 2026-11-01). Leads approve;
+// inspectors may open the list to check a property's location first.
+@Controller('ops/managed-properties')
+@UseGuards(AuthGuard, PermissionsGuard, RolesGuard)
+export class ManagedPropertiesOpsController {
+  constructor(private readonly rooms: RoomManagementService) {}
+
+  @Get()
+  @Roles('ops_inspector', 'ops_lead', 'admin')
+  @RequireAnyPermission('room_changes.review', 'visits.inspect')
+  queue(@Req() req: AuthenticatedRequest) {
+    return this.rooms.managedPropertyQueue(rlsCtx(req));
+  }
+
+  @Post(':propertyId/approve')
+  @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
+  approve(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.rooms.approveManagedProperty(rlsCtx(req), propertyId);
+  }
+
+  @Post(':propertyId/reject')
+  @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
+  reject(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: RejectManagedPropertyDto) {
+    return this.rooms.rejectManagedProperty(rlsCtx(req), propertyId, body.reason);
   }
 }
