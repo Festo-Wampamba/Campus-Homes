@@ -86,8 +86,25 @@ export class LogtoManagementClient {
   async resetMfaSkip(logtoUserId: string): Promise<void> {
     await this.request(`/api/users/${encodeURIComponent(logtoUserId)}/logto-configs`, {
       method: 'PATCH',
-      body: JSON.stringify({ mfa: { skipped: false } }),
+      body: JSON.stringify({ mfa: { skipped: false, skipMfaOnSignIn: false, enabled: true } }),
     });
+  }
+
+  /** Returns whether mandatory staff MFA already covered this authentication.
+   * Repairs membership/configuration for the following interaction. A user
+   * with a factor but an explicit skip/disabled flag must authenticate again. */
+  async prepareStaffMfa(logtoUserId: string): Promise<boolean> {
+    const orgId = await this.staffOrganizationId();
+    const userPath = `/api/users/${encodeURIComponent(logtoUserId)}`;
+    const organizations = await this.request<Array<{ id: string }>>(`${userPath}/organizations`);
+    const config = await this.request<{ mfa?: { skipped?: boolean; skipMfaOnSignIn?: boolean; enabled?: boolean } }>(
+      `${userPath}/logto-configs`,
+    );
+    const isMember = organizations.some((org) => org.id === orgId);
+    const ready = isMember && config.mfa?.enabled !== false && config.mfa?.skipMfaOnSignIn !== true;
+    if (!isMember) await this.addToStaffMfaOrganization(logtoUserId);
+    if (!ready || config.mfa?.skipped) await this.resetMfaSkip(logtoUserId);
+    return ready;
   }
 
   /** Students are never asked to set up 2-step verification. With the

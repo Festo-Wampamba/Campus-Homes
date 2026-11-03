@@ -4,7 +4,7 @@ import { parse } from 'cookie';
 import type { Request, Response } from 'express';
 import type { Prompt } from '@logto/node';
 import { authIntent, safeAuthDestination } from '@campushomes/shared';
-import { loadEnv } from '../../config/env';
+import { loadEnv, type Env } from '../../config/env';
 import { readSessionCookie } from './auth.guard';
 import { AuthTransactions, AUTH_TRANSACTION_TTL_SECONDS, transactionCookie } from './auth-transactions';
 import { digest, matchesSecret, providerAssurance, providerAssuranceFailure, redactSecrets } from './auth-security';
@@ -64,6 +64,15 @@ export class AuthController {
     }
     const intent = authIntent(intentParam, portalParam, next);
     const portal: Portal = intent === 'staff' ? 'staff' : 'consumer';
+    return this.startSignIn(env, portal, intent, next, res, { token, email, screen });
+  }
+
+  private async startSignIn(
+    env: Env, portal: Portal, intent: ReturnType<typeof authIntent>, next: string | undefined,
+    res: Response, options: { token?: string; email?: string; screen?: string; mfaEnrollmentSub?: string },
+  ) {
+    const requestId = correlationId(res);
+    const { token, email, screen, mfaEnrollmentSub } = options;
     const state = randomBytes(32).toString('base64url');
     const browserSecret = randomBytes(32).toString('base64url');
     const nonce = randomBytes(32).toString('base64url');
@@ -74,6 +83,7 @@ export class AuthController {
         await this.transactions.save(state, {
           portal, intent, next: safeAuthDestination(next), nonce, startedAt,
           browserHash: digest(browserSecret), storage: values,
+          ...(mfaEnrollmentSub ? { mfaEnrollmentSub } : {}),
         });
         clearLegacyCookies(res, env.AUTH_COOKIE_DOMAIN);
         res.cookie(transactionCookie(state), browserSecret, {
@@ -92,8 +102,8 @@ export class AuthController {
         extraParams: {
           nonce,
           ...(portal === 'staff' ? { max_age: '0', claims: JSON.stringify({ id_token: { auth_time: { essential: true }, amr: { essential: true } } }) } : {}),
-          // Logto enforces this supported ACR value as a strict step-up
-          // requirement: no password-only staff authorization code is issued.
+          // Request signed step-up proof where supported. Older hosted Logto
+          // releases use the organization policy checked in the callback.
           ...(portal === 'staff' ? { acr_values: 'urn:logto:acr:mfa' } : {}),
           ...(token ? { one_time_token: token } : {}),
         },
@@ -137,6 +147,7 @@ export class AuthController {
       // The SDK checks issuer/audience/signature/state/PKCE; this explicit
       // nonce check covers the binding absent from the installed SDK.
       if (typeof claims.nonce !== 'string' || !matchesSecret(claims.nonce, transaction.nonce)) return fail('sign_in_failed');
+      if (transaction.mfaEnrollmentSub && claims.sub !== transaction.mfaEnrollmentSub) return fail('sign_in_failed');
       const provisioned = await this.provisioning.provision({
         sub: claims.sub, email: claims.email, phoneNumber: claims.phone_number, name: claims.name,
         emailVerified: claims.email_verified === true, phoneVerified: claims.phone_number_verified === true,
@@ -148,16 +159,11 @@ export class AuthController {
       // policy only for a user who has a factor enrolled, which Logto always
       // verifies at sign-in. A failed lookup throws and fails closed below.
       const staffFlow = transaction.portal === 'staff';
-      // Staff belong to Logto's MFA-required organization, so Logto makes them
-      // set up an authenticator with no Skip (see addToStaffMfaOrganization).
-      // Added on every staff sign-in, before the check below: one that's
-      // refused now is made to enrol at the next sign-in. Best-effort; our
-      // own check still refuses staff without a factor either way.
+      // Organization membership takes effect on the next provider interaction.
+      // Do not trust the policy fallback unless it already covered this login.
+      let mfaPolicyReady = false;
       if (staffFlow) {
-        await this.management.addToStaffMfaOrganization(claims.sub).catch((error: unknown) => this.logger.warn(JSON.stringify({
-          event: 'auth.callback.staff_mfa_org_failed', requestId,
-          error: redactSecrets(error instanceof Error ? error.message : String(error)),
-        })));
+        mfaPolicyReady = await this.management.prepareStaffMfa(claims.sub);
       } else {
         // Revoked or expired staff roles have no event of their own; a later
         // consumer sign-in takes the account out of the staff organization so
@@ -170,7 +176,7 @@ export class AuthController {
           })));
       }
       const mfaEnrolled = staffFlow && env.LOGTO_MFA_POLICY_VERIFIED ? await this.management.hasMfaFactor(claims.sub) : false;
-      const mfaPolicyHolds = env.LOGTO_MFA_POLICY_VERIFIED && mfaEnrolled;
+      const mfaPolicyHolds = env.LOGTO_MFA_POLICY_VERIFIED && mfaEnrolled && mfaPolicyReady;
       const assurance = providerAssurance(claims, transaction.startedAt, staffFlow, mfaPolicyHolds);
       if (staffFlow && !assurance.mfaVerified) {
         this.logger.warn(JSON.stringify({
@@ -179,13 +185,15 @@ export class AuthController {
           reason: providerAssuranceFailure(claims, transaction.startedAt, true, mfaPolicyHolds),
           mfaEnrolled,
         }));
-        // Otherwise a staff member who once pressed "Skip" is never offered
-        // setup again and stays locked out. Best-effort: access is denied either way.
-        if (env.LOGTO_MFA_POLICY_VERIFIED && !mfaEnrolled) {
-          await this.management.resetMfaSkip(claims.sub).catch((error: unknown) => this.logger.warn(JSON.stringify({
-            event: 'auth.callback.mfa_skip_reset_failed', requestId,
-            error: redactSecrets(error instanceof Error ? error.message : String(error)),
-          })));
+        // A verified invitation may create the identity before it belongs to
+        // the staff organization. Continue immediately into its mandatory MFA
+        // interaction, without a session, a second password entry, or a loop.
+        if (env.LOGTO_MFA_POLICY_VERIFIED && !transaction.mfaEnrollmentSub &&
+          claims.email_verified === true && claims.email &&
+          providerAssuranceFailure(claims, transaction.startedAt, true, mfaPolicyHolds) === 'missing_mfa_claim') {
+          const { token } = await this.management.createOneTimeToken(claims.email, 'SignIn', 300);
+          return this.startSignIn(env, 'staff', 'staff', transaction.next ?? undefined, res,
+            { token, email: claims.email, mfaEnrollmentSub: claims.sub });
         }
         return fail('mfa_required');
       }

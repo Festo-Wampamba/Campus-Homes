@@ -16,7 +16,7 @@ const { Pool } = require('pg');
 const { loadEnv } = require('../dist/src/config/env');
 const { LogtoManagementClient } = require('../dist/src/modules/auth/logto-management.client');
 
-const STAFF_ROLE_KEYS = ['super_admin', 'platform_admin', 'ops_lead', 'ops_inspector', 'finance_admin', 'support_admin', 'auditor'];
+const { STAFF_ROLE_KEYS } = require('@campushomes/shared');
 
 async function staffLogtoIds(env) {
   const pool = new Pool({ connectionString: env.DATABASE_URL });
@@ -49,6 +49,11 @@ async function main() {
   const { mfa } = await logto.getSignInExperience();
   const factors = Array.from(new Set([...(mfa?.factors ?? []), 'Totp', 'WebAuthn', 'BackupCode']));
   await logto.updateSignInExperience({ mfa: { factors, policy: 'NoPrompt', organizationRequiredMfaPolicy: 'Mandatory' } });
+  // Password errors must have a verified recovery path. This enables the
+  // provider's existing email reset flow; it does not change any password.
+  const experience = await logto.getSignInExperience();
+  const forgotPasswordMethods = Array.from(new Set([...(experience.forgotPasswordMethods ?? []), 'EmailVerificationCode']));
+  await logto.updateSignInExperience({ forgotPasswordMethods });
   console.log(`MFA policy set: NoPrompt for everyone, Mandatory for staff organization members (factors: ${factors.join(', ')}).`);
 
   const ids = await staffLogtoIds(env);
@@ -56,6 +61,7 @@ async function main() {
   for (const id of ids) {
     try {
       await logto.addToStaffMfaOrganization(id);
+      await logto.resetMfaSkip(id);
     } catch (err) {
       failed += 1;
       console.error(`Failed to add ${id}: ${err instanceof Error ? err.message : err}`);

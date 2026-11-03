@@ -34,6 +34,10 @@ The bootstrap is idempotent, requires an active email-verified Logto-linked user
 
 Use `/admin/access/staff` to invite staff and inspect invitation delivery. Use its **Manage access** action (which opens `/admin/users`) to grant, revoke, or scope roles for an existing person. Do not create staff directly in Logto and do not edit `users.role` manually.
 
+All staff, including Directors, General Managers and Front Desk, must complete MFA. On a first invitation sign-in, the callback adds the verified identity to the MFA-required organization and, if necessary, immediately starts one identity-bound, short-lived continuation into hosted MFA setup. No CampusHomes staff session is issued until MFA passes. The continuation preserves the requested workspace and cannot loop or switch accounts. Existing MFA skip/disabled settings are repaired before another provider authentication is required.
+
+Run `auth:staff-mfa` in the target API environment to reconcile **all** shared staff role keys and enable verified email password recovery. It does not change passwords or enroll factors for users. A rejected password is a provider credential failure, not an Administration role failure: use Logto's **Forgot your password?** flow, complete the emailed verification, set the replacement password and then finish staff MFA. Never share passwords or authenticator secrets with an administrator.
+
 ## Apply hosted sign-in branding
 
 The branding command reads the current Logto Sign-in Experience first and is a dry run unless `--apply` is present. Keep staging and production credentials in their separate deployment environments; never copy M2M secrets into the command line or Git.
@@ -56,6 +60,9 @@ The script validates that the target label matches the Logto and web hostnames. 
 | --- | --- | --- | --- | --- |
 | Owner / emergency administrator | `super_admin` | `platform_wide` | `/admin` | none; keep to one or two people |
 | Day-to-day administrator | `platform_admin` | `platform_wide` | `/admin` | Super Admin management |
+| Company director | `director` | `platform_wide` | `/admin/leadership` | payment execution and platform administration |
+| General manager | `general_manager` | relevant catchment or platform-wide | `/admin/leadership` | senior role grants and automatic financial approval |
+| Office administrator / Front Desk | `office_admin` | relevant catchment or platform-wide | `/admin/front-desk` | role administration and financial approval |
 | Operations manager | `ops_lead` | relevant catchment, or platform-wide only when truly needed | `/ops` | finance and staff administration |
 | Field inspector | `ops_inspector` | assigned catchment | `/ops` | publishing, finance, staff administration |
 | Finance operator | `finance_admin` | `platform_wide` | `/admin/finance` | Ops, support mutation, role management |

@@ -16,6 +16,8 @@ export interface AuthTransaction {
   browserHash: string;
   startedAt: number;
   storage: Record<string, string>;
+  /** Server-only continuation: bounds enrollment to one retry and the same identity. */
+  mfaEnrollmentSub?: string;
 }
 
 export function transactionCookie(state: string): string {

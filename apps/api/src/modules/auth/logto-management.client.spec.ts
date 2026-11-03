@@ -85,8 +85,46 @@ describe('self-hosted Logto Management API', () => {
     await client().resetMfaSkip('user-1');
     expect(fetcher.mock.calls[1]).toEqual([
       'https://auth.example.test/api/users/user-1/logto-configs',
-      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ mfa: { skipped: false } }) }),
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ mfa: { skipped: false, skipMfaOnSignIn: false, enabled: true } }) }),
     ]);
+  });
+
+  describe('prepareStaffMfa', () => {
+    function settings(member: boolean, mfa: { skipped?: boolean; enabled?: boolean; skipMfaOnSignIn?: boolean } = {}) {
+      return jest.spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'org-1', name: 'CampusHomes Staff', isMfaRequired: true }])))
+        .mockResolvedValueOnce(new Response(JSON.stringify(member ? [{ id: 'org-1' }] : [])))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ mfa })))
+        .mockImplementation(async () => new Response(null, { status: 204 }));
+    }
+
+    it('accepts an existing organization member with no MFA bypass', async () => {
+      const fetcher = settings(true);
+      await expect(client().prepareStaffMfa('user-1')).resolves.toBe(true);
+      expect(fetcher).toHaveBeenCalledTimes(4);
+    });
+
+    it('adds a new staff member and requires a fresh provider interaction', async () => {
+      const fetcher = settings(false);
+      await expect(client().prepareStaffMfa('user-1')).resolves.toBe(false);
+      expect(fetcher.mock.calls[4]![1]).toMatchObject({ method: 'POST', body: JSON.stringify({ userIds: ['user-1'] }) });
+      expect(fetcher.mock.calls[5]![1]).toMatchObject({ method: 'PATCH' });
+    });
+
+    it.each([{ skipMfaOnSignIn: true }, { enabled: false }])('repairs an MFA bypass (%j) before reauthentication', async (mfa) => {
+      const fetcher = settings(true, mfa);
+      await expect(client().prepareStaffMfa('user-1')).resolves.toBe(false);
+      expect(fetcher.mock.calls[4]![1]).toMatchObject({ method: 'PATCH',
+        body: JSON.stringify({ mfa: { skipped: false, skipMfaOnSignIn: false, enabled: true } }) });
+    });
+
+    it('does not trust MFA policy if the configuration lookup fails', async () => {
+      settings(true).mockReset()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })))
+        .mockResolvedValueOnce(new Response('unavailable', { status: 503 }));
+      await expect(client().prepareStaffMfa('user-1')).rejects.toThrow('HTTP 503');
+    });
   });
 
   describe('addToStaffMfaOrganization', () => {
