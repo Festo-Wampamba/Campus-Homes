@@ -207,6 +207,8 @@ export class PermissionsGuard implements CanActivate {
       'staff.deactivate', 'users.permissions_manage', 'visits.assign', 'visits.inspect',
       'visits.review', 'listings.read', 'listings.publish', 'units.update_operational_status',
       'room_changes.review']);
+    // These new endpoints explicitly intersect their SQL with permission scope.
+    for (const key of ['office.read', 'office.manage', 'executive.read']) scopeAware.add(key);
     const matched = alternatives.find((permission) => granted.has(permission) ||
       (scopeAware.has(permission) && grants.some((grant) => grant.permissionKey === permission)));
     if (!matched) {

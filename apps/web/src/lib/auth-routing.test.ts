@@ -11,7 +11,7 @@ describe("workspace routing", () => {
   it.each([
     ["super_admin", "/admin"], ["platform_admin", "/admin"],
     ["finance_admin", "/admin/finance"], ["support_admin", "/admin/inquiries"],
-    ["auditor", "/admin/audit-log"],
+    ["auditor", "/admin/audit-log"], ["director", "/admin/leadership"], ["general_manager", "/admin/leadership"], ["office_admin", "/admin/front-desk"],
   ])("routes %s to its working dashboard", (role, destination) => {
     expect(authDestination(session(access(["admin"], {
       roles: [role], assurance: { authenticatedAt: new Date().toISOString(), mfaVerified: true },
@@ -24,6 +24,7 @@ describe("workspace routing", () => {
   });
   it.each([
     ["student", ["student"], "/"],
+    ["manager", ["management"], "/management"],
     ["landlord", ["landlord"], "/landlord"],
     ["dual consumer", ["student", "landlord"], "/choose-workspace"],
     ["consumer plus staff", ["student", "admin"], "/choose-workspace"],
@@ -49,7 +50,7 @@ describe("workspace routing", () => {
     expect(authDestination(session(access(["student"])), next)).toBe(next);
   });
 
-  it.each(["/admin", "/ops/inspect", "/landlord", "/api/auth/logto/sign-out", "/auth/callback", "/sign-in", "/unknown"])("discards unauthorized or non-navigation next %s", (next) => {
+  it.each(["/management", "/admin", "/ops/inspect", "/landlord", "/api/auth/logto/sign-out", "/auth/callback", "/sign-in", "/unknown"])("discards unauthorized or non-navigation next %s", (next) => {
     expect(authDestination(session(access(["student"])), next)).toBe("/");
   });
 

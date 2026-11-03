@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ManagementModule } from './modules/management/management.module';
 import { APP_FILTER, APP_PIPE } from '@nestjs/core';
 import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -47,6 +48,7 @@ import { RootController } from './root.controller';
     JobsModule,
     UploadsModule,
     StaffModule,
+    ManagementModule,
     CalendarModule,
     TenantAgreementsModule,
     LeadsModule,

@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import StudentDashboardPage from "./page";
 
+jest.mock("../../../lib/server-api", () => ({ apiServer: () => Promise.resolve([]) }));
+
 const ROW = { propertyName: "Hunter Hostel", roomCategory: "single", bedLabel: "Bed 1", bookingRequestedAt: null };
 
 jest.mock("../../../lib/session", () => ({

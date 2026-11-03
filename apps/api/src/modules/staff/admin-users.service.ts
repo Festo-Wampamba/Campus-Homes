@@ -549,7 +549,7 @@ export class AdminUsersService {
     userId: string,
   ): Promise<boolean> {
     const assignments = await this.staffAssignments(client, userId);
-    if (assignments.some((a) => a.roleKey === 'super_admin') && !actorPermissions.has('roles.manage_super_admin')) {
+    if (assignments.some((a) => ['super_admin','director','general_manager'].includes(a.roleKey)) && !actorPermissions.has('roles.manage_super_admin')) {
       throw new ForbiddenException('Only a Super Admin can modify a Super Admin');
     }
     if (!assignments.every((a) => hasCoveringScope(actorAssignments, a.scopeType, a.scopeId))) {
@@ -568,7 +568,7 @@ export class AdminUsersService {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
     const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const target = (await client.query<{
-        id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean; isActiveSuperAdmin: boolean;
+        id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean; isActiveSuperAdmin: boolean; isSeniorLeadership: boolean;
       }>(`
         SELECT u.id, u.email, u.logto_user_id AS "logtoUserId", EXISTS (
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
@@ -579,10 +579,11 @@ export class AdminUsersService {
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
           WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
             AND ura.valid_from <= now() AND (ura.valid_until IS NULL OR ura.valid_until > now())
-        ) AS "isActiveSuperAdmin"
+        ) AS "isActiveSuperAdmin", EXISTS (SELECT 1 FROM user_role_assignments leadership JOIN roles lr ON lr.id=leadership.role_id WHERE leadership.user_id=u.id AND lr.key IN ('director','general_manager') AND leadership.revoked_at IS NULL) AS "isSeniorLeadership"
         FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE
       `, [userId])).rows[0];
       if (!target) throw new NotFoundException('User not found');
+      if (target.isSeniorLeadership && !actorPermissions.has('roles.manage_super_admin')) throw new ForbiddenException('Senior leadership access requires a Super Admin');
       if (target.isSuperAdmin) {
         if (!actorPermissions.has('roles.manage_super_admin')) {
           throw new ForbiddenException('Only a Super Admin can delete a Super Admin');
@@ -627,15 +628,16 @@ export class AdminUsersService {
   async purgeUser(actor: RlsContext, actorPermissions: Set<string>, userId: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot purge your own account');
     const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      const target = (await client.query<{ id: string; deletedAt: Date | null; logtoUserId: string | null; isSuperAdmin: boolean }>(`
+      const target = (await client.query<{ id: string; deletedAt: Date | null; logtoUserId: string | null; isSuperAdmin: boolean; isSeniorLeadership: boolean }>(`
         SELECT u.id, u.deleted_at AS "deletedAt", u.logto_user_id AS "logtoUserId", EXISTS (
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
           WHERE ura.user_id = u.id AND r.key = 'super_admin' AND ura.revoked_at IS NULL
-        ) AS "isSuperAdmin"
+        ) AS "isSuperAdmin", EXISTS (SELECT 1 FROM user_role_assignments leadership JOIN roles lr ON lr.id=leadership.role_id WHERE leadership.user_id=u.id AND lr.key IN ('director','general_manager') AND leadership.revoked_at IS NULL) AS "isSeniorLeadership"
         FROM users u WHERE u.id = $1 FOR UPDATE
       `, [userId])).rows[0];
       if (!target) throw new NotFoundException('User not found');
       if (!target.deletedAt) throw new BadRequestException('Soft-delete the account first, then purge it');
+      if (target.isSeniorLeadership && !actorPermissions.has('roles.manage_super_admin')) throw new ForbiddenException('Senior leadership access requires a Super Admin');
       if (target.isSuperAdmin && !actorPermissions.has('roles.manage_super_admin')) {
         throw new ForbiddenException('Only a Super Admin can purge a Super Admin');
       }

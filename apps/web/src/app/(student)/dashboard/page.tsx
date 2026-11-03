@@ -1,3 +1,5 @@
+import { apiServer } from "@/lib/server-api";
+import { PropertyNotices, type PropertyNotice } from "@/components/management/property-notices";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CalendarCheck, ChevronRight, Heart, MessageCircle, Search, UserRound } from "lucide-react";
@@ -16,7 +18,7 @@ export const metadata: Metadata = { title: "My dashboard" };
 const STAGE_ORDER: Record<string, number> = { reserved: 0, booked: 1, occupied: 2 };
 
 export default async function StudentDashboardPage() {
-  const [session, reservations, saved] = await Promise.all([getServerSession(), getMyReservations(), getSavedListings()]);
+  const [session, reservations, saved, notices] = await Promise.all([getServerSession(), getMyReservations(), getSavedListings(), apiServer<PropertyNotice[]>("/management/notices")]);
   const live = reservations.filter((r) => r.status === "reserved" || r.status === "booked");
   const nextHoldEnd = live.filter(row => row.status === "reserved").map((r) => r.reservedExpiresAt).filter((at): at is string => Boolean(at)).sort()[0];
   const firstName = session?.user.name?.trim().split(/\s+/)[0];
@@ -76,6 +78,7 @@ export default async function StudentDashboardPage() {
         )}
       </section>
 
+      <PropertyNotices notes={notices??[]} />
       <Link href="/search?campus=MUK" className="mt-8 inline-flex min-h-11 items-center gap-2 rounded-full bg-teal-900 px-5 text-sm font-bold text-white hover:bg-teal-700"><Search aria-hidden className="size-4" /> Find housing near campus</Link>
     </>
   );

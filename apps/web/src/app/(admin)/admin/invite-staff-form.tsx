@@ -144,7 +144,7 @@ export function InviteStaffForm({ invitation }: { invitation?: EditableInvitatio
                   id={`${idPrefix}-role`}
                   className={selectClassName}
                   value={roleKey}
-                  onChange={(e) => setRoleKey(e.target.value as StaffRoleKey)}
+                  onChange={(e) => { const key=e.target.value as StaffRoleKey; setRoleKey(key); if(key === "director") setScopeType("platform_wide"); }}
                 >
                   {INVITABLE_STAFF_ROLE_KEYS.map((key) => (
                     <option key={key} value={key}>
@@ -159,6 +159,7 @@ export function InviteStaffForm({ invitation }: { invitation?: EditableInvitatio
                   id={`${idPrefix}-scope`}
                   className={selectClassName}
                   value={scopeType}
+                  disabled={roleKey === "director"}
                   onChange={(e) => setScopeType(e.target.value as "platform_wide" | "catchment")}
                 >
                   <option value="platform_wide">Platform-wide</option>

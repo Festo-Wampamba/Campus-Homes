@@ -5,13 +5,14 @@ import type { RlsDb } from '../../db/db.module';
 export const STAFF_ROLE_TO_DB_ROLE: Readonly<Record<string, UserRole>> = {
   super_admin: 'admin', platform_admin: 'admin', finance_admin: 'admin',
   support_admin: 'admin', auditor: 'admin', ops_lead: 'ops_lead', ops_inspector: 'ops_inspector',
+  director: 'admin', general_manager: 'admin', office_admin: 'admin',
 };
 
 export function effectiveRoles(roleKeys: readonly string[]): UserRole[] {
   return [...new Set(roleKeys.flatMap((key): UserRole[] => {
     const staff = Object.hasOwn(STAFF_ROLE_TO_DB_ROLE, key) ? STAFF_ROLE_TO_DB_ROLE[key] : undefined;
     if (staff) return [staff];
-    return ['student', 'landlord', 'custodian', 'property_worker'].includes(key) ? [key as UserRole] : [];
+    return ['student', 'landlord', 'custodian', 'property_worker', 'property_manager'].includes(key) ? [key as UserRole] : [];
   }))];
 }
 
@@ -43,6 +44,7 @@ export function accountAccess(identity: AccessIdentity, assurance?: Authenticati
   const workspaces: Workspace[] = [];
   if (mapped.includes('student')) workspaces.push('student');
   if (mapped.some((r) => ['landlord', 'custodian', 'property_worker'].includes(r))) workspaces.push('landlord');
+  if (mapped.includes('property_manager')) workspaces.push('management');
   if (mapped.some((r) => ['ops_lead', 'ops_inspector'].includes(r))) workspaces.push('ops');
   if (mapped.includes('admin')) workspaces.push('admin');
   return {

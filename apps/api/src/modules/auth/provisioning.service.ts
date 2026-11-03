@@ -29,6 +29,7 @@ const STAFF_LEGACY_ROLE: Record<string, 'admin' | 'ops_lead' | 'ops_inspector'> 
   finance_admin: 'admin',
   support_admin: 'admin',
   auditor: 'admin',
+  director: 'admin', general_manager: 'admin', office_admin: 'admin',
 };
 
 export interface LogtoIdentityClaims {

@@ -3,12 +3,13 @@ import { safeAuthDestination, type AccountAccess, type Workspace } from "@campus
 export const WORKSPACE_HOME: Record<Workspace, string> = {
   student: "/",
   landlord: "/landlord",
+  management: "/management",
   ops: "/ops",
   admin: "/admin",
 };
 
 export const WORKSPACE_LABEL: Record<Workspace, string> = {
-  student: "Student", landlord: "Landlord", ops: "Operations", admin: "Administration",
+  student: "Student", landlord: "Landlord", management: "Property management", ops: "Operations", admin: "Administration",
 };
 
 type RoutingSession = { user: { status: string }; access: AccountAccess };
@@ -18,7 +19,7 @@ function within(path: string, root: string): boolean {
 }
 
 export function workspaceForPath(path: string): Workspace | null {
-  for (const workspace of ["landlord", "ops", "admin"] as const) {
+  for (const workspace of ["landlord", "management", "ops", "admin"] as const) {
     if (within(path, `/${workspace}`)) return workspace;
   }
   if (["/dashboard", "/profile", "/reservations", "/messages", "/saved", "/recently-viewed", "/calendar", "/agreement"].some((root) => within(path, root))) return "student";
@@ -42,6 +43,8 @@ export function authorizedNext(access: AccountAccess, rawNext: unknown): string 
 export function workspaceHome(access: AccountAccess, workspace: Workspace): string {
   if (workspace !== "admin") return WORKSPACE_HOME[workspace];
   if (access.roles.some(role => ["super_admin", "platform_admin"].includes(role))) return "/admin";
+  if (access.roles.some(role => ["director", "general_manager"].includes(role))) return "/admin/leadership";
+  if (access.roles.includes("office_admin")) return "/admin/front-desk";
   if (access.roles.includes("finance_admin")) return "/admin/finance";
   if (access.roles.includes("support_admin")) return "/admin/inquiries";
   if (access.roles.includes("auditor")) return "/admin/audit-log";

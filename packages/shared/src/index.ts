@@ -27,3 +27,4 @@ export * from './room-management.js';
 export * from './analytics.js';
 export * from './uploads.js';
 export * from './support.js';
+export * from './management.js';

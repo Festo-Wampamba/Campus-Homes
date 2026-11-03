@@ -8,10 +8,11 @@ import { hasCoveringScope, type RoleAssignment } from '../auth/permissions';
 export const STAFF_ROLE_KEYS = [
   'super_admin', 'platform_admin', 'finance_admin', 'support_admin',
   'auditor', 'ops_lead', 'ops_inspector',
+  'director', 'general_manager', 'office_admin',
 ];
 // A user is one kind of account: staff, or a consumer (student/landlord),
 // never both. These two families are mutually exclusive at assignment time.
-export const CONSUMER_ROLE_KEYS = ['student', 'landlord'];
+export const CONSUMER_ROLE_KEYS = ['student', 'landlord', 'property_manager', 'custodian', 'property_worker'];
 export const SERVICE_CTX: RlsContext = {
   userId: '00000000-0000-0000-0000-000000000000', role: 'service_role',
 };
@@ -29,6 +30,15 @@ export interface AssignmentInput {
 export function assertGrantAllowed(
   permissions: Set<string>, assignments: RoleAssignment[], input: AssignmentInput,
 ) {
+  if (['director', 'general_manager'].includes(input.roleKey) && !permissions.has('roles.manage_super_admin')) {
+    throw new ForbiddenException('Senior leadership access requires a Super Admin');
+  }
+  if (input.roleKey === 'property_manager') {
+    throw new ForbiddenException('Property managers receive property access through a landlord management mandate');
+  }
+  if (input.roleKey === 'director' && input.scopeType !== 'platform_wide') {
+    throw new BadRequestException('Director access must be platform-wide');
+  }
   if (input.roleKey === 'super_admin' && !permissions.has('roles.manage_super_admin')) {
     throw new ForbiddenException('Only a Super Admin can grant the Super Admin role');
   }
@@ -174,6 +184,9 @@ export class RoleAssignmentService {
           throw new ForbiddenException('You cannot revoke your own Super Admin role');
         }
       }
+      if (['director', 'general_manager'].includes(assignment.roleKey) && !permissions.has('roles.manage_super_admin')) {
+        throw new ForbiddenException('Senior leadership access requires a Super Admin');
+      }
       if (!hasCoveringScope(scopes, assignment.scopeType, assignment.scopeId)) {
         throw new ForbiddenException('Cannot revoke a role assignment outside your own scope');
       }
@@ -184,6 +197,7 @@ export class RoleAssignmentService {
           WHERE user_id = $1 AND property_id = $2 AND role = $3 AND revoked_at IS NULL`,
         [owner.userId, assignment.scopeId, assignment.roleKey === 'student' ? 'resident_student' : assignment.roleKey, actor.userId]);
       }
+      if (assignment.roleKey === 'property_manager') await client.query('UPDATE management_assignments SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL', [owner.userId]);
       if (['ops_lead', 'ops_inspector'].includes(assignment.roleKey)) await syncOpsStaff(client, owner.userId);
       await recordAccessAudit(client, actor, 'roles.revoke', 'user_role_assignment', assignmentId, { targetUserId: owner.userId });
       return { id: assignmentId, revoked: true };
@@ -201,6 +215,9 @@ export class RoleAssignmentService {
         WHERE a.user_id = $1 AND r.key = ANY($2::text[]) AND a.revoked_at IS NULL FOR UPDATE OF a`, [userId, STAFF_ROLE_KEYS])).rows;
       if (assignments.some(a => a.roleKey === 'super_admin') && !permissions.has('roles.manage_super_admin')) {
         throw new ForbiddenException('Only a Super Admin can deactivate a Super Admin');
+      }
+      if (assignments.some(a => ['director', 'general_manager'].includes(a.roleKey)) && !permissions.has('roles.manage_super_admin')) {
+        throw new ForbiddenException('Senior leadership access requires a Super Admin');
       }
       if (!assignments.length || !assignments.every(a => hasCoveringScope(scopes, a.scopeType, a.scopeId))) {
         throw new ForbiddenException('Cannot deactivate a staff member outside your own scope');

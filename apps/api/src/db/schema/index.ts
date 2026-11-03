@@ -17,3 +17,4 @@ export * from './tenant-agreement';
 export * from './lead';
 export * from './analytics';
 export * from './room-management';
+export * from './management';

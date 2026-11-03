@@ -13,6 +13,7 @@ export function SignOutButton() {
     <Button
       variant="ghost"
       size="sm"
+      className="min-h-11 max-w-full whitespace-normal"
       disabled={pending}
       onClick={async () => {
         setPending(true);

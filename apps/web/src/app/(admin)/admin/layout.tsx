@@ -32,6 +32,8 @@ interface Access {
 const ICON_SIZE = "size-4 shrink-0";
 
 const NAV: (AppNavItem & { any: string[] })[] = [
+  { label: "Leadership", href: "/admin/leadership", icon: <BarChart3 aria-hidden className={ICON_SIZE} />, group: "Business", any: ["executive.read"] },
+  { label: "Front desk", href: "/admin/front-desk", icon: <LifeBuoy aria-hidden className={ICON_SIZE} />, group: "Business", any: ["office.read"] },
   { label: "Overview", href: "/admin", icon: <Gauge aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["analytics.read"] },
   { label: "Users", href: "/admin/users", icon: <Users aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["students.read", "landlords.read", "staff.read"] },
   { label: "Landlord accounts", href: "/admin/landlord-accounts", icon: <UserCog aria-hidden className={ICON_SIZE} />, group: "Operations", any: ["landlords.review_kyc"] },

@@ -561,6 +561,34 @@
       "when": 1793100000000,
       "tag": "0080_manage_only_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1793685096322,
+      "tag": "0081_property_manager_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793685097322,
+      "tag": "0082_leadership_and_property_management",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793685098322,
+      "tag": "0083_management_workflow_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793685099322,
+      "tag": "0084_management_purge_compatibility",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,7 @@ import { loadEnv } from '../../config/env';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { runtimeRedisUrl } from '../../db/redis.module';
-import { loadPermissions } from '../auth/permissions';
+import { loadPermissions, STEP_UP_MAX_AGE_MS } from '../auth/permissions';
 import { AuditService } from '../ops/audit.service';
 import { DEFAULT_RESERVE_HOURS } from '../reservations/reservations.service';
 
@@ -55,10 +55,10 @@ export class AdminDashboardService {
     });
 
     return {
-      permissions: [...loaded.permissions].sort(),
+      permissions: [...new Set([...loaded.permissions, ...loaded.grants.filter(g => ['office.read','office.manage','executive.read'].includes(g.permissionKey)).map(g => g.permissionKey)])].sort(),
       stepUpPermissions: [...loaded.stepUpRequired].sort(),
       assignments,
-      freshSignInWindowMinutes: 15,
+      freshSignInWindowMinutes: STEP_UP_MAX_AGE_MS / 60_000,
     };
   }
 

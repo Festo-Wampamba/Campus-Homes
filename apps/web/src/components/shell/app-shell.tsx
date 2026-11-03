@@ -321,22 +321,22 @@ export function AppShell({
       )}
 
       <div className={cn("transition-[padding] duration-150", collapsed ? "lg:pl-16" : "lg:pl-62")}>
-        <header className="sticky top-0 z-30 flex h-17 items-center gap-3 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-border dark:bg-background/95">
-          <button type="button" aria-label="Open navigation" onClick={() => setMenuOpen(true)} className="grid size-10 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden dark:text-foreground dark:hover:bg-muted"><Menu aria-hidden className="size-5" /></button>
+        <header className="sticky top-0 z-30 flex min-h-17 flex-wrap items-center gap-3 py-2 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-border dark:bg-background/95">
+          <button type="button" aria-label="Open navigation" onClick={() => setMenuOpen(true)} className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden dark:text-foreground dark:hover:bg-muted"><Menu aria-hidden className="size-5" /></button>
           <button
             type="button"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setSidebarCollapsed(!collapsed)}
-            className="hidden size-10 shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:grid dark:text-foreground dark:hover:bg-muted"
+            className="hidden min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:grid dark:text-foreground dark:hover:bg-muted"
           >
             {collapsed ? <PanelLeftOpen aria-hidden className="size-4.5" /> : <PanelLeftClose aria-hidden className="size-4.5" />}
           </button>
           {/* Phone: a clear square search button (the squeezed field read as an
               empty box). Tablet and up: the full search field. */}
-          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search the workspace" className="flex size-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 transition-colors hover:border-slate-300 sm:h-10 sm:w-80 sm:justify-start sm:px-3 sm:text-left sm:text-slate-500 dark:border-border dark:bg-muted dark:text-muted-foreground">
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search the workspace" className="flex size-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 transition-colors hover:border-slate-300 sm:h-10 sm:min-w-0 sm:flex-1 sm:max-w-80 sm:justify-start sm:px-3 sm:text-left sm:text-slate-500 dark:border-border dark:bg-muted dark:text-muted-foreground">
             <Search aria-hidden className="size-5 sm:size-4" /><span className="hidden truncate sm:inline">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-[10px] sm:inline">/</kbd>
           </button>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {headerExtra}
             <ThemeToggle />
             {notificationsEndpoint && (
@@ -347,13 +347,13 @@ export function AppShell({
                   aria-expanded={notifOpen}
                   aria-label="Notifications"
                   onClick={() => setNotifOpen((open) => !open)}
-                  className="relative grid size-10 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 dark:text-muted-foreground dark:hover:bg-muted"
+                  className="relative grid min-h-11 min-w-11 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 dark:text-muted-foreground dark:hover:bg-muted"
                 >
                   <Bell aria-hidden className="size-4.5" />
                   {!!unreadNotifications.length && <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />}
                 </button>
                 {notifOpen && (
-                  <div role="menu" aria-label="Notifications" className="absolute right-0 top-full z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
+                  <div role="menu" aria-label="Notifications" className="absolute right-0 top-full z-50 mt-1.5 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
                     <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
                       <p className="text-sm font-bold text-slate-900 dark:text-foreground">Notifications</p>
                     </div>
@@ -373,20 +373,20 @@ export function AppShell({
               </div>
             )}
             <div className="hidden h-8 w-px bg-slate-200 sm:block dark:bg-border" />
-            <div ref={userMenuRef} className="relative">
+            <div ref={userMenuRef} className="relative min-w-0 max-w-full">
               <button
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
                 onClick={() => setUserMenuOpen((open) => !open)}
-                className="flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-muted"
+                className="flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-muted"
               >
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user.name)}</span>
                 <span className="hidden min-w-0 text-left sm:block"><span className="block max-w-32 truncate text-xs font-bold">{user.name || user.email}</span><span className="block text-[10px] text-slate-500 dark:text-muted-foreground">{portalLabel}</span></span>
                 <ChevronDown aria-hidden className={cn("size-3.5 text-slate-400 transition-transform", userMenuOpen && "rotate-180")} />
               </button>
               {userMenuOpen && (
-                <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
+                <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
                   <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
                     <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">{user.name || "Unnamed"}</p>
                     {user.username && <p className="truncate text-xs text-teal-700 dark:text-teal-300">{user.username}</p>}

@@ -7,6 +7,7 @@ export const USER_ROLES = [
   'landlord',
   'custodian',
   'property_worker',
+  'property_manager',
   'ops_inspector',
   'ops_lead',
   'admin',
@@ -24,6 +25,9 @@ export const STAFF_ROLE_KEYS = [
   'finance_admin',
   'support_admin',
   'auditor',
+  'director',
+  'general_manager',
+  'office_admin',
 ] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 // Super Admin is never handed out by invitation link: grant it to an existing,
@@ -39,9 +43,12 @@ export const STAFF_ROLE_LABELS: Record<StaffRoleKey, string> = {
   finance_admin: 'Finance Admin',
   support_admin: 'Support Admin',
   auditor: 'Auditor',
+  director: 'Director',
+  general_manager: 'General Manager',
+  office_admin: 'Office Administrator / Front Desk',
 };
 
-export const PROPERTY_ROLE_KEYS = ['landlord', 'custodian', 'property_worker', 'student'] as const;
+export const PROPERTY_ROLE_KEYS = ['landlord', 'custodian', 'property_worker', 'property_manager', 'student'] as const;
 export type PropertyRoleKey = (typeof PROPERTY_ROLE_KEYS)[number];
 export const ASSIGNABLE_ROLE_KEYS = [...STAFF_ROLE_KEYS, ...PROPERTY_ROLE_KEYS] as const;
 export type AssignableRoleKey = (typeof ASSIGNABLE_ROLE_KEYS)[number];

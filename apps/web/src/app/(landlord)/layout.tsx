@@ -48,6 +48,7 @@ export default async function LandlordLayout({
       notificationsEndpoint="/notifications"
       nav={[
         { label: "Dashboard", href: "/landlord", icon: <LayoutDashboard aria-hidden className="size-4 shrink-0" /> },
+        { label: "Property managers", href: "/landlord/management", icon: <Users aria-hidden className="size-4 shrink-0" /> },
         { label: "My Properties", href: "/landlord/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
         { label: "Manage Rooms", href: "/landlord/rooms", icon: <BedDouble aria-hidden className="size-4 shrink-0" /> },
         { label: "Tenants", href: "/landlord/tenants", icon: <Users aria-hidden className="size-4 shrink-0" /> },

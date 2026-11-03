@@ -1,5 +1,5 @@
 /** Identity is singular; workspaces are independently granted capabilities. */
-export const WORKSPACES = ['student', 'landlord', 'ops', 'admin'] as const;
+export const WORKSPACES = ['student', 'landlord', 'management', 'ops', 'admin'] as const;
 export type Workspace = (typeof WORKSPACES)[number];
 export type AuthIntent = 'student' | 'landlord' | 'staff';
 
