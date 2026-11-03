@@ -5,7 +5,7 @@ import { ArrowRightIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SignInCard } from "@/components/sign-in-card";
 import { Wordmark } from "@/components/shell/wordmark";
 import { signInUrl } from "@/lib/auth";
 
@@ -22,11 +22,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   session_ended: "Your session has ended. Sign in again to continue.",
 };
 
-export type SignInMode = "landlord-create" | "landlord-signin" | "all";
+export type SignInMode = "landlord-create" | "landlord-signin" | "property-team" | "all";
 
 // The public landlords page sends exactly these two destinations; anything
 // else keeps the full workspace chooser.
 export function signInMode(next: string | null): SignInMode {
+  if (next?.split(/[?#]/)[0] === '/landlord/team') return 'property-team';
   if (next === "/landlords/enroll") return "landlord-create";
   if (next === "/landlord" || next?.startsWith("/landlord/")) return "landlord-signin";
   return "all";
@@ -51,11 +52,10 @@ export function TermsNote() {
   );
 }
 
-function LandlordSignIn({ mode, next, error }: { mode: Exclude<SignInMode, "all">; next: string; error?: string | null }) {
+function LandlordSignIn({ mode, next, error }: { mode: 'landlord-create' | 'landlord-signin'; next: string; error?: string | null }) {
   const creating = mode === "landlord-create";
   return (
-    <Card className="w-full max-w-md rounded-[1.5rem] border-white/70 bg-white/95 shadow-[0_24px_80px_-32px_rgba(23,63,67,0.45)] backdrop-blur">
-      <CardContent className="p-6 sm:p-8">
+    <SignInCard>
         <div className="mb-3 flex flex-col items-center gap-1 sm:mb-4">
           <Wordmark stacked />
         </div>
@@ -81,18 +81,24 @@ function LandlordSignIn({ mode, next, error }: { mode: Exclude<SignInMode, "all"
           )}
         </p>
         <TermsNote />
-      </CardContent>
-    </Card>
+    </SignInCard>
   );
 }
 
 export function SignInForm({ next, error }: { next: string | null; error?: string | null }) {
   const mode = signInMode(next);
+  if (mode === 'property-team') return <SignInCard>
+    <div className="mb-4 flex justify-center"><Wordmark stacked /></div>
+    <p className="mb-6 text-center text-sm leading-6 text-muted-foreground">Sign in with the verified customer email your landlord assigned. Your property team access is limited to your assignments.</p>
+    <ErrorNotice error={error} />
+    <a href={signInUrl('consumer', next ?? '/landlord/team', 'student')} className="block"><Button type="button" className="w-full">Property team sign in</Button></a>
+    <p className="mt-4 text-center text-sm text-muted-foreground"><Link href="/sign-in" className="font-semibold text-primary underline-offset-2 hover:underline">Student or landlord sign in</Link></p>
+    <TermsNote />
+  </SignInCard>;
   if (mode !== "all") return <LandlordSignIn mode={mode} next={next ?? "/landlord"} error={error} />;
 
   return (
-    <Card className="w-full max-w-md rounded-[1.5rem] border-white/70 bg-white/95 shadow-[0_24px_80px_-32px_rgba(23,63,67,0.45)] backdrop-blur">
-      <CardContent className="p-6 sm:p-8">
+    <SignInCard>
         <div className="mb-3 flex flex-col items-center gap-1 sm:mb-4">
           <Wordmark stacked />
         </div>
@@ -119,8 +125,9 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
           </a>
         </p>
 
+        <p className="mt-3 text-center text-xs text-muted-foreground">Custodian or property worker? <Link href="/sign-in?next=%2Flandlord%2Fteam" className="font-semibold text-primary underline-offset-2 hover:underline">Open property team</Link></p>
+
         <TermsNote />
-      </CardContent>
-    </Card>
+    </SignInCard>
   );
 }

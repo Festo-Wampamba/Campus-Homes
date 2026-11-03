@@ -23,12 +23,20 @@ import { apiServer } from "@/lib/server-api";
 import { dashboardGate } from "@/lib/landlord-gate";
 import { requireWorkspace } from "@/lib/session";
 import { AppShell } from "@/components/shell/app-shell";
+import { isPropertyTeamAccount } from '@/lib/auth-routing';
 
 // Session access controls workspace entry and the initial onboarding gate.
 export default async function LandlordLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const session = await requireWorkspace("landlord");
+  if (isPropertyTeamAccount(session.access)) {
+    return <AppShell portalLabel="Property team" user={session.user} access={session.access}
+      homeHref="/landlord/team" notificationsEndpoint="/notifications"
+      nav={[{ label: 'Assigned properties', href: '/landlord/team', icon: <Users aria-hidden className="size-4 shrink-0" /> }]}>
+      {children}
+    </AppShell>;
+  }
   // apiServer, not getMyProperties(): a failed load must stay "unknown", not
   // look like "no property" and reopen the wizard.
   const [profile, properties] = await Promise.all([
@@ -48,6 +56,7 @@ export default async function LandlordLayout({
       notificationsEndpoint="/notifications"
       nav={[
         { label: "Dashboard", href: "/landlord", icon: <LayoutDashboard aria-hidden className="size-4 shrink-0" /> },
+        { label: "Property team", href: "/landlord/team", icon: <Users aria-hidden className="size-4 shrink-0" /> },
         { label: "Property managers", href: "/landlord/management", icon: <Users aria-hidden className="size-4 shrink-0" /> },
         { label: "My Properties", href: "/landlord/properties", icon: <Building2 aria-hidden className="size-4 shrink-0" /> },
         { label: "Manage Rooms", href: "/landlord/rooms", icon: <BedDouble aria-hidden className="size-4 shrink-0" /> },

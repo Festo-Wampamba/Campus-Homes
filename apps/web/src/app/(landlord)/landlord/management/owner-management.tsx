@@ -43,8 +43,8 @@ export interface OwnerPayload {
     createdAt: string;
   }[];
 }
-export function OwnerManagement({ data }: { data: OwnerPayload }) {
-  const [creating, setCreating] = useState(false);
+export function OwnerManagement({ data, initialPropertyId, startCreating = false }: { data: OwnerPayload; initialPropertyId?: string; startCreating?: boolean }) {
+  const [creating, setCreating] = useState(startCreating);
   const [target, setTarget] = useState('individual');
   const [caps, setCaps] = useState<ManagementCapability[]>(['property.read']);
   const [validation, setValidation] = useState('');
@@ -92,7 +92,7 @@ export function OwnerManagement({ data }: { data: OwnerPayload }) {
           <form onSubmit={create} className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-4">
               <Field label="Property">
-                <select name="propertyId" className={fieldClass} required>
+                <select aria-label="Property" name="propertyId" defaultValue={data.properties.some(p => p.id === initialPropertyId) ? initialPropertyId : undefined} className={fieldClass} required>
                   {data.properties.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}

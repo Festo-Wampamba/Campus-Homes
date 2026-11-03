@@ -1,5 +1,5 @@
 import type { AccountAccess } from "@campushomes/shared";
-import { authDestination, authorizedNext, workspaceGuardDestination } from "./auth-routing";
+import { authDestination, authorizedNext, workspaceGuardDestination, workspaceLabel } from "./auth-routing";
 
 const access = (workspaces: AccountAccess["workspaces"], overrides: Partial<AccountAccess> = {}): AccountAccess => ({
   workspaces, roles: [], onboarding: { student: false, landlord: false },
@@ -8,6 +8,16 @@ const access = (workspaces: AccountAccess["workspaces"], overrides: Partial<Acco
 const session = (grants: AccountAccess, status = "active") => ({ access: grants, user: { status } });
 
 describe("workspace routing", () => {
+  it.each(['custodian','property_worker'])('opens assigned properties for %s without landlord onboarding', role => {
+    const grants = access(['landlord'], { roles: [role] });
+    expect(authDestination(session(grants))).toBe('/landlord/team');
+    expect(authDestination(session(grants), '/landlord/properties')).toBe('/landlord/team');
+    expect(workspaceGuardDestination(session(grants), 'landlord', '/landlord/team')).toBeNull();
+    expect(workspaceLabel(grants, 'landlord')).toBe('Property team');
+  });
+  it('preserves the owner dashboard when an owner also holds a ground role', () => {
+    expect(authDestination(session(access(['landlord'], { roles: ['landlord','custodian'] })))).toBe('/landlord');
+  });
   it.each([
     ["super_admin", "/admin"], ["platform_admin", "/admin"],
     ["finance_admin", "/admin/finance"], ["support_admin", "/admin/inquiries"],

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search } from "lucide-react";
+import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search, Users } from "lucide-react";
 import type { Property } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,14 @@ function ManageRoomsLink({ property }: { property: Property }) {
       <BedDouble aria-hidden className="size-4" />
     </Link>
   );
+}
+
+function PropertyTeamLink({ property }: { property: Property }) {
+  return <Link href={`/landlord/team?propertyId=${property.id}`} onClick={e => e.stopPropagation()}
+    aria-label={`Manage team at ${property.name}`} title="Manage property team"
+    className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+    <Users aria-hidden className="size-4" />
+  </Link>;
 }
 
 const PAGE_SIZE = 12;
@@ -193,6 +201,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end">
                           <ManageRoomsLink property={property} />
+                          <PropertyTeamLink property={property} />
                           <Button
                             type="button"
                             variant="ghost"
@@ -226,6 +235,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                   </div>
                   <PropertyStatusChip property={property} />
                   <ManageRoomsLink property={property} />
+                  <PropertyTeamLink property={property} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -258,6 +268,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                       </div>
                     </div>
                     <ManageRoomsLink property={property} />
+                    <PropertyTeamLink property={property} />
                     <Button
                       type="button"
                       variant="ghost"

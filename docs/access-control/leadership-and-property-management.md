@@ -45,6 +45,14 @@ Pricing changes, listing publication/verification, room structural changes, rese
 
 ## Enforcement and data lifecycle
 
+### Landlord property teams
+
+Landlords open **Property team** or the team action on a property to assign an active, email-verified customer account as a Custodian or Property Worker. Worker duties use the existing cleaner, security officer, maintenance worker and general worker categories. Each assignment writes a property-scoped role grant and a property membership in one audited transaction. Assignment starts immediately and continues until removed. Owners can remove an individual assignment without affecting that person's assignments at other properties.
+
+Property Managers use the existing individual/agency mandate flow, with the selected property carried into the form, explicit capabilities, acceptance and expiry. Landlords cannot grant company General Manager, Director or other company staff roles. Company identities cannot receive ground-team grants through this workflow.
+
+Custodians and workers enter the **Property team** workspace to see their assigned properties and property contact. They are not sent through owner registration or KYC. Accounts that also own properties retain their landlord dashboard and can see assignments to them on the team page. Role and membership revocation removes access on subsequent session/API lookups. This release adds the assignment and property-context screens; existing specialised role permissions remain governed by their existing API guards.
+
 `app_management_access_for` checks the current property owner, active/verified landlord, active recipient, mandate acceptance/dates/revocation, individual capabilities, agency membership where applicable, and active Property Manager role with `management.use`. Checks run for each property request. New tables use forced RLS with service-only policies; API projections and mandate checks precede service access. Mutations are audited within their transaction. A shared transaction lock serializes management mutations and mandate/member revocation.
 
 The new tables preserve the existing purge contract through cascade/set-null foreign keys. Purging a property removes its operational management data; retained actor references are anonymised on user purge. Ordinary revocation preserves history.

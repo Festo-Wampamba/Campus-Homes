@@ -2,7 +2,7 @@ import { ActivityLogIcon, DashboardIcon } from "@radix-ui/react-icons";
 import type { AccountAccess } from "@campushomes/shared";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SignInCard } from "@/components/sign-in-card";
 import { Wordmark } from "@/components/shell/wordmark";
 import { signInUrl } from "@/lib/auth";
 
@@ -23,18 +23,17 @@ export function StaffSignIn({ next, error }: { next: string | null; error?: stri
   const staffNext = isStaffPath(next) ? next : undefined;
 
   return (
-    <Card className="w-full max-w-md shadow-xl">
-      <CardContent className="p-4 sm:p-6">
+    <SignInCard>
         <div className="mb-3 flex flex-col items-center gap-1 sm:mb-4">
           <Wordmark stacked />
         </div>
-        <p className="mb-5 text-center text-sm text-muted-foreground">
+        <p className="mb-6 text-center text-sm leading-6 text-muted-foreground">
           Staff sign-in. Use your invited company account and complete two-step verification.
         </p>
         <ErrorNotice error={error} />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid gap-3">
           <a href={signInUrl("staff", staffNext?.startsWith("/admin") ? staffNext : "/admin", "staff")} className="block">
-            <Button type="button" variant="secondary" className="w-full gap-2 active:-translate-y-px">
+            <Button type="button" className="w-full gap-2 active:-translate-y-px">
               <DashboardIcon aria-hidden />
               Administration
             </Button>
@@ -47,7 +46,6 @@ export function StaffSignIn({ next, error }: { next: string | null; error?: stri
           </a>
         </div>
         <TermsNote />
-      </CardContent>
-    </Card>
+    </SignInCard>
   );
 }

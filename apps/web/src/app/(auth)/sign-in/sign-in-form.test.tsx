@@ -7,6 +7,7 @@ describe("signInMode", () => {
     ["/landlords/enroll", "landlord-create"],
     ["/landlord", "landlord-signin"],
     ["/landlord/bookings", "landlord-signin"],
+    ['/landlord/team', 'property-team'],
     ["/landlords", "all"],
     [null, "all"],
   ])("maps next=%s to %s", (next, mode) => {
@@ -57,6 +58,17 @@ describe("SignInForm landlord mode", () => {
 });
 
 describe("SignInForm", () => {
+  it('signs property teams into their assignments without starting landlord enrollment', () => {
+    const html = renderToStaticMarkup(<SignInForm next="/landlord/team" />);
+    expect(html).toContain('intent=student');
+    expect(html).toContain('next=%2Flandlord%2Fteam');
+    expect(html).not.toContain('intent=landlord');
+    expect(html).not.toContain('Create landlord account');
+  });
+  it('preserves a property team return link', () => {
+    const html = renderToStaticMarkup(<SignInForm next="/landlord/team?propertyId=selected" />);
+    expect(html).toContain('next=%2Flandlord%2Fteam%3FpropertyId%3Dselected');
+  });
   it("shows no staff workspaces on the public sign-in page", () => {
     expect(renderToStaticMarkup(<SignInForm next={null} />)).not.toContain("Administration");
   });

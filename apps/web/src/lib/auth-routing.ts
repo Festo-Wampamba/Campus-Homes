@@ -41,6 +41,7 @@ export function authorizedNext(access: AccountAccess, rawNext: unknown): string 
 }
 
 export function workspaceHome(access: AccountAccess, workspace: Workspace): string {
+  if (workspace === 'landlord' && isPropertyTeamAccount(access)) return '/landlord/team';
   if (workspace !== "admin") return WORKSPACE_HOME[workspace];
   if (access.roles.some(role => ["super_admin", "platform_admin"].includes(role))) return "/admin";
   if (access.roles.some(role => ["director", "general_manager"].includes(role))) return "/admin/leadership";
@@ -51,11 +52,21 @@ export function workspaceHome(access: AccountAccess, workspace: Workspace): stri
   return "/admin";
 }
 
+export function isPropertyTeamAccount(access: AccountAccess): boolean {
+  return !access.roles.includes('landlord') && access.roles.some(role => ['custodian', 'property_worker'].includes(role));
+}
+
+export function workspaceLabel(access: AccountAccess, workspace: Workspace): string {
+  return workspace === 'landlord' && isPropertyTeamAccount(access) ? 'Property team' : WORKSPACE_LABEL[workspace];
+}
+
 export function workspaceDestination(access: AccountAccess, workspace: Workspace, next = workspaceHome(access, workspace)): string {
   if (!access.workspaces.includes(workspace)) return "/access-required";
   if ((workspace === "ops" || workspace === "admin") && !access.assurance.mfaVerified) {
     return `/mfa-required?next=${encodeURIComponent(next)}`;
   }
+  if (workspace === 'landlord' && isPropertyTeamAccount(access) &&
+      new URL(next, 'https://campushomes.invalid').pathname !== '/landlord/team') return '/landlord/team';
   if (workspace === "landlord" && access.onboarding.landlord) return "/landlord/onboarding";
   return next;
 }

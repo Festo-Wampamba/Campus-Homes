@@ -6,7 +6,7 @@ import { ChevronDown, Clock, Heart, LayoutDashboard, User as UserIcon } from "lu
 
 import type { SessionUser } from "@/lib/session";
 import type { AccountAccess } from "@campushomes/shared";
-import { WORKSPACE_LABEL, workspaceDestination } from "@/lib/auth-routing";
+import { workspaceLabel, workspaceDestination } from "@/lib/auth-routing";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 
@@ -82,7 +82,7 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
           {access.workspaces.filter(workspace => workspace !== "student").map(workspace => (
             <Link key={workspace} role="menuitem" href={workspaceDestination(access, workspace)} className={menuItemClass} onClick={() => setOpen(false)}>
               <LayoutDashboard aria-hidden className="size-4 text-muted-foreground" />
-              {WORKSPACE_LABEL[workspace]}
+              {workspaceLabel(access, workspace)}
             </Link>
           ))}
           <div className="my-1 h-px bg-border" />
