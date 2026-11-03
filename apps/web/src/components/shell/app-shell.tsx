@@ -109,13 +109,13 @@ function Sidebar({
 
   return (
     <div className="flex h-full flex-col border-r border-border bg-card text-foreground">
-      <div className="flex h-17 items-center gap-3 border-b border-border px-5">
+      <div className="flex min-h-17 items-center gap-3 border-b border-border px-5 py-3">
         <Link href={homeHref} onClick={close} className="flex min-w-0 flex-1 items-center gap-3">
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-600 text-sm font-bold text-white" aria-hidden>CH</span>
           {!collapsed && (
             <span className="min-w-0">
               <Wordmark className="text-[1.02rem]" />
-              <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{portalLabel}</span>
+              <span className="block whitespace-normal break-words text-[10px] font-semibold uppercase leading-relaxed tracking-[0.14em] text-muted-foreground">{portalLabel}</span>
             </span>
           )}
         </Link>
