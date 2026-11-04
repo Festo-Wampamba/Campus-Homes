@@ -145,8 +145,8 @@ export class RoomManagementService {
   async createRoomType(ctx: RlsContext, propertyId: string, input: RoomTypeInput) {
     const roomTypeId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
-      await this.assertDistinctRoomTypeDescription(client, propertyId, input);
       await this.assertPhotoKeys(client, ctx.userId, input.photos);
+      await this.assertDistinctRoomTypeDescription(client, propertyId, input);
       const changeSet = await this.getOrCreateDraft(client, propertyId, input.semesterId, ctx.userId);
       const type = await client.query<{ id: string }>(
         `INSERT INTO room_types(property_id, created_by) VALUES ($1, $2) RETURNING id`,
@@ -165,8 +165,8 @@ export class RoomManagementService {
   async updateRoomType(ctx: RlsContext, roomTypeId: string, input: RoomTypeInput) {
     await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       const type = await this.assertRoomTypeOwner(client, roomTypeId, ctx.userId);
-      await this.assertDistinctRoomTypeDescription(client, type.property_id, input, roomTypeId);
       await this.assertPhotoKeys(client, ctx.userId, input.photos, roomTypeId);
+      await this.assertDistinctRoomTypeDescription(client, type.property_id, input, roomTypeId);
       const changeSet = await this.getOrCreateDraft(client, type.property_id, input.semesterId, ctx.userId);
       const existing = await client.query<{ id: string; version_number: number }>(
         `SELECT id, version_number FROM room_type_versions
