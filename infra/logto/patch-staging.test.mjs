@@ -3,9 +3,14 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { patchGoogle, patchExperience } from './patch-staging.mjs';
 test('native create-account link navigates to the chooser for both browser layouts',()=>{
- assert.equal(patchExperience('<TextLink replace to="/register" text="action.create_account" />','https://staging.campushomes.co.ug'),'<TextLink href="https://staging.campushomes.co.ug/create-account" text="action.create_account" />');
- assert.throws(()=>patchExperience('unknown','https://staging.campushomes.co.ug'));
- assert.throws(()=>patchExperience('unknown','https://campushomes.co.ug'));
+ const patched=patchExperience('<TextLink replace to="/register" text="action.create_account" />','https://staging.campushomes.co.ug','consumer_app_id');
+ assert(patched.includes('get("app_id") === "consumer_app_id"'));
+ assert(patched.includes('href="https://staging.campushomes.co.ug/create-account"'));
+ assert(patched.includes(': <TextLink replace to="/register"'));
+ assert.throws(()=>patchExperience('unknown','https://staging.campushomes.co.ug','consumer_app_id'));
+ assert.throws(()=>patchExperience('unknown','https://campushomes.co.ug','consumer_app_id'));
+ assert.throws(()=>patchExperience('unknown','https://staging.campushomes.co.ug','invalid"id'));
+
 });
 test('provider timeouts get a recoverable connector error without leaking request data',()=>{
  const patched=patchGoogle('var defaultTimeout = 5e3; var getUserInfoErrorHandler = (error) => { throw error; };');

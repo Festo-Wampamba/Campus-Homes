@@ -1,5 +1,6 @@
 # Pinned to the exact staging Logto image inspected on 2026-11-04.
 FROM svhd/logto@sha256:aac94e24ab7bef59be5d1809b1481b179495aaa75bb9dc2895ceae46e4117854
+ARG CONSUMER_APP_ID
 COPY infra/logto/patch-staging.mjs /tmp/patch-staging.mjs
 RUN node /tmp/patch-staging.mjs \
     && cd /etc/logto/packages/experience \
