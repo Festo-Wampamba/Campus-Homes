@@ -65,10 +65,10 @@ export function PhoneField({
         {label}
         {required && <span aria-hidden className="ml-0.5 text-red-600">*</span>}
       </span>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <select
           aria-label={`${label} country`}
-          className={cn(fieldClass, "h-11 w-[9.5rem] shrink-0 sm:h-10")}
+          className={cn(fieldClass, "h-11 min-w-0 max-w-full flex-1 basis-40 sm:h-10")}
           value={country.iso2}
           onChange={(event) => {
             const next = AFRICAN_COUNTRIES.find((c) => c.iso2 === event.target.value) ?? UGANDA;
@@ -86,6 +86,7 @@ export function PhoneField({
             form without a blur, which used to send an empty number. */}
         <Input
           id={id}
+          className="min-w-0 flex-1 basis-40"
           type="tel"
           inputMode="tel"
           autoComplete="tel-national"

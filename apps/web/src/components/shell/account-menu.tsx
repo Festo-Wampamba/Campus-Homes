@@ -85,6 +85,7 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
               {workspaceLabel(access, workspace)}
             </Link>
           ))}
+          {access.roles.includes("landlord") && <Link role="menuitem" href="/landlord/profile" className={menuItemClass} onClick={() => setOpen(false)}><UserIcon aria-hidden className="size-4 text-muted-foreground" />Profile settings</Link>}
           <div className="my-1 h-px bg-border" />
           <div className="px-1">
             <SignOutButton />

@@ -1,89 +1,11 @@
 "use client";
 
 import { useId, useState } from "react";
-import {
-  Accessibility,
-  Armchair,
-  Bath,
-  BatteryCharging,
-  BedDouble,
-  Car,
-  Cctv,
-  ChefHat,
-  CircleCheck,
-  ConciergeBell,
-  DoorOpen,
-  Droplet,
-  Droplets,
-  Fence,
-  FireExtinguisher,
-  Globe,
-  Home,
-  LampDesk,
-  ShieldCheck,
-  ShowerHead,
-  Siren,
-  Sofa,
-  Soup,
-  SprayCan,
-  Store,
-  Tv,
-  UtensilsCrossed,
-  WashingMachine,
-  Wifi,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
-
+import { amenityIcon } from "@/lib/amenity-icon";
+export { amenityIcon } from "@/lib/amenity-icon";
 import { amenityLabel } from "@/lib/amenity-label";
 export { amenityLabel } from "@/lib/amenity-label";
 import { FeatureIcon } from "@/components/listing/feature-icon";
-
-/** The existing listing vocabulary, plus the utility/security fields that
- * may be stored alongside it by older published listing snapshots. */
-const AMENITY_ICONS: Record<string, LucideIcon> = {
-  electricity: Zap,
-  water_supply: Droplet,
-  hot_water: ShowerHead,
-  backup_water: Droplets,
-  power_backup: BatteryCharging,
-  internet: Globe,
-  wifi: Wifi,
-  laundry: WashingMachine,
-  common_room: Tv,
-  dining_area: UtensilsCrossed,
-  parking: Car,
-  shop: Store,
-  security_guard: ShieldCheck,
-  cleaning: SprayCan,
-  meals: Soup,
-  reception: ConciergeBell,
-  bathroom: Bath,
-  kitchen: ChefHat,
-  fully_furnished: Sofa,
-  partly_furnished: Armchair,
-  unfurnished: Home,
-  mattress: BedDouble,
-  wardrobe: DoorOpen,
-  study_desk: LampDesk,
-  bed: BedDouble,
-  perimeter_wall: Fence,
-  cctv: Cctv,
-  fire_extinguishers: FireExtinguisher,
-  smoke_detectors: Siren,
-  emergency_exit: DoorOpen,
-  first_aid_kit: Accessibility,
-  off_grid_light: Zap,
-  ground_floor_rooms: Home,
-  accessible_bathroom: Accessibility,
-  wheelchair_accessible: Accessibility,
-};
-
-/** Return the Lucide icon for one stored amenity key. Custom keys use the
- * same neutral check icon as before instead of pretending to know more. */
-export function amenityIcon(key: string): LucideIcon {
-  return AMENITY_ICONS[key] ?? CircleCheck;
-}
 
 const COLLAPSE_LIMIT = 6;
 
@@ -103,7 +25,7 @@ export function AmenityList({ keys }: { keys: string[] }) {
           const Icon = amenityIcon(key);
           return (
             <li key={`${key}-${index}`} className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5">
-              <FeatureIcon icon={Icon} label={amenityLabel(key)} className="font-medium text-foreground" />
+              <FeatureIcon iconClassName="size-6" icon={Icon} label={amenityLabel(key)} className="font-medium text-foreground" />
             </li>
           );
         })}

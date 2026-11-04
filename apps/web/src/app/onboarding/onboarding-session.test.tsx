@@ -36,3 +36,15 @@ it('restores the visible phone field and clears only this account draft', async 
     expect(sessionStorage.getItem('campushomes:onboarding:account-b')).toBe('other account');
   } finally { act(() => root.unmount()); container.remove(); sessionStorage.clear(); }
 });
+
+it('requires an account choice for a new native sign-up and submits landlord intent', async () => {
+  sessionStorage.clear(); jest.mocked(api).mockReset().mockResolvedValueOnce({});
+  const container=document.createElement('div');document.body.append(container);const root=createRoot(container);
+  try {
+    await act(async()=>root.render(<OnboardingForm userId="new-signup" askAccountType initialName="New owner" initialUsername="repeatable" initialPhone="+256772123456" initialGender="male" askGender next="/" />));
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+    await act(async()=>container.querySelector<HTMLInputElement>('input[value="landlord"]')!.click());
+    await act(async()=>{container.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+    expect(api).toHaveBeenCalledWith('/me/onboarding',expect.objectContaining({body:JSON.stringify({accountType:'landlord',name:'New owner',username:'repeatable',contactPhone:'+256772123456',gender:'male'})}));
+  } finally {act(()=>root.unmount());container.remove();sessionStorage.clear();}
+});

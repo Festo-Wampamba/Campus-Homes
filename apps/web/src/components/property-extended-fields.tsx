@@ -1,5 +1,6 @@
 "use client";
 
+import { amenityIcon } from "@/lib/amenity-icon";
 import { useState } from "react";
 import { X } from "lucide-react";
 import {
@@ -145,15 +146,15 @@ function CheckboxGrid({
   bordered?: boolean;
 }) {
   return (
-    <div className={cn("grid grid-cols-2 gap-2 p-3 sm:grid-cols-3", bordered && "rounded-md border border-border")}>
+    <div className={cn("grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3", bordered && "rounded-md border border-border")}>
       {options.map((option) => (
-        <label key={option.key} className="flex items-center gap-2 text-sm">
+        <label key={option.key} className="flex min-h-11 items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={value[option.key] ?? false}
             onChange={(e) => onChange(withAmenity(value, option.key, e.target.checked))}
           />
-          {option.label}
+          {(() => { const Icon = amenityIcon(option.key); return <><Icon aria-hidden className="size-5 shrink-0 text-primary" /><span className="min-w-0 [overflow-wrap:anywhere]">{option.label}</span></>; })()}
         </label>
       ))}
     </div>
@@ -281,9 +282,9 @@ export function PropertyExtendedFields({
         <p className="text-xs text-muted-foreground">
           Other institutes or colleges students here might attend, beyond the nearest university.
         </p>
-        <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-2 xl:grid-cols-3">
           {NEARBY_INSTITUTIONS.map((name) => (
-            <label key={name} className="flex items-center gap-2 text-sm">
+            <label key={name} className="flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={value.otherCatchments.includes(name)}
@@ -400,7 +401,7 @@ export function PropertyExtendedFields({
         <p className="text-xs text-muted-foreground">Tick every option you accept.</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {RENT_PERIODS.map((r) => (
-            <label key={r} className="flex items-center gap-2 text-sm">
+            <label key={r} className="flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={value.rentPeriods.includes(r)}
@@ -433,7 +434,7 @@ export function PropertyExtendedFields({
       </fieldset>
 
       <div className="flex flex-wrap gap-6">
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-h-11 items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={value.transportShuttle}
@@ -441,7 +442,7 @@ export function PropertyExtendedFields({
           />
           University shuttle available
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-h-11 items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={value.advanceRentRequired}
@@ -449,7 +450,7 @@ export function PropertyExtendedFields({
           />
           Advance rent required
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-h-11 items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={value.photographyConsent}

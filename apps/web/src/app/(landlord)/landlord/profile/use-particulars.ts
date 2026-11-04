@@ -20,6 +20,8 @@ export function errorMessage(err: unknown, fallback: string): string {
 // other.
 export function useParticulars(profile: LandlordProfileWithParticulars) {
   const router = useRouter();
+  const [name, setName] = useState(profile.name ?? "");
+  const [username, setUsername] = useState(profile.username ?? "");
   const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth ?? "");
   const [gender, setGender] = useState(profile.gender ?? "");
   const [nationality, setNationality] = useState(profile.nationality ?? "");
@@ -31,8 +33,10 @@ export function useParticulars(profile: LandlordProfileWithParticulars) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const fields = { dateOfBirth, gender, nationality, address, emergencyContactName, emergencyContactPhone, contactPhone };
+  const fields = { name, username, dateOfBirth, gender, nationality, address, emergencyContactName, emergencyContactPhone, contactPhone };
   const setters = {
+    name: setName,
+    username: setUsername,
     dateOfBirth: setDateOfBirth,
     gender: setGender,
     nationality: setNationality,
@@ -55,6 +59,8 @@ export function useParticulars(profile: LandlordProfileWithParticulars) {
       await api("/landlords/particulars", {
         method: "PATCH",
         body: JSON.stringify({
+          name: name.trim(),
+          ...(username ? { username } : {}),
           dateOfBirth: dateOfBirth || null,
           gender: gender || null,
           nationality: nationality || null,

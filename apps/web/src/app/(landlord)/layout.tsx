@@ -52,6 +52,7 @@ export default async function LandlordLayout({
       portalLabel="Landlord"
       user={session.user}
       access={session.access}
+      profileHref="/landlord/profile"
       homeHref="/landlord"
       notificationsEndpoint="/notifications"
       nav={[

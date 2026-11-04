@@ -17,15 +17,15 @@ import { ACCOUNT_SECTIONS, AccountSettingsNav } from "./account-settings-nav";
 import { errorMessage, useParticulars, type Particulars } from "./use-particulars";
 
 const inputClass = cn(
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors duration-150",
+  "flex h-10 min-w-0 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors duration-150",
   "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
 );
 const selectClass = inputClass;
 
 function SaveRow({ pending, saved, label }: { pending: boolean; saved: boolean; label: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <Button type="submit" disabled={pending}>
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <Button type="submit" disabled={pending} className="h-auto min-h-11 max-w-full whitespace-normal py-2">
         {pending ? "Saving…" : label}
       </Button>
       {saved && <p className="text-sm text-success">Saved.</p>}
@@ -107,6 +107,15 @@ export function PersonalDetailsForm({ particulars }: { particulars: Particulars 
   const { fields, setField } = particulars;
   return (
     <form onSubmit={particulars.save} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="profile-name" required>Display name</Label>
+        <Input id="profile-name" required maxLength={200} autoComplete="name" value={fields.name} onChange={e => setField("name", e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="profile-username" required>Username</Label>
+        <Input id="profile-username" required minLength={3} maxLength={20} pattern="[A-Za-z0-9_]{3,20}" value={fields.username} onChange={e => setField("username", e.target.value)} />
+        <p className="text-xs text-muted-foreground">Letters, numbers and underscores. Usernames can repeat and do not change your sign-in details.</p>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="profile-dob">Date of birth</Label>
@@ -165,6 +174,26 @@ export function ContactDetailsForm({ particulars }: { particulars: Particulars }
   );
 }
 
+function WhatsAppForm({ initialValue }: { initialValue: string | null }) {
+  const router = useRouter();
+  const [number, setNumber] = useState(initialValue ?? "");
+  const [pending, setPending] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function save(event: React.FormEvent) {
+    event.preventDefault(); setPending(true); setSaved(false); setError(null);
+    try {
+      await api("/landlords/contact", { method: "PATCH", body: JSON.stringify({ whatsappNumber: number || null }) });
+      setSaved(true); router.refresh();
+    } catch (err) { setError(errorMessage(err, "Couldn't update your WhatsApp number. Try again.")); }
+    finally { setPending(false); }
+  }
+  return <form onSubmit={save} className="space-y-4">
+    <PhoneField id="profile-whatsapp" label="WhatsApp number" value={number} onChange={setNumber} hint="Optional contact number. This does not change your sign-in phone." />
+    <SaveRow pending={pending} saved={saved} label="Save WhatsApp number" /><ErrorLine error={error} />
+  </form>;
+}
+
 export function LandlordAccountSettings({
   profile,
   hasLiveListing,
@@ -176,9 +205,9 @@ export function LandlordAccountSettings({
 }) {
   const particulars = useParticulars(profile);
   return (
-    <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
       <AccountSettingsNav />
-      <div className="max-w-3xl space-y-6">
+      <div className="min-w-0 w-full max-w-3xl space-y-6 [&_input]:min-w-0 [&_button[type=submit]]:h-auto [&_button[type=submit]]:min-h-11 [&_button[type=submit]]:max-w-full [&_button[type=submit]]:whitespace-normal [&_button[type=submit]]:py-2">
         <SettingsCard id="personal">
           <PersonalDetailsForm particulars={particulars} />
         </SettingsCard>
@@ -187,6 +216,8 @@ export function LandlordAccountSettings({
           <IdentityForm profile={profile} />
         </SettingsCard>
         <SettingsCard id="contact">
+          <WhatsAppForm initialValue={profile.whatsappNumber} />
+          <hr className="border-border" />
           <ContactDetailsForm particulars={particulars} />
         </SettingsCard>
         <SettingsCard id="security">
@@ -209,7 +240,7 @@ export function LandlordAccountSettings({
 function SettingsCard({ id, children }: { id: (typeof ACCOUNT_SECTIONS)[number]["id"]; children: React.ReactNode }) {
   const section = ACCOUNT_SECTIONS.find((s) => s.id === id)!;
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <section id={id} aria-labelledby={`${id}-h`} className="min-w-0 scroll-mt-24 overflow-hidden [overflow-wrap:anywhere] rounded-xl border border-border bg-card shadow-sm">
       <header className="border-b border-border px-5 py-4 sm:px-6">
         <h2 id={`${id}-h`} className="font-display text-lg font-semibold">{section.label}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{section.description}</p>

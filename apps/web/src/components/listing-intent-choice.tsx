@@ -27,14 +27,14 @@ export function ListingIntentChoice({
   onChange: (value: ListingIntent) => void;
 }) {
   return (
-    <fieldset className="space-y-2">
-      <legend className="text-sm font-semibold text-foreground">What do you want to do with this property?</legend>
+    <fieldset className="min-w-0 space-y-2">
+      <legend className="max-w-full text-sm font-semibold text-foreground">What do you want to do with this property?</legend>
       <div className="grid gap-3 sm:grid-cols-2">
         {OPTIONS.map((option) => (
           <label
             key={option.value}
             className={cn(
-              "flex cursor-pointer gap-3 rounded-lg border p-4 text-sm transition-colors",
+              "flex min-w-0 cursor-pointer gap-3 rounded-lg border p-4 text-sm transition-colors",
               value === option.value ? "border-primary bg-primary/5" : "border-border hover:border-primary/50",
             )}
           >
@@ -46,7 +46,7 @@ export function ListingIntentChoice({
               onChange={() => onChange(option.value)}
               className="mt-0.5 size-4 shrink-0 accent-primary"
             />
-            <span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">
               <span className="block font-semibold text-foreground">{option.title}</span>
               <span className="mt-1 block text-muted-foreground">{option.body}</span>
             </span>

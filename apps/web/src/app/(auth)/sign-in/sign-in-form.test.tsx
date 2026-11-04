@@ -77,8 +77,8 @@ describe("SignInForm", () => {
     expect(renderToStaticMarkup(<SignInForm next={null} />)).not.toContain("portal=staff");
   });
 
-  it("opens Logto on the register screen for a new student", () => {
-    expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain("intent=student&amp;screen=register");
+  it("offers account selection instead of assuming a student registration", () => {
+    expect(renderToStaticMarkup(<SignInForm next={null} />)).toContain('href="/create-account"');
   });
 });
 

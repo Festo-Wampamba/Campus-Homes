@@ -1,5 +1,6 @@
 "use client";
 
+import { amenityIcon } from "@/lib/amenity-icon";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
@@ -437,9 +438,9 @@ export function OnboardingWizard({
                 idPrefix="onboarding-property"
                 amenitiesExtra={(
                   <>
-                <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-2 xl:grid-cols-3">
                   {AMENITY_OPTIONS.filter((option) => option.key !== "security").map((option) => (
-                    <label key={option.key} className="flex items-center gap-2 text-sm">
+                    <label key={option.key} className="flex min-h-11 items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={amenities[option.key] ?? false}
@@ -447,7 +448,7 @@ export function OnboardingWizard({
                           setAmenities((prev) => ({ ...prev, [option.key]: e.target.checked }))
                         }
                       />
-                      {option.label}
+                      {(() => { const Icon = amenityIcon(option.key); return <><Icon aria-hidden className="size-5 shrink-0 text-primary" /><span className="min-w-0 [overflow-wrap:anywhere]">{option.label}</span></>; })()}
                     </label>
                   ))}
                 </div>

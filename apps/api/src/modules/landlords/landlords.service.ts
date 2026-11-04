@@ -5,6 +5,7 @@ import type {
   PendingLandlordAccount,
   RejectLandlordAccountInput,
   UpsertLandlordProfileInput,
+  UpdateLandlordContactInput,
 } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
@@ -141,6 +142,7 @@ export class LandlordsService {
       const [particulars] = await db
         .select({
           name: users.name,
+          username: users.username,
           dateOfBirth: users.dateOfBirth,
           gender: users.gender,
           nationality: users.nationality,
@@ -155,8 +157,17 @@ export class LandlordsService {
     });
   }
 
-  // RLS also enforces the "pending only" self-edit rule (landlords_self_update);
-  // this check gives a clean 403 instead of a silent zero-row update.
+  // A contact-only allowlist; changing WhatsApp cannot change legal/KYC fields.
+  async updateContact(ctx: RlsContext, input: UpdateLandlordContactInput) {
+    return this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (db) => {
+      const [row] = await db.update(landlords).set({ whatsappNumber: input.whatsappNumber })
+        .where(eq(landlords.userId, ctx.userId)).returning({ whatsappNumber: landlords.whatsappNumber });
+      if (!row) throw new NotFoundException('Landlord profile not found');
+      return row;
+    });
+  }
+
+  // RLS also enforces pending-only legal-profile edits.
   upsertProfile(ctx: RlsContext, input: UpsertLandlordProfileInput) {
     return this.rlsDb.run(ctx, async (db) => {
       const [existing] = await db.select().from(landlords).where(eq(landlords.userId, ctx.userId));

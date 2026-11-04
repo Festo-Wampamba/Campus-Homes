@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 import { roomCategoryLabel } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 export type RoomCategoryRow = {
   // Local-only key for React reconciliation — never sent to the API.
@@ -139,16 +138,9 @@ export function RoomCategoryRows({
       {rows.map((row, i) => (
         <div
           key={row.key}
-          className={cn(
-            "grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3",
-            showBeds
-              ? "@xl:grid-cols-3 @4xl:grid-cols-[minmax(0,1.6fr)_minmax(0,6rem)_minmax(0,6rem)_minmax(0,1fr)_minmax(0,1fr)_auto]"
-              : showSelfContained
-                ? "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto_auto]"
-                : "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,8rem)_auto]",
-          )}
+          className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl border border-border p-4 @md:grid-cols-2 @4xl:grid-cols-3"
         >
-          <div className="col-span-2 space-y-1.5 @xl:col-span-1">
+          <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>
             <select
               id={`${idPrefix}-category-${i}`}
@@ -166,7 +158,11 @@ export function RoomCategoryRows({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
+            <Label htmlFor={`${idPrefix}-variant-${i}`}>{row.category === "other" ? "Custom room type" : "Variant (optional)"}</Label>
             <Input
+              id={`${idPrefix}-variant-${i}`}
               aria-label={row.category === "other" ? "Custom room type" : "Variant name (optional)"}
               value={row.customLabel}
               maxLength={40}
@@ -174,7 +170,7 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { customLabel: e.target.value })}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-count-${i}`}>Rooms</Label>
             <Input
               id={`${idPrefix}-count-${i}`}
@@ -187,7 +183,7 @@ export function RoomCategoryRows({
             />
           </div>
           {showBeds && (
-            <div className="space-y-1.5">
+            <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
               <Label htmlFor={`${idPrefix}-beds-${i}`}>Beds per room</Label>
               <Input
                 id={`${idPrefix}-beds-${i}`}
@@ -203,7 +199,7 @@ export function RoomCategoryRows({
               />
             </div>
           )}
-          <div className="space-y-1.5">
+          <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-price-${i}`}>Price per bed / semester (UGX)</Label>
             <Input
               id={`${idPrefix}-price-${i}`}
@@ -214,7 +210,7 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { pricePerTermUgx: e.target.value })}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-deposit-${i}`}>Deposit (UGX, optional)</Label>
             <Input
               id={`${idPrefix}-deposit-${i}`}
@@ -225,9 +221,9 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { depositUgx: e.target.value })}
             />
           </div>
-          <div className={cn("col-span-2 flex h-10 items-center justify-between gap-2 @xl:col-span-1", !showBeds && "contents")}>
+          <div className="col-span-full mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             {showSelfContained && (
-              <label className="col-span-2 flex items-center gap-2 text-sm whitespace-nowrap @3xl:col-span-1">
+              <label className="flex min-h-11 items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={row.selfContained}
@@ -240,6 +236,7 @@ export function RoomCategoryRows({
               type="button"
               variant="ghost"
               size="icon"
+              className="min-h-11 min-w-11"
               aria-label="Remove room type"
               onClick={() => remove(row.key)}
             >
@@ -300,6 +297,7 @@ export function RoomCategoryRows({
         type="button"
         variant="secondary"
         size="sm"
+        className="h-auto min-h-11 max-w-full whitespace-normal py-2"
         onClick={() => onChange([...rows, emptyRoomCategoryRow()])}
       >
         <Plus aria-hidden className="size-4" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { africanPhone } from "@campushomes/shared";
 
@@ -13,6 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+const REGISTRATION_CHOICE_KEY = "campushomes:registration-choice";
+const noSubscription = () => () => undefined;
+function storedAccountType(): "student" | "landlord" | null {
+  try { const value = sessionStorage.getItem(REGISTRATION_CHOICE_KEY); return value === "student" || value === "landlord" ? value : null; } catch { return null; }
+}
+
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
 const selectClass = cn(
@@ -22,6 +28,7 @@ const selectClass = cn(
 
 export function OnboardingForm({
   userId,
+  askAccountType = false,
   staff = false,
   initialName,
   initialUsername,
@@ -31,6 +38,7 @@ export function OnboardingForm({
   next,
 }: {
   userId: string;
+  askAccountType?: boolean;
   staff?: boolean;
   initialName: string;
   initialUsername: string;
@@ -49,9 +57,12 @@ export function OnboardingForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const storedChoice = useSyncExternalStore(noSubscription, storedAccountType, () => null);
+  const [selectedType, setSelectedType] = useState<"student" | "landlord" | null>(null);
+  const accountType = selectedType ?? storedChoice;
   const [sessionExpired, setSessionExpired] = useState(false);
-  const { draft, settle } = useIdleDraft<{ name: string; username: string; phone: string; gender: string }>(
-    `campushomes:onboarding:${userId}`, { name, username, phone, gender },
+  const { draft, settle } = useIdleDraft<{ name: string; username: string; phone: string; gender: string; accountType?: "student" | "landlord" | null }>(
+    `campushomes:onboarding:${userId}`, { name, username, phone, gender, accountType },
   );
   const signIn = `${staff ? "/staff" : "/sign-in"}?${new URLSearchParams({ error: "session_ended", next })}`;
 
@@ -62,6 +73,7 @@ export function OnboardingForm({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    if (askAccountType && !accountType) return setError("Choose a student or landlord account.");
     if (!name.trim()) return setError("Enter your full name.");
     if (!usernameValid) return setError("Username must be 3–20 letters, numbers or underscores.");
     if (askGender && !gender) return setError("Choose your gender.");
@@ -70,12 +82,13 @@ export function OnboardingForm({
     try {
       await api("/me/onboarding", {
         method: "POST",
-        body: JSON.stringify({ name: name.trim(), username: username.toLowerCase(), contactPhone: phone, ...(askGender ? { gender } : {}) }),
+        body: JSON.stringify({ ...(askAccountType && accountType ? { accountType } : {}), name: name.trim(), username: username.toLowerCase(), contactPhone: phone, ...(askGender ? { gender } : {}) }),
       });
       // The identity gate reads the session server-side, so a full navigation
       // (not just router.refresh) is what re-runs it with the new profile.
       settle();
-      router.replace(next);
+      try { sessionStorage.removeItem(REGISTRATION_CHOICE_KEY); } catch { /* Storage may be unavailable. */ }
+      router.replace(askAccountType && accountType === "landlord" ? "/landlords/enroll" : next);
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -97,6 +110,7 @@ export function OnboardingForm({
         <div className="mt-2 flex flex-wrap gap-3">
           <button type="button" className="font-semibold text-primary underline" onClick={() => {
             if ([draft.name, draft.username, draft.phone, draft.gender].every(value => typeof value === "string")) {
+              if (draft.accountType === "student" || draft.accountType === "landlord") setSelectedType(draft.accountType);
               setName(draft.name); setUsername(draft.username); setPhone(draft.phone); setPhoneRestoreKey(value => value + 1); setGender(draft.gender);
             }
             settle();
@@ -104,6 +118,14 @@ export function OnboardingForm({
           <button type="button" className="underline" onClick={settle}>Discard</button>
         </div>
       </div>}
+      {askAccountType && <fieldset className="min-w-0 space-y-2">
+        <legend className="max-w-full text-sm font-semibold">Choose your account type</legend>
+        <p className="text-xs text-muted-foreground">Select the account you want to finish creating.</p>
+        {(["student", "landlord"] as const).map(type => <label key={type} className="flex min-h-11 min-w-0 items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
+          <input type="radio" name="accountType" value={type} checked={accountType === type} onChange={() => setSelectedType(type)} required />
+          <span className="min-w-0 [overflow-wrap:anywhere]">{type === "student" ? "Student — find accommodation" : "Landlord — list and manage properties"}</span>
+        </label>)}
+      </fieldset>}
       <div className="space-y-1.5">
         <Label htmlFor="onboarding-name" required>Full name</Label>
         <Input id="onboarding-name" required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Muwanguzi Festo" aria-describedby="onboarding-name-hint" />
@@ -156,7 +178,7 @@ export function OnboardingForm({
       )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {sessionExpired && <a href={signIn} className="block font-semibold text-primary underline">Sign in again</a>}
-      <Button type="submit" disabled={sessionExpired || pending || !name.trim() || !usernameValid || !phoneCheck.success || (askGender && !gender)} className="w-full">
+      <Button type="submit" disabled={(askAccountType && !accountType) || sessionExpired || pending || !name.trim() || !usernameValid || !phoneCheck.success || (askGender && !gender)} className="w-full">
         {pending ? "Saving…" : "Continue"}
       </Button>
     </form>

@@ -1,7 +1,7 @@
 export const ACCOUNT_SECTIONS = [
-  { id: "personal", label: "Personal details", description: "Your date of birth, gender, nationality, phone number and address." },
+  { id: "personal", label: "Personal details", description: "Your display name, username, personal details and contact number." },
   { id: "identity", label: "Identity & verification", description: "The legal name we verified, and where your verification stands." },
-  { id: "contact", label: "Contact & emergency", description: "Who we should call if we can't reach you." },
+  { id: "contact", label: "Contact & emergency", description: "Your WhatsApp number and emergency contacts." },
   { id: "security", label: "Sign-in & security", description: "The email you sign in with, and your password." },
 ] as const;
 
@@ -10,7 +10,7 @@ export const ACCOUNT_SECTIONS = [
 export function AccountSettingsNav() {
   return (
     <>
-      <nav aria-label="Account settings sections" className="-mx-1 overflow-x-auto pb-1 lg:hidden">
+      <nav aria-label="Account settings sections" className="min-w-0 w-full max-w-full overflow-x-auto pb-1 lg:hidden">
         <ul className="flex gap-2 px-1 text-sm">
           {ACCOUNT_SECTIONS.map((s) => (
             <li key={s.id} className="shrink-0">

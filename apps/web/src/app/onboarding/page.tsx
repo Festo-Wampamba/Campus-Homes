@@ -26,6 +26,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       <IdleTimeout returnPath={next} signInPath={session.access.workspaces.includes("admin") || session.access.workspaces.includes("ops") ? "/staff" : "/sign-in"} />
       <OnboardingForm
         userId={session.user.id}
+        askAccountType={session.user.role === "student" && !session.user.username && session.access.roles.length === 1 && session.access.roles[0] === "student"}
         staff={session.access.workspaces.includes("admin") || session.access.workspaces.includes("ops")}
         initialName={session.user.name ?? ""}
         initialUsername={session.user.username ?? ""}

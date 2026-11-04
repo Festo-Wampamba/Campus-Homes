@@ -32,6 +32,7 @@ export async function updateSelfParticulars(
     const [row] = await db
       .update(users)
       .set({
+        ...(input.username !== undefined ? { username: input.username.toLowerCase() } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.dateOfBirth !== undefined ? { dateOfBirth: input.dateOfBirth } : {}),
         ...(input.gender !== undefined ? { gender: input.gender } : {}),
@@ -46,6 +47,7 @@ export async function updateSelfParticulars(
       .returning({
         id: users.id,
         name: users.name,
+        username: users.username,
         dateOfBirth: users.dateOfBirth,
         gender: users.gender,
         nationality: users.nationality,

@@ -25,6 +25,7 @@ import { users } from '../../db/schema';
 import { sendVerificationCodeEmail } from '../auth/auth.email';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { LogtoEmailConflictError, LogtoManagementClient } from '../auth/logto-management.client';
+import { chooseInitialConsumerRole } from './registration-choice';
 import { LogtoProfileSync } from '../auth/logto-profile-sync';
 import { rlsCtx } from '../auth/roles';
 import { updateSelfParticulars } from './particulars';
@@ -113,7 +114,8 @@ export class MeController {
     const ctx = rlsCtx(req);
     const svcCtx: RlsContext = { userId: ctx.userId, role: 'service_role' };
     const username = body.username.toLowerCase();
-    const saved = await this.rlsDb.run(svcCtx, async (db) => {
+    const saved = await this.rlsDb.run(svcCtx, async (db, client) => {
+      if (body.accountType === "landlord") await chooseInitialConsumerRole(client, ctx.userId);
       // Students and landlords must give a gender (hostels are often
       // single-gender); staff skip it. One already saved from a profile page
       // counts, so an existing user is only asked for what's missing.

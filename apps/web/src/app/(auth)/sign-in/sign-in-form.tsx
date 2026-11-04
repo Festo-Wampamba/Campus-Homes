@@ -120,7 +120,7 @@ export function SignInForm({ next, error }: { next: string | null; error?: strin
         </a>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           New here?{" "}
-          <a href={signInUrl("consumer", next ?? undefined, "student", "register")} className="font-semibold text-primary underline-offset-2 hover:underline">
+          <a href={`/create-account${next ? `?next=${encodeURIComponent(next)}` : ""}`} className="font-semibold text-primary underline-offset-2 hover:underline">
             Create an account
           </a>
         </p>

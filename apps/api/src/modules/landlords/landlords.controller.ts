@@ -5,7 +5,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { LogtoProfileSync } from '../auth/logto-profile-sync';
 import { updateSelfParticulars } from '../profile/particulars';
-import { UpdateSelfParticularsDto, UpsertLandlordProfileDto } from './landlords.dto';
+import { UpdateLandlordContactDto, UpdateSelfParticularsDto, UpsertLandlordProfileDto } from './landlords.dto';
 import { LandlordsService } from './landlords.service';
 
 @Controller('landlords')
@@ -34,6 +34,12 @@ export class LandlordsController {
   @Roles('landlord')
   upsertProfile(@Req() req: AuthenticatedRequest, @Body() body: UpsertLandlordProfileDto) {
     return this.landlords.upsertProfile(rlsCtx(req), body);
+  }
+
+  @Patch('contact')
+  @Roles('landlord')
+  updateContact(@Req() req: AuthenticatedRequest, @Body() body: UpdateLandlordContactDto) {
+    return this.landlords.updateContact(rlsCtx(req), body);
   }
 
   @Patch('particulars')

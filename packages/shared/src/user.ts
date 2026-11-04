@@ -57,10 +57,21 @@ export const upsertLandlordProfileSchema = z
   });
 export type UpsertLandlordProfileInput = z.infer<typeof upsertLandlordProfileSchema>;
 
+// Non-unique profile username, stored lowercased. Never use it for sign-in,
+// authorization, or an unambiguous user lookup; those use IDs/verified contacts.
+export const usernameSchema = z
+  .string()
+  .trim()
+  .min(3, "At least 3 characters")
+  .max(20, "At most 20 characters")
+  .regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers and underscores only");
+export type Username = z.infer<typeof usernameSchema>;
+
 // Self-service identity edits (student and landlord "my profile" pages).
 // Deliberately excludes role, status, email, sign-in phone, and staff-only fields
 // (notes, university, legalName) — those go through their own gated paths.
 export const updateSelfParticularsSchema = z.object({
+  username: usernameSchema.transform(value => value.toLowerCase()).optional(),
   name: z.string().trim().min(1).max(200).optional(),
   dateOfBirth: z.iso.date().nullable().optional(),
   gender: z.enum(['male', 'female']).nullable().optional(),
@@ -74,6 +85,7 @@ export const updateSelfParticularsSchema = z.object({
 export type UpdateSelfParticularsInput = z.infer<typeof updateSelfParticularsSchema>;
 
 export type SelfParticulars = {
+  username?: string | null;
   name: string;
   dateOfBirth: string | null;
   gender: string | null;
@@ -118,24 +130,19 @@ export const changeSelfPasswordSchema = z.object({
 });
 export type ChangeSelfPasswordInput = z.infer<typeof changeSelfPasswordSchema>;
 
-// Non-unique profile username, stored lowercased. Never use it for sign-in,
-// authorization, or an unambiguous user lookup; those use IDs/verified contacts.
-export const usernameSchema = z
-  .string()
-  .trim()
-  .min(3, "At least 3 characters")
-  .max(20, "At most 20 characters")
-  .regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers and underscores only");
-export type Username = z.infer<typeof usernameSchema>;
-
 // First-sign-in identity gate: every account (email, phone, or Google) sets a
 // full name, a username and a contact phone before reaching a portal.
 // Gender is optional here because staff skip it; the API requires it for
 // students and landlords (decided 2026-10-17).
 export const profileOnboardingSchema = z.object({
+  accountType: z.enum(["student", "landlord"]).optional(),
   name: z.string().trim().min(1, "Enter your full name").max(200),
   username: usernameSchema,
   contactPhone: africanPhone,
   gender: z.enum(['male', 'female'], { error: "Choose male or female" }).optional(),
 });
 export type ProfileOnboardingInput = z.infer<typeof profileOnboardingSchema>;
+
+// Contact details can change after verification; legal/KYC fields cannot.
+export const updateLandlordContactSchema = z.object({ whatsappNumber: africanPhone.nullable() }).strict();
+export type UpdateLandlordContactInput = z.infer<typeof updateLandlordContactSchema>;
