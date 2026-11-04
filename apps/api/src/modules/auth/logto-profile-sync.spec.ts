@@ -31,12 +31,13 @@ describe('toLogtoUserDetails', () => {
     expect(toLogtoUserDetails(row).customData.accountType).toBe('student');
   });
 
-  it('copies the username into Logto', () => {
-    expect(toLogtoUserDetails(row).username).toBe('jane_doe');
+  it('stores the profile username in non-unique custom data', () => {
+    expect(toLogtoUserDetails(row).customData.profileUsername).toBe('jane_doe');
+    expect(toLogtoUserDetails(row)).not.toHaveProperty('username');
   });
 
-  it('skips a username Logto would reject for starting with a digit', () => {
-    expect(toLogtoUserDetails({ ...row, username: '2jane' }).username).toBeNull();
+  it('keeps digit-prefixed labels out of sign-in credentials', () => {
+    expect(toLogtoUserDetails({ ...row, username: '2jane' }).customData.profileUsername).toBe('2jane');
   });
 
   it('caps the name at the 128 characters Logto accepts', () => {

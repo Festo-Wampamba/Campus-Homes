@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { ConflictException, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
@@ -62,6 +62,9 @@ export class ProvisioningService {
   async provision(claims: LogtoIdentityClaims, portal: Portal, intent: AuthIntent = 'student'): Promise<ProvisionedUser | null> {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       await this.lockIdentity(client, claims);
+      const deleted = await client.query('SELECT 1 FROM deleted_auth_identities WHERE subject_hash = $1',
+        [createHash('sha256').update(claims.sub).digest('hex')]);
+      if (deleted.rows.length) return null;
 
       // Staff grants may only be consumed inside the dedicated staff auth
       // transaction. A verified consumer login must never promote an account.

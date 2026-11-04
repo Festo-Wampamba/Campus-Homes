@@ -37,6 +37,7 @@ export class LogtoManagementClient {
     }
     const res = await fetch(`${this.env.LOGTO_ENDPOINT}/oidc/token`, {
       method: 'POST',
+      signal: AbortSignal.timeout(5_000),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
@@ -230,18 +231,6 @@ export class LogtoManagementClient {
     await this.request(user, { method: 'PATCH', body: JSON.stringify({ name: details.name }) });
     await this.request(`${user}/profile`, { method: 'PATCH', body: JSON.stringify({ profile: details.profile }) });
     await this.request(`${user}/custom-data`, { method: 'PATCH', body: JSON.stringify({ customData: details.customData }) });
-    if (details.username) {
-      // Last and on its own: Logto answers 422 when another identity holds the
-      // name (ours is unique case-insensitively, Logto's per exact spelling).
-      // That must not lose the details above, so only other failures throw.
-      const token = await this.getToken();
-      const res = await fetch(`${this.env.LOGTO_ENDPOINT}${user}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: details.username }),
-      });
-      if (!res.ok && res.status !== 422) throw new Error(`Logto Management API PATCH username failed: HTTP ${res.status}`);
-    }
   }
 
   /** Removes the identity entirely (password, 2-step factors, sessions).
@@ -250,6 +239,7 @@ export class LogtoManagementClient {
     const token = await this.getToken();
     const res = await fetch(`${this.env.LOGTO_ENDPOINT}/api/users/${encodeURIComponent(logtoUserId)}`, {
       method: 'DELETE',
+      signal: AbortSignal.timeout(5_000),
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok && res.status !== 404) throw new Error(`Logto Management API DELETE user failed: HTTP ${res.status}`);

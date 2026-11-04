@@ -10,15 +10,15 @@ import { Dialog, DialogBody, DialogFooter } from "@/components/ui/dialog";
 
 /** Inactivity sign-out for every signed-in shell. Escape or a backdrop click
  * also means someone is there, so they keep the session too. */
-export function IdleTimeout({ signInPath }: { signInPath: "/sign-in" | "/staff" }) {
+export function IdleTimeout({ signInPath, returnPath }: { signInPath: "/sign-in" | "/staff"; returnPath?: string }) {
   const onExpire = useCallback((reason: IdleExpiry) => {
-    const url = idleSignInUrl(signInPath, reason, `${window.location.pathname}${window.location.search}`);
+    const url = idleSignInUrl(signInPath, reason, returnPath ?? `${window.location.pathname}${window.location.search}`);
     // Our session only: the next sign-in always asks for credentials again
     // (prompt=login, plus max_age=0 for staff), so the Logto session can't
     // sign anyone back in silently. Offline queues (IndexedDB) are untouched.
     window.dispatchEvent(new Event(IDLE_SIGN_OUT_EVENT));
     void signOut().catch(() => undefined).finally(() => window.location.assign(url));
-  }, [signInPath]);
+  }, [signInPath, returnPath]);
   const { secondsLeft, staySignedIn } = useIdleTimeout(onExpire);
 
   return (

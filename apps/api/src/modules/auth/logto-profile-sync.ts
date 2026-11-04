@@ -8,7 +8,7 @@ import { LogtoManagementClient } from './logto-management.client';
  * Keeps Logto's copy of a user in step with ours, so the Logto console shows
  * the full person, not just the sign-in email and name. Our `users` row stays
  * the source of truth; this is a one-way, best-effort copy:
- * - name → Logto `name`; username → Logto `username`
+ * - name → Logto `name`; username → non-unique `customData.profileUsername`
  * - gender, date of birth, address → Logto standard `profile` claims
  * - contact phone, nationality, emergency contact, account type → `customData`
  *
@@ -38,8 +38,6 @@ const PROFILE_SELECT = `
   FROM users
   WHERE logto_user_id IS NOT NULL AND deleted_at IS NULL`;
 
-const LOGTO_USERNAME = /^[A-Z_a-z]\w*$/;
-
 export function toLogtoUserDetails(row: LogtoProfileRow) {
   // ponytail: Logto's partial profile update can't clear a claim, so a value
   // removed here stays in Logto until overwritten. Our DB remains authoritative.
@@ -52,12 +50,10 @@ export function toLogtoUserDetails(row: LogtoProfileRow) {
     // Logto rejects names over 128 characters (ours allow 200); a rejected
     // name PATCH would also stop the profile and custom-data updates.
     name: row.name?.slice(0, 128) ?? null,
-    // Logto usernames must start with a letter or underscore; ours may start
-    // with a digit. Those stay ours only (still shown in our own console).
-    username: row.username && LOGTO_USERNAME.test(row.username) ? row.username : null,
     profile,
     customData: {
       accountType: row.role,
+      profileUsername: row.username,
       contactPhone: row.contactPhone,
       nationality: row.nationality,
       emergencyContactName: row.emergencyContactName,

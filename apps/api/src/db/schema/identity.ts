@@ -21,8 +21,8 @@ export const users = pgTable('users', {
   name: text('name').notNull().default(''),
   // Public @handle chosen at first-sign-in onboarding. Nullable so existing
   // rows and just-provisioned identities have none until the gate collects
-  // it; case-insensitive uniqueness enforced by users_username_lower_uk
-  // (0051), not a plain column unique.
+  // it; migration 0085 makes this a non-unique profile label, never an
+  // authentication identifier.
   username: text('username'),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
@@ -107,4 +107,15 @@ export const sessions = pgTable('sessions', {
   lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Minimal deletion tombstone + durable provider cleanup. Service-only RLS is
+// installed by migration 0085. Once cleanup completes, only the subject hash
+// remains to reject stale callbacks; no credentials or contact details remain.
+export const deletedAuthIdentities = pgTable('deleted_auth_identities', {
+  subjectHash: text('subject_hash').primaryKey(),
+  logtoUserId: text('logto_user_id'),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }).notNull().defaultNow(),
 });

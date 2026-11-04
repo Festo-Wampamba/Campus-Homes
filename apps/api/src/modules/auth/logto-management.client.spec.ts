@@ -243,20 +243,13 @@ describe('self-hosted Logto Management API', () => {
       ]);
     });
 
-    it('sets the username last, on the user record', async () => {
+    it('never turns a profile username into a sign-in credential', async () => {
       const fetcher = calls();
       await client().updateUserDetails('user-1', { ...details, username: 'jane_doe' });
-      expect(fetcher.mock.calls[4]).toEqual([
-        'https://auth.example.test/api/users/user-1',
-        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ username: 'jane_doe' }) }),
-      ]);
+      expect(fetcher).toHaveBeenCalledTimes(4);
+      expect(fetcher.mock.calls.slice(1).every((call) => !String(call[1]?.body).includes('"username"'))).toBe(true);
     });
 
-    it('tolerates a username another Logto identity already holds', async () => {
-      calls().mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response('{}'))
-        .mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response('{}', { status: 422 }));
-      await expect(client().updateUserDetails('user-1', { ...details, username: 'jane_doe' })).resolves.toBeUndefined();
-    });
   });
 
   it('treats deleting an already-removed identity as done', async () => {

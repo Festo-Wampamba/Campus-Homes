@@ -7,6 +7,7 @@ import { ProvisioningService } from '../../src/modules/auth/provisioning.service
 type Row = Record<string, unknown>;
 
 function fixture(options: {
+  deleted?: boolean;
   linked?: Row;
   candidates?: Row[];
   staffAccess?: boolean;
@@ -17,6 +18,7 @@ function fixture(options: {
     query: jest.fn(async (text: string, params: unknown[] = []) => {
       const sql = text.replace(/\s+/g, ' ').trim();
       calls.push({ sql, params });
+      if (sql.includes('FROM deleted_auth_identities')) return { rows: options.deleted ? [{}] : [] };
       if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
       if (sql.includes('FROM auth_invitations')) return { rows: [] };
       if (sql.includes('WHERE logto_user_id = $1 FOR UPDATE')) {
@@ -125,4 +127,10 @@ describe('provisioning identity boundaries', () => {
     });
     expect(await service.provision({ sub: 'blocked-sub' }, 'consumer')).toBeNull();
   });
+});
+
+it('never recreates a permanently deleted provider subject', async () => {
+  const { service, createdParams } = fixture({ deleted: true });
+  expect(await service.provision({ sub: 'old-sub', email: 'reused@example.test', emailVerified: true }, 'consumer')).toBeNull();
+  expect(createdParams()).toBeUndefined();
 });

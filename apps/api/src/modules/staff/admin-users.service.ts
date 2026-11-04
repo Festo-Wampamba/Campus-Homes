@@ -5,6 +5,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
+  type OnModuleDestroy,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
@@ -74,7 +76,7 @@ function readPermissionForAccountType(accountType: string): string | null {
 }
 
 @Injectable()
-export class AdminUsersService {
+export class AdminUsersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AdminUsersService.name);
 
   constructor(
@@ -85,6 +87,41 @@ export class AdminUsersService {
     // Optional so unit tests that build the service by hand needn't stub it.
     private readonly logtoSync?: LogtoProfileSync,
   ) {}
+
+  private cleanupTimer?: ReturnType<typeof setInterval>;
+  private cleanupRunning = false;
+
+  onModuleInit() {
+    void this.retryIdentityDeletions();
+    this.cleanupTimer = setInterval(() => void this.retryIdentityDeletions(), 60_000);
+    this.cleanupTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+  }
+
+  private async retryIdentityDeletions() {
+    if (this.cleanupRunning) return;
+    this.cleanupRunning = true;
+    try {
+      const pending = await this.rlsDb.run(SERVICE_CTX, async (_db, client) =>
+        (await client.query<{ logtoUserId: string }>(`SELECT logto_user_id AS "logtoUserId"
+          FROM deleted_auth_identities WHERE completed_at IS NULL ORDER BY last_attempt_at, requested_at LIMIT 25`)).rows);
+      for (const row of pending) await this.deleteLogtoIdentity(row.logtoUserId);
+    } catch {
+      this.logger.warn('Identity deletion retry unavailable; durable pending records will be retried');
+    } finally {
+      this.cleanupRunning = false;
+    }
+  }
+
+  /** Take the provisioning lock before the user-row lock, in the same order
+   * as an OIDC callback, so a concurrent sign-in cannot recreate the user. */
+  private async lockDeletionIdentity(client: PoolClient, userId: string) {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('sub:' || logto_user_id, 0))
+      FROM users WHERE id = $1 AND logto_user_id IS NOT NULL`, [userId]);
+  }
 
   async create(actor: RlsContext, input: CreateAdminUserInput) {
     if (input.temporaryPassword) {
@@ -567,6 +604,7 @@ export class AdminUsersService {
   async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string, confirmEmail?: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
     const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await this.lockDeletionIdentity(client, userId);
       const target = (await client.query<{
         id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean; isActiveSuperAdmin: boolean; isSeniorLeadership: boolean;
       }>(`
@@ -603,22 +641,29 @@ export class AdminUsersService {
     });
     // Before the audit write: the user row is already gone, so a failed audit
     // must not leave the Logto identity behind for the next same-email signup.
-    this.deleteLogtoIdentity(userId, logtoUserId);
+    const complete = await this.deleteLogtoIdentity(logtoUserId);
     await this.audit.record(actor, 'users.delete', 'user', userId, { reason });
-    return { id: userId, deleted: true };
+    return { id: userId, deleted: true, ...(!complete ? { identityCleanupPending: true } : {}) };
   }
 
-  /** After our row is gone, the Logto identity must go too: otherwise a new
-   * account with the same email re-links to it and inherits its password and
-   * 2-step setup. Best effort, after commit: a Logto outage must not undo a
-   * completed delete, so a failure is logged for manual cleanup. */
-  private deleteLogtoIdentity(userId: string, logtoUserId: string | null) {
-    if (!logtoUserId) return;
-    void Promise.resolve()
-      .then(() => this.logtoManagement.deleteUser(logtoUserId))
-      .catch((err: unknown) => {
-        this.logger.warn(`Logto identity ${logtoUserId} for deleted user ${userId} was not removed: ${err instanceof Error ? err.message : String(err)}`);
+  /** Called only after a committed local delete. Failures remain durable,
+   * are retried on startup/every minute, and are never reported as complete. */
+  private async deleteLogtoIdentity(logtoUserId: string | null): Promise<boolean> {
+    if (!logtoUserId) return true;
+    try {
+      await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+        await client.query('UPDATE deleted_auth_identities SET last_attempt_at = now() WHERE logto_user_id = $1', [logtoUserId]);
       });
+      await this.logtoManagement.deleteUser(logtoUserId);
+      await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+        await client.query(`UPDATE deleted_auth_identities SET logto_user_id = NULL, completed_at = now()
+          WHERE logto_user_id = $1`, [logtoUserId]);
+      });
+      return true;
+    } catch {
+      this.logger.warn('Identity deletion pending; durable cleanup will retry');
+      return false;
+    }
   }
 
   /** Cleanup path for accounts already soft-deleted by the legacy two-step
@@ -628,6 +673,7 @@ export class AdminUsersService {
   async purgeUser(actor: RlsContext, actorPermissions: Set<string>, userId: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot purge your own account');
     const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await this.lockDeletionIdentity(client, userId);
       const target = (await client.query<{ id: string; deletedAt: Date | null; logtoUserId: string | null; isSuperAdmin: boolean; isSeniorLeadership: boolean }>(`
         SELECT u.id, u.deleted_at AS "deletedAt", u.logto_user_id AS "logtoUserId", EXISTS (
           SELECT 1 FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id
@@ -644,9 +690,9 @@ export class AdminUsersService {
       await this.runPurgeCascade(client, userId);
       return target.logtoUserId;
     });
-    this.deleteLogtoIdentity(userId, logtoUserId); // before audit, as in deleteUser
+    const complete = await this.deleteLogtoIdentity(logtoUserId); // before audit, as in deleteUser
     await this.audit.record(actor, 'users.purge', 'user', userId, {});
-    return { id: userId, purged: true };
+    return { id: userId, purged: true, ...(!complete ? { identityCleanupPending: true } : {}) };
   }
 
   /** Deletes a user and their whole owned footprint (properties→listings→
@@ -658,6 +704,10 @@ export class AdminUsersService {
    * child-before-parent: the schema's RESTRICT/NO-ACTION FKs would otherwise
    * block the delete. */
   private async runPurgeCascade(client: PoolClient, userId: string) {
+      await client.query(`INSERT INTO deleted_auth_identities (subject_hash, logto_user_id)
+        SELECT encode(sha256(convert_to(logto_user_id, 'UTF8')), 'hex'), logto_user_id
+        FROM users WHERE id = $1 AND logto_user_id IS NOT NULL
+        ON CONFLICT (subject_hash) DO NOTHING`, [userId]);
       await client.query(`CREATE TEMP TABLE _pg_g(id uuid PRIMARY KEY) ON COMMIT DROP`);
       await client.query(`INSERT INTO _pg_g VALUES ($1)`, [userId]);
       await client.query(`
@@ -733,7 +783,8 @@ export class AdminUsersService {
           WHERE invited_by IN (SELECT id FROM _pg_g)
              OR cancelled_by IN (SELECT id FROM _pg_g)
              OR accepted_by IN (SELECT id FROM _pg_g)
-             OR target_user_id IN (SELECT id FROM _pg_g);
+             OR target_user_id IN (SELECT id FROM _pg_g)
+             OR lower(btrim(email)) IN (SELECT lower(btrim(email)) FROM users WHERE id IN (SELECT id FROM _pg_g) AND email IS NOT NULL);
         UPDATE campus_photos SET uploaded_by = NULL WHERE uploaded_by IN (SELECT id FROM _pg_g);
         UPDATE onboarding_leads SET contacted_by = NULL WHERE contacted_by IN (SELECT id FROM _pg_g);
         UPDATE platform_integrations SET created_by = NULL WHERE created_by IN (SELECT id FROM _pg_g);

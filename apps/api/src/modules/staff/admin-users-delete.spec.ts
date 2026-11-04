@@ -99,9 +99,9 @@ describe('AdminUsersService.deleteUser', () => {
     expect(logto.deleteUser).toHaveBeenCalledWith('logto-boss');
   });
 
-  it('still reports the delete when Logto is unreachable', async () => {
+  it('reports pending cleanup when Logto is unreachable', async () => {
     const { service, logto } = make({ isSuperAdmin: false });
     logto.deleteUser.mockRejectedValueOnce(new Error('down'));
-    await expect(service.deleteUser(actor, new Set(), target, 'left')).resolves.toEqual({ id: target, deleted: true });
+    await expect(service.deleteUser(actor, new Set(), target, 'left')).resolves.toEqual({ id: target, deleted: true, identityCleanupPending: true });
   });
 });

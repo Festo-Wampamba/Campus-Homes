@@ -100,7 +100,7 @@ export class MeController {
   }
 
   /**
-   * First-sign-in identity gate: set full name, a unique @handle and a
+   * First-sign-in identity gate: set full name, a profile username and a
    * contact phone. Runs as service_role because `users` has no self-UPDATE
    * RLS policy (role/status escalation risk) — the field allowlist here
    * (name/username/contact_phone only) is what keeps it safe. The phone goes
@@ -125,20 +125,12 @@ export class MeController {
       if (!gender && (current?.role === 'student' || current?.role === 'landlord')) {
         throw new BadRequestException('Choose your gender');
       }
-      try {
-        const [row] = await db
-          .update(users)
-          .set({ name: body.name.trim(), username, contactPhone: body.contactPhone, gender, updatedAt: new Date() })
-          .where(eq(users.id, ctx.userId))
-          .returning({ id: users.id, name: users.name, username: users.username });
-        return row;
-      } catch (err) {
-        // 23505 = users_username_lower_uk violation (handle already taken).
-        if ((err as { cause?: { code?: string } }).cause?.code === '23505') {
-          throw new ConflictException('That username is already taken');
-        }
-        throw err;
-      }
+      const [row] = await db
+        .update(users)
+        .set({ name: body.name.trim(), username, contactPhone: body.contactPhone, gender, updatedAt: new Date() })
+        .where(eq(users.id, ctx.userId))
+        .returning({ id: users.id, name: users.name, username: users.username });
+      return row;
     });
     this.logtoSync.push(ctx.userId);
     return saved;

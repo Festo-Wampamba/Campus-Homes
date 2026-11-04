@@ -118,8 +118,8 @@ export const changeSelfPasswordSchema = z.object({
 });
 export type ChangeSelfPasswordInput = z.infer<typeof changeSelfPasswordSchema>;
 
-// Public @handle. Stored lowercased; uniqueness is case-insensitive. Kept to
-// URL/mention-safe characters so it can double as a display handle later.
+// Non-unique profile username, stored lowercased. Never use it for sign-in,
+// authorization, or an unambiguous user lookup; those use IDs/verified contacts.
 export const usernameSchema = z
   .string()
   .trim()

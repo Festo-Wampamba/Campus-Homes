@@ -1,12 +1,11 @@
 /**
  * MeController.completeOnboarding against the real docker test DB: sets name,
- * a lowercased username and a contact phone, and rejects a case-insensitive
- * duplicate handle.
+ * a lowercased username and a contact phone, and accepts duplicate profile usernames.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import { profileOnboardingSchema } from '@campushomes/shared';
@@ -61,13 +60,13 @@ describe('MeController.completeOnboarding', () => {
     expect(row).toEqual({ name: 'Jane Doe', username: 'janedoe' });
   });
 
-  it('rejects a username already taken in a different case', async () => {
+  it('accepts a username already used by another account', async () => {
     const first = await seedUser('+256700000502');
     await controller.completeOnboarding(reqFor(first), { name: 'First', username: 'sharedhandle', contactPhone: '+256772000502', gender: 'male' });
     const second = await seedUser('+256700000503');
     await expect(
       controller.completeOnboarding(reqFor(second), { name: 'Second', username: 'SharedHandle', contactPhone: '+256772000503', gender: 'male' }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).resolves.toMatchObject({ id: second, username: 'sharedhandle' });
   });
 
   it('stores the contact phone without touching the sign-in phone', async () => {
