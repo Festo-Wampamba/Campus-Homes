@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 
-import { roomTypeImportLabels } from '@campushomes/shared';
+import { normalizeRoomTypeName, roomTypeImportLabels } from '@campushomes/shared';
 import type {
   ProposedRoomCategory,
   BedBlockInput,
@@ -48,6 +48,7 @@ interface ChangeSetRow {
 interface RoomTypeVersionRow {
   id: string;
   room_type_id: string;
+  change_set_id: string | null;
   version_number: number;
   title: string;
   category: string;
@@ -64,6 +65,19 @@ interface RoomTypeVersionRow {
   reviewer_notes: string | null;
   submitted_at: Date | null;
   reviewed_at: Date | null;
+}
+
+interface RoomTypePhotoRow {
+  id: string; room_type_version_id: string; storage_key: string; sort_order: number;
+  is_primary: boolean; uploaded_by: string; created_at: Date;
+}
+interface RoomBedRow {
+  id: string; unit_id: string; label: string; blocked: boolean; blocked_reason: string | null; reservation_id: string | null;
+  status: string | null; reserved_expires_at: Date | null; booked_at: Date | null; student_name: string | null; student_phone: string | null;
+}
+interface RoomBlockRow {
+  id: string; unit_id: string; reason: string; starts_at: Date; ends_at: Date | null; notes: string | null;
+  created_by: string; cleared_at: Date | null; created_at: Date;
 }
 
 @Injectable()
@@ -131,6 +145,7 @@ export class RoomManagementService {
   async createRoomType(ctx: RlsContext, propertyId: string, input: RoomTypeInput) {
     const roomTypeId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
+      await this.assertDistinctRoomTypeDescription(client, propertyId, input);
       await this.assertPhotoKeys(client, ctx.userId, input.photos);
       const changeSet = await this.getOrCreateDraft(client, propertyId, input.semesterId, ctx.userId);
       const type = await client.query<{ id: string }>(
@@ -150,6 +165,7 @@ export class RoomManagementService {
   async updateRoomType(ctx: RlsContext, roomTypeId: string, input: RoomTypeInput) {
     await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       const type = await this.assertRoomTypeOwner(client, roomTypeId, ctx.userId);
+      await this.assertDistinctRoomTypeDescription(client, type.property_id, input, roomTypeId);
       await this.assertPhotoKeys(client, ctx.userId, input.photos, roomTypeId);
       const changeSet = await this.getOrCreateDraft(client, type.property_id, input.semesterId, ctx.userId);
       const existing = await client.query<{ id: string; version_number: number }>(
@@ -821,6 +837,26 @@ export class RoomManagementService {
     return roomImportTemplate(format, titles);
   }
 
+  /** Serialize name checks on the property, including the first draft, so two
+   * concurrent requests cannot both create an undescribed duplicate. IDs stay
+   * distinct; a shared display name is allowed with a distinguishing description. */
+  private async assertDistinctRoomTypeDescription(client: PoolClient, propertyId: string, input: RoomTypeInput, excludeId?: string) {
+    await client.query(`SELECT id FROM properties WHERE id=$1 FOR UPDATE`, [propertyId]);
+    const others = await client.query<{ title: string; description: string | null }>(
+      `SELECT v.title, v.description FROM room_types rt JOIN room_type_versions v ON v.room_type_id=rt.id
+       LEFT JOIN room_inventory_change_sets cs ON cs.id=v.change_set_id
+       WHERE rt.property_id=$1 AND rt.archived_at IS NULL AND ($2::uuid IS NULL OR rt.id<>$2)
+         AND (v.id=rt.current_version_id OR cs.status IN ('draft','rejected','pending_review','visit_required'))`,
+      [propertyId, excludeId ?? null],
+    );
+    const duplicates = others.rows.filter((row) => normalizeRoomTypeName(row.title) === normalizeRoomTypeName(input.title));
+    if (!duplicates.length) return;
+    const description = normalizeRoomTypeName(input.description ?? '');
+    if (!description || duplicates.some((row) => normalizeRoomTypeName(row.description ?? '') === description)) {
+      throw new BadRequestException('This room type name is already used. Add a different description explaining its size, price or features.');
+    }
+  }
+
   private async assertPropertyOwner(client: PoolClient, propertyId: string, userId: string) {
     const result = await client.query(`SELECT 1 FROM properties WHERE id=$1 AND landlord_id=$2`, [propertyId, userId]);
     if (!result.rows.length) throw new ForbiddenException('You do not manage this property');
@@ -981,31 +1017,43 @@ export class RoomManagementService {
        FROM room_types rt LEFT JOIN units u ON u.room_type_id=rt.id
        WHERE rt.property_id=$1 AND rt.archived_at IS NULL GROUP BY rt.id ORDER BY rt.created_at`, [propertyId],
     );
-    const output = [];
-    for (const type of types.rows) {
-      const current = type.current_version_id
-        ? (await client.query<RoomTypeVersionRow>(`SELECT * FROM room_type_versions WHERE id=$1`, [type.current_version_id])).rows[0] ?? null
-        : null;
-      const pending = changeSetId
-        ? (await client.query<RoomTypeVersionRow>(
-          `SELECT * FROM room_type_versions WHERE room_type_id=$1 AND change_set_id=$2 ORDER BY version_number DESC LIMIT 1`,
-          [type.id, changeSetId],
-        )).rows[0] ?? null
-        : null;
-      output.push({
-        id: type.id, propertyId: type.property_id, currentVersionId: type.current_version_id,
-        currentVersion: current ? await this.mapVersion(client, current) : null,
-        pendingVersion: pending ? await this.mapVersion(client, pending) : null,
-        attachedRoomsCount: Number(type.attached_count), createdAt: type.created_at.toISOString(),
-      });
+    const typeIds = types.rows.map((row) => row.id);
+    const versions = await client.query<RoomTypeVersionRow>(
+      `SELECT * FROM room_type_versions WHERE id=ANY($1::uuid[])
+         OR (room_type_id=ANY($2::uuid[]) AND change_set_id=$3)
+       ORDER BY version_number DESC`,
+      [types.rows.flatMap((row) => row.current_version_id ? [row.current_version_id] : []), typeIds, changeSetId],
+    );
+    const photos = await client.query<RoomTypePhotoRow>(
+      `SELECT * FROM room_type_photos WHERE room_type_version_id=ANY($1::uuid[]) ORDER BY sort_order`,
+      [versions.rows.map((row) => row.id)],
+    );
+    const byId = new Map(versions.rows.map((row) => [row.id, row]));
+    const pendingByType = new Map<string, RoomTypeVersionRow>();
+    const photosByVersion = new Map<string, RoomTypePhotoRow[]>();
+    for (const version of versions.rows) {
+      // Current versions may be from another change set. Only the selected
+      // change set belongs in pendingVersion (preserve the original contract).
+      if (changeSetId && version.change_set_id === changeSetId && !pendingByType.has(version.room_type_id)) pendingByType.set(version.room_type_id, version);
     }
-    return output;
+    for (const photo of photos.rows) {
+      const group = photosByVersion.get(photo.room_type_version_id) ?? [];
+      group.push(photo);
+      photosByVersion.set(photo.room_type_version_id, group);
+    }
+    return types.rows.map((type) => {
+      const current = type.current_version_id ? byId.get(type.current_version_id) : null;
+      const pending = pendingByType.get(type.id);
+      return {
+        id: type.id, propertyId: type.property_id, currentVersionId: type.current_version_id,
+        currentVersion: current ? this.mapVersion(current, photosByVersion.get(current.id) ?? []) : null,
+        pendingVersion: pending ? this.mapVersion(pending, photosByVersion.get(pending.id) ?? []) : null,
+        attachedRoomsCount: Number(type.attached_count), createdAt: type.created_at.toISOString(),
+      };
+    });
   }
 
-  private async mapVersion(client: PoolClient, row: RoomTypeVersionRow) {
-    const photos = await client.query<{ id: string; storage_key: string; sort_order: number; is_primary: boolean; uploaded_by: string; created_at: Date }>(
-      `SELECT * FROM room_type_photos WHERE room_type_version_id=$1 ORDER BY sort_order`, [row.id],
-    );
+  private mapVersion(row: RoomTypeVersionRow, photos: RoomTypePhotoRow[]) {
     return {
       id: row.id, roomTypeId: row.room_type_id, versionNumber: Number(row.version_number), title: row.title,
       category: row.category, bathroomType: row.bathroom_type, capacity: Number(row.capacity), sizeSqm: row.size_sqm,
@@ -1013,7 +1061,7 @@ export class RoomManagementService {
       pricePerTermUgx: Number(row.price_per_term_ugx), depositUgx: row.deposit_ugx === null ? null : Number(row.deposit_ugx),
       status: row.status, rejectionReason: row.rejection_reason, reviewerNotes: row.reviewer_notes,
       submittedAt: row.submitted_at?.toISOString() ?? null, reviewedAt: row.reviewed_at?.toISOString() ?? null,
-      photos: photos.rows.map((photo) => ({ id: photo.id, storageKey: photo.storage_key,
+      photos: photos.map((photo) => ({ id: photo.id, storageKey: photo.storage_key,
         sortOrder: Number(photo.sort_order), isPrimary: photo.is_primary, uploadedBy: photo.uploaded_by,
         createdAt: photo.created_at.toISOString() })),
     };
@@ -1089,54 +1137,69 @@ export class RoomManagementService {
        LEFT JOIN room_type_versions cv ON cv.id=rt.current_version_id
        WHERE u.property_id=$1 AND u.archived_at IS NULL ORDER BY u.building_name NULLS FIRST,u.floor_label NULLS FIRST,u.label`, [propertyId],
     );
+    const beds = await client.query<RoomBedRow>(
+      `SELECT b.id,b.unit_id,b.label,b.blocked,b.blocked_reason,r.id reservation_id,r.status::text,r.reserved_expires_at,r.booked_at,
+        su.name student_name,coalesce(su.contact_phone,su.phone) student_phone
+       FROM beds b LEFT JOIN LATERAL (
+         SELECT * FROM reservations r WHERE r.bed_id=b.id AND r.status IN ('reserved','booked','occupied')
+         ORDER BY r.created_at DESC LIMIT 1
+       ) r ON true LEFT JOIN users su ON su.id=r.student_id
+       WHERE b.unit_id=ANY($1::uuid[]) AND b.retired_at IS NULL ORDER BY b.label`, [units.rows.map((unit) => unit.id)],
+    );
+    const blocks = await client.query<RoomBlockRow>(
+      `SELECT DISTINCT ON (unit_id) * FROM unit_blocks WHERE unit_id=ANY($1::uuid[])
+       AND cleared_at IS NULL AND starts_at<=now() AND (ends_at IS NULL OR ends_at>now())
+       ORDER BY unit_id,starts_at DESC`, [units.rows.map((unit) => unit.id)],
+    );
+    const bedsByUnit = new Map<string, RoomBedRow[]>();
+    for (const bed of beds.rows) {
+      const group = bedsByUnit.get(bed.unit_id) ?? [];
+      group.push(bed);
+      bedsByUnit.set(bed.unit_id, group);
+    }
+    const blocksByUnit = new Map(blocks.rows.map((block) => [block.unit_id, block]));
+    const changes = changeSetId ? (await client.query<{
+      id: string; unit_id: string | null; action: string; room_type_id: string; proposed_data: JsonRecord;
+    }>(`SELECT id,unit_id,action,room_type_id,proposed_data FROM room_unit_changes
+       WHERE change_set_id=$1 AND action IN ('create','update') ORDER BY created_at`, [changeSetId])).rows : [];
+    const updatesByUnit = new Map(changes.filter((change) => change.action === 'update').map((change) => [change.unit_id, change]));
+    const specs = changes.length ? (await client.query<{ room_type_id: string; title: string; category: string; capacity: number }>(
+      `SELECT DISTINCT ON (room_type_id) room_type_id,title,category,capacity FROM room_type_versions
+       WHERE room_type_id=ANY($1::uuid[])
+       ORDER BY room_type_id,CASE WHEN status IN ('draft','rejected','pending_review','visit_required') THEN 0 ELSE 1 END,version_number DESC`,
+      [[...new Set(changes.map((change) => change.room_type_id))]],
+    )).rows : [];
+    const specsByType = new Map(specs.map((spec) => [spec.room_type_id, spec]));
     const output = [];
     for (const unit of units.rows) {
-      const mapped = await this.mapUnit(client, unit);
+      const mapped = this.mapUnit(unit, bedsByUnit.get(unit.id) ?? [], blocksByUnit.get(unit.id));
       if (unit.pending_removal) Object.assign(mapped, { pendingRemoval: true });
-      if (changeSetId) {
-        const pending = await client.query<{ room_type_id: string; proposed_data: JsonRecord }>(
-          `SELECT room_type_id,proposed_data FROM room_unit_changes
-           WHERE change_set_id=$1 AND unit_id=$2 AND action='update' ORDER BY created_at DESC LIMIT 1`,
-          [changeSetId, unit.id],
-        );
-        if (pending.rows[0]) {
-          const data = pending.rows[0].proposed_data;
-          const spec = await client.query<{ title: string; category: string; capacity: number }>(
-            `SELECT title,category,capacity FROM room_type_versions WHERE room_type_id=$1
-             ORDER BY CASE WHEN status IN ('draft','rejected','pending_review','visit_required') THEN 0 ELSE 1 END,
-             version_number DESC LIMIT 1`, [pending.rows[0].room_type_id],
-          );
-          Object.assign(mapped, {
-            roomTypeId: pending.rows[0].room_type_id,
-            roomTypeTitle: spec.rows[0]?.title ?? mapped.roomTypeTitle,
-            roomCategory: spec.rows[0]?.category ?? mapped.roomCategory,
-            roomCode: data.roomCode ?? mapped.roomCode,
-            buildingName: data.buildingName ?? null,
-            floorLabel: data.floorLabel ?? null,
-            capacity: Number(spec.rows[0]?.capacity ?? mapped.capacity),
-            pendingChanges: true,
-          });
-        }
+      const pending = updatesByUnit.get(unit.id);
+      if (pending) {
+        const data = pending.proposed_data;
+        const spec = specsByType.get(pending.room_type_id);
+        Object.assign(mapped, {
+          roomTypeId: pending.room_type_id,
+          roomTypeTitle: spec?.title ?? mapped.roomTypeTitle,
+          roomCategory: spec?.category ?? mapped.roomCategory,
+          roomCode: data.roomCode ?? mapped.roomCode,
+          buildingName: data.buildingName ?? null,
+          floorLabel: data.floorLabel ?? null,
+          capacity: Number(spec?.capacity ?? mapped.capacity),
+          pendingChanges: true,
+        });
       }
       output.push(mapped);
     }
 
     if (changeSetId) {
-      const proposed = await client.query<{ id: string; room_type_id: string; proposed_data: JsonRecord }>(
-        `SELECT id, room_type_id, proposed_data FROM room_unit_changes
-         WHERE change_set_id=$1 AND action='create' ORDER BY created_at`, [changeSetId],
-      );
-      for (const change of proposed.rows) {
+      for (const change of changes.filter((change) => change.action === 'create')) {
         const data = change.proposed_data;
-        const spec = await client.query<{ title: string; category: string; capacity: number }>(
-          `SELECT title,category,capacity FROM room_type_versions WHERE room_type_id=$1
-           ORDER BY CASE WHEN status IN ('draft','rejected','pending_review','visit_required') THEN 0 ELSE 1 END,
-           version_number DESC LIMIT 1`, [change.room_type_id],
-        );
-        const capacity = Number(data.capacity ?? spec.rows[0]?.capacity ?? 1);
+        const spec = specsByType.get(change.room_type_id);
+        const capacity = Number(data.capacity ?? spec?.capacity ?? 1);
         output.push({
           id: change.id, propertyId, roomTypeId: change.room_type_id,
-          roomTypeTitle: spec.rows[0]?.title ?? 'Room', roomCategory: spec.rows[0]?.category ?? 'other',
+          roomTypeTitle: spec?.title ?? 'Room', roomCategory: spec?.category ?? 'other',
           roomCode: String(data.roomCode ?? ''), buildingName: data.buildingName ?? null, floorLabel: data.floorLabel ?? null,
           capacity, totalBeds: capacity, occupiedBeds: 0, derivedStatus: 'available', activeBlock: null,
           pendingChanges: true,
@@ -1148,30 +1211,11 @@ export class RoomManagementService {
     return output;
   }
 
-  private async mapUnit(client: PoolClient, unit: {
+  private mapUnit(unit: {
     id: string; property_id: string; room_type_id: string; label: string; capacity: number; room_category: string;
     building_name: string | null; floor_label: string | null; operational_status: string; type_title: string; pending: boolean;
-  }) {
-    const beds = await client.query<{
-      id: string; label: string; blocked: boolean; blocked_reason: string | null; reservation_id: string | null;
-      status: string | null; reserved_expires_at: Date | null; booked_at: Date | null; student_name: string | null; student_phone: string | null;
-    }>(
-      `SELECT b.id,b.label,b.blocked,b.blocked_reason,r.id reservation_id,r.status::text,r.reserved_expires_at,r.booked_at,
-        su.name student_name,coalesce(su.contact_phone,su.phone) student_phone
-       FROM beds b LEFT JOIN LATERAL (
-         SELECT * FROM reservations r WHERE r.bed_id=b.id AND r.status IN ('reserved','booked','occupied')
-         ORDER BY r.created_at DESC LIMIT 1
-       ) r ON true LEFT JOIN users su ON su.id=r.student_id
-       WHERE b.unit_id=$1 AND b.retired_at IS NULL ORDER BY b.label`, [unit.id],
-    );
-    const block = await client.query<{
-      id: string; unit_id: string; reason: string; starts_at: Date; ends_at: Date | null; notes: string | null;
-      created_by: string; cleared_at: Date | null; created_at: Date;
-    }>(
-      `SELECT * FROM unit_blocks WHERE unit_id=$1 AND cleared_at IS NULL AND starts_at<=now()
-       AND (ends_at IS NULL OR ends_at>now()) ORDER BY starts_at DESC LIMIT 1`, [unit.id],
-    );
-    const mappedBeds = beds.rows.map((bed) => ({
+  }, beds: RoomBedRow[], block?: RoomBlockRow) {
+    const mappedBeds = beds.map((bed) => ({
       id: bed.id, unitId: unit.id, label: bed.label, blocked: bed.blocked, blockedReason: bed.blocked_reason,
       status: bed.blocked ? 'blocked' : bed.status ?? 'available', studentName: bed.student_name,
       studentPhone: bed.student_phone, reservationId: bed.reservation_id,
@@ -1179,7 +1223,7 @@ export class RoomManagementService {
     }));
     const occupiedBeds = mappedBeds.filter((bed) => ['reserved','booked','occupied'].includes(bed.status)).length;
     const activeBeds = mappedBeds.filter((bed) => !bed.blocked);
-    const activeBlock = block.rows[0] ? this.mapBlock(block.rows[0]) : null;
+    const activeBlock = block ? this.mapBlock(block) : null;
     const derivedStatus = activeBlock || unit.operational_status === 'blocked' || unit.operational_status === 'under_maintenance'
       ? 'blocked'
       : activeBeds.length === 0 ? 'blocked'

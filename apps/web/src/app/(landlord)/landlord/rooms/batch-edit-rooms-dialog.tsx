@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { api, apiErrorMessage } from "@/lib/api";
@@ -17,9 +18,11 @@ export function BatchEditRoomsDialog({
   propertyId,
   rooms,
   onClose,
+  applyImmediately = false,
   onUpdated,
 }: {
   propertyId: string;
+  applyImmediately?: boolean;
   rooms: RoomUnit[];
   onClose: () => void;
   onUpdated: (rooms: RoomUnit[]) => void;
@@ -27,15 +30,19 @@ export function BatchEditRoomsDialog({
   const [codes, setCodes] = useState(() => new Map(rooms.map((room) => [room.id, room.roomCode])));
   const [prefix, setPrefix] = useState("");
   const [start, setStart] = useState("1");
+  const [zeroPad, setZeroPad] = useState(false);
+  const first = /^\d+$/.test(start) ? Number(start) : NaN;
+  const validStart = Number.isSafeInteger(first) && first >= 0 && Number.isSafeInteger(first + rooms.length);
+  const padWidth = zeroPad ? Math.max(2, start.length, String(first + rooms.length - 1).length) : 0;
+  const numberedCode = (index: number) => `${prefix}${String(first + index).padStart(padWidth, "0")}`;
   const [building, setBuilding] = useState("");
   const [floor, setFloor] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function numberRooms() {
-    const first = Number.parseInt(start, 10);
-    const from = Number.isFinite(first) ? first : 1;
-    setCodes(new Map(rooms.map((room, index) => [room.id, `${prefix}${from + index}`])));
+    if (!validStart) return;
+    setCodes(new Map(rooms.map((room, index) => [room.id, numberedCode(index)])));
   }
 
   async function submit(event: React.FormEvent) {
@@ -69,7 +76,7 @@ export function BatchEditRoomsDialog({
       <form onSubmit={submit} className="contents">
         <DialogHeader
           title={`Edit ${rooms.length} ${rooms.length === 1 ? "room" : "rooms"}`}
-          description="Change each code below, or number them all at once. Your edits are staged together and sent to Operations for approval."
+          description={applyImmediately ? "Change each code below, or number them all at once. Your changes apply immediately to this managed property." : "Change each code below, or number them all at once. Your edits are staged together and sent to Operations for approval."}
           onClose={onClose}
         />
         <DialogBody className="space-y-5">
@@ -82,12 +89,16 @@ export function BatchEditRoomsDialog({
               </label>
               <label className="block text-sm">
                 Start at
-                <input type="number" min={0} value={start} onChange={(e) => setStart(e.target.value)} className={`mt-1 ${FIELD}`} />
+                <Input type="number" min={0} step={1} value={start} onChange={(e) => setStart(e.target.value)} className={`mt-1 ${FIELD}`} />
               </label>
-              <Button type="button" variant="secondary" onClick={numberRooms}>Apply numbering</Button>
+              <Button type="button" variant="secondary" onClick={numberRooms} disabled={!validStart}>Apply numbering</Button>
             </div>
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={zeroPad} onChange={(event) => setZeroPad(event.target.checked)} className="size-4 accent-primary" />
+              Zero-pad room numbers (01, 02 instead of 1, 2)
+            </label>
             <p className="mt-2 text-xs text-muted-foreground">
-              Fills the codes in list order, for example {prefix || "D"}{start || 1}, {prefix || "D"}{(Number.parseInt(start, 10) || 1) + 1}…
+              {validStart ? `Fills the codes in list order: ${numberedCode(0)}, ${numberedCode(1)}…` : "Enter a whole number starting at 0 or above."}
             </p>
           </fieldset>
 

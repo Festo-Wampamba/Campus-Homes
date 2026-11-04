@@ -5,12 +5,15 @@ import { PublishedNotice } from "@/components/published-notice";
 export function KycBanner({
   status,
   hasLiveListing = false,
+  listingIntent,
 }: {
   status: "pending" | "verified" | "rejected";
   /** null = listings couldn't be loaded; don't claim either state. */
   hasLiveListing?: boolean | null;
+  listingIntent?: "manage_only" | "list";
 }) {
   if (status === "verified") {
+    if (listingIntent === "manage_only") return null;
     // Once something is live the steady-state banner goes away; all that's
     // left is the one-time "published" notice from the first publish.
     if (hasLiveListing) return <PublishedNotice />;
@@ -34,7 +37,7 @@ export function KycBanner({
   return (
     <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning-subtle px-4 py-3 text-sm font-semibold text-warning">
       <Clock aria-hidden className="size-5 shrink-0" />
-      Your KYC review is in progress. Our team verifies new landlords before listings go live.
+      {listingIntent === "manage_only" ? "Your account review is in progress." : "Your KYC review is in progress. Our team verifies new landlords before listings go live."}
     </div>
   );
 }

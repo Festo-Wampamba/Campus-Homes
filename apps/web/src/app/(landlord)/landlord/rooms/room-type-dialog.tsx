@@ -22,7 +22,7 @@ import {
   type RoomType,
   type RoomTypePhoto,
 } from "@/lib/room-management";
-import { SELECTABLE_ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
+import { normalizeRoomTypeName, SELECTABLE_ROOM_CATEGORIES, type RoomCategory } from "@campushomes/shared";
 
 interface RoomTypeDialogProps {
   open: boolean;
@@ -30,13 +30,18 @@ interface RoomTypeDialogProps {
   propertyId: string;
   semesterId: string;
   roomType?: RoomType | null;
+  roomTypes: RoomType[];
   onSaved: (savedType: RoomType) => void;
 }
 
 const COMMON_AMENITIES = [
   "Wi-Fi",
   "Hot Water",
-  "Reading Desk & Chair",
+  "Reading desk",
+  "Chair",
+  "Bed",
+  "Mattress",
+  "Dressing mirror",
   "Wardrobe",
   "Balcony",
   "Ceiling Fan",
@@ -54,6 +59,7 @@ export function RoomTypeDialog({
   propertyId,
   semesterId,
   roomType,
+  roomTypes,
   onSaved,
 }: RoomTypeDialogProps) {
   const current = roomType?.pendingVersion ?? roomType?.currentVersion;
@@ -76,12 +82,17 @@ export function RoomTypeDialog({
     current?.sizeSqm ? String(current.sizeSqm) : "",
   );
   const [description, setDescription] = useState(current?.description ?? "");
-  const [amenities, setAmenities] = useState<string[]>(current?.amenities ?? []);
+  const [amenities, setAmenities] = useState<string[]>(() => Array.from(new Set((current?.amenities ?? []).flatMap((item) => item === "Reading Desk & Chair" ? ["Reading desk", "Chair"] : [item]))));
   const [photos, setPhotos] = useState<RoomTypePhoto[]>(current?.photos ?? []);
 
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const sameNameTypes = roomTypes.filter((type) => type.id !== roomType?.id &&
+    [type.currentVersion, type.pendingVersion].some((version) => version && normalizeRoomTypeName(version.title) === normalizeRoomTypeName(title)));
+  const needsDescription = sameNameTypes.length > 0;
+  const amenityOptions = Array.from(new Set([...COMMON_AMENITIES, ...amenities]));
 
   function toggleAmenity(item: string) {
     setAmenities((prev) =>
@@ -165,6 +176,11 @@ export function RoomTypeDialog({
       return;
     }
 
+    if (needsDescription && !description.trim()) {
+      setError("This name is already used. Describe what makes this room type different, such as size, price or features.");
+      return;
+    }
+
     const deposit = depositUgx ? Number(depositUgx.replace(/[^0-9]/g, "")) : null;
 
     setSubmitting(true);
@@ -241,7 +257,7 @@ export function RoomTypeDialog({
                 className="mt-1.5"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Public display name shown to students.
+                Name used to identify this specification in your inventory.
               </p>
             </div>
 
@@ -348,9 +364,12 @@ export function RoomTypeDialog({
           </div>
 
           <div>
-            <Label htmlFor="rt-desc">Description</Label>
+            {needsDescription && <p id="rt-desc-hint" className="mb-2 text-sm text-primary">Another room type uses this name. Describe what makes this one different, such as size, price or features.</p>}
+            <Label htmlFor="rt-desc">Description{needsDescription ? " (required for this name)" : ""}</Label>
             <Textarea
               id="rt-desc"
+              required={needsDescription}
+              aria-describedby={needsDescription ? "rt-desc-hint" : undefined}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Highlight room layout, natural lighting, views, ventilation, or study environment..."
@@ -361,14 +380,15 @@ export function RoomTypeDialog({
           <div>
             <Label className="block mb-2">Room Amenities and Features</Label>
             <div className="flex flex-wrap gap-2">
-              {COMMON_AMENITIES.map((item) => {
+              {amenityOptions.map((item) => {
                 const checked = amenities.includes(item);
                 return (
                   <button
                     key={item}
                     type="button"
                     onClick={() => toggleAmenity(item)}
-                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    aria-pressed={checked}
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                       checked
                         ? "bg-teal-600 text-white"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"

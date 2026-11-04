@@ -26,6 +26,7 @@ export default async function LandlordProfilePage() {
       <div className="mt-6">
         <LandlordAccountSettings
           profile={profile}
+          listingIntent={properties && properties.length > 0 && properties.every((p) => p.listingIntent === "manage_only") ? "manage_only" : "list"}
           hasLiveListing={properties === null ? null : properties.some((p) => p.hasLiveListing)}
           email={particulars?.email ?? null}
         />

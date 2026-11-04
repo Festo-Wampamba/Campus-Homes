@@ -1,12 +1,13 @@
 "use client";
 
+import { roomTypeImportLabels } from "@campushomes/shared";
 import type { RoomType } from "@/lib/room-management";
 
 /** What a landlord sees for a room type: its name and bed count. */
-export function roomTypeOptionLabel(roomType: RoomType): string {
+export function roomTypeOptionLabel(roomType: RoomType, roomTypes: RoomType[] = [roomType], labels = roomTypeImportLabels(roomTypes)): string {
   const version = roomType.pendingVersion ?? roomType.currentVersion;
   const beds = version?.capacity ?? 1;
-  return `${version?.title ?? "Untitled"} (${beds} ${beds === 1 ? "bed" : "beds"})`;
+  return `${labels.get(roomType.id) ?? version?.title ?? "Untitled"} (${beds} ${beds === 1 ? "bed" : "beds"})`;
 }
 
 /** The chosen room type if it's still in the list, else the first one. A
@@ -31,6 +32,7 @@ export function RoomTypePicker({
   value: string;
   onChange: (roomTypeId: string) => void;
 }) {
+  const labels = roomTypeImportLabels(roomTypes);
   return (
     <select
       id={id}
@@ -43,7 +45,7 @@ export function RoomTypePicker({
       {roomTypes.length === 0 && <option value="">No room types yet</option>}
       {roomTypes.map((roomType) => (
         <option key={roomType.id} value={roomType.id}>
-          {roomTypeOptionLabel(roomType)}
+          {roomTypeOptionLabel(roomType, roomTypes, labels)}
         </option>
       ))}
     </select>

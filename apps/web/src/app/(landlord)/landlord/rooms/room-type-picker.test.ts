@@ -18,3 +18,12 @@ it("falls back to the first room type when the remembered one is gone", () => {
 it("says bed, not beds, for a one-bed room type", () => {
   expect(roomTypeOptionLabel(TYPES[0]!)).toBe("Single Room - Executive (1 bed)");
 });
+
+it('distinguishes same-name room types by description and keeps their IDs', () => {
+  const twins = [roomType('a', 'Single', 1), roomType('b', 'Single', 1)];
+  twins[0]!.currentVersion!.description = 'Ground floor, courtyard';
+  twins[1]!.currentVersion!.description = 'Upper floor, balcony';
+  expect(roomTypeOptionLabel(twins[0]!, twins)).toContain('Ground floor, courtyard');
+  expect(roomTypeOptionLabel(twins[1]!, twins)).toContain('Upper floor, balcony');
+  expect(resolveRoomTypeId(twins, 'b')).toBe('b');
+});

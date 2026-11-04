@@ -1,5 +1,7 @@
 "use client";
 
+import { roomTypeImportLabels } from "@campushomes/shared";
+
 import { useMemo, useState } from "react";
 import { Bed, Edit, Layers, Lock, Plus, Search, Trash2, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,8 @@ interface RoomsInventoryTabProps {
   roomTypes: RoomType[];
   rooms: RoomUnit[];
   onRoomUpdated: (updatedRoom: RoomUnit) => void;
+  onRoomsUpdated: (updatedRooms: RoomUnit[]) => void;
+  applyImmediately: boolean;
   onRoomsAdded: (newRooms: RoomUnit[]) => void;
   onRoomsDeleted: () => void;
   /** Controlled by Manage Rooms so its stat cards can filter this table. */
@@ -58,6 +62,8 @@ export function RoomsInventoryTab({
   roomTypes,
   rooms,
   onRoomUpdated,
+  onRoomsUpdated,
+  applyImmediately,
   onRoomsAdded,
   onRoomsDeleted,
   filterStatus,
@@ -96,6 +102,8 @@ export function RoomsInventoryTab({
   const [srFloor, setSrFloor] = useState("");
   const [srSubmitting, setSrSubmitting] = useState(false);
   const [srError, setSrError] = useState<string | null>(null);
+
+  const typeLabels = useMemo(() => roomTypeImportLabels(roomTypes), [roomTypes]);
 
   // Unique building and floor options for filters
   const buildingOptions = useMemo(() => {
@@ -324,7 +332,7 @@ export function RoomsInventoryTab({
   }
 
   return (
-    <div id="rooms-inventory" className="scroll-mt-24 space-y-5">
+    <div id="rooms-inventory" className="scroll-mt-24 space-y-5 [&_button]:max-w-full [&_button]:whitespace-normal">
       {/* Sub-Header & Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -336,7 +344,7 @@ export function RoomsInventoryTab({
             Tick several rooms to edit or delete them together.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start max-w-full sm:self-auto [&_button]:h-auto [&_button]:min-h-11 [&_button]:py-2">
           {selectedRooms.length > 0 && (
             <Button variant="secondary" onClick={() => setBatchEditOpen(true)} className="gap-1.5">
               <Edit className="size-4" />
@@ -389,7 +397,7 @@ export function RoomsInventoryTab({
             >
               <option value="all">All Room Types</option>
               {roomTypes.map((rt) => {
-                const title = rt.currentVersion?.title ?? rt.pendingVersion?.title ?? "Room";
+                const title = typeLabels.get(rt.id) ?? "Room";
                 return (
                   <option key={rt.id} value={rt.id}>
                     {title}
@@ -679,7 +687,7 @@ export function RoomsInventoryTab({
                   key={room.id}
                   className="rounded-xl border border-border bg-card p-4 shadow-xs space-y-3 text-xs"
                 >
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <label className="flex min-h-11 items-center gap-2">
                         <input type="checkbox" aria-label={`Select room ${room.roomCode}`} checked={selectedIds.has(room.id)} onChange={() => toggleSelected(room.id)} className="size-5 accent-teal-700" />
@@ -719,7 +727,7 @@ export function RoomsInventoryTab({
                   </div>
 
                   {/* Actions bar (44px min touch target) */}
-                  <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-border flex flex-wrap items-center justify-between gap-2">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -775,9 +783,10 @@ export function RoomsInventoryTab({
         <BatchEditRoomsDialog
           propertyId={propertyId}
           rooms={selectedRooms}
+          applyImmediately={applyImmediately}
           onClose={() => setBatchEditOpen(false)}
           onUpdated={(updated) => {
-            updated.forEach(onRoomUpdated);
+            onRoomsUpdated(updated);
             setSelectedIds(new Set());
           }}
         />
@@ -791,6 +800,7 @@ export function RoomsInventoryTab({
         semesterId={semesterId}
         roomTypes={roomTypes}
         existingRooms={rooms}
+        applyImmediately={applyImmediately}
         onGenerated={onRoomsAdded}
       />
 
@@ -826,13 +836,15 @@ export function RoomsInventoryTab({
               {deleteError}
             </div>
           )}
+          {applyImmediately ? <p>These rooms will be removed from active inventory immediately. Past bookings stay on record.</p> : <>
           <p>
             Rooms you added but haven&apos;t sent for review are removed straight away.
           </p>
           <p className="text-muted-foreground">
             Approved rooms are marked <span className="font-semibold text-destructive">Removal pending</span> and
-            leave your listing once Operations approves, after you submit your changes. Past bookings stay on record.
+            are removed from active inventory when your changes are approved. Past bookings stay on record.
           </p>
+          </>}
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setRoomsToDelete([])} disabled={deleting}>

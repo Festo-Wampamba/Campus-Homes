@@ -140,7 +140,11 @@ export interface RoomChangeReviewItem {
   }>;
 }
 
-type LabelledVersion = { title: string; capacity: number; bathroomType: string; pricePerTermUgx: number };
+export function normalizeRoomTypeName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+type LabelledVersion = { title: string; capacity: number; bathroomType: string; pricePerTermUgx: number; sizeSqm?: number | null; description?: string | null };
 type LabelledRoomType = { id: string; currentVersion?: LabelledVersion | null; pendingVersion?: LabelledVersion | null };
 
 const BATHROOM_LABELS: Record<string, string> = {
@@ -167,7 +171,7 @@ export function roomTypeImportLabels(roomTypes: LabelledRoomType[]): Map<string,
     const version = type.pendingVersion ?? type.currentVersion;
     return version ? [{ id: type.id, version }] : [];
   });
-  const key = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
+  const key = normalizeRoomTypeName;
   const labels = new Map<string, string>();
   for (const { id, version } of versions) {
     const twins = versions.filter((other) => key(other.version.title) === key(version.title));
@@ -177,7 +181,9 @@ export function roomTypeImportLabels(roomTypes: LabelledRoomType[]): Map<string,
       differs((v) => v.capacity) ? `${version.capacity} ${version.capacity === 1 ? 'bed' : 'beds'}` : null,
       differs((v) => v.bathroomType) ? (BATHROOM_LABELS[version.bathroomType] ?? version.bathroomType) : null,
       differs((v) => v.pricePerTermUgx) ? shortUgx(version.pricePerTermUgx) : null,
+      differs((v) => v.sizeSqm) && version.sizeSqm ? `${version.sizeSqm} m²` : null,
     ].filter(Boolean);
+    if (!details.length && differs((v) => v.description) && version.description?.trim()) details.push(version.description.trim().slice(0, 100));
     labels.set(id, [version.title.trim(), ...details].join(' - '));
   }
   // Still the same (identical twins, or two rents that round alike): number

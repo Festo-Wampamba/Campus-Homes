@@ -86,7 +86,7 @@ async function overview(propertyId: string) {
 /** A room type on the property, so rooms can be added to it. */
 async function roomType(propertyId: string) {
   const type = await rooms.createRoomType(landlordCtx, propertyId, {
-    title: 'Single room', category: 'single', bathroomType: 'shared', capacity: 1, amenities: [],
+    title: 'Single room', description: 'Additional shared single specification', category: 'single', bathroomType: 'shared', capacity: 1, amenities: [],
     semesterId, pricePerTermUgx: 800000, photos: [],
   });
   return (type as { id: string }).id;

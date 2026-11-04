@@ -197,10 +197,12 @@ function WhatsAppForm({ initialValue }: { initialValue: string | null }) {
 export function LandlordAccountSettings({
   profile,
   hasLiveListing,
+  listingIntent,
   email,
 }: {
   profile: LandlordProfileWithParticulars;
   hasLiveListing: boolean | null;
+  listingIntent: "manage_only" | "list";
   email: string | null;
 }) {
   const particulars = useParticulars(profile);
@@ -212,7 +214,7 @@ export function LandlordAccountSettings({
           <PersonalDetailsForm particulars={particulars} />
         </SettingsCard>
         <SettingsCard id="identity">
-          <KycBanner status={profile.kycStatus} hasLiveListing={hasLiveListing} />
+          <KycBanner listingIntent={listingIntent} status={profile.kycStatus} hasLiveListing={hasLiveListing} />
           <IdentityForm profile={profile} />
         </SettingsCard>
         <SettingsCard id="contact">

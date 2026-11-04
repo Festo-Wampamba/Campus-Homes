@@ -41,7 +41,7 @@ beforeAll(async () => {
   landlordCtx = { userId: landlordId, role: 'landlord' };
   for (const bathroomType of ['shared', 'ensuite'] as const) {
     await rooms.createRoomType(landlordCtx, propertyId, {
-      title: 'Double Room', category: 'double', bathroomType, capacity: 2, amenities: [],
+      title: 'Double Room', description: `${bathroomType} bathroom`, category: 'double', bathroomType, capacity: 2, amenities: [],
       semesterId, pricePerTermUgx: 1_200_000, photos: [],
     });
   }

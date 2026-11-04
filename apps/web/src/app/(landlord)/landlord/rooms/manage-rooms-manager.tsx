@@ -44,9 +44,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   // Bumped by a stat card so the table's own filters (search, type, building,
   // floor) reset too: each card describes the whole property.
   const [inventoryResetKey, setInventoryResetKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<"types" | "rooms">(
-    (searchParams.get("tab") as "types" | "rooms") || "rooms",
-  );
+  const activeTab = searchParams.get("tab") === "types" ? "types" : "rooms";
 
   const property = initialData.property;
   const properties = initialData.properties;
@@ -136,10 +134,9 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   }
 
   function handleTabChange(tab: "types" | "rooms") {
-    setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
   }
 
   async function handleDiscardChangeSet() {
@@ -192,6 +189,12 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
     setRooms((prev) =>
       prev.map((r) => (r.id === updatedRoom.id ? updatedRoom : r)),
     );
+    router.refresh();
+  }
+
+  function onRoomsUpdated(updatedRooms: RoomUnit[]) {
+    const byId = new Map(updatedRooms.map((room) => [room.id, room]));
+    setRooms((prev) => prev.map((room) => byId.get(room.id) ?? room));
     router.refresh();
   }
 
@@ -331,7 +334,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
                   Inventory Changes Under Operations Review
                 </h4>
                 <p className="text-xs text-amber-900/80 dark:text-amber-300/80 mt-0.5">
-                  Submitted {changeSet.submittedAt ? new Date(changeSet.submittedAt).toLocaleDateString() : "recently"}. Existing verified listings remain live while Operations reviews this change set.
+                  Submitted {changeSet.submittedAt ? new Date(changeSet.submittedAt).toLocaleDateString() : "recently"}. Your approved inventory stays active while Operations reviews these changes.
                 </p>
               </div>
             </div>
@@ -381,7 +384,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
       )}
 
       {/* Summary Metric Cards (6 Cards) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
         {([
           { label: "Total Rooms", value: metrics.totalRooms, caption: "Physical units", Icon: DoorClosed, tone: "muted", filter: "all", title: "Every physical room on this property for the selected semester. Click to see the full list." },
           { label: "Total Beds", value: metrics.totalBeds, caption: "Total capacity", Icon: Bed, tone: "muted", filter: "all", title: "Total bedspaces across all rooms. The maximum students you can house. Click to see the list." },
@@ -426,7 +429,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
         <div
           role="tablist"
           aria-label="Manage Rooms Sections"
-          className="flex border-b border-border text-sm font-semibold"
+          className="flex flex-wrap border-b border-border text-sm font-semibold"
         >
           <button
             role="tab"
@@ -435,7 +438,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
             aria-controls="panel-rooms"
             tabIndex={activeTab === "rooms" ? 0 : -1}
             onClick={() => handleTabChange("rooms")}
-            className={`flex items-center gap-2 border-b-2 py-3 px-5 transition-colors ${
+            className={`flex max-w-full items-center gap-2 border-b-2 py-3 px-5 transition-colors ${
               activeTab === "rooms"
                 ? "border-teal-600 text-teal-700 dark:text-teal-400"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -455,7 +458,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
             aria-controls="panel-types"
             tabIndex={activeTab === "types" ? 0 : -1}
             onClick={() => handleTabChange("types")}
-            className={`flex items-center gap-2 border-b-2 py-3 px-5 transition-colors ${
+            className={`flex max-w-full items-center gap-2 border-b-2 py-3 px-5 transition-colors ${
               activeTab === "types"
                 ? "border-teal-600 text-teal-700 dark:text-teal-400"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -476,7 +479,6 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
           aria-labelledby="tab-rooms"
           hidden={activeTab !== "rooms"}
         >
-          {activeTab === "rooms" && (
             <RoomsInventoryTab
               key={inventoryResetKey}
               propertyId={property.id}
@@ -484,12 +486,13 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               roomTypes={roomTypes}
               rooms={rooms}
               onRoomUpdated={onRoomUpdated}
+              onRoomsUpdated={onRoomsUpdated}
+              applyImmediately={property.listingIntent === "manage_only" && property.manageReviewStatus === "approved"}
               onRoomsAdded={onRoomsAdded}
               onRoomsDeleted={onRoomsDeleted}
               filterStatus={roomStatusFilter}
               onFilterStatusChange={setRoomStatusFilter}
             />
-          )}
         </div>
 
         {/* Tab Panel 2: Room Types */}
@@ -499,14 +502,12 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
           aria-labelledby="tab-types"
           hidden={activeTab !== "types"}
         >
-          {activeTab === "types" && (
             <RoomTypesTab
               propertyId={property.id}
               semesterId={currentSemester.id}
               roomTypes={roomTypes}
               onRoomTypeSaved={onRoomTypeSaved}
             />
-          )}
         </div>
       </div>
 

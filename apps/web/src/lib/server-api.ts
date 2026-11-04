@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 
 import { API_TIMEOUT_MS } from "./api";
@@ -13,7 +14,9 @@ const BASE =
 // Server-component counterpart to lib/api.ts: forwards the incoming
 // request's session cookie since server components can't rely on fetch's
 // browser `credentials: 'include'` (session.ts pattern).
-export async function apiServer<T>(path: string): Promise<T | null> {
+// Request-scoped only: layouts and pages share identical reads without
+// caching authenticated responses across users or across navigations.
+export const apiServer = cache(async function apiServer<T>(path: string): Promise<T | null> {
   const cookie = (await headers()).get("cookie");
   if (!cookie) {
     // WHY log: apiServer collapses every failure to null (see note below),
@@ -39,7 +42,7 @@ export async function apiServer<T>(path: string): Promise<T | null> {
     );
     return null;
   }
-}
+});
 
 // apiServer() collapses "not signed in", "API is down", and "genuinely no
 // data" into the same null/[] — fine for most callers, but wrong for a

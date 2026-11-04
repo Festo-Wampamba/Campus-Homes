@@ -53,7 +53,7 @@ export default async function LandlordDashboardPage() {
       <p className="mt-1 text-sm text-muted-foreground">Here&apos;s what&apos;s happening across your properties.</p>
 
       <div className="mt-6">
-        <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
+        <KycBanner listingIntent={properties.length > 0 && properties.every((p) => p.listingIntent === "manage_only") ? "manage_only" : "list"} status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-5">

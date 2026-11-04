@@ -57,7 +57,7 @@ export default async function ManageRoomsPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
+      <KycBanner listingIntent={selectedProperty.listingIntent} status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       <div className="mt-6">
         <ManageRoomsManager
           key={JSON.stringify([

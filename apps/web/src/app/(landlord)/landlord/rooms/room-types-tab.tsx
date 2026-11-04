@@ -122,7 +122,7 @@ export function RoomTypesTab({
                   {/* Status Badge */}
                   <div className="absolute top-2 right-2">
                     {rt.currentVersion ? (
-                      <StatusChip tone="success">Approved & Live</StatusChip>
+                      <StatusChip tone="success">Approved & Active</StatusChip>
                     ) : rt.pendingVersion?.status === "rejected" ? (
                       <StatusChip tone="destructive">Rejected</StatusChip>
                     ) : (
@@ -227,14 +227,15 @@ export function RoomTypesTab({
       )}
 
       {/* Add / Edit Dialog */}
-      <RoomTypeDialog
+      {dialogOpen && <RoomTypeDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         propertyId={propertyId}
         semesterId={semesterId}
         roomType={editingType}
+        roomTypes={roomTypes}
         onSaved={onRoomTypeSaved}
-      />
+      />}
     </div>
   );
 }

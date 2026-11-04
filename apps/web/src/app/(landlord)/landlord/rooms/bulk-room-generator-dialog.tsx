@@ -23,6 +23,7 @@ interface BulkRoomGeneratorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   propertyId: string;
+  applyImmediately?: boolean;
   /** Semester on screen: the template lists that semester's pending room type names. */
   semesterId: string;
   roomTypes: RoomType[];
@@ -33,7 +34,7 @@ interface BulkRoomGeneratorDialogProps {
 // The three ways to add rooms read as real buttons: brand teal for the one in
 // use, teal-outlined for the others.
 const MODE_BUTTON =
-  "rounded-md border px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "min-h-16 min-w-0 rounded-md border px-4 py-3 text-left text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 const MODE_ON = "border-primary bg-primary text-primary-foreground shadow-xs";
 const MODE_OFF = "border-primary/40 bg-card text-primary hover:bg-teal-50 dark:hover:bg-primary/10";
 
@@ -41,6 +42,7 @@ export function BulkRoomGeneratorDialog({
   open,
   onOpenChange,
   propertyId,
+  applyImmediately = false,
   semesterId,
   roomTypes,
   existingRooms,
@@ -173,7 +175,7 @@ export function BulkRoomGeneratorDialog({
       const e = parseInt(endNum, 10);
       if (!isNaN(s) && !isNaN(e) && e >= s) {
         const count = Math.min(e - s + 1, 200);
-        const padLen = zeroPad ? Math.max(startNum.length, endNum.length) : 0;
+        const padLen = zeroPad ? Math.max(2, startNum.length, endNum.length) : 0;
 
         for (let i = 0; i < count; i++) {
           const numStr = padLen ? String(s + i).padStart(padLen, "0") : String(s + i);
@@ -256,15 +258,15 @@ export function BulkRoomGeneratorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="lg">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" resizable dismissible={false}>
       <form onSubmit={handleGenerate} className="flex min-h-0 flex-auto flex-col">
         <DialogHeader
           title="Bulk Generate Physical Rooms"
-          description="Quickly generate sequential or custom room codes and assign them to a room type. Added rooms are staged into your draft change set."
           onClose={() => onOpenChange(false)}
         />
 
-        <DialogBody className="space-y-5">
+        <DialogBody className="@container space-y-5">
+          <p className="text-sm text-muted-foreground">{applyImmediately ? "Add room codes in bulk. Rooms are added immediately to this managed property." : "Add room codes in bulk. Rooms are staged into your draft change set."}</p>
           {error && (
             <div
               role="alert"
@@ -275,14 +277,15 @@ export function BulkRoomGeneratorDialog({
           )}
 
           {/* Mode switch */}
-          <div role="group" aria-label="How to add rooms" className="grid gap-2 sm:grid-cols-3">
+          <div role="group" aria-label="How to add rooms" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2">
             <button
               type="button"
               onClick={() => setMode("range")}
               aria-pressed={mode === "range"}
               className={`${MODE_BUTTON} ${mode === "range" ? MODE_ON : MODE_OFF}`}
             >
-              Sequential Range (e.g. Room 101 to 120)
+              <span className="block">Sequential range</span>
+              <span className="mt-1 block text-xs font-normal">For example, Room 101–120</span>
             </button>
             <button
               type="button"
@@ -290,7 +293,8 @@ export function BulkRoomGeneratorDialog({
               aria-pressed={mode === "custom"}
               className={`${MODE_BUTTON} ${mode === "custom" ? MODE_ON : MODE_OFF}`}
             >
-              Custom Codes (CSV or Newline)
+              <span className="block">Custom codes</span>
+              <span className="mt-1 block text-xs font-normal">Separate with commas or new lines</span>
             </button>
             <button
               type="button"
@@ -298,7 +302,8 @@ export function BulkRoomGeneratorDialog({
               aria-pressed={mode === "upload"}
               className={`${MODE_BUTTON} ${mode === "upload" ? MODE_ON : MODE_OFF}`}
             >
-              Upload Spreadsheet (Excel or CSV)
+              <span className="block">Upload spreadsheet</span>
+              <span className="mt-1 block text-xs font-normal">Excel or CSV file</span>
             </button>
           </div>
 
@@ -395,7 +400,7 @@ export function BulkRoomGeneratorDialog({
             </div>
           ) : (
           <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 @min-[36rem]:grid-cols-3">
             <div>
               <Label htmlFor="bg-room-type">Room Type Specification</Label>
               <RoomTypePicker id="bg-room-type" roomTypes={roomTypes} value={selectedRoomTypeId} onChange={setSelectedRoomTypeId} />
@@ -426,7 +431,7 @@ export function BulkRoomGeneratorDialog({
 
           {mode === "range" ? (
             <div className="rounded-lg border border-border p-4 bg-muted/20 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 @min-[36rem]:grid-cols-3">
                 <div>
                   <Label htmlFor="bg-prefix">Code Prefix</Label>
                   <Input
@@ -529,7 +534,7 @@ export function BulkRoomGeneratorDialog({
           )}
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="flex-wrap [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2">
           <Button
             type="button"
             variant="secondary"

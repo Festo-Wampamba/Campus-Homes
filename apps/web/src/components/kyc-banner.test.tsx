@@ -19,3 +19,13 @@ describe("KycBanner", () => {
     expect(renderToStaticMarkup(<KycBanner status="verified" hasLiveListing={null} />)).not.toContain("inspection");
   });
 });
+
+it('removes listing guidance for verified management-only owners', () => {
+  expect(renderToStaticMarkup(<KycBanner status="verified" listingIntent="manage_only" hasLiveListing={false} />)).toBe('');
+  expect(renderToStaticMarkup(<KycBanner status="verified" listingIntent="list" hasLiveListing={false} />)).toContain('inspection');
+});
+it('retains relevant account-review notices for management-only owners', () => {
+  const html = renderToStaticMarkup(<KycBanner status="pending" listingIntent="manage_only" />);
+  expect(html).toContain('account review is in progress');
+  expect(html).not.toContain('listings');
+});

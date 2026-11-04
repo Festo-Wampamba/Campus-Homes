@@ -16,7 +16,7 @@ export default async function LandlordPropertiesPage() {
 
   return (
     <>
-      <KycBanner status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
+      <KycBanner listingIntent={properties.length > 0 && properties.every((p) => p.listingIntent === "manage_only") ? "manage_only" : "list"} status={profile.kycStatus} hasLiveListing={properties.some((p) => p.hasLiveListing)} />
       <div className="mt-6">
         <PropertiesManager properties={properties} />
       </div>

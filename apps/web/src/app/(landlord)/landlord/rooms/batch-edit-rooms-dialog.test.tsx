@@ -53,3 +53,19 @@ it("numbers the selected rooms from a prefix and saves them together", async () 
   const body = JSON.parse((mockApi.mock.calls[0]![1] as { body: string }).body) as { rooms: { roomCode: string }[] };
   expect(body.rooms.map((r) => r.roomCode)).toEqual(["D1", "D2"]);
 });
+
+it.each([['1', ['A01', 'A02']], ['0', ['A00', 'A01']]])('zero-pads room codes starting at %s', async (start, expected) => {
+  await act(async () => root.render(<BatchEditRoomsDialog propertyId="p1" rooms={[room('r1', 'Old1'), room('r2', 'Old2')]} onClose={() => {}} onUpdated={() => {}} />));
+  async function fill(input: HTMLInputElement, value: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  await fill(container.querySelector<HTMLInputElement>('input[placeholder^="e.g. D"]')!, 'A');
+  await fill(container.querySelector<HTMLInputElement>('input[type="number"]')!, start);
+  await act(async () => container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  await act(async () => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Apply numbering')!.click());
+  const codes = Array.from(container.querySelectorAll<HTMLInputElement>('input[aria-label^="New code"]')).map((input) => input.value);
+  expect(codes).toEqual(expected);
+});

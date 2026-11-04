@@ -153,7 +153,7 @@ export function BedspaceDrawer({
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Available for student reservation on verified listing.
+                    Available bedspace in this room.
                   </p>
                 )}
 
