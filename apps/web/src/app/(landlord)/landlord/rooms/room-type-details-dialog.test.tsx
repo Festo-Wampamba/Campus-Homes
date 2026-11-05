@@ -51,3 +51,8 @@ it('shows missing specifications and empty rooms explicitly instead of inventing
   await act(async () => root.render(<RoomTypeDetailsDialog roomType={null} room={room} rooms={[room]} onClose={() => {}} />));expect(viewer().textContent).toContain('specifications are unavailable');expect(viewer().textContent).not.toContain('UGX');
   await act(async () => root.render(<RoomTypeDetailsDialog roomType={{ ...type, currentVersion: null, pendingVersion: { ...version, status: 'draft' } }} rooms={[]} onClose={() => {}} />));expect(viewer().textContent).toContain('Draft specification');expect(viewer().textContent).toContain('No physical rooms are attached yet.');
 });
+
+it('does not label an older approved specification as a pending price proposal', async () => {
+  await act(async () => root.render(<RoomTypeDetailsDialog roomType={{ ...type, pendingVersion: { ...version, id: 'old-approved', pricePerTermUgx: 500000 } }} rooms={[room]} onClose={() => {}} />));
+  expect(viewer().querySelector('summary')).toBeNull();expect(viewer().textContent).toContain('800,000');expect(viewer().textContent).not.toContain('500,000');
+});
