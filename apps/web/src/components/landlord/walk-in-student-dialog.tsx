@@ -19,8 +19,9 @@ const FIELD =
 type WalkInResult = { studentCreated: boolean; status: "booked" | "occupied" };
 
 /** A student who came in person, not through CampusHomes (Festo, 2026-10-23).
- * The API finds their student account by phone or creates one, books the bed
- * (taking it off CampusHomes at once) and texts them how to sign in. */
+ * The API creates their student account, books the bed (taking it off
+ * CampusHomes at once) and texts them how to sign in. A phone that already has
+ * an account is refused: that student reserves the bed from their account. */
 export function WalkInStudentButton({ beds }: { beds: WalkInBed[] }) {
   const [open, setOpen] = useState(false);
   return (
@@ -91,7 +92,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
         <DialogBody>
           <p role="status" className="text-sm">
             {name.trim()} now has this room {done.status === "occupied" ? "and is recorded as moved in" : "booked"}. The bed is no longer offered on CampusHomes.
-            {done.studentCreated ? " We created their CampusHomes account." : " They already had a CampusHomes account."}{" "}
+            {" We created their CampusHomes account. "}
             {email.trim() ? `We emailed ${email.trim()} how to sign in and see the booking${paidUgx > 0 ? ", with a payment receipt" : ""}.` : `They sign in with ${phone.trim()} to see the booking.`}
           </p>
         </DialogBody>
@@ -107,7 +108,7 @@ function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: ()
       <form onSubmit={submit} className="contents">
         <DialogHeader
           title="Add a walk-in student"
-          description="For a student who came to you in person. We create their CampusHomes account (or use the one with this phone), book the bed, and text them how to sign in."
+          description="For a student who came to you in person and has no CampusHomes account. We create their account, book the bed, and text them how to sign in. A student who already has an account reserves the bed from their phone, then you confirm the booking."
           onClose={onClose}
         />
         <DialogBody className="space-y-6">

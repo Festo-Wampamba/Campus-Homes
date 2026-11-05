@@ -1386,13 +1386,25 @@ export class OpsService {
    * one-time-token invite, same pattern as staff — see StaffService) so the
    * emailed link works before the landlord ever visits the app. */
   async inviteLandlord(ctx: RlsContext, input: InviteLandlordInput) {
-    const user = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-      await assertStaffScope(client, ctx);
-      await client.query('BEGIN');
-      try {
-        const existing = await client.query('SELECT id FROM users WHERE email = $1', [input.email]);
-        if (existing.rows[0]) {
-          throw new ConflictException('A user with this email already exists');
+    // The Logto identity is created inside the transaction: a Logto failure
+    // rolls our rows back so a retry starts clean, and if anything after it
+    // fails, the identity is deleted again.
+    const logto: { userId?: string } = {};
+    let invited: { user: { id: string; name: string; email: string }; token: string };
+    try {
+      invited = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+        await assertStaffScope(client, ctx);
+        // Sign-in links accounts by lower(btrim(email)): a case variant of an
+        // existing address would be a second account that blocks both sign-ins.
+        const existing = (await client.query<{ emailTaken: boolean }>(
+          `SELECT lower(btrim(email)) = $1 AS "emailTaken" FROM users
+           WHERE lower(btrim(email)) = $1 OR phone = $2 LIMIT 1`,
+          [input.email, input.phone],
+        )).rows[0];
+        if (existing) {
+          throw new ConflictException(existing.emailTaken
+            ? 'A user with this email already exists'
+            : 'A user with this phone number already exists');
         }
         const created = (await client.query(
           `INSERT INTO users (name, email, phone, role, status, email_verified, phone_verified)
@@ -1417,16 +1429,18 @@ export class OpsService {
             [input.leadId, ctx.userId],
           );
         }
-        await client.query('COMMIT');
-        return created;
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
-        throw error;
-      }
-    });
+        logto.userId = (await this.logtoManagement.createUser({
+          primaryEmail: input.email, primaryPhone: input.phone, name: input.name,
+        })).id;
+        const { token } = await this.logtoManagement.createOneTimeToken(input.email, 'ForgotPassword');
+        return { user: created, token };
+      });
+    } catch (error) {
+      if (logto.userId) await this.logtoManagement.deleteUser(logto.userId).catch(() => undefined);
+      throw error;
+    }
+    const { user, token } = invited;
     const env = loadEnv();
-    await this.logtoManagement.createUser({ primaryEmail: input.email, primaryPhone: input.phone, name: input.name });
-    const { token } = await this.logtoManagement.createOneTimeToken(input.email, 'ForgotPassword');
     const url = magicSignInUrl(env, 'consumer', token, input.email);
     await sendAuthEmail(env, { to: input.email, name: input.name, url, kind: pickPasswordEmailKind(false) });
     await this.audit.record(ctx, 'landlord.invite', 'user', user.id, { email: input.email });

@@ -208,7 +208,8 @@ export type IssueStrikeInput = z.infer<typeof issueStrikeSchema>;
 // (0027), which gets marked 'converted' when provided.
 export const inviteLandlordSchema = z.object({
   name: z.string().trim().min(2).max(200),
-  email: z.email(),
+  // Lowercased: sign-in matches accounts by lower(btrim(email)).
+  email: z.string().trim().toLowerCase().email().max(254),
   phone: africanPhone,
   leadId: uuid.optional(),
 });

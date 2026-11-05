@@ -22,36 +22,25 @@ export const reserveSchema = z.object({
 });
 export type ReserveInput = z.infer<typeof reserveSchema>;
 
-// Landlord/custodian confirms a booking two ways: against an existing
-// Reserved row (`reservationId`), or directly against an Available bed with
-// no prior Reserve step at all (`bedId` + `studentPhone`) — the walk-in
-// path. Exactly one of the two shapes must be provided.
-export const bookReservationSchema = z
-  .object({
-    reservationId: uuid.optional(),
-    bedId: uuid.optional(),
-    // Walk-in only: how the landlord identifies which student account this
-    // booking belongs to. The student must already have an account (and a
-    // completed profile) — this doesn't create one.
-    studentPhone: ugPhone.optional(),
-    bookingFeeCollectedUgx: ugxAmount.optional(),
-    depositCollectedUgx: ugxAmount.optional(),
-    paymentMethod: z.enum(PAYMENT_METHODS).optional(),
-    notes: z.string().trim().max(500).optional(),
-  })
-  .refine((v) => Boolean(v.reservationId) !== Boolean(v.bedId), {
-    message: 'Provide either reservationId (booking an existing reservation) or bedId (booking a walk-in directly), not both',
-    path: ['reservationId'],
-  })
-  .refine((v) => !v.bedId || Boolean(v.studentPhone), {
-    message: 'studentPhone is required when booking a bed directly',
-    path: ['studentPhone'],
-  });
+// Landlord/custodian confirms a booking against a student's own Reserved row.
+// Booking an existing account by phone alone is gone (2026-10-30): anyone who
+// knew a student's number could attach them to a bed and read their contact
+// details. A student who already has an account reserves the bed themselves
+// and the landlord confirms it here; walk-ins without an account go through
+// onboardWalkInSchema.
+export const bookReservationSchema = z.object({
+  reservationId: uuid,
+  bookingFeeCollectedUgx: ugxAmount.optional(),
+  depositCollectedUgx: ugxAmount.optional(),
+  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
 export type BookReservationInput = z.infer<typeof bookReservationSchema>;
 
 // A student who walked in without CampusHomes (Festo, 2026-10-23): the landlord
-// creates their account (or finds it by phone) and books them a free bed in
-// one step. The student later signs in with this phone or email to claim it.
+// creates their account and books them a free bed in one step. A phone that
+// already has an account is refused: that student reserves the bed themselves.
+// The student later signs in with this phone or email to claim it.
 // Email is optional and must not belong to another account: SMS codes don't
 // reach students yet (Festo, 2026-10-23), so email is how most will sign in.
 // Like the phone, whoever controls the address can claim the account.

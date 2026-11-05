@@ -1603,3 +1603,23 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     approved, reviewed_by = landlord). Listed properties and unapproved
     manage-only ones keep the review flow. `listings_intent_guard` unchanged.
   - Property form / onboarding hide room-type photo pickers for manage-only.
+- **Walk-in booking no longer touches existing accounts; landlord invite email
+  case (2026-10-30, code review):**
+  - `POST /reservations/book` takes only `reservationId`. Booking a bed for an
+    existing account by phone is gone: any landlord who knew a student's number
+    could attach them to a bed and then read their email, emergency contact,
+    university and gender through `/reservations/:id/student` and the tenant
+    ledger. A student who already has an account reserves the bed themselves
+    and the landlord confirms it. `POST /reservations/walk-in` only creates
+    brand-new accounts and refuses any phone that already has one (Festo chose
+    this over a student-confirmation step). Account creation and booking now
+    share one transaction (`bookInTransaction`), so a failed booking leaves no
+    account that the retry would then refuse. The property dialog's phone-only
+    "Book" button became a link to Add walk-in student.
+  - `inviteLandlordSchema` lowercases/trims the email and `inviteLandlord`
+    checks `lower(btrim(email))` and phone before inserting: `users_email_unique`
+    is case-sensitive, and sign-in refuses (`identity_conflict`) when two rows
+    match an address. The Logto user + one-time token are created inside the
+    DB transaction, and the Logto user is deleted if anything after it fails,
+    so a Logto outage no longer leaves a half-created, un-retryable account.
+    Tests: `landlord-invite.spec.ts` (new), `reservations-flow.spec.ts` updated.
