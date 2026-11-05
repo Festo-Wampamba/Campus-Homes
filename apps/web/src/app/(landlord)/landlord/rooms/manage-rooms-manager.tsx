@@ -484,6 +484,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               propertyId={property.id}
               semesterId={currentSemester.id}
               roomTypes={roomTypes}
+              semesters={initialData.semesters}
               rooms={rooms}
               onRoomUpdated={onRoomUpdated}
               onRoomsUpdated={onRoomsUpdated}
@@ -506,6 +507,8 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               propertyId={property.id}
               semesterId={currentSemester.id}
               roomTypes={roomTypes}
+              semesters={initialData.semesters}
+              rooms={rooms}
               onRoomTypeSaved={onRoomTypeSaved}
             />
         </div>

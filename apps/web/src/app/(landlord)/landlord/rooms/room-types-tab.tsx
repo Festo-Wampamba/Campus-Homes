@@ -19,13 +19,17 @@ import { formatUgx } from "@/lib/format";
 import {
   BATHROOM_TYPE_LABELS,
   type RoomType,
+  type RoomUnit,
 } from "@/lib/room-management";
+import { RoomTypeDetailsDialog } from "./room-type-details-dialog";
 import { RoomTypeDialog } from "./room-type-dialog";
 
 interface RoomTypesTabProps {
   propertyId: string;
   semesterId: string;
   roomTypes: RoomType[];
+  rooms?: RoomUnit[];
+  semesters?: { id: string; name: string }[];
   onRoomTypeSaved: (savedType: RoomType) => void;
 }
 
@@ -33,8 +37,12 @@ export function RoomTypesTab({
   propertyId,
   semesterId,
   roomTypes,
+  rooms = [],
+  semesters = [],
   onRoomTypeSaved,
 }: RoomTypesTabProps) {
+  const [detailsTypeId, setDetailsTypeId] = useState<string | null>(null);
+  const detailsType = roomTypes.find((type) => type.id === detailsTypeId);
   const [editingType, setEditingType] = useState<RoomType | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -136,7 +144,7 @@ export function RoomTypesTab({
                   <div>
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="text-base font-bold font-heading text-foreground">
-                        {activeVer?.title}
+                        <button type="button" className="min-h-11 text-left text-primary underline decoration-primary/40 underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring" onClick={() => setDetailsTypeId(rt.id)}>{activeVer?.title}</button>
                       </h4>
                     </div>
 
@@ -208,12 +216,13 @@ export function RoomTypesTab({
                   </div>
 
                   {/* Card Actions */}
-                  <div className="pt-3 border-t border-border flex items-center justify-between">
+                  <div className="pt-3 border-t border-border flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="secondary" size="sm" className="h-auto min-h-11 whitespace-normal py-2" onClick={() => setDetailsTypeId(rt.id)}>View details</Button>
                     <Button
                       variant="secondary"
                       size="sm"
                       onClick={() => handleEdit(rt)}
-                      className="w-full gap-1.5"
+                      className="h-auto min-h-11 flex-1 gap-1.5 whitespace-normal py-2"
                     >
                       <Edit className="size-3.5" />
                       {isRejected ? "Revise and Resubmit" : "Edit Specifications"}
@@ -226,6 +235,7 @@ export function RoomTypesTab({
         </div>
       )}
 
+      {detailsType && <RoomTypeDetailsDialog roomType={detailsType} rooms={rooms} semesters={semesters} onClose={() => setDetailsTypeId(null)} />}
       {/* Add / Edit Dialog */}
       {dialogOpen && <RoomTypeDialog
         open={dialogOpen}

@@ -22,6 +22,7 @@ import {
   type RoomType,
   type RoomUnit,
 } from "@/lib/room-management";
+import { RoomTypeDetailsDialog } from "./room-type-details-dialog";
 import { BedspaceDrawer } from "./bedspace-drawer";
 import { BatchEditRoomsDialog } from "./batch-edit-rooms-dialog";
 import { BulkRoomGeneratorDialog } from "./bulk-room-generator-dialog";
@@ -32,6 +33,7 @@ interface RoomsInventoryTabProps {
   propertyId: string;
   semesterId: string;
   roomTypes: RoomType[];
+  semesters?: { id: string; name: string }[];
   rooms: RoomUnit[];
   onRoomUpdated: (updatedRoom: RoomUnit) => void;
   onRoomsUpdated: (updatedRooms: RoomUnit[]) => void;
@@ -60,6 +62,7 @@ export function RoomsInventoryTab({
   propertyId,
   semesterId,
   roomTypes,
+  semesters = [],
   rooms,
   onRoomUpdated,
   onRoomsUpdated,
@@ -69,6 +72,8 @@ export function RoomsInventoryTab({
   filterStatus,
   onFilterStatusChange: setFilterStatus,
 }: RoomsInventoryTabProps) {
+  const [detailsRoomId, setDetailsRoomId] = useState<string | null>(null);
+  const detailsRoom = rooms.find((room) => room.id === detailsRoomId);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterBuilding, setFilterBuilding] = useState("all");
@@ -562,9 +567,7 @@ export function RoomsInventoryTab({
 
                       {/* Room Type */}
                       <td className="py-3.5 px-4">
-                        <span className="font-semibold text-foreground">
-                          {room.roomTypeTitle}
-                        </span>
+                        <button type="button" onClick={() => setDetailsRoomId(room.id)} aria-label={`View ${room.roomTypeTitle} details for room ${room.roomCode}`} className="min-h-11 text-left font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring">{room.roomTypeTitle}</button>
                         <span className="block text-[11px] text-muted-foreground uppercase">
                           {room.roomCategory}
                         </span>
@@ -701,7 +704,7 @@ export function RoomsInventoryTab({
                         </span>
                       </label>
                       <p className="text-muted-foreground mt-0.5">
-                        {room.roomTypeTitle} · {room.buildingName || "Main building"}
+                        <button type="button" onClick={() => setDetailsRoomId(room.id)} aria-label={`View ${room.roomTypeTitle} details for room ${room.roomCode}`} className="min-h-11 text-left font-semibold text-primary underline decoration-primary/40 underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">{room.roomTypeTitle}</button> · {room.buildingName || "Main building"}
                         {room.floorLabel ? `, ${room.floorLabel}` : ""}
                       </p>
                       {room.pendingRemoval && (
@@ -812,6 +815,7 @@ export function RoomsInventoryTab({
       />
 
       {/* Bedspace Drawer */}
+      {detailsRoom && <RoomTypeDetailsDialog room={detailsRoom} roomType={roomTypes.find((type) => type.id === detailsRoom.roomTypeId) ?? null} rooms={rooms} semesters={semesters} onClose={() => setDetailsRoomId(null)} />}
       <BedspaceDrawer
         open={bedspaceDrawerOpen}
         onClose={() => setBedspaceDrawerOpen(false)}
