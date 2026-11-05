@@ -679,9 +679,9 @@ export class ReservationsService {
         if (taken.rowCount) throw new ConflictException('That email already belongs to another CampusHomes account');
       }
       const studentId = (await client.query<{ id: string }>(
-        `INSERT INTO users (phone, contact_phone, email, name, role, status)
-         VALUES ($1, $1, $2, $3, 'student', 'active') RETURNING id`,
-        [input.phone, input.email ?? null, input.name],
+        `INSERT INTO users (phone, contact_phone, email, name, gender, role, status)
+         VALUES ($1, $1, $2, $3, $4, 'student', 'active') RETURNING id`,
+        [input.phone, input.email ?? null, input.name, input.gender ?? null],
       ).catch((err: { code?: string }) => {
         // A concurrent walk-in for the same phone or email committed first.
         if (err.code === '23505') throw new ConflictException(existingAccountMessage({ role: 'student', deleted: false }));

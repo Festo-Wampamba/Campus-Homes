@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { TenantImportPanel } from "./tenant-import-panel";
+import { emptyTenantRow as emptyRow, importedTenantRows, studentName, type TenantIntakeRow as Row } from "./tenant-intake-rows";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, UserPlus } from "lucide-react";
 import { UNIVERSITIES, tenantIntakeEntrySchema, type TenantIntakeResult, type University } from "@campushomes/shared";
@@ -14,14 +16,6 @@ import { api, apiErrorMessage } from "@/lib/api";
 import { formatUgx } from "@/lib/format";
 
 const FIELD = "mt-1 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
-type Row = {
-  key: string; kind: "new" | "existing"; name: string; phone: string; email: string;
-  contact: string; university: University; bedId: string; movedIn: boolean; paid: string; paymentMethod: string;
-};
-function emptyRow(bedId = ""): Row {
-  return { key: crypto.randomUUID(), kind: "new", name: "", phone: "", email: "", contact: "", university: "MUK", bedId, movedIn: false, paid: "", paymentMethod: "" };
-}
-
 export function WalkInStudentButton({ beds }: { beds: WalkInBed[] }) {
   const [open, setOpen] = useState(false);
   return <>
@@ -60,9 +54,10 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
       const shared = { bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
         bookingFeeCollectedUgx: row.paid ? Number(row.paid) || undefined : undefined, paymentMethod: row.paymentMethod || undefined };
       const parsed = tenantIntakeEntrySchema.safeParse(row.kind === "new"
-        ? { ...shared, kind: "new", name: row.name, phone: row.phone, email: row.email.trim() || undefined, university: row.university }
+        ? { ...shared, kind: "new", name: studentName(row), firstName: row.firstName.trim(), lastName: row.lastName.trim(), gender: row.gender || undefined, phone: row.phone, email: row.email.trim() || undefined, university: row.university }
         : { ...shared, kind: "existing", contact: row.contact });
-      const message = !bed ? "Choose an available bed." : Number(row.paid) > bed.pricePerTermUgx ? "Amount paid exceeds this room’s rent." : !parsed.success ? parsed.error.issues[0]?.message : null;
+      const invalidMoney = Boolean(row.paid) && (!/^\d+$/.test(row.paid) || !Number.isSafeInteger(Number(row.paid)));
+      const message = invalidMoney ? "Enter a whole UGX amount, using digits only." : !bed ? "Choose an available bed." : Number(row.paid) > bed.pricePerTermUgx ? "Amount paid exceeds this room’s rent." : !parsed.success ? parsed.error.issues[0]?.message : null;
       if (message) invalid[row.key] = { key: row.key, status: "failed", message };
       else if (parsed.success) entries.push(parsed.data);
     }
@@ -88,6 +83,11 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
         <DialogHeader className="gap-2 p-3 sm:p-5" title="Add students" onClose={() => { if (!pending) onClose(); }} />
         <DialogBody className="space-y-5">
           <p className="text-sm text-muted-foreground">Add a walk-in or students already living at your property, one at a time or as a batch. Available beds include approved managed-only and listed properties.</p>
+          <TenantImportPanel disabled={pending} capacity={50-rows.filter((row)=>studentName(row)||row.phone||row.email||row.contact||row.paid||complete(row.key)).length}
+            onUse={(records)=>setRows((current)=>{
+              const kept=current.filter((row)=>studentName(row)||row.phone||row.email||row.contact||row.paid||complete(row.key));
+              return [...kept,...importedTenantRows(records,beds,kept.map((row)=>row.bedId))];
+            })}/>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm">{beds.length} free beds · {rows.length} {rows.length === 1 ? "student" : "students"}</p>
             <Button type="button" variant="secondary" disabled={pending} onClick={refreshBeds}>Refresh beds</Button>
@@ -99,7 +99,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
             const locked = Boolean(complete(row.key));
             const overpaid = Number(row.paid) > (bed?.pricePerTermUgx ?? 0);
             return <fieldset key={row.key} disabled={pending || locked} className="min-w-0 space-y-4 rounded-lg border border-border p-4">
-              <legend className="max-w-full break-words px-1 font-semibold">Student {index + 1}{row.name.trim() ? ` · ${row.name.trim()}` : ""}</legend>
+              <legend className="max-w-full break-words px-1 font-semibold">Student {index + 1}{studentName(row) ? ` · ${studentName(row)}` : ""}</legend>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="min-w-0 flex-1 text-sm font-semibold">Account
                   <select className={FIELD} value={row.kind} onChange={(e) => update(row.key, { kind: e.target.value as Row["kind"] })}>
@@ -109,11 +109,14 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 {rows.length > 1 && !locked && <Button aria-label={`Remove student ${index + 1}`} type="button" variant="secondary" onClick={() => setRows((items) => items.filter((item) => item.key !== row.key))}><Trash2 aria-hidden className="size-4" /></Button>}
               </div>
               {row.kind === "new" ? <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-                <label className="text-sm font-semibold">Full name *<input required minLength={2} maxLength={120} className={FIELD} value={row.name} onChange={(e) => update(row.key, { name: e.target.value })} /></label>
+                <label className="text-sm font-semibold">First name *<input required maxLength={60} autoComplete="given-name" className={FIELD} value={row.firstName} onChange={(e) => update(row.key, { firstName: e.target.value })} /></label>
+                <label className="text-sm font-semibold">Last name *<input required maxLength={60} autoComplete="family-name" className={FIELD} value={row.lastName} onChange={(e) => update(row.key, { lastName: e.target.value })} /></label>
+                <label className="text-sm font-semibold">Gender<select className={FIELD} value={row.gender} onChange={(e) => update(row.key, { gender: e.target.value as Row["gender"] })}><option value="">Not recorded</option><option value="male">Male</option><option value="female">Female</option></select></label>
                 <label className="text-sm font-semibold">Phone number *<input required type="tel" className={FIELD} placeholder="0771 234567" value={row.phone} onChange={(e) => update(row.key, { phone: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Email (optional)<input type="email" className={FIELD} value={row.email} onChange={(e) => update(row.key, { email: e.target.value })} /></label>
                 <label className="text-sm font-semibold">University *<select className={FIELD} value={row.university} onChange={(e) => update(row.key, { university: e.target.value as University })}>{UNIVERSITIES.map((id) => <option key={id} value={id}>{UNIVERSITY_LABELS[id]}</option>)}</select></label>
               </div> : <div>
+                {(studentName(row)||row.gender)&&<p className="mb-3 text-sm text-muted-foreground">Imported reference: {studentName(row)}{row.gender ? ` · ${row.gender}` : ""}. Existing account names and gender are unchanged.</p>}
                 <label className="text-sm font-semibold">Verified email or phone *<input required className={FIELD} value={row.contact} onChange={(e) => update(row.key, { contact: e.target.value })} /></label>
                 <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
               </div>}
@@ -123,12 +126,14 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                   {beds.map((candidate) => <option key={candidate.id} value={candidate.id} disabled={rows.some((other) => other.key !== row.key && other.bedId === candidate.id)}>{candidate.propertyName} · {candidate.roomLabel} · {candidate.bedLabel}{candidate.semesterName ? ` · ${candidate.semesterName}` : ""}</option>)}
                 </select>
               </label>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="text-sm font-semibold">Amount paid (UGX)<input type="text" inputMode="numeric" pattern="[0-9]*" className={FIELD} value={row.paid} onChange={(e) => update(row.key, { paid: e.target.value })} aria-invalid={overpaid || undefined} /></label>
                 <label className="text-sm font-semibold">Paid with<select className={FIELD} value={row.paymentMethod} onChange={(e) => update(row.key, { paymentMethod: e.target.value })}><option value="">Not recorded</option>{Object.entries(PAYMENT_METHOD_LABEL).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
-                <div className="text-sm"><p>Rent: <strong>{formatUgx(bed?.pricePerTermUgx ?? 0)}</strong></p><p className="mt-2">Balance: <output aria-live="polite">{formatUgx(Math.max(0, (bed?.pricePerTermUgx ?? 0) - (Number(row.paid) || 0)))}</output></p></div>
+                <div className="min-w-0 text-sm font-semibold"><p>Rent (UGX)</p><output aria-label="Rent" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{formatUgx(bed?.pricePerTermUgx ?? 0)}</output></div>
+                <div className="min-w-0 text-sm font-semibold"><p>Balance (UGX)</p><output aria-label="Balance" aria-live="polite" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{formatUgx(Math.max(0, (bed?.pricePerTermUgx ?? 0) - (Number(row.paid) || 0)))}</output></div>
               </div>
               <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={row.movedIn} onChange={(e) => update(row.key, { movedIn: e.target.checked })} />Already moved in / living here</label>
+              {!!row.importWarnings?.length && <div role="note" className="space-y-1 rounded-md border border-border bg-muted/30 p-3 text-sm"><p className="font-semibold">Review imported row</p>{row.importWarnings.map((warning)=><p key={warning}>{warning}</p>)}</div>}
               {overpaid && !result && <p role="alert" className="text-sm text-destructive">Amount paid exceeds this room’s rent.</p>}
               {result && <p role={result.status === "failed" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${result.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-foreground"}`}>
                 {result.status === "added" ? "Student added and bed booked." : result.status === "requested" ? "Request recorded. Ask the student to check My reservations using the verified contact above. No booking is made until they accept." : result.message}

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 
@@ -8,6 +8,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import { ReservationsService } from './reservations.service';
 import { tenantsWorkbook } from './tenants-export';
+import { parseTenantFile, tenantImportTemplate } from './tenant-import';
 
 class ReserveDto extends createZodDto(reserveSchema) {}
 class BookDto extends createZodDto(bookReservationSchema) {}
@@ -84,6 +85,21 @@ export class ReservationsController {
   @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   onboardWalkIn(@Req() req: AuthenticatedRequest, @Body() body: OnboardWalkInDto) {
     return this.reservationsService.onboardWalkIn(rlsCtx(req), body);
+  }
+
+  @Post('tenant-import/parse')
+  @Roles('landlord')
+  async parseTenantImport(@Body() body: unknown, @Query('format') format: string) {
+    return { rows: await parseTenantFile(body as Buffer, format) };
+  }
+
+  @Get('tenant-import/template')
+  @Roles('landlord')
+  async tenantTemplate(@Query('format') format: string, @Res({ passthrough: true }) response: Response) {
+    const file = await tenantImportTemplate(format === 'csv' ? 'csv' : 'xlsx');
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    return new StreamableFile(file.buffer);
   }
 
   @Get('walk-in-beds')

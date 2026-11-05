@@ -1,7 +1,8 @@
 "use client";
 
 import NextImage from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { prepareRoomPhoto } from "./room-photo-file";
 import { Camera, Check, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import { roomCategoryLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -85,9 +86,14 @@ export function RoomTypeDialog({
   const [amenities, setAmenities] = useState<string[]>(() => Array.from(new Set((current?.amenities ?? []).flatMap((item) => item === "Reading Desk & Chair" ? ["Reading desk", "Chair"] : [item]))));
   const [photos, setPhotos] = useState<RoomTypePhoto[]>(current?.photos ?? []);
 
+  const photoInput = useRef<HTMLInputElement>(null);
+  const errorBox = useRef<HTMLDivElement>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { if (error) errorBox.current?.scrollIntoView?.({ block: "nearest" }); }, [error]);
 
   const sameNameTypes = roomTypes.filter((type) => type.id !== roomType?.id &&
     [type.currentVersion, type.pendingVersion].some((version) => version && normalizeRoomTypeName(version.title) === normalizeRoomTypeName(title)));
@@ -101,11 +107,13 @@ export function RoomTypeDialog({
   }
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+    const files = Array.from(e.currentTarget.files ?? []);
+    e.currentTarget.value = "";
+    setPhotoError(null);
     if (!files.length) return;
 
     if (photos.length + files.length > 10) {
-      setError("You can upload a maximum of 10 photos per room type.");
+      setPhotoError("You can upload a maximum of 10 photos per room type.");
       return;
     }
 
@@ -113,14 +121,8 @@ export function RoomTypeDialog({
     setError(null);
 
     try {
-      for (const file of files) {
-        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-          throw new Error("Only JPEG, PNG, and WebP images are allowed.");
-        }
-        if (file.size > 8 * 1024 * 1024) {
-          throw new Error("Each image must be 8 MB or less.");
-        }
-
+      for (const selected of files) {
+        const file = await prepareRoomPhoto(selected);
         const sig = await api<CloudinarySignature>("/uploads/sign", {
           method: "POST",
           body: JSON.stringify({ folder: `properties/${propertyId}/room-types`, contentType: file.type, size: file.size }),
@@ -140,10 +142,9 @@ export function RoomTypeDialog({
         ]);
       }
     } catch (err) {
-      setError(apiErrorMessage(err, "Photo upload failed. Please try again."));
+      setPhotoError(err instanceof Error && !("status" in err) ? err.message : apiErrorMessage(err, "Photo upload failed. Please try again."));
     } finally {
       setUploading(false);
-      e.target.value = "";
     }
   }
 
@@ -168,6 +169,7 @@ export function RoomTypeDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (uploading) { setPhotoError("Wait for the photo upload to finish before saving."); return; }
     setError(null);
 
     const price = Number(pricePerTermUgx.replace(/[^0-9]/g, ""));
@@ -225,19 +227,21 @@ export function RoomTypeDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="xl" resizable>
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" resizable dismissible={false}>
       {/* min-h-0 + flex-auto (not flex-1: iOS Safari collapses a zero basis) let DialogBody scroll inside the dialog's max height,
           so the photos section and Save button are always reachable. */}
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-auto flex-col">
         <DialogHeader
-          title={roomType ? "Edit Room Type Specification" : "Create Room Type"}
-          description="Define the room category, bathroom type, sleeping capacity, amenities, and price per bedspace per semester."
-          onClose={() => onOpenChange(false)}
+          title={roomType ? "Edit room type" : "Create room type"}
+          className="gap-2 p-3 sm:p-5"
+          onClose={() => { if (!uploading && !submitting) onOpenChange(false); }}
         />
 
         <DialogBody className="space-y-6">
+          <p className="text-sm text-muted-foreground">Define the room category, bathroom type, sleeping capacity, amenities, and price per bedspace per semester.</p>
           {error && (
             <div
+              ref={errorBox}
               role="alert"
               className="rounded-lg border border-destructive/20 bg-destructive-subtle p-3 text-sm text-destructive"
             >
@@ -403,35 +407,24 @@ export function RoomTypeDialog({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <Label>Room Photographs ({photos.length}/10)</Label>
                 <p className="text-xs text-muted-foreground">
                   Upload up to 10 clear photos showing bed, desk, bathroom, and space.
                 </p>
               </div>
-              <label
-                className={`inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted cursor-pointer ${
-                  photos.length >= 10 || uploading ? "opacity-50 pointer-events-none" : ""
-                }`}
-              >
-                {uploading ? (
-                  <Loader2 className="size-4 animate-spin text-teal-600" />
-                ) : (
-                  <ImagePlus className="size-4 text-teal-600" />
-                )}
-                <span>Add Photos</span>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handlePhotoUpload}
-                  disabled={photos.length >= 10 || uploading}
-                  className="sr-only"
-                />
-              </label>
+              <Button type="button" variant="secondary" size="sm" className="min-h-11 shrink-0"
+                disabled={photos.length >= 10 || uploading || submitting} onClick={() => photoInput.current?.click()}>
+                <ImagePlus aria-hidden className="mr-1.5 size-4" />
+                {uploading ? "Uploading photos…" : "Add Photos"}
+              </Button>
+              <input ref={photoInput} type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                aria-label="Choose room photos" onChange={handlePhotoUpload} disabled={photos.length >= 10 || uploading || submitting} hidden />
             </div>
 
+            {photoError && <p role="alert" className="mb-3 rounded-md border border-destructive/30 p-3 text-sm text-destructive">{photoError}</p>}
+            {uploading && <p role="status" className="mb-3 text-sm text-muted-foreground">Uploading photos. Keep this window open until the preview appears.</p>}
             {photos.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-8 text-center bg-muted/20">
                 <Camera className="size-8 text-muted-foreground/60 mb-2" />
@@ -499,12 +492,12 @@ export function RoomTypeDialog({
           </div>
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="flex-wrap [&>*]:h-auto [&>*]:min-h-11 [&>*]:max-w-full [&>*]:whitespace-normal [&>*]:py-2">
           <Button
             type="button"
             variant="secondary"
             onClick={() => onOpenChange(false)}
-            disabled={submitting}
+            disabled={submitting || uploading}
           >
             Cancel
           </Button>

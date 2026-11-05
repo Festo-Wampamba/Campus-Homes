@@ -49,6 +49,9 @@ export const onboardWalkInSchema = z.object({
   semesterId: uuid.optional(),
   idempotencyKey: idempotencyKey.optional(),
   name: z.string().trim().min(2).max(120),
+  firstName: z.string().trim().min(1).max(60).optional(),
+  lastName: z.string().trim().min(1).max(60).optional(),
+  gender: z.enum(['male', 'female']).optional(),
   phone: ugPhone,
   email: z.string().trim().toLowerCase().email().max(254).optional(),
   university: z.enum(UNIVERSITIES),
@@ -87,6 +90,13 @@ export type TenantIntakeResult = { key: string; status: 'added' | 'requested' | 
 export type TenantAssignmentRequest = {
   id: string; propertyName: string; roomLabel: string; bedLabel: string;
   pricePerTermUgx: number; movedIn: boolean; amountPaidUgx: number; expiresAt: string;
+};
+
+export type ImportedTenantRow = {
+  rowNumber: number; firstName: string; lastName: string; gender: 'male' | 'female' | '';
+  kind: 'new' | 'existing'; phone: string; email: string; university: string;
+  propertyName: string; roomLabel: string; bedLabel: string; amountPaid: string;
+  rent: string; balance: string; paymentMethod: string; movedIn: boolean; warnings: string[];
 };
 
 // A booking fee / deposit a landlord recorded (0075). Both parties get a copy.

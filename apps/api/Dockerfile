@@ -21,6 +21,10 @@ RUN pnpm --offline --filter @campushomes/api deploy --prod --legacy /prod/api
 
 FROM node:24-bookworm-slim AS runner
 
+# Server-side extraction of selectable text from uploaded tenant PDF tables.
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
 ENV PORT=4000
 

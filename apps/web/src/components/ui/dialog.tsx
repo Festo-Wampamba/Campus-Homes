@@ -101,7 +101,7 @@ function Dialog({
         // painted its own border as a stray horizontal line wherever it sat
         // in the page — one per Dialog instance, so it multiplied on pages
         // with several (e.g. one ReserveButton per room row).
-        "hidden open:flex m-auto max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
+        "hidden open:flex m-auto min-w-0 max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
         DIALOG_WIDTH[size],
         // Native corner resize (CSS `resize` works with overflow-hidden),
         // bounded so the dialog never outgrows the viewport. Phones keep the
@@ -120,7 +120,7 @@ function Dialog({
           (iOS) sizes a `flex-basis: 0%` child of an auto-height column to
           zero — the open dialog collapsed to a thin line over the backdrop. */}
       {open && (
-        <div className="flex min-h-0 flex-auto flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex min-h-0 min-w-0 flex-auto flex-col" onClick={(e) => e.stopPropagation()}>
           {children}
         </div>
       )}
@@ -160,7 +160,7 @@ function DialogHeader({
 }
 
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("min-h-0 flex-auto overflow-y-auto p-5", className)} {...props} />;
+  return <div className={cn("min-h-0 min-w-0 flex-auto overflow-y-auto p-5", className)} {...props} />;
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {

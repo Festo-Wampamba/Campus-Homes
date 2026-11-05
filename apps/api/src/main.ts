@@ -37,6 +37,7 @@ async function bootstrap() {
   http.use(cookieOriginGuard(env.WEB_ORIGIN));
   // Landlords upload room spreadsheets as raw bytes; the JSON parser's 100 kB
   // limit doesn't apply to this one route.
+  http.use('/api/v1/reservations/tenant-import/parse', raw({ type: 'application/octet-stream', limit: '2mb' }));
   http.use('/api/v1/room-management/rooms/import/parse', raw({ type: 'application/octet-stream', limit: '2mb' }));
   // This API had no security headers at all, while the Logto instance it
   // redirects into sets the full set — an audit of the live staging response

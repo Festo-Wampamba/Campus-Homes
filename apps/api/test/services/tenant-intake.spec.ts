@@ -53,11 +53,12 @@ afterEach(async () => {
 it('offers approved managed beds with no listing and books a new student without publishing', async () => {
   const target = await bed();
   expect((await service.walkInBeds(landlord())).map((item) => item.id)).toContain(target.bed);
-  const entry = fresh(target.bed, 1);
+  const entry = { ...fresh(target.bed, 1), firstName: 'Sarah', lastName: 'Kato', name: 'Sarah Kato', gender: 'female' as const };
   expect((await service.tenantIntake(landlord(), { entries: [entry] }))[0]?.status).toBe('added');
   const listing = (await pool.query('SELECT status FROM listings WHERE property_id=$1', [target.property])).rows[0];
   expect(listing.status).toBe('draft');
   const booked = (await pool.query('SELECT student_id,id FROM reservations WHERE bed_id=$1', [target.bed])).rows[0];
+  expect((await pool.query('SELECT name,gender FROM users WHERE id=$1', [booked.student_id])).rows[0]).toMatchObject({ name: 'Sarah Kato', gender: 'female' });
   expect((await service.mine({ userId: booked.student_id, role: 'student' }))[0]).toMatchObject({ id: booked.id, publicListing: false });
   expect((await service.landlordTenants(landlord())).some((item) => item.reservationId === booked.id)).toBe(true);
   expect((await service.walkInBeds(landlord())).some((item) => item.id === target.bed)).toBe(false);
