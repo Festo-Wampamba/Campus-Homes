@@ -60,3 +60,16 @@ it("reports validation beside the affected student without posting",async()=>{
   await act(async()=>container.querySelector("form")!.requestSubmit());
   expect(mockApi).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')?.textContent).toContain("Ugandan mobile");
 });
+
+it("saves larger batches in bounded requests",async()=>{
+  const beds=Array.from({length:6},(_,i)=>({...BED,id:`5f0c2a9e-1111-4222-8333-44445555666${i}`}));
+  await open(beds);
+  for(let i=0;i<6;i++){
+    if(i) await act(async()=>button("Add another student").click());
+    await fill(i);
+  }
+  mockApi.mockImplementation(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string})=>({key:row.idempotencyKey,status:"added"})));
+  await act(async()=>container.querySelector("form")!.requestSubmit());
+  expect(mockApi.mock.calls.map((call)=>JSON.parse(call[1].body).entries.length)).toEqual([5,1]);
+  expect(container.querySelectorAll('[role="status"]')).toHaveLength(6);
+});

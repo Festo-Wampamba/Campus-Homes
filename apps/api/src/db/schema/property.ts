@@ -155,6 +155,8 @@ export const propertyMemberships = pgTable(
       .references(() => properties.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
     workerType: text('worker_type'),
+    // TEAM_CAPABILITIES the landlord granted (migration 0086).
+    capabilities: text('capabilities').array().notNull().default([]),
     status: text('status').notNull().default('active'),
     assignedBy: uuid('assigned_by').notNull().references(() => users.id),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull().defaultNow(),

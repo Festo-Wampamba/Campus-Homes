@@ -28,7 +28,7 @@ export class ReservationsController {
   }
 
   @Post('book')
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   book(@Req() req: AuthenticatedRequest, @Body() body: BookDto) {
     return this.reservationsService.book(rlsCtx(req), body);
   }
@@ -65,7 +65,7 @@ export class ReservationsController {
   }
 
   @Post(':id/payments')
-  @Roles('landlord', 'custodian')
+  @Roles('landlord', 'custodian', 'property_worker')
   recordPayment(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -75,13 +75,13 @@ export class ReservationsController {
   }
 
   @Get(':id/student')
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   studentDetails(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.reservationsService.studentDetails(rlsCtx(req), id);
   }
 
   @Post('walk-in')
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   onboardWalkIn(@Req() req: AuthenticatedRequest, @Body() body: OnboardWalkInDto) {
     return this.reservationsService.onboardWalkIn(rlsCtx(req), body);
   }
@@ -117,7 +117,7 @@ export class ReservationsController {
   }
 
   @Post(':id/release')
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   release(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -151,7 +151,7 @@ export class ReservationsController {
   }
 
   @Post(':id/move-in')
-  @Roles('student', 'landlord', 'custodian')
+  @Roles('student', 'landlord', 'custodian', 'property_worker')
   confirmMoveIn(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.reservationsService.confirmMoveIn(rlsCtx(req), id);
   }

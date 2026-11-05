@@ -1,8 +1,9 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { propertyTeamAssignmentSchema } from '@campushomes/shared';
+import { TEAM_CAPABILITIES, propertyTeamAssignmentSchema, type TeamCapability } from '@campushomes/shared';
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
 import { PropertyTeamService } from '../../src/modules/management/property-team.service';
+import { hasTeamCapability } from '../../src/modules/management/team-capability';
 import { resolveAccountAccess } from '../../src/modules/auth/access-resolver';
 import { pool, seed } from '../rls/helpers';
 
@@ -114,4 +115,38 @@ it('suspension or loss of owner verification stops assignment creation and visib
   await pool.query("UPDATE users SET status='suspended' WHERE id=$1", [recipient.userId]);
   await expect(service.assign(owner, input())).rejects.toThrow(ForbiddenException);
   expect(await service.mine(recipient)).toHaveLength(0);
+});
+
+describe('landlord-set team permissions (2026-11-05)', () => {
+  const capsEmail = 'team-caps-member@example.test';
+  let member: RlsContext;
+  const assign = (role: 'custodian' | 'property_worker', capabilities?: TeamCapability[]) =>
+    service.assign(owner, { propertyId: property, email: capsEmail, role, reason: 'Permission fixture',
+      workerType: role === 'property_worker' ? 'cleaner' : undefined, capabilities });
+  async function can(capability: TeamCapability) {
+    const client = await pool.connect();
+    try { return await hasTeamCapability(client, member.userId, property, capability); } finally { client.release(); }
+  }
+  beforeAll(async () => {
+    member = { userId: await seed(`INSERT INTO users(role,status,name,email,email_verified,logto_user_id)
+      VALUES('student','active',$1,$1,true,$1) RETURNING id`, [capsEmail]), role: 'custodian' };
+  });
+
+  it('gives a new property worker no permissions by default', async () => {
+    await assign('property_worker');
+    expect(await can('bookings.manage')).toBe(false);
+  });
+  it('gives a new custodian every permission by default', async () => {
+    await assign('custodian');
+    expect((await service.mine(member)).find(p => p.role === 'custodian')?.capabilities).toEqual([...TEAM_CAPABILITIES]);
+  });
+  it('stops an action as soon as the landlord unticks it', async () => {
+    const membership = await assign('custodian');
+    await service.setCapabilities(owner, membership.id, { capabilities: ['students.view'] });
+    expect(await can('payments.record')).toBe(false);
+  });
+  it("refuses another landlord changing this team member's permissions", async () => {
+    const membership = await assign('custodian');
+    await expect(service.setCapabilities(other, membership.id, { capabilities: [...TEAM_CAPABILITIES] })).rejects.toThrow(ForbiddenException);
+  });
 });

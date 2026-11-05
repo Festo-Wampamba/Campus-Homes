@@ -87,7 +87,7 @@ beforeAll(async () => {
     [property, propertyDocKey, landlord],
   );
   await pool.query(
-    `INSERT INTO property_memberships (user_id, property_id, role, assigned_by) VALUES ($1, $2, 'custodian', $3)`,
+    `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, capabilities) VALUES ($1, $2, 'custodian', $3, ARRAY['agreements.manage'])`,
     [custodian, property, landlord],
   );
   await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [student]);

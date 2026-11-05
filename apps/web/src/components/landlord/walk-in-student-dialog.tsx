@@ -36,6 +36,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
   const [rows, setRows] = useState<Row[]>(() => [emptyRow(initialBeds[0]?.id)]);
   const [results, setResults] = useState<Record<string, TenantIntakeResult>>({});
   const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const complete = (key: string) => results[key] && results[key].status !== "failed";
   const editable = rows.filter((row) => !complete(row.key));
@@ -68,12 +69,18 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
     if (Object.keys(invalid).length) { setResults((current) => ({ ...current, ...invalid })); return; }
     if (!entries.length) return;
     setPending(true);
+    setProgress({ done: 0, total: entries.length });
     try {
-      const saved = await api<TenantIntakeResult[]>("/reservations/tenant-intake", { method: "POST", body: JSON.stringify({ entries }) });
-      setResults((current) => ({ ...current, ...Object.fromEntries(saved.map((result) => [result.key, result])) }));
-      router.refresh();
+      // Keep each request within the normal API timeout, show progress, and
+      // retain earlier successes if a later chunk loses its connection.
+      for (let start = 0; start < entries.length; start += 5) {
+        const chunk = entries.slice(start, start + 5);
+        const saved = await api<TenantIntakeResult[]>("/reservations/tenant-intake", { method: "POST", body: JSON.stringify({ entries: chunk }) });
+        setResults((current) => ({ ...current, ...Object.fromEntries(saved.map((result) => [result.key, result])) }));
+        setProgress({ done: start + chunk.length, total: entries.length });
+      }
     } catch (caught) { setError(apiErrorMessage(caught, "Could not save these students. Retry to check each entry.")); }
-    finally { setPending(false); }
+    finally { setPending(false); router.refresh(); }
   }
   return (
     <Dialog aria-label="Add students" open onOpenChange={(open) => { if (!open && !pending) onClose(); }} size="xl" resizable dismissible={false}>
@@ -134,7 +141,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
         </DialogBody>
         <DialogFooter className="flex-wrap [&>*]:h-auto [&>*]:min-h-11 [&>*]:whitespace-normal [&>*]:py-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{editable.length ? "Close" : "Done"}</Button>
-          {editable.length > 0 && <Button type="submit" disabled={pending || beds.length === 0 || editable.some((row) => Number(row.paid) > (beds.find((bed) => bed.id === row.bedId)?.pricePerTermUgx ?? 0))}>{pending ? "Saving…" : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
+          {editable.length > 0 && <Button type="submit" disabled={pending || beds.length === 0 || editable.some((row) => Number(row.paid) > (beds.find((bed) => bed.id === row.bedId)?.pricePerTermUgx ?? 0))}>{pending ? `Saving… ${progress.done}/${progress.total}` : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
         </DialogFooter>
       </form>
     </Dialog>
