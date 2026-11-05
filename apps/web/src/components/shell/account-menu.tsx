@@ -54,7 +54,7 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
       </button>
 
       {open && (
-        <HeaderPanel label="Account" onClose={() => setOpen(false)} className="w-64 p-1.5">
+        <HeaderPanel label="Account" onClose={() => setOpen(false)} widthRem={16} className="p-1.5">
           {isStudent && (
             <>
               <Link href="/dashboard" className={menuItemClass} onClick={() => setOpen(false)}>

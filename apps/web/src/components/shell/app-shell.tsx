@@ -393,7 +393,7 @@ export function AppShell({
                 <ChevronDown aria-hidden className={cn("size-3.5 text-slate-400 transition-transform", userMenuOpen && "rotate-180")} />
               </button>
               {userMenuOpen && (
-                <HeaderPanel label="Account" className="w-64" onClose={() => setUserMenuOpen(false)}>
+                <HeaderPanel label="Account" widthRem={16} onClose={() => setUserMenuOpen(false)}>
                   <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
                     <p className="break-words text-sm font-bold text-slate-900 dark:text-foreground">{user.name || "Unnamed"}</p>
                     {user.username && <p className="break-all text-xs text-teal-700 dark:text-teal-300">{user.username}</p>}

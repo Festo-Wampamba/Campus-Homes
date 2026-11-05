@@ -7,9 +7,12 @@ let container: HTMLDivElement;
 let root: Root;
 let compact: boolean;
 let notify: () => void;
+let anchorRight: number;
 const onClose = jest.fn();
 beforeEach(() => {
   compact = false;
+  anchorRight = 1000;
+  jest.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({ right: anchorRight, left: anchorRight - 44, top: 0, bottom: 44, width: 44, height: 44, x: anchorRight - 44, y: 0, toJSON: () => ({}) }));
   onClose.mockClear();
   window.matchMedia = jest.fn().mockImplementation(() => ({
     get matches() { return compact; },
@@ -22,7 +25,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
 });
-afterEach(() => { act(() => root.unmount()); container.remove(); });
+afterEach(() => { act(() => root.unmount()); container.remove(); jest.restoreAllMocks(); });
 const render = () => act(async () => root.render(<StrictMode><HeaderPanel label="Account" onClose={onClose}><a href="/profile">Profile settings</a></HeaderPanel></StrictMode>));
 it("uses an accessible nonmodal panel on a large screen", async () => {
   await render();
@@ -43,4 +46,13 @@ it("propagates a native modal close to its owner", async () => {
   await render();
   await act(async () => container.querySelector("dialog")!.close());
   expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("uses a bounded modal when the anchor is too far left, and remeasures on resize", async () => {
+  anchorRight = 200;
+  await render();
+  expect(container.querySelector("dialog")?.open).toBe(true);
+  await act(async () => { anchorRight = 1000; window.dispatchEvent(new Event("resize")); });
+  expect(container.querySelector("dialog")).toBeNull();
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 });
