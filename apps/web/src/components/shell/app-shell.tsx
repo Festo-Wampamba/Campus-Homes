@@ -27,6 +27,8 @@ import {
 } from "@/lib/sidebar-collapsed";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/shell/sign-out-button";
+import { Dialog, DialogBody } from "@/components/ui/dialog";
+import { HeaderPanel } from "./header-panel";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Wordmark } from "@/components/shell/wordmark";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
@@ -115,10 +117,11 @@ function Sidebar({
           {!collapsed && (
             <span className="min-w-0">
               <Wordmark className="text-[1.02rem]" />
-              <span className="block whitespace-normal break-words text-[10px] font-semibold uppercase leading-relaxed tracking-[0.14em] text-muted-foreground">{portalLabel}</span>
+              <span className="block whitespace-normal break-words text-xs font-semibold uppercase leading-relaxed tracking-[0.14em] text-muted-foreground">{portalLabel}</span>
             </span>
           )}
         </Link>
+        {close && <button type="button" aria-label="Close navigation" onClick={close} className="grid size-[44px] shrink-0 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring"><X aria-hidden className="size-5" /></button>}
       </div>
       <nav aria-label="Primary navigation" className="scrollbar-hide flex-1 overflow-y-auto px-3 py-4">
         {groups.map((group) => {
@@ -126,7 +129,7 @@ function Sidebar({
           if (!items.length) return null;
           return (
             <div key={group || "_"} className="mb-5">
-              {!collapsed && group && <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{group}</p>}
+              {!collapsed && group && <p className="mb-1.5 px-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{group}</p>}
               <div className="space-y-1">
                 {items.map((item) => {
                   const selected = active === item.href;
@@ -140,7 +143,7 @@ function Sidebar({
                       title={collapsed ? item.label : undefined}
                       aria-current={selected ? "page" : undefined}
                       className={cn(
-                        "group flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400",
+                        "group flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400",
                         collapsed && "justify-center px-2",
                         selected ? "bg-accent text-teal-700 dark:bg-teal-500/16 dark:text-teal-300" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
@@ -149,7 +152,7 @@ function Sidebar({
                         {item.icon}
                         {needsAttention && <span aria-label="Action required" className="absolute -right-1.5 -top-1 size-2 rounded-full border border-card bg-red-500" />}
                       </span>
-                      {!collapsed && <><span className="min-w-0 flex-1 truncate">{item.label}</span>{attentionCount > 0 && <span aria-label={`${attentionCount} unread`} className="grid min-w-5 place-items-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{attentionCount > 99 ? "99+" : attentionCount}</span>}</>}
+                      {!collapsed && <><span className="min-w-0 flex-1 break-words">{item.label}</span>{attentionCount > 0 && <span aria-label={`${attentionCount} unread`} className="grid min-w-5 place-items-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white">{attentionCount > 99 ? "99+" : attentionCount}</span>}</>}
                     </Link>
                   );
                 })}
@@ -209,6 +212,14 @@ export function AppShell({
   const [messageToast, setMessageToast] = useState<NotificationRow | null>(null);
   const knownNotificationIds = useRef<Set<string> | null>(null);
   const baseDocumentTitle = useRef<string | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const closeOnWideScreen = () => { if (wide.matches) setMenuOpen(false); };
+    closeOnWideScreen();
+    wide.addEventListener("change", closeOnWideScreen);
+    return () => wide.removeEventListener("change", closeOnWideScreen);
+  }, [menuOpen]);
   const [query, setQuery] = useState("");
   const matches = useMemo(() => nav.filter((item) => `${item.label} ${item.group ?? ""}`.toLowerCase().includes(query.toLowerCase())), [nav, query]);
   const unreadNotifications = useMemo(() => notifications?.filter((item) => !item.readAt) ?? [], [notifications]);
@@ -305,36 +316,31 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-dvh min-w-0 bg-background text-foreground">
       <PresenceHeartbeat />
       <IdleTimeout signInPath={isStaff ? "/staff" : "/sign-in"} />
-      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 lg:block", collapsed ? "w-16" : "w-62")}>
+      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 lg:block", collapsed ? "w-[64px]" : "w-[var(--ch-sidebar-width)]")}>
         <Sidebar nav={nav} pathname={pathname} collapsed={collapsed} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
       </aside>
-      {menuOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button aria-label="Close navigation" className="absolute inset-0 bg-slate-950/60" onClick={() => setMenuOpen(false)} />
-          <aside className="relative h-full w-72 max-w-[86vw] shadow-2xl">
-            <Sidebar nav={nav} pathname={pathname} close={() => setMenuOpen(false)} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
-          </aside>
-        </div>
-      )}
+      {menuOpen && <Dialog open aria-label="Workspace navigation" onOpenChange={setMenuOpen} size="sm" className="ch-workspace-nav lg:hidden">
+        <Sidebar nav={nav} pathname={pathname} close={() => setMenuOpen(false)} portalLabel={portalLabel} homeHref={homeHref} attentionHrefs={attentionHrefs} attentionCounts={attentionCounts} />
+      </Dialog>}
 
-      <div className={cn("transition-[padding] duration-150", collapsed ? "lg:pl-16" : "lg:pl-62")}>
-        <header className="sticky top-0 z-30 flex min-h-17 flex-wrap items-center gap-3 py-2 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-border dark:bg-background/95">
-          <button type="button" aria-label="Open navigation" onClick={() => setMenuOpen(true)} className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden dark:text-foreground dark:hover:bg-muted"><Menu aria-hidden className="size-5" /></button>
+      <div className={cn("min-w-0 transition-[padding] duration-150", collapsed ? "lg:pl-[64px]" : "lg:pl-[var(--ch-sidebar-width)]")}>
+        <header className="ch-app-header sticky [@media(max-height:500px)]:static top-0 z-30 flex min-h-17 flex-wrap items-center gap-3 py-2 border-b border-slate-200/90 bg-white/95 px-4 backdrop-blur sm:px-6 dark:border-border dark:bg-background/95">
+          <button type="button" aria-label="Open navigation" aria-expanded={menuOpen} aria-haspopup="dialog" onClick={() => setMenuOpen(true)} className="grid min-h-[44px] min-w-[44px] shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden dark:text-foreground dark:hover:bg-muted"><Menu aria-hidden className="size-5" /></button>
           <button
             type="button"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setSidebarCollapsed(!collapsed)}
-            className="hidden min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:grid dark:text-foreground dark:hover:bg-muted"
+            className="hidden min-h-[44px] min-w-[44px] shrink-0 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:grid dark:text-foreground dark:hover:bg-muted"
           >
             {collapsed ? <PanelLeftOpen aria-hidden className="size-4.5" /> : <PanelLeftClose aria-hidden className="size-4.5" />}
           </button>
           {/* Phone: a clear square search button (the squeezed field read as an
               empty box). Tablet and up: the full search field. */}
-          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search the workspace" className="flex size-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 transition-colors hover:border-slate-300 sm:h-10 sm:min-w-0 sm:flex-1 sm:max-w-80 sm:justify-start sm:px-3 sm:text-left sm:text-slate-500 dark:border-border dark:bg-muted dark:text-muted-foreground">
-            <Search aria-hidden className="size-5 sm:size-4" /><span className="hidden truncate sm:inline">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-[10px] sm:inline">/</kbd>
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search the workspace" className="flex size-[44px] shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600 transition-colors hover:border-slate-300 sm:h-10 sm:min-w-0 sm:flex-1 sm:max-w-80 sm:justify-start sm:px-3 sm:text-left sm:text-slate-500 dark:border-border dark:bg-muted dark:text-muted-foreground">
+            <Search aria-hidden className="size-5 sm:size-4" /><span className="hidden truncate sm:inline">Search the workspace</span><kbd className="ml-auto hidden rounded border px-1.5 py-0.5 text-xs sm:inline">/</kbd>
           </button>
           <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {headerExtra}
@@ -343,17 +349,17 @@ export function AppShell({
               <div ref={notifMenuRef} className="relative">
                 <button
                   type="button"
-                  aria-haspopup="menu"
+                  aria-haspopup="dialog"
                   aria-expanded={notifOpen}
                   aria-label="Notifications"
                   onClick={() => setNotifOpen((open) => !open)}
-                  className="relative grid min-h-11 min-w-11 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 dark:text-muted-foreground dark:hover:bg-muted"
+                  className="relative grid min-h-[44px] min-w-[44px] place-items-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 dark:text-muted-foreground dark:hover:bg-muted"
                 >
                   <Bell aria-hidden className="size-4.5" />
                   {!!unreadNotifications.length && <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />}
                 </button>
                 {notifOpen && (
-                  <div role="menu" aria-label="Notifications" className="absolute right-0 top-full z-50 mt-1.5 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
+                  <HeaderPanel label="Notifications" onClose={() => setNotifOpen(false)}>
                     <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
                       <p className="text-sm font-bold text-slate-900 dark:text-foreground">Notifications</p>
                     </div>
@@ -368,7 +374,7 @@ export function AppShell({
                       })}
                     </div>
                     {auditLogHref && <Link href={auditLogHref} onClick={() => setNotifOpen(false)} className="block px-4 py-3 text-center text-sm font-bold text-teal-700 transition-colors hover:bg-slate-50 dark:hover:bg-muted">View audit log</Link>}
-                  </div>
+                  </HeaderPanel>
                 )}
               </div>
             )}
@@ -376,55 +382,57 @@ export function AppShell({
             <div ref={userMenuRef} className="relative min-w-0 max-w-full">
               <button
                 type="button"
-                aria-haspopup="menu"
+                aria-haspopup="dialog"
+                aria-label="Account settings"
                 aria-expanded={userMenuOpen}
                 onClick={() => setUserMenuOpen((open) => !open)}
                 className="flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-muted"
               >
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user.name)}</span>
-                <span className="hidden min-w-0 text-left sm:block"><span className="block max-w-32 truncate text-xs font-bold">{user.name || user.email}</span><span className="block text-[10px] text-slate-500 dark:text-muted-foreground">{portalLabel}</span></span>
+                <span className="grid size-[32px] shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user.name)}</span>
+                <span className="hidden min-w-0 text-left sm:block"><span className="block max-w-32 truncate text-xs font-bold">{user.name || user.email}</span><span className="block max-w-[220px] break-words text-xs text-slate-500 dark:text-muted-foreground">{portalLabel}</span></span>
                 <ChevronDown aria-hidden className={cn("size-3.5 text-slate-400 transition-transform", userMenuOpen && "rotate-180")} />
               </button>
               {userMenuOpen && (
-                <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-border dark:bg-card">
+                <HeaderPanel label="Account" className="w-64" onClose={() => setUserMenuOpen(false)}>
                   <div className="border-b border-slate-100 px-4 py-3 dark:border-border">
-                    <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">{user.name || "Unnamed"}</p>
-                    {user.username && <p className="truncate text-xs text-teal-700 dark:text-teal-300">{user.username}</p>}
-                    {user.email && <p className="truncate text-xs text-slate-500 dark:text-muted-foreground">{user.email}</p>}
-                    {user.phoneNumber && <p className="truncate text-xs text-slate-500 dark:text-muted-foreground">{user.phoneNumber}</p>}
-                    <p className="mt-1.5 inline-block rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">{portalLabel}</p>
+                    <p className="break-words text-sm font-bold text-slate-900 dark:text-foreground">{user.name || "Unnamed"}</p>
+                    {user.username && <p className="break-all text-xs text-teal-700 dark:text-teal-300">{user.username}</p>}
+                    {user.email && <p className="break-all text-xs text-slate-500 dark:text-muted-foreground">{user.email}</p>}
+                    {user.phoneNumber && <p className="break-all text-xs text-slate-500 dark:text-muted-foreground">{user.phoneNumber}</p>}
+                    <p className="mt-1.5 inline-block rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">{portalLabel}</p>
                   </div>
                   {profileHref && (
-                    <Link role="menuitem" href={profileHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
+                    <Link href={profileHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
                       <UserRound aria-hidden className="size-4 text-slate-400" />
                       Profile settings
                     </Link>
                   )}
                   {auditLogHref && (
-                    <Link role="menuitem" href={auditLogHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
+                    <Link href={auditLogHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
                       <Bell aria-hidden className="size-4 text-slate-400" />
                       Audit log
                     </Link>
                   )}
                   {settingsHref && (
-                    <Link role="menuitem" href={settingsHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
+                    <Link href={settingsHref} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
                       <Settings aria-hidden className="size-4 text-slate-400" />
                       Settings
                     </Link>
                   )}
                   {canSwitchWorkspace && (
-                    <Link role="menuitem" href="/choose-workspace" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
+                    <Link href="/choose-workspace" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-foreground dark:hover:bg-muted">
                       <ArrowLeftRight aria-hidden className="size-4 text-slate-400" />
                       Switch workspace
                     </Link>
                   )}
-                </div>
+                  <div className="border-t border-border p-2 sm:hidden"><SignOutButton /></div>
+                </HeaderPanel>
               )}
             </div>
-            <SignOutButton />
+            <div className="hidden sm:block"><SignOutButton /></div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[var(--ch-app-max)] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
+        <main className="mx-auto min-w-0 w-full max-w-[var(--ch-app-max)] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
       </div>
 
       {messageToast && (
@@ -437,23 +445,13 @@ export function AppShell({
         </div>
       )}
 
-      {searchOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/55 px-4 pt-[12vh]" onMouseDown={() => setSearchOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Search workspace" onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-border dark:bg-card">
-            <div className="flex items-center gap-3 border-b border-slate-200 px-4 dark:border-border"><Search aria-hidden className="size-5 text-slate-400" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search pages…" className="h-14 min-w-0 flex-1 bg-transparent text-sm outline-none" /><button aria-label="Close search" onClick={() => setSearchOpen(false)} className="grid size-9 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-muted"><X aria-hidden className="size-4" /></button></div>
-            <div className="max-h-80 overflow-y-auto p-2">
-              {matches.map((item) => (
-                <Link key={item.href} href={item.href} onClick={() => setSearchOpen(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-slate-100 dark:hover:bg-muted">
-                  <span className="text-teal-700">{item.icon}</span>
-                  <span className="font-semibold">{item.label}</span>
-                  {item.group && <span className="ml-auto text-xs text-slate-400">{item.group}</span>}
-                </Link>
-              ))}
-              {!matches.length && <p className="px-3 py-8 text-center text-sm text-slate-500">No workspace pages match.</p>}
-            </div>
-          </div>
-        </div>
-      )}
+      {searchOpen && <Dialog open aria-label="Search workspace" onOpenChange={setSearchOpen} size="md">
+        <div className="flex shrink-0 items-center gap-3 border-b border-border px-3"><Search aria-hidden className="size-5 shrink-0 text-muted-foreground" /><input autoFocus aria-label="Search pages" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search pages…" className="min-h-14 min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /><button type="button" aria-label="Close search" onClick={() => setSearchOpen(false)} className="grid size-[44px] shrink-0 place-items-center rounded-md hover:bg-muted"><X aria-hidden className="size-4" /></button></div>
+        <DialogBody className="p-2">
+          {matches.map((item) => <Link key={item.href} href={item.href} onClick={() => setSearchOpen(false)} className="flex min-h-11 flex-wrap items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-muted"><span aria-hidden className="shrink-0 text-primary">{item.icon}</span><span className="min-w-0 flex-1 break-words font-semibold">{item.label}</span>{item.group && <span className="text-xs text-muted-foreground">{item.group}</span>}</Link>)}
+          {!matches.length && <p className="px-3 py-8 text-center text-sm text-muted-foreground">No workspace pages match.</p>}
+        </DialogBody>
+      </Dialog>}
     </div>
   );
 }

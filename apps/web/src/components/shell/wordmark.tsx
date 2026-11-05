@@ -79,7 +79,7 @@ function Wordmark({
 
   // Height in em so callers keep sizing the logo with text-* classes.
   return (
-    <span className={cn("inline-flex items-center text-lg", className)}>
+    <span className={cn("inline-flex min-w-0 max-w-full items-center text-lg", className)}>
       <ThemedImage
         light="/images/branding/campushomes-logo-light.png"
         dark="/images/branding/campushomes-logo-dark.png"
@@ -87,7 +87,7 @@ function Wordmark({
         height={200}
         alt="CampusHomes"
         onDark={onDark}
-        className="h-[1.75em] w-auto max-w-full"
+        className="h-auto max-h-[1.75em] w-[7.6em] max-w-full object-contain"
       />
     </span>
   );

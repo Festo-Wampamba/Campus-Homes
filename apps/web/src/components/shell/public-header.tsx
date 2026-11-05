@@ -40,6 +40,14 @@ export function PublicHeader({
   const currentSignInHref = pathname ? (isHome ? "/sign-in" : `/sign-in?next=${encodeURIComponent(currentPath)}`) : signInHref;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const closeOnWideScreen = () => { if (wide.matches) setOpen(false); };
+    closeOnWideScreen();
+    wide.addEventListener("change", closeOnWideScreen);
+    return () => wide.removeEventListener("change", closeOnWideScreen);
+  }, [open]);
   const links: PublicHeaderLink[] = [
     { href: "/search", label: "Find a room" },
     { ...landlordLink, label: landlordLink.href === "/landlords" ? "For Landlords" : landlordLink.label },

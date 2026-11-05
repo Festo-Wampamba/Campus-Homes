@@ -44,7 +44,7 @@ export function MobileNav({ links }: { links: NavLink[] }) {
         <nav
           id="mobile-nav-panel"
           aria-label="Main"
-          className="fixed inset-x-0 top-16 z-(--z-dropdown) border-b border-border bg-background px-4 py-3 shadow-md"
+          className="fixed inset-x-0 top-16 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain z-(--z-dropdown) border-b border-border bg-background px-4 py-3 shadow-md"
         >
           <ul className="flex flex-col gap-1">
             {links.map((link) => (

@@ -988,3 +988,6 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.ch-landlords-request__details > *, .ch-landlords-request__form > * { min-width: 0; }
+@media (max-width: 900px) { .ch-landlords-request__details { grid-template-columns: minmax(0, 1fr); } }

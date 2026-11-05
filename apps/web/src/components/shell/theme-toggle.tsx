@@ -13,7 +13,7 @@ const STORAGE_KEY = "theme";
 function toggleTheme() {
   const next = !document.documentElement.classList.contains("dark");
   document.documentElement.classList.toggle("dark", next);
-  localStorage.setItem(STORAGE_KEY, next ? "dark" : "light");
+  try { localStorage.setItem(STORAGE_KEY, next ? "dark" : "light"); } catch { /* Private browsing may block storage; the theme still changes. */ }
 }
 
 export function ThemeToggle({ className }: { className?: string }) {
@@ -22,7 +22,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       type="button"
       aria-label="Toggle theme"
       className={cn(
-        "inline-flex size-11 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-current transition-opacity duration-150 hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        "inline-flex size-[44px] shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-current transition-opacity duration-150 hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className,
       )}
       onClick={toggleTheme}

@@ -642,3 +642,9 @@
   .ch-journey-tab__indicator,
   .ch-journey-tabs__controls button { transition: none; }
 }
+
+.ch-journey-panel__copy, .ch-journey-panel__visual, .ch-journey-previews > * { min-width: 0; }
+@media (max-width: 860px) { .ch-journey-panel__content { grid-template-columns: minmax(0, 1fr); } }
+
+.ch-journey-preview-card__label { flex-wrap: wrap; }
+.ch-journey-preview-card__label > span, .ch-preview-open__copy { min-width: 0; overflow-wrap: anywhere; }

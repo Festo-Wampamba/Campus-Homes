@@ -366,3 +366,72 @@
     100% { opacity: 0; transform: scale(1.5); }
   }
 }
+
+/* Shared responsive boundaries: wrap content rather than reducing the user's
+   chosen text size. Keep form controls shrinkable in grid/flex layouts. */
+@layer base {
+  :where(input, select, textarea, label) { min-inline-size: 0; max-inline-size: 100%; }
+}
+@layer components {
+  .ch-dialog {
+    --ch-dialog-gutter: clamp(8px, 2vw, 16px);
+    width: min(var(--ch-dialog-width, 38rem), calc(100vw - 2 * var(--ch-dialog-gutter)));
+    max-width: calc(100vw - 2 * var(--ch-dialog-gutter));
+    max-height: calc(100vh - 2 * var(--ch-dialog-gutter));
+    max-height: calc(100dvh - 2 * var(--ch-dialog-gutter));
+    overscroll-behavior: contain;
+  }
+  .ch-dialog-content { max-height: inherit; }
+  .ch-dialog-header { display: flow-root; }
+  .ch-dialog-body { overscroll-behavior: contain; overflow-wrap: anywhere; }
+  .ch-dialog-footer > * { height: auto; min-width: 0; max-width: 100%; white-space: normal; }
+  @media (min-width: 640px) {
+    .ch-dialog--resizable {
+      min-width: min(36rem, calc(100vw - 2 * var(--ch-dialog-gutter)));
+      min-height: min(24rem, calc(100dvh - 2 * var(--ch-dialog-gutter)));
+    }
+  }
+  @media (max-width: 639px), (max-height: 500px) {
+    .ch-dialog-header, .ch-dialog-body, .ch-dialog-footer { padding: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ch-dialog[open] { animation: none; }
+  }
+}
+
+@layer components {
+  .ch-workspace-nav {
+    inset: 0 auto 0 0; margin: 0; width: min(24rem, 92vw);
+    max-width: 92vw; height: 100dvh; max-height: 100dvh;
+    border-radius: 0; border: 0;
+  }
+  .ch-workspace-nav > .ch-dialog-content { height: 100%; }
+  .ch-app-header > button, .ch-app-header button[aria-label="Toggle theme"],
+  .ch-app-header button[aria-label="Notifications"] {
+    min-width: 44px; min-height: 44px;
+  }
+  @media (max-width: 639px) {
+    .ch-app-header { gap: 8px; padding: 8px 12px; }
+    .ch-app-header > button { width: 44px; height: 44px; }
+    .ch-app-header button[aria-label="Toggle theme"] { width: 44px; height: 44px; }
+    .ch-app-header button[aria-label="Account settings"] > span:first-child { width: 32px; height: 32px; font-size: 14px; }
+  }
+}
+
+:root { --ch-sidebar-width: clamp(240px, 18vw, 280px); }
+@layer base {
+  :where(h1, h2, h3, h4, p, dt, dd, legend, label) { overflow-wrap: break-word; }
+}
+/* A 16px floor prevents automatic form zoom on touch Safari. Keep rem so
+   larger browser text remains larger. This intentionally follows utilities. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(1rem, 16px); }
+}
+
+/* On phones or short landscape screens, scroll the entire form. Enlarged
+   headings and stacked footer buttons must not consume the body’s space. */
+@media (max-width: 639px), (max-height: 500px) {
+  .ch-dialog:not(.ch-workspace-nav) > .ch-dialog-content { display: block; overflow-y: auto; }
+  .ch-dialog:not(.ch-workspace-nav) .ch-dialog-body { overflow: visible; }
+  .ch-dialog-header h2 { font-size: 1rem; }
+}

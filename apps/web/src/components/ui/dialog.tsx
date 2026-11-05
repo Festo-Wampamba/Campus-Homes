@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,20 @@ import { cn } from "@/lib/utils";
  * <dialog>). `open`/`onOpenChange` mirror the usual controlled-dialog shape
  * so callers can drive it from their own create/edit state.
  */
+const DialogTitleId = createContext<string | undefined>(undefined);
+
 const DIALOG_WIDTH = {
   // A single stacked column of fields (e.g. a 4-field signup form) reads as
   // oddly wide and flat at "md" width, which was sized for two-up layouts.
-  sm: "w-[min(26rem,calc(100vw-2rem))]",
+  sm: "[--ch-dialog-width:26rem]",
   // Landscape, not portrait — width comfortably exceeds height for a typical
   // form's worth of fields laid out two-up (see PropertyForm).
-  md: "w-[min(38rem,calc(100vw-2rem))]",
-  lg: "w-[min(56rem,calc(100vw-2rem))]",
+  md: "[--ch-dialog-width:38rem]",
+  lg: "[--ch-dialog-width:56rem]",
   // Dense multi-column forms (the room-type spec: 2- and 3-up rows plus
   // amenities, description and photos) need more room before columns get
   // cramped — the body still scrolls vertically within max-h.
-  xl: "w-[min(72rem,calc(100vw-2rem))]",
+  xl: "[--ch-dialog-width:72rem]",
 };
 
 function Dialog({
@@ -53,6 +55,7 @@ function Dialog({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -78,6 +81,7 @@ function Dialog({
     <dialog
       ref={ref}
       aria-label={ariaLabel}
+      aria-labelledby={ariaLabel ? undefined : titleId}
       onClose={() => onOpenChange(false)}
       onClick={(e) => {
         if (!dismissible) return;
@@ -101,27 +105,27 @@ function Dialog({
         // painted its own border as a stray horizontal line wherever it sat
         // in the page — one per Dialog instance, so it multiplied on pages
         // with several (e.g. one ReserveButton per room row).
-        "hidden open:flex m-auto min-w-0 max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
+        "ch-dialog hidden open:flex m-auto min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card p-0 text-foreground shadow-lg",
         DIALOG_WIDTH[size],
         // Native corner resize (CSS `resize` works with overflow-hidden),
         // bounded so the dialog never outgrows the viewport. Phones keep the
         // fixed full-width layout.
-        resizable && "sm:resize sm:min-w-[min(36rem,calc(100vw-2rem))] sm:min-h-[min(24rem,90vh)] max-w-[95vw] sm:max-h-[90vh]",
+        resizable && "ch-dialog--resizable sm:resize",
         "z-(--z-modal) backdrop:bg-black/50",
         "open:animate-in open:fade-in open:zoom-in-95 open:duration-150",
         className,
       )}
     >
-      {/* flex column filling the dialog's max-height — DialogBody is the
+      {/* On larger screens, a flex column filling the dialog's max-height — DialogBody is the
           only flexible/scrollable region (flex-auto min-h-0), so header and
-          footer (with the submit button) can never get clipped off the
-          bottom the way plain stacked blocks + overflow-hidden would.
+          footer stay visible. Compact screens scroll the whole content so
+          enlarged headings and footer buttons leave every field reachable.
           flex-auto, not flex-1: the dialog's height is auto, and Safari
           (iOS) sizes a `flex-basis: 0%` child of an auto-height column to
           zero — the open dialog collapsed to a thin line over the backdrop. */}
       {open && (
-        <div className="flex min-h-0 min-w-0 flex-auto flex-col" onClick={(e) => e.stopPropagation()}>
-          {children}
+        <div className="ch-dialog-content flex min-h-0 min-w-0 flex-auto flex-col" onClick={(e) => e.stopPropagation()}>
+          <DialogTitleId.Provider value={titleId}>{children}</DialogTitleId.Provider>
         </div>
       )}
     </dialog>
@@ -139,35 +143,29 @@ function DialogHeader({
   description?: string;
   onClose: () => void;
 }) {
+  const titleId = useContext(DialogTitleId);
   return (
-    <div className={cn("flex shrink-0 items-start justify-between gap-4 border-b border-border p-5", className)}>
-      <div className="min-w-0 break-words">
-        <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label="Close"
-        className="-mt-1 -mr-1 shrink-0"
-        onClick={onClose}
-      >
+    <div className={cn("ch-dialog-header shrink-0 border-b border-border p-3 sm:p-5", className)}>
+      <Button type="button" variant="ghost" size="icon" aria-label="Close" className="float-right mb-1 ml-3" onClick={onClose}>
         <X aria-hidden className="size-4" />
       </Button>
+      <div className="min-w-0 break-words">
+        <h2 id={titleId} className="font-display text-lg font-bold text-foreground">{title}</h2>
+        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+      </div>
     </div>
   );
 }
 
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("min-h-0 min-w-0 flex-auto overflow-y-auto p-5", className)} {...props} />;
+  return <div className={cn("ch-dialog-body min-h-0 min-w-0 flex-auto overflow-y-auto p-3 sm:p-5", className)} {...props} />;
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-end gap-2 border-t border-border p-5",
+        "ch-dialog-footer flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border p-3 sm:p-5",
         className,
       )}
       {...props}

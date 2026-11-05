@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-base font-semibold transition-colors duration-150 ease-out-quart focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 min-w-0 max-w-full whitespace-normal break-words rounded-md text-base font-semibold transition-colors duration-150 ease-out-quart focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -17,11 +17,11 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        // 44px touch floor on mobile (PRODUCT.md accessibility), 40px ≥sm
-        default: "h-11 px-4 sm:h-10",
-        sm: "h-9 rounded-md px-3 text-sm",
-        lg: "h-12 rounded-md px-6",
-        icon: "size-11 sm:size-10",
+        // Minimum touch height; multiline labels can grow without clipping.
+        default: "h-auto min-h-11 px-4 py-2",
+        sm: "h-auto min-h-9 rounded-md px-3 py-2 text-sm",
+        lg: "h-auto min-h-12 rounded-md px-6 py-3",
+        icon: "size-[44px] shrink-0",
       },
     },
     defaultVariants: {

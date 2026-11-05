@@ -7,6 +7,7 @@ import { ChevronDown, Clock, Heart, LayoutDashboard, User as UserIcon } from "lu
 import type { SessionUser } from "@/lib/session";
 import type { AccountAccess } from "@campushomes/shared";
 import { workspaceLabel, workspaceDestination } from "@/lib/auth-routing";
+import { HeaderPanel } from "./header-panel";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/shell/sign-out-button";
 
@@ -40,9 +41,10 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
       <button
         type="button"
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
+        aria-label="Account settings"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-current transition-colors hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-3"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-current transition-colors hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-3"
       >
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
           {displayName.charAt(0).toUpperCase()}
@@ -52,45 +54,42 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
       </button>
 
       {open && (
-        <div
-          role="menu"
-          className="absolute top-full right-0 z-(--z-dropdown) mt-2 w-56 rounded-md border border-border bg-card p-1.5 shadow-md"
-        >
+        <HeaderPanel label="Account" onClose={() => setOpen(false)} className="w-64 p-1.5">
           {isStudent && (
             <>
-              <Link role="menuitem" href="/dashboard" className={menuItemClass} onClick={() => setOpen(false)}>
+              <Link href="/dashboard" className={menuItemClass} onClick={() => setOpen(false)}>
                 <LayoutDashboard aria-hidden className="size-4 text-muted-foreground" />
                 My dashboard
               </Link>
-              <Link role="menuitem" href="/reservations" className={menuItemClass} onClick={() => setOpen(false)}>
+              <Link href="/reservations" className={menuItemClass} onClick={() => setOpen(false)}>
                 <UserIcon aria-hidden className="size-4 text-muted-foreground" />
                 My reservations
               </Link>
-              <Link role="menuitem" href="/saved" className={menuItemClass} onClick={() => setOpen(false)}>
+              <Link href="/saved" className={menuItemClass} onClick={() => setOpen(false)}>
                 <Heart aria-hidden className="size-4 text-muted-foreground" />
                 Favourites
               </Link>
-              <Link role="menuitem" href="/recently-viewed" className={menuItemClass} onClick={() => setOpen(false)}>
+              <Link href="/recently-viewed" className={menuItemClass} onClick={() => setOpen(false)}>
                 <Clock aria-hidden className="size-4 text-muted-foreground" />
                 Recently viewed
               </Link>
-              <Link role="menuitem" href="/profile" className={menuItemClass} onClick={() => setOpen(false)}>
+              <Link href="/profile" className={menuItemClass} onClick={() => setOpen(false)}>
                 Profile
               </Link>
             </>
           )}
           {access.workspaces.filter(workspace => workspace !== "student").map(workspace => (
-            <Link key={workspace} role="menuitem" href={workspaceDestination(access, workspace)} className={menuItemClass} onClick={() => setOpen(false)}>
+            <Link key={workspace} href={workspaceDestination(access, workspace)} className={menuItemClass} onClick={() => setOpen(false)}>
               <LayoutDashboard aria-hidden className="size-4 text-muted-foreground" />
               {workspaceLabel(access, workspace)}
             </Link>
           ))}
-          {access.roles.includes("landlord") && <Link role="menuitem" href="/landlord/profile" className={menuItemClass} onClick={() => setOpen(false)}><UserIcon aria-hidden className="size-4 text-muted-foreground" />Profile settings</Link>}
+          {access.roles.includes("landlord") && <Link href="/landlord/profile" className={menuItemClass} onClick={() => setOpen(false)}><UserIcon aria-hidden className="size-4 text-muted-foreground" />Profile settings</Link>}
           <div className="my-1 h-px bg-border" />
           <div className="px-1">
             <SignOutButton />
           </div>
-        </div>
+        </HeaderPanel>
       )}
     </div>
   );

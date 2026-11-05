@@ -77,7 +77,7 @@
 #message { scroll-margin-top: 96px; }
 .dark .ch-contact-eyebrow--dark { color: var(--coral-500); }
 @media (max-width: 900px) {
-  .ch-contact-hero__inner { grid-template-columns: 1fr; }
+  .ch-contact-hero__inner { grid-template-columns: minmax(0, 1fr); }
   .ch-contact-channel-grid { grid-template-columns: 1fr; }
   .ch-contact-section__header { grid-template-columns: 1fr; gap: 16px; }
   .ch-contact-office { gap: 24px; }
@@ -96,3 +96,6 @@
   .ch-contact-hero__channel { opacity: 1; transform: none; animation: none; }
   .ch-contact-page a { transition: none; }
 }
+
+.ch-contact-hero__copy, .ch-contact-hero__channels { min-width: 0; }
+.ch-contact-inline-link { max-width: 100%; overflow-wrap: anywhere; }

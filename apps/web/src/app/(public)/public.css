@@ -119,7 +119,11 @@ html:has(.ch-public-shell) {
 }
 
 .ch-public-header__menu-dialog-inner {
-  min-height: 100%;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
   background: var(--ch-card);
   color: var(--ch-ink);
 }
@@ -148,9 +152,9 @@ html:has(.ch-public-shell) {
 }
 
 .ch-public-header__menu-panel {
-  position: absolute;
-  inset-inline: 16px;
-  top: calc(100% + 8px);
+  position: static;
+  min-width: 0;
+  overflow-y: auto;
   border: 1px solid var(--ch-line);
   border-radius: 18px;
   padding: 8px;
@@ -220,6 +224,8 @@ html:has(.ch-public-shell) {
 }
 
 .ch-home-hero__copy {
+  min-width: 0;
+  width: 100%;
   max-width: 780px;
   margin: 0 auto;
 }
@@ -711,7 +717,8 @@ html:has(.ch-public-shell) {
   }
 
   .ch-public-shell dialog[open] > div {
-    min-height: 100dvh;
+    min-height: 0;
+    max-height: 100dvh;
   }
 
   .ch-public-header__inner {
@@ -894,3 +901,12 @@ html:has(.ch-public-shell) {
 @media (max-width: 1279px) {
   .ch-search-map { top: 88px; }
 }
+
+/* Content keeps its reading size; containers and long controls reflow. */
+.ch-public-header__nav { min-width: 0; max-width: 100%; }
+.ch-public-header__inner > a { min-width: 0; max-width: 100%; }
+.ch-public-header__menu-dialog .ch-public-header__menu-panel {
+  flex: 1 1 auto; border: 0; box-shadow: none; margin: 0;
+}
+.ch-public-header__menu-dialog .ch-public-header__menu-dialog-heading { flex-shrink: 0; gap: 12px; }
+.ch-public-shell :is(button, .ch-journey-button, .ch-landlords-button) { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
