@@ -230,7 +230,8 @@ export class DocumentsService {
     const { rows: signatures } = await client.query<{ student_id: string; landlord_id: string; is_custodian: boolean }>(
       `SELECT a.student_id, p.landlord_id, EXISTS (
          SELECT 1 FROM property_memberships m
-         WHERE m.property_id = a.property_id AND m.user_id = $2 AND m.role = 'custodian'
+         WHERE m.property_id = a.property_id AND m.user_id = $2
+           AND m.role IN ('custodian', 'property_worker') AND 'agreements.manage' = ANY(m.capabilities)
            AND m.status = 'active' AND m.revoked_at IS NULL AND m.starts_at <= now()
            AND (m.ends_at IS NULL OR m.ends_at > now())
        ) AS is_custodian

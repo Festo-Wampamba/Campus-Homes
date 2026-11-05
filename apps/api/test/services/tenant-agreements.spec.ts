@@ -60,7 +60,7 @@ beforeAll(async () => {
     `INSERT INTO users (phone, role, status) VALUES ('+256710000042', 'custodian', 'active') RETURNING id`,
   );
   await pool.query(
-    `INSERT INTO property_memberships (user_id, property_id, role, assigned_by) VALUES ($1, $2, 'custodian', $3)`,
+    `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, capabilities) VALUES ($1, $2, 'custodian', $3, ARRAY['agreements.manage'])`,
     [custodianA, propertyA, landlordA],
   );
 
