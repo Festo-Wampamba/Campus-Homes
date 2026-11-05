@@ -119,6 +119,7 @@ export interface RoomUnit {
   occupiedBeds: number;
   derivedStatus: DerivedOccupancyStatus;
   activeBlock?: UnitBlock | null;
+  scheduledBlocks?: UnitBlock[];
   pendingChanges?: boolean;
   // Deleted by the landlord; leaves the listing once Ops approves.
   pendingRemoval?: boolean;

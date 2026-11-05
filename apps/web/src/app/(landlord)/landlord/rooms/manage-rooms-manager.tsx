@@ -74,7 +74,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   // While Ops is reviewing, keep re-fetching so an approval (or rejection)
   // shows up here within seconds, with no manual reload.
   const refreshRooms = useCallback(() => router.refresh(), [router]);
-  useRefreshWhile(changeSet?.status === "pending_review" || changeSet?.status === "visit_required", refreshRooms, 10_000);
+  useRefreshWhile(changeSet?.status === "pending_review" || changeSet?.status === "visit_required" || rooms.some((room) => room.scheduledBlocks?.length || room.activeBlock?.endsAt), refreshRooms, 10_000);
 
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [cancellingChangeSet, setCancellingChangeSet] = useState(false);

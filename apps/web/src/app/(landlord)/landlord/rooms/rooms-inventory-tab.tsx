@@ -74,6 +74,8 @@ export function RoomsInventoryTab({
   const [filterBuilding, setFilterBuilding] = useState("all");
   const [filterFloor, setFilterFloor] = useState("all");
 
+  const [blockNotice, setBlockNotice] = useState<string | null>(null);
+
   // Dialog & Drawer state
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [singleRoomDialogOpen, setSingleRoomDialogOpen] = useState(false);
@@ -333,6 +335,7 @@ export function RoomsInventoryTab({
 
   return (
     <div id="rooms-inventory" className="scroll-mt-24 space-y-5 [&_button]:max-w-full [&_button]:whitespace-normal">
+      {blockNotice && <p role="status" className="rounded-lg border border-primary/30 bg-accent p-3 text-sm text-foreground">{blockNotice}</p>}
       {/* Sub-Header & Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -607,6 +610,8 @@ export function RoomsInventoryTab({
                             <Lock className="size-3" />
                             Blocked
                           </button>
+                        ) : room.scheduledBlocks?.length ? (
+                          <button type="button" onClick={() => openBlockModal(room)} className="text-[11px] font-semibold text-primary hover:underline">Scheduled ({room.scheduledBlocks.length})</button>
                         ) : (
                           <span className="text-[11px] text-muted-foreground">None</span>
                         )}
@@ -635,7 +640,7 @@ export function RoomsInventoryTab({
                                 ? "text-destructive border-destructive/30 hover:bg-destructive-subtle"
                                 : ""
                             }`}
-                            title={room.activeBlock ? "Manage Block" : "Block Room"}
+                            title={room.activeBlock || room.scheduledBlocks?.length ? "Manage Block" : "Block Room"}
                           >
                             {room.activeBlock ? (
                               <Unlock className="size-3.5" />
@@ -706,6 +711,7 @@ export function RoomsInventoryTab({
                     {renderStatusBadge(room.derivedStatus)}
                   </div>
 
+                  {Boolean(room.scheduledBlocks?.length) && <button type="button" onClick={() => openBlockModal(room)} className="text-primary underline">Scheduled blocks ({room.scheduledBlocks!.length})</button>}
                   {/* Occupancy bar */}
                   <div className="space-y-1">
                     <div className="flex justify-between tabular-nums font-semibold">
@@ -741,6 +747,7 @@ export function RoomsInventoryTab({
                       variant="secondary"
                       size="sm"
                       onClick={() => openBlockModal(room)}
+                      aria-label={`${room.activeBlock || room.scheduledBlocks?.length ? "Manage block for" : "Block"} room ${room.roomCode}`}
                       disabled={room.pendingChanges}
                       className={`h-11 px-3.5 ${
                         room.activeBlock ? "text-destructive border-destructive/30" : ""
@@ -813,17 +820,19 @@ export function RoomsInventoryTab({
       />
 
       {/* Unit Block Dialog */}
-      <UnitBlockDialog
+      {blockDialogOpen && <UnitBlockDialog
         open={blockDialogOpen}
         onOpenChange={setBlockDialogOpen}
-        room={activeBlockRoom}
-        onBlockUpdated={(updated) => {
+        room={rooms.find((room) => room.id === activeBlockRoom?.id) ?? activeBlockRoom}
+        onBlockUpdated={(updated, message) => {
+          setBlockNotice(message);
+          setActiveBlockRoom(updated);
           onRoomUpdated(updated);
           if (activeBedspaceRoom?.id === updated.id) {
             setActiveBedspaceRoom(updated);
           }
         }}
-      />
+      />}
 
       <Dialog open={roomsToDelete.length > 0} onOpenChange={(open) => !open && !deleting && setRoomsToDelete([])} size="sm">
         <DialogHeader

@@ -88,6 +88,7 @@ export const bulkRoomInputSchema = z.object({
 export type BulkRoomInput = z.infer<typeof bulkRoomInputSchema>;
 
 export const unitBlockInputSchema = z.object({
+  startImmediately: z.boolean().optional(),
   reason: z.enum(UNIT_BLOCK_REASONS),
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime().nullable().optional(),

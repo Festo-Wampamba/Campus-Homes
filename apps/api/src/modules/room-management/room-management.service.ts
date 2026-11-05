@@ -392,6 +392,11 @@ export class RoomManagementService {
   async blockRoom(ctx: RlsContext, unitId: string, input: UnitBlockInput) {
     const block = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertUnitOwner(client, unitId, ctx.userId);
+      const startsAt = input.startImmediately ? new Date() : new Date(input.startsAt);
+      const endsAt = input.endsAt ? new Date(input.endsAt) : null;
+      if (!Number.isFinite(startsAt.getTime()) || (endsAt && (!Number.isFinite(endsAt.getTime()) || endsAt <= startsAt || endsAt.getTime() <= Date.now()))) {
+        throw new BadRequestException('The end time must be in the future and after the start time. Leave it blank to block until manually cleared.');
+      }
       try {
         const inserted = await client.query<{
           id: string; unit_id: string; reason: string; starts_at: Date; ends_at: Date | null;
@@ -399,18 +404,19 @@ export class RoomManagementService {
         }>(
           `INSERT INTO unit_blocks(unit_id, reason, starts_at, ends_at, notes, created_by)
            VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-          [unitId, input.reason, input.startsAt, input.endsAt ?? null, input.notes ?? null, ctx.userId],
+          [unitId, input.reason, startsAt.toISOString(), endsAt?.toISOString() ?? null, input.notes ?? null, ctx.userId],
         );
         return inserted.rows[0]!;
       } catch (error) {
         if ((error as { code?: string }).code === '23P01') {
-          throw new ConflictException('This room already has an overlapping active block');
+          throw new ConflictException('This room already has a block during these dates. Clear its existing block or choose different dates.');
         }
         throw error;
       }
     });
-    await this.audit.record(ctx, 'room.block', 'unit', unitId, { reason: input.reason, startsAt: input.startsAt, endsAt: input.endsAt });
-    return this.mapBlock(block);
+    await this.audit.record(ctx, 'room.block', 'unit', unitId, { reason: input.reason, startsAt: block.starts_at.toISOString(), endsAt: block.ends_at?.toISOString() ?? null });
+    const room = await this.roomAfterBlock(ctx, unitId);
+    return { ...this.mapBlock(block), room };
   }
 
   async clearBlock(ctx: RlsContext, unitId: string, blockId: string) {
@@ -424,7 +430,12 @@ export class RoomManagementService {
       if (!result.rows.length) throw new NotFoundException('Active room block not found');
     });
     await this.audit.record(ctx, 'room.unblock', 'unit', unitId, { blockId });
-    return { cleared: true };
+    return { cleared: true, room: await this.roomAfterBlock(ctx, unitId) };
+  }
+
+  private async roomAfterBlock(ctx: RlsContext, unitId: string) {
+    const propertyId = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => (await this.assertUnitOwner(client, unitId, ctx.userId)).property_id);
+    return this.pendingRoom(ctx, propertyId, unitId);
   }
 
   async blockBed(ctx: RlsContext, unitId: string, bedId: string, input: BedBlockInput) {
@@ -1147,9 +1158,9 @@ export class RoomManagementService {
        WHERE b.unit_id=ANY($1::uuid[]) AND b.retired_at IS NULL ORDER BY b.label`, [units.rows.map((unit) => unit.id)],
     );
     const blocks = await client.query<RoomBlockRow>(
-      `SELECT DISTINCT ON (unit_id) * FROM unit_blocks WHERE unit_id=ANY($1::uuid[])
-       AND cleared_at IS NULL AND starts_at<=now() AND (ends_at IS NULL OR ends_at>now())
-       ORDER BY unit_id,starts_at DESC`, [units.rows.map((unit) => unit.id)],
+      `SELECT * FROM unit_blocks WHERE unit_id=ANY($1::uuid[])
+       AND cleared_at IS NULL AND (ends_at IS NULL OR ends_at>now())
+       ORDER BY unit_id,starts_at`, [units.rows.map((unit) => unit.id)],
     );
     const bedsByUnit = new Map<string, RoomBedRow[]>();
     for (const bed of beds.rows) {
@@ -1157,7 +1168,12 @@ export class RoomManagementService {
       group.push(bed);
       bedsByUnit.set(bed.unit_id, group);
     }
-    const blocksByUnit = new Map(blocks.rows.map((block) => [block.unit_id, block]));
+    const blocksByUnit = new Map<string, RoomBlockRow[]>();
+    for (const block of blocks.rows) {
+      const group = blocksByUnit.get(block.unit_id) ?? [];
+      group.push(block);
+      blocksByUnit.set(block.unit_id, group);
+    }
     const changes = changeSetId ? (await client.query<{
       id: string; unit_id: string | null; action: string; room_type_id: string; proposed_data: JsonRecord;
     }>(`SELECT id,unit_id,action,room_type_id,proposed_data FROM room_unit_changes
@@ -1201,7 +1217,7 @@ export class RoomManagementService {
           id: change.id, propertyId, roomTypeId: change.room_type_id,
           roomTypeTitle: spec?.title ?? 'Room', roomCategory: spec?.category ?? 'other',
           roomCode: String(data.roomCode ?? ''), buildingName: data.buildingName ?? null, floorLabel: data.floorLabel ?? null,
-          capacity, totalBeds: capacity, occupiedBeds: 0, derivedStatus: 'available', activeBlock: null,
+          capacity, totalBeds: capacity, occupiedBeds: 0, derivedStatus: 'available', activeBlock: null, scheduledBlocks: [],
           pendingChanges: true,
           beds: Array.from({ length: capacity }, (_, index) => ({ id: `${change.id}-bed-${index + 1}`,
             unitId: change.id, label: `Bed ${index + 1}`, blocked: false, status: 'available' })),
@@ -1214,7 +1230,7 @@ export class RoomManagementService {
   private mapUnit(unit: {
     id: string; property_id: string; room_type_id: string; label: string; capacity: number; room_category: string;
     building_name: string | null; floor_label: string | null; operational_status: string; type_title: string; pending: boolean;
-  }, beds: RoomBedRow[], block?: RoomBlockRow) {
+  }, beds: RoomBedRow[], blocks: RoomBlockRow[] = []) {
     const mappedBeds = beds.map((bed) => ({
       id: bed.id, unitId: unit.id, label: bed.label, blocked: bed.blocked, blockedReason: bed.blocked_reason,
       status: bed.blocked ? 'blocked' : bed.status ?? 'available', studentName: bed.student_name,
@@ -1223,7 +1239,10 @@ export class RoomManagementService {
     }));
     const occupiedBeds = mappedBeds.filter((bed) => ['reserved','booked','occupied'].includes(bed.status)).length;
     const activeBeds = mappedBeds.filter((bed) => !bed.blocked);
+    const now = Date.now();
+    const block = blocks.find((row) => row.starts_at.getTime() <= now && (!row.ends_at || row.ends_at.getTime() > now));
     const activeBlock = block ? this.mapBlock(block) : null;
+    const scheduledBlocks = blocks.filter((row) => row.starts_at.getTime() > now).map((row) => this.mapBlock(row));
     const derivedStatus = activeBlock || unit.operational_status === 'blocked' || unit.operational_status === 'under_maintenance'
       ? 'blocked'
       : activeBeds.length === 0 ? 'blocked'
@@ -1232,7 +1251,7 @@ export class RoomManagementService {
     return {
       id: unit.id, propertyId: unit.property_id, roomTypeId: unit.room_type_id, roomTypeTitle: unit.type_title,
       roomCategory: unit.room_category, roomCode: unit.label, buildingName: unit.building_name, floorLabel: unit.floor_label,
-      capacity: Number(unit.capacity), totalBeds: mappedBeds.length, occupiedBeds, derivedStatus, activeBlock,
+      capacity: Number(unit.capacity), totalBeds: mappedBeds.length, occupiedBeds, derivedStatus, activeBlock, scheduledBlocks,
       pendingChanges: unit.pending, beds: mappedBeds,
     };
   }

@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, apiErrorMessage } from "@/lib/api";
 import {
   UNIT_BLOCK_REASONS,
+  deriveRoomStatus,
   type RoomUnit,
   type UnitBlock,
   type UnitBlockReason,
@@ -24,7 +25,12 @@ interface UnitBlockDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   room: RoomUnit | null;
-  onBlockUpdated: (updatedRoom: RoomUnit) => void;
+  onBlockUpdated: (updatedRoom: RoomUnit, message: string) => void;
+}
+
+export function localDateTimeInput(date = new Date()): string {
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function UnitBlockDialog({
@@ -35,9 +41,10 @@ export function UnitBlockDialog({
 }: UnitBlockDialogProps) {
   const isBlocked = Boolean(room?.activeBlock);
 
+  const [startImmediately, setStartImmediately] = useState(true);
   const [reason, setReason] = useState<UnitBlockReason>("maintenance");
   const [startsAt, setStartsAt] = useState(
-    new Date().toISOString().slice(0, 16),
+    localDateTimeInput(),
   );
   const [endsAt, setEndsAt] = useState("");
   const [notes, setNotes] = useState("");
@@ -49,18 +56,24 @@ export function UnitBlockDialog({
     e.preventDefault();
     if (!room) return;
 
-    setSubmitting(true);
     setError(null);
-
+    const start = startImmediately ? new Date() : new Date(startsAt);
+    const end = endsAt ? new Date(endsAt) : null;
+    if (!Number.isFinite(start.getTime()) || (end && (!Number.isFinite(end.getTime()) || end <= start || end.getTime() <= Date.now()))) {
+      setError("Choose an end time in the future, after the start time, or leave it blank until you clear the block.");
+      return;
+    }
+    setSubmitting(true);
     try {
       const payload = {
+        startImmediately,
         reason,
-        startsAt: new Date(startsAt).toISOString(),
-        endsAt: endsAt ? new Date(endsAt).toISOString() : null,
+        startsAt: start.toISOString(),
+        endsAt: end?.toISOString() ?? null,
         notes: notes.trim() || null,
       };
 
-      const block = await api<UnitBlock>(
+      const block = await api<UnitBlock & { room?: RoomUnit }>(
         `/room-management/rooms/${room.id}/blocks`,
         {
           method: "POST",
@@ -68,57 +81,47 @@ export function UnitBlockDialog({
         },
       );
 
-      const updated: RoomUnit = {
+      const active = new Date(block.startsAt).getTime() <= Date.now() && (!block.endsAt || new Date(block.endsAt).getTime() > Date.now());
+      const updated: RoomUnit = block.room ?? {
         ...room,
-        activeBlock: block,
-        derivedStatus: new Date(block.startsAt) <= new Date() ? "blocked" : room.derivedStatus,
+        activeBlock: active ? block : room.activeBlock,
+        scheduledBlocks: active ? room.scheduledBlocks : [...(room.scheduledBlocks ?? []), block],
+        derivedStatus: active ? "blocked" : room.derivedStatus,
       };
-
-      onBlockUpdated(updated);
+      onBlockUpdated(updated, active ? `Room ${room.roomCode} is blocked. Its beds are excluded from availability.` : `Block scheduled for room ${room.roomCode} at ${new Date(block.startsAt).toLocaleString()}.`);
       onOpenChange(false);
     } catch (err) {
-      setError(apiErrorMessage(err, "Could not apply maintenance block."));
+      setError(apiErrorMessage(err, "Could not apply room block."));
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleClearBlock() {
-    if (!room || !room.activeBlock) return;
+  async function handleClearBlock(block = room?.activeBlock) {
+    if (!room || !block) return;
 
     setSubmitting(true);
     setError(null);
 
     try {
-      await api(
-        `/room-management/rooms/${room.id}/blocks/${room.activeBlock.id}/clear`,
+      const result = await api<{ room?: RoomUnit }>(
+        `/room-management/rooms/${room.id}/blocks/${block.id}/clear`,
         {
           method: "POST",
         },
       );
 
-      const activeBeds = room.beds.filter((b) => !b.blocked);
-      const occupiedCount = activeBeds.filter(
-        (b) => b.status === "occupied" || b.status === "booked" || b.status === "reserved",
-      ).length;
-
-      let derivedStatus: RoomUnit["derivedStatus"] = "available";
-      if (occupiedCount >= activeBeds.length && activeBeds.length > 0) {
-        derivedStatus = "fully_occupied";
-      } else if (occupiedCount > 0) {
-        derivedStatus = "partially_occupied";
-      }
-
-      const updated: RoomUnit = {
+      const activeBlock = room.activeBlock?.id === block.id ? null : room.activeBlock;
+      const updated: RoomUnit = result.room ?? {
         ...room,
-        activeBlock: null,
-        derivedStatus,
+        activeBlock,
+        scheduledBlocks: (room.scheduledBlocks ?? []).filter((item) => item.id !== block.id),
+        derivedStatus: deriveRoomStatus(room.beds, activeBlock),
       };
-
-      onBlockUpdated(updated);
+      onBlockUpdated(updated, `Block cleared for room ${room.roomCode}. Availability has been updated.`);
       onOpenChange(false);
     } catch (err) {
-      setError(apiErrorMessage(err, "Could not clear maintenance block."));
+      setError(apiErrorMessage(err, "Could not clear room block."));
     } finally {
       setSubmitting(false);
     }
@@ -127,23 +130,19 @@ export function UnitBlockDialog({
   if (!room) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="md">
+    <Dialog open={open} onOpenChange={onOpenChange} size="md" dismissible={!submitting} resizable>
       <form onSubmit={handleApplyBlock} className="flex min-h-0 flex-auto flex-col">
         <DialogHeader
           title={
             isBlocked
-              ? `Manage Maintenance Block: ${room.roomCode}`
-              : `Block Room for Maintenance: ${room.roomCode}`
+              ? `Manage Room Block: ${room.roomCode}`
+              : `Block Room: ${room.roomCode}`
           }
-          onClose={() => onOpenChange(false)}
-          description={
-            isBlocked
-              ? "This room is currently blocked from student bookings. You can review block details or restore availability immediately."
-              : "Temporarily block this physical room from student availability. Blocking takes effect immediately without waiting for Operations review."
-          }
+          onClose={() => !submitting && onOpenChange(false)}
         />
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-4 [&_input]:min-w-0 [&_select]:min-w-0 [&_textarea]:min-w-0">
+          <p className="text-sm text-muted-foreground">Only room {room.roomCode} is affected. {isBlocked ? "Review or clear its block below." : "Start immediately or schedule a time; choose an end time or clear it manually."}</p>
           {error && (
             <div
               role="alert"
@@ -153,6 +152,13 @@ export function UnitBlockDialog({
             </div>
           )}
 
+          {Boolean(room.scheduledBlocks?.length) && <section aria-label="Scheduled blocks" className="space-y-3 rounded-lg border border-border p-3 text-sm">
+            <h3 className="font-semibold">Scheduled blocks</h3>
+            {room.scheduledBlocks!.map((block) => <div key={block.id} className="space-y-2 border-t border-border pt-2">
+              <p>{UNIT_BLOCK_REASONS.find((item) => item.value === block.reason)?.label ?? block.reason}: {new Date(block.startsAt).toLocaleString()} – {block.endsAt ? new Date(block.endsAt).toLocaleString() : "until cleared"}</p>
+              <Button type="button" variant="secondary" className="h-auto min-h-11 max-w-full whitespace-normal py-2" disabled={submitting} onClick={() => handleClearBlock(block)}>Cancel scheduled block</Button>
+            </div>)}
+          </section>}
           {isBlocked ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive-subtle/30 p-4 space-y-3">
               <div className="flex items-center gap-2 text-destructive font-bold text-sm">
@@ -202,8 +208,13 @@ export function UnitBlockDialog({
                 </select>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" checked={startImmediately} onChange={(event) => setStartImmediately(event.target.checked)} className="size-4 accent-primary" />
+                Start immediately
+              </label>
+              <p className="text-xs text-muted-foreground">Times use your device’s local time zone. An end time must be in the future.</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>div]:min-w-0">
+                {!startImmediately && <div>
                   <Label htmlFor="block-starts">Block Start Date & Time</Label>
                   <Input
                     id="block-starts"
@@ -213,7 +224,7 @@ export function UnitBlockDialog({
                     required
                     className="mt-1.5"
                   />
-                </div>
+                </div>}
                 <div>
                   <Label htmlFor="block-ends">Scheduled End Date (optional)</Label>
                   <Input
@@ -243,7 +254,7 @@ export function UnitBlockDialog({
           )}
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="flex-wrap [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2">
           <Button
             type="button"
             variant="secondary"
@@ -256,7 +267,7 @@ export function UnitBlockDialog({
           {isBlocked ? (
             <Button
               type="button"
-              onClick={handleClearBlock}
+              onClick={() => handleClearBlock()}
               disabled={submitting}
               className="bg-teal-600 hover:bg-teal-700 text-white"
             >
@@ -265,7 +276,7 @@ export function UnitBlockDialog({
               ) : (
                 <Unlock className="mr-2 size-4" />
               )}
-              Clear Block (Restore Availability)
+              Clear Block
             </Button>
           ) : (
             <Button
@@ -278,7 +289,7 @@ export function UnitBlockDialog({
               ) : (
                 <Lock className="mr-2 size-4" />
               )}
-              Apply Block Immediately
+              {startImmediately ? "Apply Block Immediately" : "Schedule Block"}
             </Button>
           )}
         </DialogFooter>

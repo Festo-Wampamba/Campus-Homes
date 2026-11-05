@@ -67,7 +67,7 @@ export default async function ManageRoomsPage({ searchParams }: PageProps) {
             overview.changeSet?.status,
             overview.changeSet?.physicalRoomChangesCount,
             overview.changeSet?.roomTypeChangesCount,
-            overview.rooms.map((room) => [room.id, room.pendingChanges, room.activeBlock?.id]),
+            overview.rooms.map((room) => [room.id, room.pendingChanges]),
             overview.roomTypes.map((roomType) => [roomType.id, roomType.currentVersion?.id, roomType.pendingVersion?.id]),
           ])}
           initialData={overview}
