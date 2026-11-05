@@ -1309,7 +1309,7 @@ describe('tenant_agreements (0020): QR-code tenant registration responses', () =
 
     custodian = await seedUser('custodian', '+256700000007');
     await seed(
-      `INSERT INTO property_memberships (user_id, property_id, role, assigned_by) VALUES ($1, $2, 'custodian', $3)`,
+      `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, capabilities) VALUES ($1, $2, 'custodian', $3, ARRAY['agreements.manage'])`,
       [custodian, property1, landlord1],
     );
   });
@@ -1386,12 +1386,25 @@ describe('tenant_agreements (0020): QR-code tenant registration responses', () =
     expect(rows).toHaveLength(1);
   });
 
+  it("a custodian the landlord didn't grant agreements.manage reads no agreements (0086)", async () => {
+    const user = await seedUser('custodian', '+256700000098');
+    await seed(
+      `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, capabilities)
+       VALUES ($1, $2, 'custodian', $3, ARRAY['bookings.manage']) RETURNING id`,
+      [user, property1, landlord1],
+    );
+    const rows = await asIdentity({ userId: user, role: 'custodian' }, async (c) =>
+      c.query('SELECT * FROM tenant_agreements WHERE id = $1', [agreement1]).then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   describe('custodian membership window (0057): RLS is no looser than the service layer', () => {
     async function custodianSees(phone: string, column: string, valueSql: string): Promise<number> {
       const user = await seedUser('custodian', phone);
       await seed(
-        `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, ${column})
-         VALUES ($1, $2, 'custodian', $3, ${valueSql}) RETURNING id`,
+        `INSERT INTO property_memberships (user_id, property_id, role, assigned_by, capabilities, ${column})
+         VALUES ($1, $2, 'custodian', $3, ARRAY['agreements.manage'], ${valueSql}) RETURNING id`,
         [user, property1, landlord1],
       );
       const rows = await asIdentity({ userId: user, role: 'custodian' }, async (c) =>

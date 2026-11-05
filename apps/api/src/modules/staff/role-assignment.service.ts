@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import { DEFAULT_TEAM_CAPABILITIES } from '@campushomes/shared';
 
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
@@ -140,13 +141,17 @@ export async function assignRoleInTransaction(
     RETURNING id, user_id AS "userId", scope_type AS "scopeType", scope_id AS "scopeId", valid_until AS "validUntil"`,
   [userId, role.id, input.scopeType, input.scopeId ?? null, input.validUntil ?? null, actor.userId, input.reason])).rows[0]!;
   if (input.scopeType === 'property' && ['landlord', 'custodian', 'property_worker', 'student'].includes(input.roleKey)) {
-    await client.query(`INSERT INTO property_memberships (user_id, property_id, role, worker_type, assigned_by, ends_at)
-      VALUES ($1, $2, $3, $4, $5, $6)
+    // A new custodian/worker starts with the role's default team permissions;
+    // a re-grant keeps whatever the landlord has ticked since.
+    const capabilities = input.roleKey === 'custodian' || input.roleKey === 'property_worker'
+      ? DEFAULT_TEAM_CAPABILITIES[input.roleKey] : [];
+    await client.query(`INSERT INTO property_memberships (user_id, property_id, role, worker_type, assigned_by, ends_at, capabilities)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (user_id, property_id, role) WHERE revoked_at IS NULL
       DO UPDATE SET status = 'active', worker_type = EXCLUDED.worker_type,
         ends_at = EXCLUDED.ends_at, assigned_by = EXCLUDED.assigned_by`,
     [userId, input.scopeId, input.roleKey === 'student' ? 'resident_student' : input.roleKey,
-      input.workerType ?? null, actor.userId, input.validUntil ?? null]);
+      input.workerType ?? null, actor.userId, input.validUntil ?? null, capabilities]);
   }
   if (input.roleKey === 'ops_lead' || input.roleKey === 'ops_inspector') await syncOpsStaff(client, userId);
   await recordAccessAudit(client, actor, 'roles.assign', 'user_role_assignment', assignment.id,

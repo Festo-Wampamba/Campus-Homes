@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput, type TeamCapability } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
@@ -20,6 +20,7 @@ import { firstRow, type Db } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import { REDIS } from '../../db/redis.module';
 import { assertStaffScope } from '../auth/staff-scope';
+import { hasTeamCapability, isTeamRole } from '../management/team-capability';
 import { moveIns, reservationReleases, reservations } from '../../db/schema';
 import { AuditService } from '../ops/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -86,11 +87,11 @@ export class ReservationsService {
     @Optional() @Inject(NotificationsService) private readonly notifications: NotificationsService | null = null,
   ) {}
 
-  /** Landlord (own property) or an actively-assigned custodian — the two
-   * roles allowed to Book/Release/confirm move-in on a bed. Ops/admin
+  /** Landlord (own property), or a custodian/worker the landlord granted
+   * `capability` on it (property team permissions, migration 0086). Ops/admin
    * must have an active staff assignment covering the target property.
    * Mirrors tenant-agreements.service.ts's assertCanManageProperty. */
-  private async assertCanManageProperty(client: PoolClient, ctx: RlsContext, propertyId: string): Promise<void> {
+  private async assertCanManageProperty(client: PoolClient, ctx: RlsContext, propertyId: string, capability: TeamCapability): Promise<void> {
     if (ctx.role === 'ops_lead' || ctx.role === 'admin') {
       await assertStaffScope(client, ctx, propertyId);
       return;
@@ -102,14 +103,8 @@ export class ReservationsService {
         ctx.userId,
       ]);
       allowed = res.rowCount! > 0;
-    } else if (ctx.role === 'custodian') {
-      const res = await client.query(
-        `SELECT 1 FROM property_memberships
-         WHERE property_id = $1 AND user_id = $2 AND role = 'custodian' AND revoked_at IS NULL
-           AND status = 'active' AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())`,
-        [propertyId, ctx.userId],
-      );
-      allowed = res.rowCount! > 0;
+    } else if (isTeamRole(ctx.role)) {
+      allowed = await hasTeamCapability(client, ctx.userId, propertyId, capability);
     }
     if (!allowed) {
       throw new ForbiddenException("You don't have permission to manage this property's beds");
@@ -120,12 +115,12 @@ export class ReservationsService {
    * (never a second rlsDb.run — that would need a second pooled connection
    * per call and deadlock the pool under load) against the property that owns
    * `bedId`, before any student/status/limit lookup can leak to the caller. */
-  private async assertCanManageBed(client: PoolClient, ctx: RlsContext, bedId: string): Promise<void> {
+  private async assertCanManageBed(client: PoolClient, ctx: RlsContext, bedId: string, capability: TeamCapability): Promise<void> {
     const res = await client.query('SELECT u.property_id FROM beds b JOIN units u ON u.id = b.unit_id WHERE b.id = $1', [
       bedId,
     ]);
     if (res.rowCount === 0) throw new NotFoundException('Bed not found');
-    await this.assertCanManageProperty(client, ctx, res.rows[0].property_id as string);
+    await this.assertCanManageProperty(client, ctx, res.rows[0].property_id as string, capability);
   }
 
   /** A student who has already moved into a bed (status 'occupied') can't
@@ -318,7 +313,7 @@ export class ReservationsService {
         where: eq(reservations.id, input.reservationId),
       });
       if (!reservation) throw new NotFoundException('Reservation not found');
-      await this.assertCanManageBed(client, ctx, reservation.bedId);
+      await this.assertCanManageBed(client, ctx, reservation.bedId, 'bookings.manage');
       if (reservation.status !== 'reserved') {
         throw new ConflictException(`Cannot book a reservation that is ${reservation.status}`);
       }
@@ -327,7 +322,7 @@ export class ReservationsService {
       studentId = reservation.studentId;
       listingVersionId = reservation.listingVersionId;
     } else {
-      await this.assertCanManageBed(client, ctx, input.bedId);
+      await this.assertCanManageBed(client, ctx, input.bedId, 'bookings.manage');
       // Walk-in: book an Available bed directly, no prior Reserve. Rooms
       // are permanent/property-level (2026-09) — a unit can carry pricing
       // for more than one semester, so this picks whichever verified
@@ -565,7 +560,7 @@ export class ReservationsService {
         [reservationId],
       )).rows[0];
       if (!reservation) throw new NotFoundException('Reservation not found');
-      await this.assertCanManageBed(client, ctx, reservation.bed_id);
+      await this.assertCanManageBed(client, ctx, reservation.bed_id, 'payments.record');
       const earlier = (await client.query<ReceiptRow>(
         `SELECT receipt_number, student_id, landlord_id, property_name, room_label, booking_fee_ugx, deposit_ugx,
                 rent_ugx, payment_method::text AS payment_method, recorded_at
@@ -645,7 +640,7 @@ export class ReservationsService {
         `SELECT bed_id, student_id, status::text AS status FROM reservations WHERE id = $1`, [reservationId],
       )).rows[0];
       if (!reservation) throw new NotFoundException('Reservation not found');
-      await this.assertCanManageBed(client, ctx, reservation.bed_id);
+      await this.assertCanManageBed(client, ctx, reservation.bed_id, 'students.view');
       if (!['reserved', 'booked', 'occupied'].includes(reservation.status)) {
         throw new ForbiddenException('Student details are only available while the reservation or booking is active');
       }
@@ -672,7 +667,7 @@ export class ReservationsService {
    * leaves behind an account that the retry would then refuse. */
   async onboardWalkIn(ctx: RlsContext, input: OnboardWalkInInput) {
     const { account, booked, receipt } = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
-      await this.assertCanManageBed(client, ctx, input.bedId);
+      await this.assertCanManageBed(client, ctx, input.bedId, 'bookings.manage');
       const property = (await client.query<{ name: string; room_label: string }>(
         `SELECT p.name, u.label AS room_label FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id WHERE b.id = $1`,
         [input.bedId],
@@ -759,7 +754,7 @@ export class ReservationsService {
         where: eq(reservations.id, reservationId),
       });
       if (!reservation) throw new NotFoundException('Reservation not found');
-      await this.assertCanManageBed(client, ctx, reservation.bedId);
+      await this.assertCanManageBed(client, ctx, reservation.bedId, 'bookings.manage');
       if (!['reserved', 'booked'].includes(reservation.status)) {
         throw new ConflictException(`Cannot release a reservation that is ${reservation.status}`);
       }
@@ -921,7 +916,7 @@ export class ReservationsService {
       if (reservation.studentId === ctx.userId) {
         confirmerRole = 'student';
       } else {
-        await this.assertCanManageBed(client, ctx, reservation.bedId);
+        await this.assertCanManageBed(client, ctx, reservation.bedId, 'bookings.manage');
         confirmerRole = 'landlord';
       }
       if (reservation.status !== 'booked') {

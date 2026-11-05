@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { propertyTeamAssignmentSchema, type AssignedProperty, type OwnerPropertyTeam, type PropertyTeamAssignmentInput } from '@campushomes/shared';
+import { DEFAULT_TEAM_CAPABILITIES, propertyTeamAssignmentSchema, propertyTeamCapabilitiesSchema, type AssignedProperty, type OwnerPropertyTeam, type PropertyTeamAssignmentInput, type PropertyTeamCapabilitiesInput } from '@campushomes/shared';
 import type { PoolClient } from 'pg';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
@@ -26,7 +26,7 @@ export class PropertyTeamService {
         JOIN users u ON u.id=l.user_id WHERE p.landlord_id=$1 AND l.kyc_status='verified'
         AND u.status='active' AND u.deleted_at IS NULL ORDER BY p.name`, [actor.userId])).rows;
       const members = (await c.query(`SELECT pm.id,p.id AS "propertyId",p.name AS "propertyName",u.name,u.email,pm.role,
-        pm.worker_type AS "workerType",pm.starts_at AS "startsAt",
+        pm.worker_type AS "workerType",pm.capabilities,pm.starts_at AS "startsAt",
         CASE WHEN pm.revoked_at IS NOT NULL OR pm.status='revoked' THEN 'revoked'
           WHEN pm.ends_at<=now() THEN 'expired' WHEN u.status<>'active' OR u.deleted_at IS NOT NULL THEN 'inactive'
           WHEN pm.status<>'active' THEN pm.status ELSE 'active' END AS status
@@ -57,14 +57,33 @@ export class PropertyTeamService {
         scopeId: input.propertyId, workerType: input.workerType, reason: input.reason });
       await c.query(`UPDATE user_role_assignments SET valid_from=LEAST(valid_from,now()),valid_until=NULL WHERE id=$1`, [assignment.id]);
       // Also reconcile a legacy membership if an existing role grant was returned.
+      const capabilities = input.capabilities ?? DEFAULT_TEAM_CAPABILITIES[input.role];
       const membership = (await c.query<{ id: string }>(`INSERT INTO property_memberships
-        (user_id,property_id,role,worker_type,assigned_by) VALUES($1,$2,$3,$4,$5)
+        (user_id,property_id,role,worker_type,assigned_by,capabilities) VALUES($1,$2,$3,$4,$5,$6)
         ON CONFLICT(user_id,property_id,role) WHERE revoked_at IS NULL
-        DO UPDATE SET status='active',worker_type=EXCLUDED.worker_type,starts_at=LEAST(property_memberships.starts_at,now()),ends_at=NULL,assigned_by=EXCLUDED.assigned_by
-        RETURNING id`, [target.id, input.propertyId, input.role, input.workerType ?? null, actor.userId])).rows[0]!;
+        DO UPDATE SET status='active',worker_type=EXCLUDED.worker_type,starts_at=LEAST(property_memberships.starts_at,now()),ends_at=NULL,assigned_by=EXCLUDED.assigned_by,capabilities=EXCLUDED.capabilities
+        RETURNING id`, [target.id, input.propertyId, input.role, input.workerType ?? null, actor.userId, capabilities])).rows[0]!;
       await recordAccessAudit(c, actor, 'property_team.assign', 'property_membership', membership.id,
-        { propertyId: input.propertyId, role: input.role, workerType: input.workerType ?? null, reason: input.reason });
+        { propertyId: input.propertyId, role: input.role, workerType: input.workerType ?? null, capabilities, reason: input.reason });
       return membership;
+    });
+  }
+
+  /** The landlord changes what one custodian or worker may do. Takes effect
+   * on their next request: every check reads the membership row live. */
+  setCapabilities(actor: RlsContext, membershipId: string, raw: PropertyTeamCapabilitiesInput) {
+    const parsed = propertyTeamCapabilitiesSchema.safeParse(raw);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid permissions');
+    const { capabilities } = parsed.data;
+    return this.db.run(SERVICE_CTX, async (_db, c) => {
+      const member = (await c.query<{ propertyId: string }>(`SELECT property_id AS "propertyId" FROM property_memberships
+        WHERE id=$1 AND role=ANY($2::text[]) AND revoked_at IS NULL`, [membershipId, GROUND_ROLES])).rows[0];
+      if (!member) throw new NotFoundException('Property team assignment not found');
+      await this.ownerOf(c, actor, member.propertyId);
+      await c.query(`UPDATE property_memberships SET capabilities=$2 WHERE id=$1 AND revoked_at IS NULL`, [membershipId, capabilities]);
+      await recordAccessAudit(c, actor, 'property_team.capabilities', 'property_membership', membershipId,
+        { propertyId: member.propertyId, capabilities });
+      return { id: membershipId, capabilities };
     });
   }
 
@@ -92,7 +111,7 @@ export class PropertyTeamService {
 
   mine(actor: RlsContext): Promise<AssignedProperty[]> {
     return this.db.run(SERVICE_CTX, async (_db, c) => (await c.query(`SELECT pm.id,p.id AS "propertyId",p.name,
-      p.street_address AS "streetAddress",pm.role,pm.worker_type AS "workerType",owner.name AS "ownerName",
+      p.street_address AS "streetAddress",pm.role,pm.worker_type AS "workerType",pm.capabilities,owner.name AS "ownerName",
       p.contact_phone AS "contactPhone" FROM property_memberships pm JOIN properties p ON p.id=pm.property_id
       JOIN users u ON u.id=pm.user_id JOIN users owner ON owner.id=p.landlord_id
       JOIN landlords l ON l.user_id=p.landlord_id WHERE pm.user_id=$1 AND pm.role=ANY($2::text[])

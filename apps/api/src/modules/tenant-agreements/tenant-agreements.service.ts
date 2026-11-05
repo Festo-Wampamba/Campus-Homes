@@ -14,10 +14,10 @@ import { firstRow } from '../../db/client';
 import { RlsDb } from '../../db/db.module';
 import type { RlsContext } from '../../db/rls-context';
 import { assertStaffScope } from '../auth/staff-scope';
+import { hasTeamCapability, isTeamRole } from '../management/team-capability';
 import { assertOwnedDocumentKey } from '../uploads/storage-key';
 import {
   properties,
-  propertyMemberships,
   students,
   tenantAgreementFields,
   tenantAgreementTemplates,
@@ -40,8 +40,8 @@ const SERVICE_CTX: RlsContext = {
 export class TenantAgreementsService {
   constructor(private readonly rlsDb: RlsDb) {}
 
-  // Landlord (own property) or an actively-assigned custodian — the two
-  // roles allowed to design a property's tenant agreement (and, reused
+  // Landlord (own property) or a custodian/worker the landlord granted
+  // 'agreements.manage' — the people allowed to design a property's tenant agreement (and, reused
   // below, to view its submissions), per the QR flow. Ops/admin need an active
   // staff assignment covering the property, just like the underlying RLS.
   private async assertCanManageProperty(ctx: RlsContext, propertyId: string): Promise<void> {
@@ -49,25 +49,13 @@ export class TenantAgreementsService {
       await this.rlsDb.run(SERVICE_CTX, (_db, client) => assertStaffScope(client, ctx, propertyId));
       return;
     }
-    const allowed = await this.rlsDb.run(SERVICE_CTX, async (db) => {
+    const allowed = await this.rlsDb.run(SERVICE_CTX, async (db, client) => {
       if (ctx.role === 'landlord') {
         const [property] = await db.select().from(properties).where(eq(properties.id, propertyId));
         return property?.landlordId === ctx.userId;
       }
-      if (ctx.role === 'custodian') {
-        const [membership] = await db
-          .select()
-          .from(propertyMemberships)
-          .where(
-            and(
-              eq(propertyMemberships.propertyId, propertyId),
-              eq(propertyMemberships.userId, ctx.userId),
-              eq(propertyMemberships.role, 'custodian'),
-            ),
-          );
-        return membership != null && membership.revokedAt === null && membership.status === 'active'
-          && membership.startsAt.getTime() <= Date.now()
-          && (membership.endsAt === null || membership.endsAt.getTime() > Date.now());
+      if (isTeamRole(ctx.role)) {
+        return hasTeamCapability(client, ctx.userId, propertyId, 'agreements.manage');
       }
       return false;
     });

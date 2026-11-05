@@ -596,6 +596,13 @@
       "when": 1793685100322,
       "tag": "0085_profile_names_identity_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793685200322,
+      "tag": "0086_property_team_capabilities",
+      "breakpoints": true
     }
   ]
 }
