@@ -74,17 +74,51 @@ it("saves larger batches in bounded requests",async()=>{
   expect(container.querySelectorAll('[role="status"]')).toHaveLength(6);
 });
 it("reviews a document before importing and sends names and gender on save",async()=>{
-  await open();
+  await open();await act(async()=>button("Import tenant records").click());
+  expect(fields()).toHaveLength(0);
   mockApi.mockResolvedValueOnce({rows:[{rowNumber:2,firstName:'Amina',lastName:'Nakato',gender:'female',kind:'new',phone:'0771234567',email:'',university:'MUK',propertyName:BED.propertyName,roomLabel:BED.roomLabel,bedLabel:BED.bedLabel,amountPaid:'300000',rent:'900000',balance:'600000',paymentMethod:'cash',movedIn:true,warnings:[]}]});
   const upload=container.querySelector<HTMLInputElement>('input[aria-label="Tenant records file"]')!;
   Object.defineProperty(upload,'files',{value:[new File(['First name,Last name\nAmina,Nakato'],'tenants.csv',{type:'text/csv'})]});
   await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
-  expect(mockApi).toHaveBeenCalledTimes(1);expect(button('Use 1 row in form').disabled).toBe(true);
-  const review=[...container.querySelectorAll('label')].find((label)=>label.textContent?.includes('I have checked the extracted'))!.querySelector('input')!;
-  await act(async()=>review.click());await act(async()=>button('Use 1 row in form').click());
+  expect(mockApi).toHaveBeenCalledTimes(1);expect(button('Save 1 imported student').disabled).toBe(true);
+  const review=[...container.querySelectorAll('label')].find((label)=>label.textContent?.includes('I have checked the selected'))!.querySelector('input')!;
+  await act(async()=>review.click());expect(button('Save 1 imported student').disabled).toBe(false);
   expect(field('First name').value).toBe('Amina');expect(field('Last name').value).toBe('Nakato');
   expect([...fields()[0]!.querySelectorAll('select')].some((select)=>select.value==='female')).toBe(true);
   mockApi.mockImplementationOnce(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string})=>({key:row.idempotencyKey,status:'added'})));
   await act(async()=>container.querySelector('form')!.requestSubmit());
   expect(JSON.parse(mockApi.mock.calls[1][1].body).entries[0]).toMatchObject({name:'Amina Nakato',firstName:'Amina',lastName:'Nakato',gender:'female',bookingFeeCollectedUgx:300000,movedIn:true});
+});
+
+const imported = (bed = BED, firstName = 'Amina') => ({rowNumber: 2, firstName, lastName: 'Nakato', gender: 'female', kind: 'new', phone: '0771234567', email: '', university: 'MUK', propertyName: bed.propertyName, roomLabel: bed.roomLabel, bedLabel: bed.bedLabel, amountPaid: '0', rent: '900000', balance: '900000', paymentMethod: '', movedIn: false, warnings: []});
+async function upload() {
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Tenant records file"]')!;
+  Object.defineProperty(input, 'files', {value: [new File(['records'], 'tenants.csv', {type: 'text/csv'})], configurable: true});
+  await act(async () => input.dispatchEvent(new Event('change', {bubbles: true})));
+}
+it('keeps manual entry and import separate and saves only selected uploaded records', async () => {
+  await open([BED, BED2]);await fill();
+  expect(fields()[0]!.querySelector('legend')!.textContent).toBe('Student · Amina Nakato');
+  await act(async () => button('Import tenant records').click());
+  expect(fields()).toHaveLength(0);expect(button('Save imported students').disabled).toBe(true);
+  mockApi.mockResolvedValueOnce({rows: [imported(), {...imported(BED2, 'Sarah'), rowNumber: 3, phone: '0771234568'}]});
+  await upload();expect(fields()).toHaveLength(2);
+  const review = container.querySelector<HTMLInputElement>('label input[type="checkbox"]')!;
+  await act(async () => review.click());
+  mockApi.mockImplementationOnce(async (_path, options) => JSON.parse(options.body).entries.map((row: {idempotencyKey: string}) => ({key: row.idempotencyKey, status: 'added'})));
+  await act(async () => container.querySelector('form')!.requestSubmit());
+  expect(JSON.parse(mockApi.mock.calls[1][1].body).entries.map((row: {name: string}) => row.name)).toEqual(['Amina Nakato', 'Sarah Nakato']);
+  await act(async () => button('Enter manually').click());expect(fields()).toHaveLength(1);expect(field('First name').value).toBe('Amina');
+});
+it('updates selected import rows without requiring the unused manual student', async () => {
+  await open([BED, BED2]);await act(async () => button('Import tenant records').click());
+  mockApi.mockResolvedValueOnce({rows: [imported(), {...imported(BED2, 'Sarah'), rowNumber: 3}]});await upload();
+  await act(async () => type(field('Last name', 1), 'Corrected'));
+  const retainedKey = fields()[1]!.querySelector('legend')!.textContent;
+  await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Use document row 2"]')!.click());
+  expect(fields()).toHaveLength(1);expect(field('First name').value).toBe('Sarah');expect(field('Last name').value).toBe('Corrected');expect(fields()[0]!.querySelector('legend')!.textContent).toBe(retainedKey);expect(button('Save 1 imported student').disabled).toBe(true);
+  const review = [...container.querySelectorAll('label')].find(label => label.textContent?.includes('I have checked'))!.querySelector('input')!;
+  await act(async () => review.click());expect(button('Save 1 imported student').disabled).toBe(false);
+  mockApi.mockRejectedValueOnce(new Error('Could not read file'));await upload();
+  expect(fields()).toHaveLength(0);expect(button('Save imported students').disabled).toBe(true);
 });

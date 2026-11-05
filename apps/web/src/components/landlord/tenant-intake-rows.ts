@@ -6,6 +6,7 @@ export type TenantIntakeRow = {
   gender: 'male' | 'female' | ''; phone: string; email: string; contact: string;
   university: University; bedId: string; movedIn: boolean; paid: string; paymentMethod: string;
   importWarnings?: string[];
+  documentRowNumber?: number;
 };
 export const studentName = (row: Pick<TenantIntakeRow,'firstName'|'lastName'>) => `${row.firstName.trim()} ${row.lastName.trim()}`.trim();
 export function emptyTenantRow(bedId=''):TenantIntakeRow {
@@ -25,7 +26,7 @@ export function importedTenantRows(records:ImportedTenantRow[],beds:WalkInBed[],
     if(selected&&record.rent&&Number(record.rent)!==selected.pricePerTermUgx)warnings.push('The document rent differs from this room’s rent. Check the room and money before saving.');
     if(record.university&&!universities[normalize(record.university)])warnings.push('University was not recognized. Select the correct one.');
     if(record.paymentMethod&&!methods[normalize(record.paymentMethod)])warnings.push('Payment method was not recognized. Select it in the form.');
-    return {...emptyTenantRow(),kind:record.kind,firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
+    return {...emptyTenantRow(),documentRowNumber:record.rowNumber,kind:record.kind,firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
       contact:record.email||record.phone,university:universities[normalize(record.university)]??'MUK',bedId:selected?.id??'',movedIn:record.movedIn,paid:record.amountPaid,
       paymentMethod:methods[normalize(record.paymentMethod)]??'',importWarnings:warnings};
   });

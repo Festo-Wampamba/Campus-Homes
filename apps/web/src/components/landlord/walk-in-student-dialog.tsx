@@ -27,7 +27,13 @@ export function WalkInStudentButton({ beds }: { beds: WalkInBed[] }) {
 function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]; onClose: () => void }) {
   const router = useRouter();
   const [beds, setBeds] = useState(initialBeds);
-  const [rows, setRows] = useState<Row[]>(() => [emptyRow(initialBeds[0]?.id)]);
+  const [entryMode, setEntryMode] = useState<'manual' | 'import'>('manual');
+  const [manualRows, setManualRows] = useState<Row[]>(() => [emptyRow(initialBeds[0]?.id)]);
+  const [importRows, setImportRows] = useState<Row[]>([]);
+  const [importReviewed, setImportReviewed] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const rows = entryMode === 'manual' ? manualRows : importRows;
+  const setRows = entryMode === 'manual' ? setManualRows : setImportRows;
   const [results, setResults] = useState<Record<string, TenantIntakeResult>>({});
   const [pending, setPending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -47,6 +53,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    if (entryMode === 'import' && (!importReviewed || importBusy || !rows.length)) return;
     const entries = [];
     const invalid: Record<string, TenantIntakeResult> = {};
     for (const row of editable) {
@@ -83,11 +90,28 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
         <DialogHeader className="gap-2 p-3 sm:p-5" title="Add students" onClose={() => { if (!pending) onClose(); }} />
         <DialogBody className="space-y-5">
           <p className="text-sm text-muted-foreground">Add a walk-in or students already living at your property, one at a time or as a batch. Available beds include approved managed-only and listed properties.</p>
-          <TenantImportPanel disabled={pending} capacity={50-rows.filter((row)=>studentName(row)||row.phone||row.email||row.contact||row.paid||complete(row.key)).length}
-            onUse={(records)=>setRows((current)=>{
-              const kept=current.filter((row)=>studentName(row)||row.phone||row.email||row.contact||row.paid||complete(row.key));
-              return [...kept,...importedTenantRows(records,beds,kept.map((row)=>row.bedId))];
-            })}/>
+          <div role="group" aria-label="Choose how to add students" className="space-y-3">
+            <Button type="button" variant={entryMode === 'import' ? 'primary' : 'secondary'} aria-pressed={entryMode === 'import'} disabled={pending || importBusy}
+              className={`h-auto min-h-14 w-full whitespace-normal px-4 py-3 text-lg ${entryMode === 'import' ? '' : 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'}`}
+              onClick={() => { setEntryMode('import'); setError(null); }}>Import tenant records</Button>
+            <Button type="button" variant="secondary" aria-pressed={entryMode === 'manual'} disabled={pending || importBusy}
+              className={`h-auto min-h-11 w-full whitespace-normal px-4 py-2 ${entryMode === 'manual' ? 'border-primary text-primary' : ''}`}
+              onClick={() => { setEntryMode('manual'); setError(null); }}>Enter manually</Button>
+          </div>
+          <div hidden={entryMode !== 'import'}>
+            <TenantImportPanel disabled={pending || importRows.some((row) => Boolean(complete(row.key)))}
+              onRecordsChange={(records) => setImportRows((current) => {
+                // Changing the selected document rows must preserve corrections
+                // and retry keys on entries that remain selected.
+                const selectedNumbers = new Set(records.map((record) => record.rowNumber));
+                const kept = current.filter((row) => selectedNumbers.has(row.documentRowNumber!));
+                const keptNumbers = new Set(kept.map((row) => row.documentRowNumber));
+                const added = importedTenantRows(records.filter((record) => !keptNumbers.has(record.rowNumber)), beds, kept.map((row) => row.bedId));
+                const mapped = new Map([...kept, ...added].map((row) => [row.documentRowNumber, row]));
+                return records.map((record) => mapped.get(record.rowNumber)!);
+              })}
+              onReviewedChange={setImportReviewed} onBusyChange={setImportBusy} />
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm">{beds.length} free beds · {rows.length} {rows.length === 1 ? "student" : "students"}</p>
             <Button type="button" variant="secondary" disabled={pending} onClick={refreshBeds}>Refresh beds</Button>
@@ -99,14 +123,14 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
             const locked = Boolean(complete(row.key));
             const overpaid = Number(row.paid) > (bed?.pricePerTermUgx ?? 0);
             return <fieldset key={row.key} disabled={pending || locked} className="min-w-0 space-y-4 rounded-lg border border-border p-4">
-              <legend className="max-w-full break-words px-1 font-semibold">Student {index + 1}{studentName(row) ? ` · ${studentName(row)}` : ""}</legend>
+              <legend className="max-w-full break-words px-1 font-semibold">Student{studentName(row) ? ` · ${studentName(row)}` : ""}</legend>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="min-w-0 flex-1 text-sm font-semibold">Account
                   <select className={FIELD} value={row.kind} onChange={(e) => update(row.key, { kind: e.target.value as Row["kind"] })}>
                     <option value="new">New CampusHomes student</option><option value="existing">Existing CampusHomes student</option>
                   </select>
                 </label>
-                {rows.length > 1 && !locked && <Button aria-label={`Remove student ${index + 1}`} type="button" variant="secondary" onClick={() => setRows((items) => items.filter((item) => item.key !== row.key))}><Trash2 aria-hidden className="size-4" /></Button>}
+                {entryMode === 'manual' && rows.length > 1 && !locked && <Button aria-label={`Remove student ${index + 1}`} type="button" variant="secondary" onClick={() => setRows((items) => items.filter((item) => item.key !== row.key))}><Trash2 aria-hidden className="size-4" /></Button>}
               </div>
               {row.kind === "new" ? <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <label className="text-sm font-semibold">First name *<input required maxLength={60} autoComplete="given-name" className={FIELD} value={row.firstName} onChange={(e) => update(row.key, { firstName: e.target.value })} /></label>
@@ -140,13 +164,13 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
               </p>}
             </fieldset>;
           })}
-          <Button type="button" variant="secondary" disabled={pending || rows.length >= 50} onClick={() => setRows((items) => [...items, emptyRow(beds.find((bed) => !items.some((row) => row.bedId === bed.id))?.id)])}><Plus aria-hidden className="mr-2 size-4" />Add another student</Button>
+          {entryMode === 'manual' && <Button type="button" variant="secondary" disabled={pending || rows.length >= 50} onClick={() => setRows((items) => [...items, emptyRow(beds.find((bed) => !items.some((row) => row.bedId === bed.id))?.id)])}><Plus aria-hidden className="mr-2 size-4" />Add another student</Button>}
           <p className="text-xs text-muted-foreground">Up to 50 students per batch. Successful rows stay saved; retry only the rows that need corrections.</p>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </DialogBody>
         <DialogFooter className="flex-wrap [&>*]:h-auto [&>*]:min-h-11 [&>*]:whitespace-normal [&>*]:py-2">
-          <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{editable.length ? "Close" : "Done"}</Button>
-          {editable.length > 0 && <Button type="submit" disabled={pending || beds.length === 0 || editable.some((row) => Number(row.paid) > (beds.find((bed) => bed.id === row.bedId)?.pricePerTermUgx ?? 0))}>{pending ? `Saving… ${progress.done}/${progress.total}` : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
+          <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{rows.length > 0 && !editable.length ? "Done" : "Close"}</Button>
+          {(editable.length > 0 || (entryMode === 'import' && !rows.length)) && <Button type="submit" disabled={pending || beds.length === 0 || (entryMode === 'import' && (!importReviewed || importBusy || !rows.length)) || editable.some((row) => Number(row.paid) > (beds.find((bed) => bed.id === row.bedId)?.pricePerTermUgx ?? 0))}>{pending ? `Saving… ${progress.done}/${progress.total}` : entryMode === 'import' ? `Save ${editable.length || ""} imported ${editable.length === 1 ? "student" : "students"}`.replace(/  /g, " ") : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
         </DialogFooter>
       </form>
     </Dialog>
