@@ -12,7 +12,9 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type TenantIntakeResult, type TenantAssignmentRequest, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+
+import { bookableIntakeBed, intakeVersion, INTAKE_BEDS_SQL, type IntakeBed } from './tenant-intake-inventory';
 
 import { loadEnv } from '../../config/env';
 import type { RlsContext } from '../../db/rls-context';
@@ -56,13 +58,13 @@ const SERVICE = (userId: string): RlsContext => ({ userId, role: 'service_role' 
 /** A free bed booked straight to a student account onboardWalkIn just
  * created. Server-internal: the HTTP schema has no student field, so a client
  * can never pick whose account a booking lands on. */
-type WalkInBooking = Omit<BookReservationInput, 'reservationId'> & { bedId: string; studentId: string };
+type WalkInBooking = Omit<BookReservationInput, 'reservationId'> & { bedId: string; studentId: string; semesterId?: string; idempotencyKey?: string; movedIn?: boolean; moveInConfirmedBy?: 'student' | 'landlord' };
 
 /** Why a walk-in can't use this phone number, and what the landlord does instead. */
 function existingAccountMessage(account: { role: string; deleted: boolean }): string {
   if (account.deleted) return 'This phone number belongs to a closed CampusHomes account. Contact CampusHomes support.';
   if (account.role !== 'student') return 'This phone number belongs to a landlord or staff account, not a student';
-  return 'This student already has a CampusHomes account. Ask them to reserve this room from their account, then confirm the booking under Reservations.';
+  return 'This student already has a CampusHomes account. Choose Existing CampusHomes student to send a room request, or confirm their reservation under Reservations.';
 }
 
 /**
@@ -328,31 +330,10 @@ export class ReservationsService {
       listingVersionId = reservation.listingVersionId;
     } else {
       await this.assertCanManageBed(client, ctx, input.bedId);
-      // Walk-in: book an Available bed directly, no prior Reserve. Rooms
-      // are permanent/property-level (2026-09) — a unit can carry pricing
-      // for more than one semester, so this picks whichever verified
-      // listing was most recently published for the bed's property (same
-      // "prefer the current listing" precedent as ListingsService.
-      // propertyDetail, the landlord's own view this walk-in flow is
-      // driven from).
-      const bedRes = await client.query(
-        `SELECT b.id, l.id AS listing_id, l.current_version_id,
-                usp.price_per_term_ugx, usp.deposit_ugx
-         FROM beds b
-         JOIN units u ON u.id = b.unit_id
-         JOIN listings l ON l.property_id = u.property_id AND l.status = 'verified'
-         JOIN unit_semester_pricing usp ON usp.unit_id = u.id AND usp.semester_id = l.semester_id
-         WHERE b.id = $1 AND b.blocked = false
-         ORDER BY l.created_at DESC
-         LIMIT 1`,
-        [input.bedId],
-      );
-      if (bedRes.rowCount === 0) {
-        throw new NotFoundException('Bed not found on a verified listing, or it is blocked');
-      }
-      bedId = bedRes.rows[0].id as string;
-      listingVersionId = bedRes.rows[0].current_version_id as string;
-      walkInPrice = bedRes.rows[0] as { price_per_term_ugx: number; deposit_ugx: number | null };
+      const bed = await bookableIntakeBed(client, input.bedId, input.semesterId);
+      bedId = bed.id;
+      listingVersionId = await intakeVersion(client, bed);
+      walkInPrice = { price_per_term_ugx: bed.pricePerTermUgx, deposit_ugx: bed.deposit_ugx };
       const recorded = (input.bookingFeeCollectedUgx ?? 0) + (input.depositCollectedUgx ?? 0);
       if (recorded > Number(walkInPrice.price_per_term_ugx)) {
         throw new BadRequestException(
@@ -368,11 +349,10 @@ export class ReservationsService {
       if (studentRes.rowCount === 0) throw new NotFoundException('Student account not found');
       studentId = input.studentId;
 
-      await this.assertNotLockedInByCurrentOccupancy(client, studentId);
-
       // Walk-in creates a brand-new active reservation for this student, so
       // the same per-student rules as reserve() apply (§12-13).
       await this.assertStudentCanTakeRoom(client, studentId, bedId, 'landlord');
+      await this.assertNotLockedInByCurrentOccupancy(client, studentId);
     }
 
     const now = new Date();
@@ -408,7 +388,7 @@ export class ReservationsService {
             depositCollectedUgx: input.depositCollectedUgx ?? null,
             paymentMethod: input.paymentMethod ?? null,
             paymentRecordedAt: input.bookingFeeCollectedUgx || input.depositCollectedUgx ? now : null,
-            idempotencyKey: `walkin-${bedId}-${now.getTime()}`,
+            idempotencyKey: 'idempotencyKey' in input && input.idempotencyKey ? `walkin-${ctx.userId}-${input.idempotencyKey}` : `walkin-${bedId}-${now.getTime()}`,
             pricePerTermUgx: Number(walkInPrice!.price_per_term_ugx),
             depositUgx: walkInPrice!.deposit_ugx != null ? Number(walkInPrice!.deposit_ugx) : null,
           })
@@ -436,6 +416,12 @@ export class ReservationsService {
         [reservationRow!.id, studentId, bookingFee, deposit, input.paymentMethod ?? null, ctx.userId, bedId],
       )).rows[0] ?? null;
     }
+    if ('studentId' in input && input.movedIn) {
+      await db.insert(moveIns).values({ reservationId: reservationRow!.id, confirmedAt: now,
+        confirmedByRole: input.moveInConfirmedBy ?? 'landlord' });
+      reservationRow = firstRow(await db.update(reservations).set({ status: 'occupied', updatedAt: now })
+        .where(eq(reservations.id, reservationRow!.id)).returning());
+    }
     return { reservation: reservationRow!, receipt };
   }
 
@@ -456,7 +442,7 @@ export class ReservationsService {
     this.notifications
       ?.notify(reservation.studentId, 'reservation.booked', 'in_app', {
         reservationId: reservation.id,
-        message: 'Your landlord confirmed your booking. Move in and confirm it in My reservations.',
+        message: reservation.status === 'occupied' ? 'Your room is booked and recorded as moved in. See My reservations.' : 'Your landlord confirmed your booking. Move in and confirm it in My reservations.',
         href: '/reservations',
       })
       .catch((err: unknown) => console.error('[reservations] booking confirmed notify failed:', err));
@@ -667,12 +653,20 @@ export class ReservationsService {
    *
    * A phone that already has an account is refused (2026-10-30): booking it
    * would let anyone who knows a student's number attach them to a bed and read
-   * their contact details. That student reserves the bed from their own
-   * account and the landlord confirms it. Atomic so a failed booking never
+   * their contact details. That student accepts an assignment request from their own account, or
+   * reserves a publicly listed bed for the landlord to confirm. Atomic so a failed booking never
    * leaves behind an account that the retry would then refuse. */
   async onboardWalkIn(ctx: RlsContext, input: OnboardWalkInInput) {
-    const { account, booked, receipt } = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
+    const { account, booked, receipt, replayed } = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
       await this.assertCanManageBed(client, ctx, input.bedId);
+      if (input.idempotencyKey) {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`intake:${ctx.userId}:${input.idempotencyKey}`]);
+        const prior = await db.query.reservations.findFirst({ where: eq(reservations.idempotencyKey, `walkin-${ctx.userId}-${input.idempotencyKey}`) });
+        if (prior) {
+          if (prior.bedId !== input.bedId) throw new ConflictException('This request key was already used for a different bed');
+          return { account: { studentId: prior.studentId, email: null, propertyName: '', roomLabel: '' }, booked: prior, receipt: null, replayed: true };
+        }
+      }
       const property = (await client.query<{ name: string; room_label: string }>(
         `SELECT p.name, u.label AS room_label FROM beds b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id WHERE b.id = $1`,
         [input.bedId],
@@ -705,6 +699,9 @@ export class ReservationsService {
       const { reservation, receipt } = await this.bookInTransaction(db, client, ctx, {
         bedId: input.bedId,
         studentId,
+        semesterId: input.semesterId,
+        movedIn: input.movedIn,
+        idempotencyKey: input.idempotencyKey,
         bookingFeeCollectedUgx: input.bookingFeeCollectedUgx,
         depositCollectedUgx: input.depositCollectedUgx,
         paymentMethod: input.paymentMethod,
@@ -718,10 +715,11 @@ export class ReservationsService {
         },
         booked: reservation,
         receipt,
+        replayed: false,
       };
     });
+    if (replayed) return { reservationId: booked.id, studentId: account.studentId, studentCreated: true, status: booked.status };
     await this.afterBook(ctx, booked, receipt, true);
-    if (input.movedIn) await this.confirmMoveIn(ctx, booked.id);
     await this.audit.record(ctx, 'reservation.walk_in_onboard', 'reservation', booked.id, {
       movedIn: input.movedIn,
     });
@@ -748,6 +746,117 @@ export class ReservationsService {
       studentCreated: true,
       status: input.movedIn ? 'occupied' as const : 'booked' as const,
     };
+  }
+
+  async walkInBeds(ctx: RlsContext) {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const rows = await client.query<IntakeBed>(INTAKE_BEDS_SQL, [null, ctx.userId, null]);
+      return rows.rows.map(({ id, propertyName, roomLabel, bedLabel, roomCategory, selfContained, pricePerTermUgx, semesterId, semesterName }) =>
+        ({ id, propertyName, roomLabel, bedLabel, roomCategory, selfContained, pricePerTermUgx, semesterId, semesterName }));
+    });
+  }
+
+  /** Every row commits independently. A failed row can be corrected/retried
+   * without duplicating successful accounts, bookings or payment receipts. */
+  async tenantIntake(ctx: RlsContext, input: TenantIntakeInput): Promise<TenantIntakeResult[]> {
+    const results: TenantIntakeResult[] = [];
+    for (const entry of input.entries) {
+      try {
+        if (entry.kind === 'new') {
+          await this.onboardWalkIn(ctx, entry);
+          results.push({ key: entry.idempotencyKey, status: 'added' });
+        } else {
+          await this.requestTenantAssignment(ctx, entry);
+          results.push({ key: entry.idempotencyKey, status: 'requested' });
+        }
+      } catch (err) {
+        // Only deliberate domain errors cross this boundary. Never leak SQL,
+        // account rows, provider responses or internal errors in batch output.
+        const safe = err instanceof BadRequestException || err instanceof ConflictException || err instanceof ForbiddenException || err instanceof NotFoundException;
+        results.push({ key: entry.idempotencyKey, status: 'failed', message: safe ? err.message : 'Could not save this student. Retry this row.' });
+      }
+    }
+    return results;
+  }
+
+  private async requestTenantAssignment(ctx: RlsContext, input: Extract<TenantIntakeInput['entries'][number], { kind: 'existing' }>) {
+    const request = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      await this.assertCanManageBed(client, ctx, input.bedId);
+      const prior = (await client.query('SELECT id,bed_id,payload FROM tenant_assignment_requests WHERE created_by=$1 AND idempotency_key=$2', [ctx.userId, input.idempotencyKey])).rows[0];
+      if (prior) {
+        if (prior.bed_id !== input.bedId || prior.payload.contact !== input.contact) {
+          throw new ConflictException('This request was already saved with different details. Remove this row and add it again for a new request.');
+        }
+        return null;
+      }
+      const bed = await bookableIntakeBed(client, input.bedId, input.semesterId);
+      if ((input.bookingFeeCollectedUgx ?? 0) > bed.pricePerTermUgx) throw new BadRequestException('Amount paid exceeds this room’s rent');
+      // Exact, verified identity only. No search endpoint or account details
+      // return to a landlord who merely knows a phone/email.
+      const student = (await client.query<{ id: string }>(
+        `SELECT u.id FROM users u JOIN students s ON s.user_id=u.id
+         WHERE u.deleted_at IS NULL AND u.status='active' AND
+           ((u.email_verified AND lower(btrim(u.email))=$1) OR (u.phone_verified AND u.phone=$1)) LIMIT 1`, [input.contact],
+      )).rows[0];
+      if (!student) return null; // Same public response for unknown contacts.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`tenant-request:${ctx.userId}:${student.id}`]);
+      const pending = await client.query(`SELECT count(*) FROM tenant_assignment_requests WHERE created_by=$1 AND student_id=$2 AND status='pending' AND expires_at>now()`, [ctx.userId, student.id]);
+      if (Number(pending.rows[0].count) >= 10) return null;
+      const inserted = (await client.query<{ id: string }>(
+        `INSERT INTO tenant_assignment_requests(created_by,student_id,bed_id,idempotency_key,payload)
+         VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(created_by,idempotency_key) DO NOTHING RETURNING id`,
+        [ctx.userId, student.id, input.bedId, input.idempotencyKey, JSON.stringify({ ...input, semesterId: bed.semesterId, pricePerTermUgx: bed.pricePerTermUgx })],
+      )).rows[0];
+      return inserted ? { id: inserted.id, studentId: student.id, propertyName: bed.propertyName } : null;
+    });
+    if (request) {
+      await this.audit.record(ctx, 'reservation.assignment_requested', 'tenant_assignment_request', request.id, {});
+      this.notifications?.notify(request.studentId, 'tenancy.assignment_requested', 'in_app', {
+        message: `${request.propertyName} offered you a room. Review and accept or decline it in My reservations.`, href: '/reservations',
+      }).catch(() => undefined);
+    }
+  }
+
+  async tenantAssignmentRequests(ctx: RlsContext): Promise<TenantAssignmentRequest[]> {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => (await client.query<TenantAssignmentRequest>(
+      `SELECT q.id,p.name AS "propertyName",u.label AS "roomLabel",b.label AS "bedLabel",
+         (q.payload->>'pricePerTermUgx')::int AS "pricePerTermUgx",
+         (q.payload->>'movedIn')::boolean AS "movedIn",
+         COALESCE((q.payload->>'bookingFeeCollectedUgx')::int,0) AS "amountPaidUgx",q.expires_at AS "expiresAt"
+       FROM tenant_assignment_requests q JOIN beds b ON b.id=q.bed_id JOIN units u ON u.id=b.unit_id
+       JOIN properties p ON p.id=u.property_id JOIN users creator ON creator.id=q.created_by
+       WHERE q.student_id=$1 AND q.status='pending' AND q.expires_at>now()
+         AND p.landlord_id=q.created_by AND creator.deleted_at IS NULL AND creator.status='active'
+       ORDER BY q.created_at DESC`, [ctx.userId],
+    )).rows);
+  }
+
+  async respondTenantAssignment(ctx: RlsContext, id: string, accept: boolean) {
+    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
+      const request = (await client.query<{
+        id: string; created_by: string; bed_id: string; status: string; reservation_id: string | null;
+        expired: boolean; payload: Extract<TenantIntakeInput['entries'][number], { kind: 'existing' }> & { pricePerTermUgx: number };
+      }>(`SELECT *,expires_at<=now() AS expired FROM tenant_assignment_requests WHERE id=$1 AND student_id=$2 FOR UPDATE`, [id, ctx.userId])).rows[0];
+      if (!request) throw new NotFoundException('Room request not found');
+      if (request.status === 'accepted' && accept && request.reservation_id) return { reservationId: request.reservation_id, replayed: true, request };
+      if (request.status !== 'pending' || request.expired) throw new ConflictException('This request has ended. Ask the landlord for a new one.');
+      if (!accept) {
+        await client.query(`UPDATE tenant_assignment_requests SET status='declined' WHERE id=$1`, [id]);
+        return { reservationId: null, replayed: false, request };
+      }
+      const creator = (await client.query(`SELECT 1 FROM users WHERE id=$1 AND deleted_at IS NULL AND status='active'`, [request.created_by])).rowCount;
+      if (!creator) throw new ConflictException('This landlord account is no longer active');
+      const actor: RlsContext = { userId: request.created_by, role: 'landlord' };
+      await this.assertCanManageBed(client, actor, request.bed_id);
+      const bed = await bookableIntakeBed(client, request.bed_id, request.payload.semesterId);
+      if (bed.pricePerTermUgx !== request.payload.pricePerTermUgx) throw new ConflictException('The room price changed. Ask the landlord to send an updated request.');
+      const booked = await this.bookInTransaction(db, client, actor, { ...request.payload, bedId: request.bed_id, studentId: ctx.userId, moveInConfirmedBy: 'student' });
+      await client.query(`UPDATE tenant_assignment_requests SET status='accepted',reservation_id=$2 WHERE id=$1`, [id, booked.reservation.id]);
+      return { reservationId: booked.reservation.id, replayed: false, request, booked };
+    });
+    if (result.booked) await this.afterBook({ userId: result.request.created_by, role: 'landlord' }, result.booked.reservation, result.booked.receipt, true);
+    if (!result.replayed) await this.audit.record(ctx, accept ? 'reservation.assignment_accepted' : 'reservation.assignment_declined', 'tenant_assignment_request', id, {});
+    return { reservationId: result.reservationId };
   }
 
   /** Landlord/custodian/ops frees up a Reserved or Booked bed the student
@@ -963,7 +1072,7 @@ export class ReservationsService {
            m.confirmed_at AS "moveInConfirmedAt", r.updated_at AS "updatedAt",
            r.booking_fee_collected_ugx AS "bookingFeeCollectedUgx",
            r.deposit_collected_ugx AS "depositCollectedUgx", r.payment_method AS "paymentMethod",
-           l.id AS "listingId", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",
+           l.id AS "listingId", (l.status='verified' AND p.listing_intent='list') AS "publicListing", p.name AS "propertyName", p.street_address AS "propertyStreetAddress",
            b.label AS "bedLabel", u.room_category AS "roomCategory", u.capacity AS "roomCapacity",
            r.price_per_term_ugx AS "rentPerTermUgx", r.deposit_ugx AS "depositUgx"
          FROM reservations r

@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import type { TenantAssignmentRequest } from "@campushomes/shared";
+import { TenantAssignmentRequests } from "@/components/tenant-assignment-requests";
+import { apiServer } from "@/lib/server-api";
 import Link from "next/link";
 import { Timer } from "lucide-react";
 
@@ -15,13 +18,14 @@ export default async function ReservationsPage({
 }: {
   searchParams: Promise<{ new?: string; track?: string }>;
 }) {
-  const [reservations, { new: justReservedId, track: trackId }, receipts] = await Promise.all([getMyReservations(), searchParams, getMyReceipts("student")]);
+  const [reservations, { new: justReservedId, track: trackId }, receipts, assignments] = await Promise.all([getMyReservations(), searchParams, getMyReceipts("student"), apiServer<TenantAssignmentRequest[]>("/reservations/assignment-requests")]);
 
   return (
     <>
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ae5528]">Your room holds</p>
       <h1 className="ch-student-page__title mt-3">My reservations</h1>
       <p className="ch-student-page__lede">A reservation is free and holds an available bed while you view the room and agree terms with the landlord.</p>
+      {assignments ? <TenantAssignmentRequests requests={assignments} /> : <p role="alert" className="mt-4 text-sm">Could not load room offers. Refresh to try again.</p>}
       {reservations.length === 0 ? (
         <div className="mt-6">
           <EmptyState

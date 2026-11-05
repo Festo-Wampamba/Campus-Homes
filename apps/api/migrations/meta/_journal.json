@@ -596,6 +596,13 @@
       "when": 1793685100322,
       "tag": "0085_profile_names_identity_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793685201322,
+      "tag": "0087_tenant_assignment_requests",
+      "breakpoints": true
     }
   ]
 }

@@ -215,12 +215,13 @@ function ReservationCard({
       <Card className={cn("rounded-[18px] border-[#dbe7e5] shadow-[0_8px_24px_rgba(23,63,67,0.04)]", highlighted && "ring-2 ring-teal-600 ring-offset-2 ring-offset-background")}>
         <CardContent className="flex flex-wrap items-start justify-between gap-3 p-5">
           <div className="min-w-0">
-            <Link
-              href={`/listings/${reservation.listingId}`}
-              className="font-semibold text-foreground hover:underline"
-            >
-              {reservation.propertyName}
-            </Link>
+            {reservation.publicListing === false ? (
+              <p className="font-semibold text-foreground">{reservation.propertyName}</p>
+            ) : (
+              <Link href={`/listings/${reservation.listingId}`} className="font-semibold text-foreground hover:underline">
+                {reservation.propertyName}
+              </Link>
+            )}
             <p className="text-sm text-muted-foreground">{reservation.propertyStreetAddress}</p>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">

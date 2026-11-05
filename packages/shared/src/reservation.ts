@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { PAYMENT_METHODS, RESERVATION_STATUSES, UNIVERSITIES } from './enums.js';
-import { idempotencyKey, ugPhone, ugxAmount, uuid } from './common.js';
+import { idempotencyKey, normalizeUgPhone, ugPhone, ugxAmount, uuid } from './common.js';
 
 // Reserve -> Book -> Move-in (bed-level redesign, 2026-09). Booking payment
 // is expected to happen offline — the landlord/custodian records what they
@@ -39,13 +39,15 @@ export type BookReservationInput = z.infer<typeof bookReservationSchema>;
 
 // A student who walked in without CampusHomes (Festo, 2026-10-23): the landlord
 // creates their account and books them a free bed in one step. A phone that
-// already has an account is refused: that student reserves the bed themselves.
+// already has an account is refused here: use a tenant-assignment request instead.
 // The student later signs in with this phone or email to claim it.
 // Email is optional and must not belong to another account: SMS codes don't
 // reach students yet (Festo, 2026-10-23), so email is how most will sign in.
 // Like the phone, whoever controls the address can claim the account.
 export const onboardWalkInSchema = z.object({
   bedId: uuid,
+  semesterId: uuid.optional(),
+  idempotencyKey: idempotencyKey.optional(),
   name: z.string().trim().min(2).max(120),
   phone: ugPhone,
   email: z.string().trim().toLowerCase().email().max(254).optional(),
@@ -56,6 +58,36 @@ export const onboardWalkInSchema = z.object({
   paymentMethod: z.enum(PAYMENT_METHODS).optional(),
 });
 export type OnboardWalkInInput = z.infer<typeof onboardWalkInSchema>;
+
+// Existing accounts accept the assignment themselves; the landlord never receives
+// account lookup results or overwrites identity data. Each batch row is retry-safe.
+export const tenantIntakeEntrySchema = z.discriminatedUnion('kind', [
+  onboardWalkInSchema.extend({ kind: z.literal('new'), idempotencyKey }),
+  z.object({
+    kind: z.literal('existing'), bedId: uuid, semesterId: uuid.optional(), idempotencyKey,
+    contact: z.string().trim().min(5).max(254).transform((value) => value.includes('@') ? value.toLowerCase() : normalizeUgPhone(value))
+      .refine((value) => z.string().email().safeParse(value).success || ugPhone.safeParse(value).success,
+        'Enter their verified email or phone number'),
+    movedIn: z.boolean().default(false),
+    bookingFeeCollectedUgx: ugxAmount.optional(),
+    paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  }),
+]);
+export const tenantIntakeSchema = z.object({ entries: z.array(tenantIntakeEntrySchema).min(1).max(50) })
+  .superRefine(({ entries }, ctx) => {
+    if (new Set(entries.map((entry) => entry.bedId)).size !== entries.length) {
+      ctx.addIssue({ code: 'custom', path: ['entries'], message: 'Choose a different bed for each student' });
+    }
+    if (new Set(entries.map((entry) => entry.idempotencyKey)).size !== entries.length) {
+      ctx.addIssue({ code: 'custom', path: ['entries'], message: 'Each student needs a distinct request key' });
+    }
+  });
+export type TenantIntakeInput = z.infer<typeof tenantIntakeSchema>;
+export type TenantIntakeResult = { key: string; status: 'added' | 'requested' | 'failed'; message?: string };
+export type TenantAssignmentRequest = {
+  id: string; propertyName: string; roomLabel: string; bedLabel: string;
+  pricePerTermUgx: number; movedIn: boolean; amountPaidUgx: number; expiresAt: string;
+};
 
 // A booking fee / deposit a landlord recorded (0075). Both parties get a copy.
 export const paymentReceiptSchema = z.object({
@@ -157,6 +189,7 @@ export const MAX_ACTIVE_RESERVATIONS = 5;
 // this in server-side; nothing here is client-editable.
 export const studentReservationViewSchema = reservationSchema.extend({
   listingId: uuid,
+  publicListing: z.boolean().optional(),
   propertyName: z.string(),
   propertyStreetAddress: z.string(),
   bedLabel: z.string(),

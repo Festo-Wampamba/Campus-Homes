@@ -165,3 +165,17 @@ export const moveIns = pgTable(
   },
   (t) => [uniqueIndex('move_ins_reservation_uk').on(t.reservationId)],
 );
+
+// Service-only requests. Explicit owner/student checks live in ReservationsService.
+export const tenantAssignmentRequests = pgTable('tenant_assignment_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').notNull().references(() => students.userId, { onDelete: 'cascade' }),
+  bedId: uuid('bed_id').notNull().references(() => beds.id, { onDelete: 'cascade' }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  payload: jsonb('payload').notNull(),
+  status: text('status').notNull().default('pending'),
+  reservationId: uuid('reservation_id').references(() => reservations.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull().default(sql`now() + interval '7 days'`),
+}, (t) => [uniqueIndex('tenant_assignment_requests_created_by_idempotency_key_key').on(t.createdBy, t.idempotencyKey)]);

@@ -129,16 +129,18 @@ function Dialog({
 }
 
 function DialogHeader({
+  className,
   title,
   description,
   onClose,
 }: {
+  className?: string;
   title: string;
   description?: string;
   onClose: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border p-5">
+    <div className={cn("flex shrink-0 items-start justify-between gap-4 border-b border-border p-5", className)}>
       <div className="min-w-0 break-words">
         <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
         {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}

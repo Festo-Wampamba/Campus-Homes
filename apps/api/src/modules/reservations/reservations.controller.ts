@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, Res, Streamable
 import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 
-import { bookReservationSchema, onboardWalkInSchema, recordPaymentSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
+import { bookReservationSchema, onboardWalkInSchema, tenantIntakeSchema, recordPaymentSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
@@ -12,6 +12,7 @@ import { tenantsWorkbook } from './tenants-export';
 class ReserveDto extends createZodDto(reserveSchema) {}
 class BookDto extends createZodDto(bookReservationSchema) {}
 class OnboardWalkInDto extends createZodDto(onboardWalkInSchema) {}
+class TenantIntakeDto extends createZodDto(tenantIntakeSchema) {}
 class ReleaseDto extends createZodDto(releaseReservationSchema) {}
 class RecordPaymentDto extends createZodDto(recordPaymentSchema) {}
 
@@ -83,6 +84,36 @@ export class ReservationsController {
   @Roles('landlord', 'custodian', 'ops_lead', 'admin')
   onboardWalkIn(@Req() req: AuthenticatedRequest, @Body() body: OnboardWalkInDto) {
     return this.reservationsService.onboardWalkIn(rlsCtx(req), body);
+  }
+
+  @Get('walk-in-beds')
+  @Roles('landlord')
+  walkInBeds(@Req() req: AuthenticatedRequest) {
+    return this.reservationsService.walkInBeds(rlsCtx(req));
+  }
+
+  @Post('tenant-intake')
+  @Roles('landlord')
+  tenantIntake(@Req() req: AuthenticatedRequest, @Body() body: TenantIntakeDto) {
+    return this.reservationsService.tenantIntake(rlsCtx(req), body);
+  }
+
+  @Get('assignment-requests')
+  @Roles('student')
+  assignmentRequests(@Req() req: AuthenticatedRequest) {
+    return this.reservationsService.tenantAssignmentRequests(rlsCtx(req));
+  }
+
+  @Post('assignment-requests/:id/accept')
+  @Roles('student')
+  acceptAssignment(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservationsService.respondTenantAssignment(rlsCtx(req), id, true);
+  }
+
+  @Post('assignment-requests/:id/decline')
+  @Roles('student')
+  declineAssignment(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservationsService.respondTenantAssignment(rlsCtx(req), id, false);
   }
 
   @Post(':id/release')

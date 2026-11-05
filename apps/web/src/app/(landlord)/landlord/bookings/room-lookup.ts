@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { apiServer } from "@/lib/server-api";
 
 import { getMyProperties, getPropertyDetail } from "@/lib/landlord";
 
@@ -14,6 +15,8 @@ export type WalkInBed = {
   selfContained: boolean;
   /** The rent the student is booked at: the walk-in form's Total. */
   pricePerTermUgx: number;
+  semesterId?: string;
+  semesterName?: string;
 };
 
 // One fetch per request, shared by every lookup below (React server cache).
@@ -44,23 +47,7 @@ export async function roomsByBedId(): Promise<Map<string, RoomInfo>> {
 
 /** Free beds: no live reservation, not blocked, and the room is open. */
 export async function freeBedsForWalkIn(): Promise<WalkInBed[]> {
-  const beds: WalkInBed[] = [];
-  for (const { propertyName, rooms } of await loadPropertyRooms()) {
-    for (const room of rooms) {
-      if (room.operationalStatus !== "available" && room.operationalStatus !== "vacant") continue;
-      for (const bed of room.beds) {
-        if (bed.blocked || bed.status) continue;
-        beds.push({
-          id: bed.id,
-          propertyName,
-          roomLabel: room.label,
-          bedLabel: bed.label,
-          roomCategory: room.roomCategory,
-          selfContained: room.selfContained,
-          pricePerTermUgx: room.pricePerTermUgx,
-        });
-      }
-    }
-  }
+  const beds = await apiServer<WalkInBed[]>("/reservations/walk-in-beds");
+  if (!beds) throw new Error("Could not load bookable beds. Refresh the page to retry.");
   return beds;
 }

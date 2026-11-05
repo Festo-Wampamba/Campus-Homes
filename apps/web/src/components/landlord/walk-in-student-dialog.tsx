@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus } from "lucide-react";
-import { UNIVERSITIES, type University } from "@campushomes/shared";
+import { Plus, Trash2, UserPlus } from "lucide-react";
+import { UNIVERSITIES, tenantIntakeEntrySchema, type TenantIntakeResult, type University } from "@campushomes/shared";
 
 import type { WalkInBed } from "@/app/(landlord)/landlord/bookings/room-lookup";
 import { PAYMENT_METHOD_LABEL } from "@/components/landlord/confirm-booking-dialog";
@@ -11,216 +11,130 @@ import { UNIVERSITY_LABELS } from "@/components/university-select-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { api, apiErrorMessage } from "@/lib/api";
-import { formatUgx, roomCategoryLabel } from "@/lib/format";
+import { formatUgx } from "@/lib/format";
 
-const FIELD =
-  "mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10";
-
-type WalkInResult = { studentCreated: boolean; status: "booked" | "occupied" };
-
-/** A student who came in person, not through CampusHomes (Festo, 2026-10-23).
- * The API creates their student account, books the bed (taking it off
- * CampusHomes at once) and texts them how to sign in. A phone that already has
- * an account is refused: that student reserves the bed from their account. */
-export function WalkInStudentButton({ beds }: { beds: WalkInBed[] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button type="button" onClick={() => setOpen(true)} className="gap-1.5">
-        <UserPlus aria-hidden className="size-4" />
-        Add walk-in student
-      </Button>
-      {open && <WalkInStudentDialog beds={beds} onClose={() => setOpen(false)} />}
-    </>
-  );
+const FIELD = "mt-1 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+type Row = {
+  key: string; kind: "new" | "existing"; name: string; phone: string; email: string;
+  contact: string; university: University; bedId: string; movedIn: boolean; paid: string; paymentMethod: string;
+};
+function emptyRow(bedId = ""): Row {
+  return { key: crypto.randomUUID(), kind: "new", name: "", phone: "", email: "", contact: "", university: "MUK", bedId, movedIn: false, paid: "", paymentMethod: "" };
 }
 
-function WalkInStudentDialog({ beds, onClose }: { beds: WalkInBed[]; onClose: () => void }) {
+export function WalkInStudentButton({ beds }: { beds: WalkInBed[] }) {
+  const [open, setOpen] = useState(false);
+  return <>
+    <Button type="button" onClick={() => setOpen(true)} className="gap-1.5"><UserPlus aria-hidden className="size-4" />Add students</Button>
+    {open && <WalkInStudentDialog beds={beds} onClose={() => setOpen(false)} />}
+  </>;
+}
+
+function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]; onClose: () => void }) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [university, setUniversity] = useState<University>("MUK");
-  const [bedId, setBedId] = useState(beds[0]?.id ?? "");
-  const [movedIn, setMovedIn] = useState(false);
-  const [amountPaid, setAmountPaid] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("");
+  const [beds, setBeds] = useState(initialBeds);
+  const [rows, setRows] = useState<Row[]>(() => [emptyRow(initialBeds[0]?.id)]);
+  const [results, setResults] = useState<Record<string, TenantIntakeResult>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<WalkInResult | null>(null);
+  const complete = (key: string) => results[key] && results[key].status !== "failed";
+  const editable = rows.filter((row) => !complete(row.key));
 
-  // Total is the booked room's rent; Balance follows what was paid.
-  const totalUgx = beds.find((bed) => bed.id === bedId)?.pricePerTermUgx ?? 0;
-  const paidUgx = Number(amountPaid) || 0;
-  const balanceUgx = totalUgx - paidUgx;
-  const overpaid = balanceUgx < 0;
-
-  const byProperty = new Map<string, WalkInBed[]>();
-  for (const bed of beds) byProperty.set(bed.propertyName, [...(byProperty.get(bed.propertyName) ?? []), bed]);
-
+  function update(key: string, patch: Partial<Row>) {
+    setRows((items) => items.map((row) => row.key === key ? { ...row, ...patch } : row));
+    setResults((current) => { const next = { ...current }; delete next[key]; return next; });
+  }
+  async function refreshBeds() {
+    setError(null);
+    try { setBeds(await api<WalkInBed[]>("/reservations/walk-in-beds")); }
+    catch (caught) { setError(apiErrorMessage(caught, "Could not load free beds. Try again.")); }
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
     setError(null);
-    try {
-      const result = await api<WalkInResult>("/reservations/walk-in", {
-        method: "POST",
-        body: JSON.stringify({
-          bedId,
-          name: name.trim(),
-          phone: phone.trim(),
-          email: email.trim() || undefined,
-          university,
-          movedIn,
-          bookingFeeCollectedUgx: paidUgx > 0 ? paidUgx : undefined,
-          paymentMethod: paymentMethod || undefined,
-        }),
-      });
-      setDone(result);
-      router.refresh();
-    } catch (caught) {
-      setError(apiErrorMessage(caught, "Couldn't add this student. Check the details and try again."));
-    } finally {
-      setPending(false);
+    const entries = [];
+    const invalid: Record<string, TenantIntakeResult> = {};
+    for (const row of editable) {
+      const bed = beds.find((bed) => bed.id === row.bedId);
+      const shared = { bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
+        bookingFeeCollectedUgx: row.paid ? Number(row.paid) || undefined : undefined, paymentMethod: row.paymentMethod || undefined };
+      const parsed = tenantIntakeEntrySchema.safeParse(row.kind === "new"
+        ? { ...shared, kind: "new", name: row.name, phone: row.phone, email: row.email.trim() || undefined, university: row.university }
+        : { ...shared, kind: "existing", contact: row.contact });
+      const message = !bed ? "Choose an available bed." : Number(row.paid) > bed.pricePerTermUgx ? "Amount paid exceeds this room’s rent." : !parsed.success ? parsed.error.issues[0]?.message : null;
+      if (message) invalid[row.key] = { key: row.key, status: "failed", message };
+      else if (parsed.success) entries.push(parsed.data);
     }
+    if (Object.keys(invalid).length) { setResults((current) => ({ ...current, ...invalid })); return; }
+    if (!entries.length) return;
+    setPending(true);
+    try {
+      const saved = await api<TenantIntakeResult[]>("/reservations/tenant-intake", { method: "POST", body: JSON.stringify({ entries }) });
+      setResults((current) => ({ ...current, ...Object.fromEntries(saved.map((result) => [result.key, result])) }));
+      router.refresh();
+    } catch (caught) { setError(apiErrorMessage(caught, "Could not save these students. Retry to check each entry.")); }
+    finally { setPending(false); }
   }
-
-  if (done) {
-    return (
-      <Dialog aria-label="Walk-in student added" open onOpenChange={(next) => { if (!next) onClose(); }} size="sm">
-        <DialogHeader title="Student added" onClose={onClose} />
-        <DialogBody>
-          <p role="status" className="text-sm">
-            {name.trim()} now has this room {done.status === "occupied" ? "and is recorded as moved in" : "booked"}. The bed is no longer offered on CampusHomes.
-            {" We created their CampusHomes account. "}
-            {email.trim() ? `We emailed ${email.trim()} how to sign in and see the booking${paidUgx > 0 ? ", with a payment receipt" : ""}.` : `They sign in with ${phone.trim()} to see the booking.`}
-          </p>
-        </DialogBody>
-        <DialogFooter>
-          <Button type="button" onClick={onClose}>Done</Button>
-        </DialogFooter>
-      </Dialog>
-    );
-  }
-
   return (
-    <Dialog aria-label="Add a walk-in student" open onOpenChange={(next) => { if (!next) onClose(); }} size="lg" dismissible={false}>
+    <Dialog aria-label="Add students" open onOpenChange={(open) => { if (!open && !pending) onClose(); }} size="xl" resizable dismissible={false}>
       <form onSubmit={submit} className="contents">
-        <DialogHeader
-          title="Add a walk-in student"
-          description="For a student who came to you in person and has no CampusHomes account. We create their account, book the bed, and text them how to sign in. A student who already has an account reserves the bed from their phone, then you confirm the booking."
-          onClose={onClose}
-        />
-        <DialogBody className="space-y-6">
-          {beds.length === 0 ? (
-            <p role="alert" className="text-sm text-destructive">
-              No free beds right now. Free a bed in Manage rooms first, or check that your hostel is published.
-            </p>
-          ) : (
-            <>
-              <fieldset className="grid gap-3 sm:grid-cols-2">
-                <legend className="mb-2 font-display text-base font-semibold">Student</legend>
-                <label className="block text-sm font-semibold">
-                  Full name <span aria-hidden className="text-destructive">*</span>
-                  <input required minLength={2} maxLength={120} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} className={FIELD} />
-                </label>
-                <label className="block text-sm font-semibold">
-                  Phone number <span aria-hidden className="text-destructive">*</span>
-                  <input required type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+256 7XX XXX XXX" aria-describedby="walk-in-phone-hint" className={FIELD} />
-                  <span id="walk-in-phone-hint" className="mt-1 block text-xs font-normal text-muted-foreground">They sign in with this number.</span>
-                </label>
-                <label className="block text-sm font-semibold">
-                  Email (optional)
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-describedby="walk-in-email-hint" className={FIELD} />
-                  <span id="walk-in-email-hint" className="mt-1 block text-xs font-normal text-muted-foreground">They can sign in with it, and payment receipts go here.</span>
-                </label>
-                <label className="block text-sm font-semibold">
-                  University <span aria-hidden className="text-destructive">*</span>
-                  <select required value={university} onChange={(e) => setUniversity(e.target.value as University)} className={FIELD}>
-                    {UNIVERSITIES.map((id) => <option key={id} value={id}>{UNIVERSITY_LABELS[id]}</option>)}
+        <DialogHeader className="gap-2 p-3 sm:p-5" title="Add students" onClose={() => { if (!pending) onClose(); }} />
+        <DialogBody className="space-y-5">
+          <p className="text-sm text-muted-foreground">Add a walk-in or students already living at your property, one at a time or as a batch. Available beds include approved managed-only and listed properties.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm">{beds.length} free beds · {rows.length} {rows.length === 1 ? "student" : "students"}</p>
+            <Button type="button" variant="secondary" disabled={pending} onClick={refreshBeds}>Refresh beds</Button>
+          </div>
+          {beds.length === 0 && <p role="alert" className="rounded-md border border-border p-3 text-sm">No free beds right now. Check that the property is approved, rooms are open and priced for a current or upcoming semester, and beds are not occupied or blocked. Managed-only properties do not need a public listing.</p>}
+          {rows.map((row, index) => {
+            const bed = beds.find((bed) => bed.id === row.bedId);
+            const result = results[row.key];
+            const locked = Boolean(complete(row.key));
+            const overpaid = Number(row.paid) > (bed?.pricePerTermUgx ?? 0);
+            return <fieldset key={row.key} disabled={pending || locked} className="min-w-0 space-y-4 rounded-lg border border-border p-4">
+              <legend className="max-w-full break-words px-1 font-semibold">Student {index + 1}{row.name.trim() ? ` · ${row.name.trim()}` : ""}</legend>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="min-w-0 flex-1 text-sm font-semibold">Account
+                  <select className={FIELD} value={row.kind} onChange={(e) => update(row.key, { kind: e.target.value as Row["kind"] })}>
+                    <option value="new">New CampusHomes student</option><option value="existing">Existing CampusHomes student</option>
                   </select>
                 </label>
-              </fieldset>
-
-              <fieldset className="space-y-3">
-                <legend className="mb-2 font-display text-base font-semibold">Room</legend>
-                <label className="block text-sm font-semibold">
-                  Bed <span aria-hidden className="text-destructive">*</span>
-                  <select required value={bedId} onChange={(e) => setBedId(e.target.value)} className={FIELD}>
-                    {[...byProperty].map(([propertyName, propertyBeds]) => (
-                      <optgroup key={propertyName} label={propertyName}>
-                        {propertyBeds.map((bed) => (
-                          <option key={bed.id} value={bed.id}>
-                            {bed.roomLabel} · {bed.bedLabel} ({roomCategoryLabel(bed.roomCategory)}{bed.selfContained ? ", self-contained" : ""})
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </label>
-                <div role="radiogroup" aria-label="Move-in" className="grid gap-2 sm:grid-cols-2">
-                  {[
-                    { value: false, title: "Booked, moving in later", body: "They confirm the move-in from their account." },
-                    { value: true, title: "Moved in today", body: "Record the move-in now." },
-                  ].map((option) => (
-                    <label key={String(option.value)} className="flex cursor-pointer gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                      <input type="radio" name="walk-in-moved-in" checked={movedIn === option.value} onChange={() => setMovedIn(option.value)} className="mt-1" />
-                      <span><span className="block text-sm font-semibold">{option.title}</span><span className="block text-xs text-muted-foreground">{option.body}</span></span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset className="grid gap-3 sm:grid-cols-3">
-                <legend className="mb-2 font-display text-base font-semibold">Payment received (optional)</legend>
-                <label className="block text-sm font-semibold">
-                  Booking fee / Amount paid (UGX)
-                  <input
-                    type="number"
-                    min={0}
-                    max={totalUgx || undefined}
-                    inputMode="numeric"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    aria-invalid={overpaid || undefined}
-                    aria-describedby={overpaid ? "walk-in-overpaid" : undefined}
-                    className={FIELD}
-                  />
-                </label>
-                <label className="block text-sm font-semibold">
-                  Total
-                  <input readOnly tabIndex={-1} value={formatUgx(totalUgx)} aria-describedby="walk-in-total-hint" className={`${FIELD} bg-muted/40`} />
-                  <span id="walk-in-total-hint" className="mt-1 block text-xs font-normal text-muted-foreground">This room&apos;s rent per semester.</span>
-                </label>
-                <label className="block text-sm font-semibold">
-                  Balance
-                  <output
-                    aria-live="polite"
-                    className={`${FIELD} flex items-center bg-muted/40 font-semibold ${balanceUgx > 0 || overpaid ? "text-destructive" : "text-foreground"}`}
-                  >
-                    {formatUgx(Math.max(balanceUgx, 0))}
-                  </output>
-                </label>
-                {overpaid && (
-                  <p id="walk-in-overpaid" role="alert" className="text-sm text-destructive sm:col-span-3">
-                    Amount paid is more than the total. Enter at most {formatUgx(totalUgx)}.
-                  </p>
-                )}
-                <label className="block text-sm font-semibold">
-                  Paid with
-                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={FIELD}>
-                    <option value="">Not recorded</option>
-                    {Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </label>
-              </fieldset>
-            </>
-          )}
+                {rows.length > 1 && !locked && <Button aria-label={`Remove student ${index + 1}`} type="button" variant="secondary" onClick={() => setRows((items) => items.filter((item) => item.key !== row.key))}><Trash2 aria-hidden className="size-4" /></Button>}
+              </div>
+              {row.kind === "new" ? <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <label className="text-sm font-semibold">Full name *<input required minLength={2} maxLength={120} className={FIELD} value={row.name} onChange={(e) => update(row.key, { name: e.target.value })} /></label>
+                <label className="text-sm font-semibold">Phone number *<input required type="tel" className={FIELD} placeholder="0771 234567" value={row.phone} onChange={(e) => update(row.key, { phone: e.target.value })} /></label>
+                <label className="text-sm font-semibold">Email (optional)<input type="email" className={FIELD} value={row.email} onChange={(e) => update(row.key, { email: e.target.value })} /></label>
+                <label className="text-sm font-semibold">University *<select className={FIELD} value={row.university} onChange={(e) => update(row.key, { university: e.target.value as University })}>{UNIVERSITIES.map((id) => <option key={id} value={id}>{UNIVERSITY_LABELS[id]}</option>)}</select></label>
+              </div> : <div>
+                <label className="text-sm font-semibold">Verified email or phone *<input required className={FIELD} value={row.contact} onChange={(e) => update(row.key, { contact: e.target.value })} /></label>
+                <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
+              </div>}
+              <label className="block text-sm font-semibold">Property, room and bed *
+                <select required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value })}>
+                  <option value="">Choose a free bed</option>
+                  {beds.map((candidate) => <option key={candidate.id} value={candidate.id} disabled={rows.some((other) => other.key !== row.key && other.bedId === candidate.id)}>{candidate.propertyName} · {candidate.roomLabel} · {candidate.bedLabel}{candidate.semesterName ? ` · ${candidate.semesterName}` : ""}</option>)}
+                </select>
+              </label>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="text-sm font-semibold">Amount paid (UGX)<input type="text" inputMode="numeric" pattern="[0-9]*" className={FIELD} value={row.paid} onChange={(e) => update(row.key, { paid: e.target.value })} aria-invalid={overpaid || undefined} /></label>
+                <label className="text-sm font-semibold">Paid with<select className={FIELD} value={row.paymentMethod} onChange={(e) => update(row.key, { paymentMethod: e.target.value })}><option value="">Not recorded</option>{Object.entries(PAYMENT_METHOD_LABEL).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
+                <div className="text-sm"><p>Rent: <strong>{formatUgx(bed?.pricePerTermUgx ?? 0)}</strong></p><p className="mt-2">Balance: <output aria-live="polite">{formatUgx(Math.max(0, (bed?.pricePerTermUgx ?? 0) - (Number(row.paid) || 0)))}</output></p></div>
+              </div>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={row.movedIn} onChange={(e) => update(row.key, { movedIn: e.target.checked })} />Already moved in / living here</label>
+              {overpaid && !result && <p role="alert" className="text-sm text-destructive">Amount paid exceeds this room’s rent.</p>}
+              {result && <p role={result.status === "failed" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${result.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-foreground"}`}>
+                {result.status === "added" ? "Student added and bed booked." : result.status === "requested" ? "Request recorded. Ask the student to check My reservations using the verified contact above. No booking is made until they accept." : result.message}
+              </p>}
+            </fieldset>;
+          })}
+          <Button type="button" variant="secondary" disabled={pending || rows.length >= 50} onClick={() => setRows((items) => [...items, emptyRow(beds.find((bed) => !items.some((row) => row.bedId === bed.id))?.id)])}><Plus aria-hidden className="mr-2 size-4" />Add another student</Button>
+          <p className="text-xs text-muted-foreground">Up to 50 students per batch. Successful rows stay saved; retry only the rows that need corrections.</p>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </DialogBody>
-        <DialogFooter>
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={pending || beds.length === 0 || overpaid}>{pending ? "Adding…" : "Add student and book bed"}</Button>
+        <DialogFooter className="flex-wrap [&>*]:h-auto [&>*]:min-h-11 [&>*]:whitespace-normal [&>*]:py-2">
+          <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{editable.length ? "Close" : "Done"}</Button>
+          {editable.length > 0 && <Button type="submit" disabled={pending || beds.length === 0 || editable.some((row) => Number(row.paid) > (beds.find((bed) => bed.id === row.bedId)?.pricePerTermUgx ?? 0))}>{pending ? "Saving…" : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
         </DialogFooter>
       </form>
     </Dialog>
