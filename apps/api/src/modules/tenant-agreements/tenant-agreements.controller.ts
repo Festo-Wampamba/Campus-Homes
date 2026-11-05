@@ -19,14 +19,14 @@ export class TenantAgreementsController {
 
   @Get('template/:propertyId/edit')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   getTemplateForEdit(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string) {
     return this.tenantAgreements.getTemplateForEdit(rlsCtx(req), propertyId);
   }
 
   @Get('template/:propertyId/pdf')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   async downloadTemplatePdf(
     @Req() req: AuthenticatedRequest,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
@@ -40,7 +40,7 @@ export class TenantAgreementsController {
 
   @Put('template/:propertyId')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   saveTemplate(
     @Req() req: AuthenticatedRequest,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
@@ -66,7 +66,7 @@ export class TenantAgreementsController {
 
   @Get('property/:propertyId')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('landlord', 'custodian', 'ops_lead', 'admin')
+  @Roles('landlord', 'custodian', 'property_worker', 'ops_lead', 'admin')
   forProperty(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string) {
     return this.tenantAgreements.forProperty(rlsCtx(req), propertyId);
   }
