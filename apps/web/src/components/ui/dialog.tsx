@@ -139,7 +139,7 @@ function DialogHeader({
 }) {
   return (
     <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border p-5">
-      <div>
+      <div className="min-w-0 break-words">
         <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
         {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
       </div>

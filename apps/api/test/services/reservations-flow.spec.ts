@@ -549,9 +549,10 @@ describe('payment receipts and student details (Festo, 2026-10-23)', () => {
     );
     await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [existing]);
     const { bedId: bed } = await seedUnitWithBed('Existing account email');
-    await reservationsService.onboardWalkIn(landlordCtx(landlord1), {
+    await expect(reservationsService.onboardWalkIn(landlordCtx(landlord1), {
       bedId: bed, name: 'Has Account', phone: '+256710000313', email: 'landlord.typed@example.com', university: 'MUK', movedIn: false,
-    });
+    })).rejects.toThrow(/already has a CampusHomes account/);
+    expect((await pool.query(`SELECT 1 FROM reservations WHERE student_id=$1`, [existing])).rowCount).toBe(0);
     const row = await pool.query(`SELECT email FROM users WHERE id = $1`, [existing]);
     expect(row.rows[0].email).toBeNull();
   });

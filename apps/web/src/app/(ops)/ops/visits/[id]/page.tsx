@@ -7,6 +7,7 @@ import {
   type VerificationChecklistComponent,
 } from "@campushomes/shared";
 
+import { PhotoTile } from "@/components/listing/photo-tile";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusChip } from "@/components/status-chip";
 import { getPropertyListings, getPublishableSemesters, getVisitDetail } from "@/lib/ops";
@@ -86,6 +87,18 @@ export default async function VisitDetailPage({
                 </p>
               )}
             </div>
+            {visit.propertyCoverPhotoKey && (
+              <figure className="w-full max-w-60">
+                <PhotoTile
+                  photos={[{ storageKey: visit.propertyCoverPhotoKey }]}
+                  alt="Landlord's cover photo"
+                  className="aspect-video overflow-hidden rounded-md"
+                />
+                <figcaption className="mt-1 text-xs text-muted-foreground">
+                  Landlord&apos;s cover photo, used as the listing cover
+                </figcaption>
+              </figure>
+            )}
             {isLead && visit.result === "passed" && !visit.approvedAt && (
               <ApproveVisitButton visitId={visit.id} />
             )}

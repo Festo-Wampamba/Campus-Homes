@@ -112,6 +112,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   // null until loaded, so a failed load never sends an empty set that would
   // strip the listing's photos.
   const [photos, setPhotos] = useState<VisitPhoto[] | null>(null);
+  const [coverKey, setCoverKey] = useState<string | null>(null);
   const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([
     emptyRoomCategoryRow(),
   ]);
@@ -148,13 +149,22 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         setAmenities(declaredAmenityState(property));
         // First publish starts from the landlord's own description; the lead edits it.
         setDescription(property.description ?? "");
-        setPhotos([...visitPhotos, ...landlordRoomTypePhotos(property, visitPhotos)]);
+        setCoverKey(property.coverPhotoKey);
+        // The landlord's cover joins the set so it can become the listing
+        // cover (orderPhotosCoverFirst decides; the server applies the same rule).
+        const landlordCover: VisitPhoto[] =
+          property.coverPhotoKey && !visitPhotos.some((p) => p.storageKey === property.coverPhotoKey)
+            ? [{ storageKey: property.coverPhotoKey, category: "exterior" }]
+            : [];
+        setPhotos([...landlordCover, ...visitPhotos, ...landlordRoomTypePhotos(property, visitPhotos)]);
         if (listing.status === "verified" && version) {
           // Re-opening a live listing to edit it: keep the published snapshot
           // for the banner, pre-fill amenities/description from it, then fall
           // through to load the rooms so the whole form is editable. Saving
           // creates a new version and stays verified (photos carried server-side).
           setPublished({ version, photos: livePhotos });
+          // Live photos only: a landlord cover the lead removed at first publish
+          // must not come back on every edit.
           setPhotos(livePhotos.map((p) => ({
             storageKey: p.storageKey,
             category: p.category ?? "other",
@@ -295,7 +305,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           idPrefix="publish-room"
         />
       </div>
-      {photos && <PhotoSetEditor photos={photos} onChange={setPhotos} />}
+      {photos && <PhotoSetEditor photos={photos} onChange={setPhotos} landlordCoverKey={coverKey} />}
       <AmenityConfirmation
         groups={amenityGroups(declared)}
         value={amenities}

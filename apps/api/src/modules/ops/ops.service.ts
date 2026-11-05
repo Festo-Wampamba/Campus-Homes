@@ -25,6 +25,7 @@ import {
   type University,
   type VisitPhoto,
   normalizeVisitPhotos,
+  orderPhotosCoverFirst,
 } from '@campushomes/shared';
 
 import { loadEnv } from '../../config/env';
@@ -168,7 +169,7 @@ export class OpsService {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
         `SELECT vv.id AS visit_id, vv.property_id, vv.scheduled_at, vv.result,
-                p.name AS property_name, p.street_address
+                p.name AS property_name, p.street_address, p.cover_photo_key
          FROM verification_visits vv
          JOIN properties p ON p.id = vv.property_id
          WHERE vv.inspector_id = $1 AND vv.approved_at IS NULL
@@ -189,7 +190,7 @@ export class OpsService {
     return this.rlsDb.run(ctx, async (_db, client) => {
       const res = await client.query(
         `SELECT vv.id AS visit_id, vv.property_id, vv.scheduled_at, vv.result,
-                p.name AS property_name, p.street_address
+                p.name AS property_name, p.street_address, p.cover_photo_key
          FROM verification_visits vv
          JOIN properties p ON p.id = vv.property_id
          WHERE vv.inspector_id = $1 AND vv.approved_at IS NOT NULL
@@ -218,7 +219,11 @@ export class OpsService {
         .from(visitCorrections)
         .where(eq(visitCorrections.visitId, visitId))
         .orderBy(desc(visitCorrections.raisedAt));
-      return { ...visit, corrections };
+      const [property] = await db
+        .select({ coverPhotoKey: properties.coverPhotoKey })
+        .from(properties)
+        .where(eq(properties.id, visit.propertyId));
+      return { ...visit, corrections, propertyCoverPhotoKey: property?.coverPhotoKey ?? null };
     });
   }
 
@@ -768,6 +773,7 @@ export class OpsService {
           name: properties.name,
           listingIntent: properties.listingIntent,
           listingRequestedAt: properties.listingRequestedAt,
+          coverPhotoKey: properties.coverPhotoKey,
         })
         .from(properties)
         .where(eq(properties.id, listing.propertyId));
@@ -985,12 +991,12 @@ export class OpsService {
       // Validated here so a bad photo aborts the whole publish; written after
       // commit as service_role (see confirmedPhotoRows).
       const photoRows = input.photos
-        ? await this.confirmedPhotoRows(db, ctx, version.id, priorVersionId, approvedVisit, input.photos)
+        ? await this.confirmedPhotoRows(db, ctx, version.id, priorVersionId, approvedVisit, input.photos, property.coverPhotoKey)
         : [];
 
       return {
         listing: updated, version, approvedVisit, isRepublish, priorVersionId, photoRows,
-        landlordId: property.landlordId, propertyName: property.name,
+        landlordId: property.landlordId, propertyName: property.name, coverPhotoKey: property.coverPhotoKey,
       };
     });
     await this.audit.record(
@@ -1052,7 +1058,12 @@ export class OpsService {
     const visit = input.photos ? undefined : published.approvedVisit;
     // Staged photos are jsonb and may be bare keys (staged before categories)
     // or {storageKey, category} — normalizeVisitPhotos reads both.
-    const visitPhotos = normalizeVisitPhotos(visit?.photoStorageKeys);
+    const staged = normalizeVisitPhotos(visit?.photoStorageKeys);
+    const landlordCover: VisitPhoto[] =
+      published.coverPhotoKey && !staged.some((p) => p.storageKey === published.coverPhotoKey)
+        ? [{ storageKey: published.coverPhotoKey, category: 'exterior' }]
+        : [];
+    const visitPhotos = orderPhotosCoverFirst([...landlordCover, ...staged], published.coverPhotoKey);
     const gpsLat = visit?.visitGpsLat;
     const gpsLon = visit?.visitGpsLon;
     if (visit && visitPhotos.length > 0 && gpsLat != null && gpsLon != null) {
@@ -1065,7 +1076,8 @@ export class OpsService {
             customLabel: photo.category === 'custom' ? (photo.label ?? null) : null,
             selfContained: photo.selfContained ?? null,
             roomCategory: photo.roomCategory ?? null,
-            capturedBy: visit.inspectorId,
+            // The landlord's own cover wasn't captured by the inspector.
+            capturedBy: landlordCover.includes(photo) ? null : visit.inspectorId,
             gpsLat,
             gpsLon,
             capturedAt: visit.completedAt ?? new Date(),
@@ -1095,6 +1107,7 @@ export class OpsService {
     priorVersionId: string | null,
     visit: typeof verificationVisits.$inferSelect,
     photos: VisitPhoto[],
+    landlordCoverKey: string | null,
   ) {
     if (photos.length === 0) return [];
     type Provenance = { capturedBy: string | null; gpsLat: string; gpsLon: string; capturedAt: Date };
@@ -1127,13 +1140,18 @@ export class OpsService {
           if (!known.has(key)) known.set(key, { capturedBy: null, ...visitGps, capturedAt: new Date() });
         }
       }
+      // The landlord's own cover photo (property form), offered to the lead
+      // as the listing cover.
+      if (landlordCoverKey && !known.has(landlordCoverKey)) {
+        known.set(landlordCoverKey, { capturedBy: null, ...visitGps, capturedAt: new Date() });
+      }
     }
     const added = photos.map((p) => p.storageKey).filter((key) => !known.has(key));
     assertOwnedStorageKeys(ctx.userId, added);
     if (added.length > 0 && !visitGps) {
       throw new BadRequestException('The approved visit has no GPS, so new photos cannot be located');
     }
-    return photos.map((photo, i) => ({
+    return orderPhotosCoverFirst(photos, landlordCoverKey).map((photo, i) => ({
         listingVersionId: versionId,
         storageKey: photo.storageKey,
         category: photo.category,

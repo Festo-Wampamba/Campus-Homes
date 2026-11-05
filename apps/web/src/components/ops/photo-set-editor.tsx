@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ImagePlus, Trash2 } from "lucide-react";
 import {
   canBeSelfContained,
+  orderPhotosCoverFirst,
   PHOTO_CATEGORIES,
   PHOTO_CATEGORY_LABELS,
   type PhotoCategory,
@@ -15,15 +16,18 @@ import { RoomTypeSelect } from "@/components/ops/room-type-select";
 import { listingPhotoUrl, uploadToCloudinary, type CloudinarySignature } from "@/lib/cloudinary";
 
 /** The Ops lead's view of a listing's photo set: retype, relabel or remove
- * what the inspector captured, and upload anything they missed. The first
- * photo becomes the cover. */
+ * what the inspector captured, and upload anything they missed. The cover is
+ * picked by orderPhotosCoverFirst, the same rule the publish API applies. */
 export function PhotoSetEditor({
   photos,
   onChange,
+  landlordCoverKey = null,
 }: {
   photos: VisitPhoto[];
   onChange: (photos: VisitPhoto[]) => void;
+  landlordCoverKey?: string | null;
 }) {
+  const coverKey = orderPhotosCoverFirst(photos, landlordCoverKey)[0]?.storageKey;
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +61,8 @@ export function PhotoSetEditor({
       <legend className="text-sm font-medium">Photos</legend>
       <p className="text-xs text-muted-foreground">
         Set what each photo shows, remove any that are wrong, and add photos the inspector missed.
-        The first photo is the cover.
+        The cover is the landlord&apos;s own cover photo; without one, the first Exterior photo,
+        otherwise the first photo.
       </p>
       {photos.length === 0 && (
         <p className="text-sm text-muted-foreground">No photos yet. The listing will go live without any.</p>
@@ -65,6 +70,10 @@ export function PhotoSetEditor({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {photos.map((photo, i) => {
           const src = listingPhotoUrl(photo.storageKey, 400);
+          const badge = [
+            photo.storageKey === coverKey && "Cover",
+            photo.storageKey === landlordCoverKey && "Landlord's cover",
+          ].filter(Boolean).join(" · ");
           return (
             <div key={photo.storageKey} className="space-y-1.5 rounded-md border border-border p-2">
               <div className="relative">
@@ -76,9 +85,9 @@ export function PhotoSetEditor({
                     No preview
                   </div>
                 )}
-                {i === 0 && (
+                {badge && (
                   <span className="absolute left-1 top-1 rounded bg-background/90 px-1.5 py-0.5 text-[11px] font-semibold">
-                    Cover
+                    {badge}
                   </span>
                 )}
                 <button
