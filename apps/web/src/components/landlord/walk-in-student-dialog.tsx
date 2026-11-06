@@ -66,7 +66,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
     const invalid: Record<string, TenantIntakeResult> = {};
     for (const row of editable) {
       const bed = beds.find((bed) => bed.id === row.bedId);
-      const shared = { bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
+      const shared = { emergencyContactName: row.emergencyContactName?.trim() || undefined, emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined, bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
         bookingFeeCollectedUgx: row.paid ? Number(row.paid) || undefined : undefined, paymentMethod: row.paymentMethod || undefined };
       const parsed = tenantIntakeEntrySchema.safeParse(row.kind !== "existing"
         ? { ...shared, kind: row.kind, name: studentName(row), firstName: row.firstName.trim(), lastName: row.lastName.trim(), gender: row.gender || undefined, phone: row.phone.trim() || undefined, email: row.email.trim() || undefined, university: row.university }
@@ -153,6 +153,10 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
               </div>}
               {row.kind === "record" && <p className="text-sm text-muted-foreground">Save a tenant record and book the selected bed immediately. No CampusHomes login or student acceptance is required. Contact details stay with this property record.</p>}
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <label className="text-sm font-semibold">Emergency contact name (optional)<input autoComplete="off" maxLength={120} className={FIELD} value={row.emergencyContactName ?? ""} onChange={(e) => update(row.key, { emergencyContactName: e.target.value })} /></label>
+                <label className="text-sm font-semibold">Emergency contact phone (optional)<input type="tel" autoComplete="off" className={FIELD} placeholder="0771 234567" value={row.emergencyContactPhone ?? ""} onChange={(e) => update(row.key, { emergencyContactPhone: e.target.value })} /></label>
+              </div>
               <label className="block text-sm font-semibold">Property, room and bed *
                 <select required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value, assignmentNote: undefined, assignmentProblem: undefined })}>
                   <option value="">Choose a free bed</option>

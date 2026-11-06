@@ -44,7 +44,19 @@ export type BookReservationInput = z.infer<typeof bookReservationSchema>;
 // Email is optional and must not belong to another account: SMS codes don't
 // reach students yet (Festo, 2026-10-23), so email is how most will sign in.
 // Like the phone, whoever controls the address can claim the account.
+// Emergency contacts belong to this booking; landlords do not edit a student's
+// global identity/profile. Blank values explicitly clear a booking override.
+const tenantEmergencyFields = {
+  emergencyContactName: z.string().trim().max(120),
+  emergencyContactPhone: z.string().trim().max(30).transform(normalizeUgPhone)
+    .refine((value) => value === '' || /^\+?\d{7,15}$/.test(value), 'Enter a valid emergency phone number, including its country code when outside Uganda'),
+};
+export const updateTenantEmergencySchema = z.object(tenantEmergencyFields).strict();
+export type UpdateTenantEmergencyInput = z.infer<typeof updateTenantEmergencySchema>;
+
 export const onboardWalkInSchema = z.object({
+  emergencyContactName: tenantEmergencyFields.emergencyContactName.optional(),
+  emergencyContactPhone: tenantEmergencyFields.emergencyContactPhone.optional(),
   bedId: uuid,
   semesterId: uuid.optional(),
   idempotencyKey: idempotencyKey.optional(),
@@ -74,6 +86,8 @@ export const tenantIntakeEntrySchema = z.discriminatedUnion('kind', [
   tenantRecordSchema,
   onboardWalkInSchema.extend({ kind: z.literal('new'), idempotencyKey }),
   z.object({
+    emergencyContactName: tenantEmergencyFields.emergencyContactName.optional(),
+    emergencyContactPhone: tenantEmergencyFields.emergencyContactPhone.optional(),
     kind: z.literal('existing'), bedId: uuid, semesterId: uuid.optional(), idempotencyKey,
     contact: z.string().trim().min(5).max(254).transform((value) => value.includes('@') ? value.toLowerCase() : normalizeUgPhone(value))
       .refine((value) => z.string().email().safeParse(value).success || ugPhone.safeParse(value).success,
@@ -104,6 +118,7 @@ export type ImportedTenantRow = {
   kind: 'record' | 'new' | 'existing'; phone: string; email: string; university: string;
   propertyName: string; roomLabel: string; bedLabel: string; amountPaid: string;
   rent: string; balance: string; paymentMethod: string; movedIn: boolean; warnings: string[];
+  emergencyContactName?: string; emergencyContactPhone?: string;
 };
 
 // A booking fee / deposit a landlord recorded (0075). Both parties get a copy.

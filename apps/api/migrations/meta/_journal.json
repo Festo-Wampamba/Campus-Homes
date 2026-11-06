@@ -617,6 +617,13 @@
       "when": 1793685202322,
       "tag": "0088_private_tenant_records",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793685203322,
+      "tag": "0089_tenant_emergency_contacts",
+      "breakpoints": true
     }
   ]
 }

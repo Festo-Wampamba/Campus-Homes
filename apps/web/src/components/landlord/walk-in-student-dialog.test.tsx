@@ -148,3 +148,10 @@ it('explains an unmatched room without pretending a positive payment exceeds zer
  expect(container.querySelector('[aria-label="Rent"]')?.textContent).toBe('UGX\u00a0900,000');
  expect(container.textContent).not.toContain('No available room matches');
 });
+it('sends emergency details with a tenant record at intake',async()=>{
+ await open();await fill();
+ await act(async()=>{type(field('Emergency contact name'),'Grace Kato');type(field('Emergency contact phone'),'0771 234567');});
+ mockApi.mockImplementation(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string})=>({key:row.idempotencyKey,status:'added'})));
+ await act(async()=>container.querySelector('form')!.requestSubmit());
+ expect(JSON.parse(mockApi.mock.calls[0][1].body).entries[0]).toMatchObject({kind:'record',emergencyContactName:'Grace Kato',emergencyContactPhone:'+256771234567'});
+});
