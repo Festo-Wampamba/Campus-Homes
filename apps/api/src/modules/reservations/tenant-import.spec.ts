@@ -56,3 +56,13 @@ it('rejects empty, unsupported, oversized and excessive records instead of dropp
 it('makes a CSV template containing exactly the supported headers',async()=>{
   const file=await tenantImportTemplate('csv');expect(file.buffer.toString('utf8').replace(/^\uFEFF/,'').trim()).toBe(TENANT_HEADERS.join(','));
 });
+
+it('imports emergency contacts from current templates and next-of-kin document columns without losing old columns', async()=>{
+ const template=await tenantImportTemplate('xlsx');const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(template.buffer as unknown as ArrayBuffer);
+ const sheet=workbook.getWorksheet('Tenants')!;
+ expect(sheet.getCell('N1').value).toBe('Emergency contact name');expect(sheet.getCell('O1').value).toBe('Emergency contact phone');
+ sheet.addRow(['James','Kato','Male','Tenant record','','','MUK','Courts','A01','1',100000,'cash','No','Grace Kato','0771234567']);
+ expect((await parseTenantFile(Buffer.from(await workbook.xlsx.writeBuffer()),'xlsx'))[0]).toMatchObject({emergencyContactName:'Grace Kato',emergencyContactPhone:'0771234567',roomLabel:'A01',amountPaid:'100000'});
+ expect(tenantRowsFromCells([['First name','Last name','Next of kin name','Next of kin phone'],['James','Kato','Grace Kato','0771234567']])[0]).toMatchObject({emergencyContactName:'Grace Kato',emergencyContactPhone:'0771234567'});
+ expect(tenantRowsFromCells([['First name','Last name','Room'],['James','Kato','A01']])[0]).toMatchObject({emergencyContactName:'',emergencyContactPhone:''});
+});

@@ -6,6 +6,7 @@ import { ChevronRight, Phone } from "lucide-react";
 import type { LandlordTenant } from "@campushomes/shared";
 
 import { PAYMENT_METHOD_LABEL } from "@/components/landlord/confirm-booking-dialog";
+import { TenantEmergencyContactButton } from "@/components/landlord/tenant-emergency-contact";
 import { DownloadTenantsExcel } from "@/components/landlord/download-tenants-excel";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
                     {t.emergencyContactName || t.emergencyContactPhone
                       ? <>{t.emergencyContactName ?? ""}{t.emergencyContactPhone && <span className="block">{t.emergencyContactPhone}</span>}</>
                       : "Not given"}
+                    <div><TenantEmergencyContactButton tenant={t} /></div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.totalUgx)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.paidUgx)}<span className="block text-xs text-muted-foreground">{t.paidUgx === 0 ? "Unpaid" : t.balanceUgx > 0 ? "Part-paid" : "Paid in full"}</span></td>

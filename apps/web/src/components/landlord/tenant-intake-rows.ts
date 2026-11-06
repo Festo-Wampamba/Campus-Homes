@@ -5,6 +5,7 @@ export type TenantIntakeRow = {
   key: string; kind: 'record' | 'new' | 'existing'; firstName: string; lastName: string;
   gender: 'male' | 'female' | ''; phone: string; email: string; contact: string;
   university: University; bedId: string; movedIn: boolean; paid: string; paymentMethod: string;
+  emergencyContactName?: string; emergencyContactPhone?: string;
   importWarnings?: string[];
   documentRowNumber?: number;
   importLocation?: Pick<ImportedTenantRow, "propertyName" | "roomLabel" | "bedLabel">;
@@ -63,7 +64,7 @@ export function importedTenantRows(records:ImportedTenantRow[],beds:WalkInBed[],
     if(record.university&&!universities[normalize(record.university)])warnings.push('University was not recognized. Select the correct one.');
     if(record.paymentMethod&&!methods[normalize(record.paymentMethod)])warnings.push('Payment method was not recognized. Select it in the form.');
     return {...emptyTenantRow(),documentRowNumber:record.rowNumber,kind:'record',firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
-      contact:record.email||record.phone,university:universities[normalize(record.university)]??'MUK',...assignment,movedIn:record.movedIn,paid:record.amountPaid,
+      contact:record.email||record.phone,emergencyContactName:record.emergencyContactName??'',emergencyContactPhone:record.emergencyContactPhone??'',university:universities[normalize(record.university)]??'MUK',...assignment,movedIn:record.movedIn,paid:record.amountPaid,
       paymentMethod:methods[normalize(record.paymentMethod)]??'',importWarnings:warnings,
       importLocation:{propertyName:record.propertyName,roomLabel:record.roomLabel,bedLabel:record.bedLabel}};
   });

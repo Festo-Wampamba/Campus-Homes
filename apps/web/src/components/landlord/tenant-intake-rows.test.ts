@@ -48,3 +48,8 @@ it('imports existing residents as immediate tenant records, preserving names wit
  const [row]=importedTenantRows([{...record,kind:'existing',email:'shared@example.test',phone:''}],[bed],[]);
  expect(row).toMatchObject({kind:'record',firstName:'Amina',lastName:'Nakato',email:'shared@example.test',phone:'',movedIn:true});
 });
+
+it('preserves imported emergency contacts in the review form',()=>{
+ const [row]=importedTenantRows([{...record,emergencyContactName:'Grace Kato',emergencyContactPhone:'0771234567'}],[bed],[]);
+ expect(row).toMatchObject({emergencyContactName:'Grace Kato',emergencyContactPhone:'0771234567'});
+});

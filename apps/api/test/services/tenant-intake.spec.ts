@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { tenantIntakeSchema } from '@campushomes/shared';
+import { tenantIntakeSchema, updateTenantEmergencySchema } from '@campushomes/shared';
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
 import { ProvisioningService } from '../../src/modules/auth/provisioning.service';
@@ -269,4 +269,46 @@ it('does not claim a private tenant when its supplied contact later signs up', a
  expect(account!.id).not.toBe(recordId);
  expect((await service.mine({userId:account!.id,role:'student'}))).toHaveLength(0);
  expect((await pool.query('SELECT logto_user_id,name FROM users WHERE id=$1',[recordId])).rows[0]).toEqual({logto_user_id:null,name:'James Kananula'});
+});
+
+it('saves emergency contacts at intake and allows missing details to be added, corrected and cleared after booking', async()=>{
+ const target=await bed();
+ const [saved]=await service.tenantIntake(landlord(),{entries:[record(target.bed)]});
+ const reservationId=saved!.reservationId!;
+ const update=updateTenantEmergencySchema.parse({emergencyContactName:' Grace Kato ',emergencyContactPhone:'0771 234567'});
+ await service.updateTenantEmergency(landlord(),reservationId,update);
+ const reread=new ReservationsService(new RlsDb(pool),new AuditService(rls),null,null);
+ expect((await reread.landlordTenants(landlord())).find(t=>t.reservationId===reservationId)).toMatchObject({emergencyContactName:'Grace Kato',emergencyContactPhone:'+256771234567',paidUgx:230000,balanceUgx:570000,status:'booked'});
+ expect(await reread.studentDetails(landlord(),reservationId)).toMatchObject({emergencyContactName:'Grace Kato',emergencyContactPhone:'+256771234567'});
+ await expect(service.updateTenantEmergency({userId:outsider,role:'landlord'},reservationId,update)).rejects.toThrow(/permission/i);
+ await service.updateTenantEmergency(landlord(),reservationId,{emergencyContactName:'Updated Kin',emergencyContactPhone:''});
+ expect((await service.landlordTenants(landlord())).find(t=>t.reservationId===reservationId)).toMatchObject({emergencyContactName:'Updated Kin',emergencyContactPhone:null});
+ await service.updateTenantEmergency(landlord(),reservationId,{emergencyContactName:'',emergencyContactPhone:''});
+ expect((await service.landlordTenants(landlord())).find(t=>t.reservationId===reservationId)).toMatchObject({emergencyContactName:null,emergencyContactPhone:null});
+ await pool.query("UPDATE reservations SET status='released' WHERE id=$1",[reservationId]);
+ await expect(service.updateTenantEmergency(landlord(),reservationId,update)).rejects.toThrow(/only be updated/i);
+ const next=await bed();
+ const [withContact]=await service.tenantIntake(landlord(),{entries:[{...record(next.bed),...update}]});
+ expect((await reread.landlordTenants(landlord())).find(t=>t.reservationId===withContact!.reservationId)).toMatchObject(update);
+});
+it('keeps a booking emergency override separate from a linked student profile and other bookings', async()=>{
+ const a=await bed(), b=await bed();
+ await pool.query("UPDATE users SET emergency_contact_name='Profile Kin',emergency_contact_phone='+256772222222' WHERE id=$1",[student]);
+ await service.tenantIntake(landlord(),{entries:[existing(a.bed)]});
+ const requestId=(await service.tenantAssignmentRequests(actor()))[0]!.id;
+ const accepted=await service.respondTenantAssignment(actor(),requestId,true);
+ await service.tenantIntake(landlord(),{entries:[existing(b.bed)]});
+ const secondId=(await service.tenantAssignmentRequests(actor()))[0]!.id;
+ const second=await service.respondTenantAssignment(actor(),secondId,true);
+ expect((await service.studentDetails(landlord(),accepted.reservationId!)).emergencyContactName).toBe('Profile Kin');
+ await service.updateTenantEmergency(landlord(),accepted.reservationId!,{emergencyContactName:'Booking Kin',emergencyContactPhone:'+256773333333'});
+ expect((await service.studentDetails(landlord(),second.reservationId!)).emergencyContactName).toBe('Profile Kin');
+ expect((await pool.query('SELECT emergency_contact_name FROM users WHERE id=$1',[student])).rows[0].emergency_contact_name).toBe('Profile Kin');
+ await service.updateTenantEmergency(landlord(),accepted.reservationId!,{emergencyContactName:'',emergencyContactPhone:''});
+ expect((await service.studentDetails(landlord(),accepted.reservationId!)).emergencyContactName).toBeNull();
+});
+it('accepts international emergency contacts and rejects invalid phone numbers or unexpected profile fields',()=>{
+ expect(updateTenantEmergencySchema.parse({emergencyContactName:'Kin',emergencyContactPhone:'+254 712 345678'}).emergencyContactPhone).toBe('+254712345678');
+ expect(updateTenantEmergencySchema.safeParse({emergencyContactName:'Kin',emergencyContactPhone:'invalid'}).success).toBe(false);
+ expect(updateTenantEmergencySchema.safeParse({emergencyContactName:'Kin',emergencyContactPhone:'',email:'unwanted@example.test'}).success).toBe(false);
 });

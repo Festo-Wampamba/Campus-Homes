@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 
-import { bookReservationSchema, onboardWalkInSchema, tenantIntakeSchema, recordPaymentSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
+import { bookReservationSchema, onboardWalkInSchema, tenantIntakeSchema, updateTenantEmergencySchema, recordPaymentSchema, releaseReservationSchema, reserveSchema } from '@campushomes/shared';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
@@ -13,6 +13,7 @@ import { parseTenantFile, tenantImportTemplate } from './tenant-import';
 class ReserveDto extends createZodDto(reserveSchema) {}
 class BookDto extends createZodDto(bookReservationSchema) {}
 class OnboardWalkInDto extends createZodDto(onboardWalkInSchema) {}
+class UpdateTenantEmergencyDto extends createZodDto(updateTenantEmergencySchema) {}
 class TenantIntakeDto extends createZodDto(tenantIntakeSchema) {}
 class ReleaseDto extends createZodDto(releaseReservationSchema) {}
 class RecordPaymentDto extends createZodDto(recordPaymentSchema) {}
@@ -73,6 +74,12 @@ export class ReservationsController {
     @Body() body: RecordPaymentDto,
   ) {
     return this.reservationsService.recordPayment(rlsCtx(req), id, body);
+  }
+
+  @Patch(':id/emergency-contact')
+  @Roles('landlord')
+  updateTenantEmergency(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateTenantEmergencyDto) {
+    return this.reservationsService.updateTenantEmergency(rlsCtx(req), id, body);
   }
 
   @Get(':id/student')
