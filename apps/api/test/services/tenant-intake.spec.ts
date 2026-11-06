@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { tenantIntakeSchema } from '@campushomes/shared';
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
+import { ProvisioningService } from '../../src/modules/auth/provisioning.service';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
 import { testDatabaseUrl } from '../test-database-url';
@@ -145,6 +146,10 @@ it('supports both new and existing students at a verified listed property', asyn
   const booked = (await pool.query('SELECT id,student_id,status FROM reservations WHERE bed_id=$1',[target.bed])).rows[0];
   expect(booked.status).toBe('occupied');
   await pool.query("UPDATE reservations SET status='released' WHERE id=$1",[booked.id]);
+  const [savedRecord] = await service.tenantIntake(landlord(),{entries:[{...record(target.bed),movedIn:false}]});
+  expect(savedRecord).toMatchObject({status:'added',bookingStatus:'booked'});
+  expect((await service.landlordTenants(landlord())).find(t=>t.reservationId===savedRecord!.reservationId)).toMatchObject({name:'James Kananula',paidUgx:230000,balanceUgx:570000});
+  await pool.query("UPDATE reservations SET status='released' WHERE id=$1",[savedRecord!.reservationId]);
   await service.tenantIntake(landlord(),{entries:[{...existing(target.bed),movedIn:true}]});
   const requestId=(await service.tenantAssignmentRequests(actor()))[0]!.id;
   await service.respondTenantAssignment(actor(),requestId,true);
@@ -180,4 +185,88 @@ it('keeps assignment rows service-only under RLS',async()=>{
   const target=await bed(); await request(target.bed);
   const rows=await rls.run(actor(),async(_db,client)=>client.query('SELECT id FROM tenant_assignment_requests'));
   expect(rows.rowCount).toBe(0);
+});
+
+const record = (bedId: string) => ({ kind: 'record' as const, idempotencyKey: randomUUID(), bedId, semesterId: semester,
+  name: 'James Kananula', firstName: 'James', lastName: 'Kananula', gender: 'male' as const,
+  university: 'MUK' as const, movedIn: false, bookingFeeCollectedUgx: 230000, paymentMethod: 'cash' as const });
+it('persists a private tenant, payment, booked status and balance without account acceptance', async () => {
+  const target = await bed();
+  const entry = record(target.bed);
+  const [saved] = await service.tenantIntake(landlord(), { entries: [entry] });
+  expect(saved).toMatchObject({ status: 'added', bookingStatus: 'booked', reservationId: expect.any(String) });
+  // A fresh service/read transaction proves this is committed, not an in-memory success.
+  const freshService = new ReservationsService(new RlsDb(pool), new AuditService(rls), null, null);
+  const tenant = (await freshService.landlordTenants(landlord())).find(t => t.reservationId === saved!.reservationId)!;
+  expect(tenant).toMatchObject({ name: 'James Kananula', status: 'booked', paidUgx: 230000, balanceUgx: 570000 });
+  expect((await freshService.walkInBeds(landlord())).some(b => b.id === target.bed)).toBe(false);
+  expect((await freshService.receipts(landlord(), 'landlord')).find(r => r.reservationId === saved!.reservationId)).toMatchObject({totalUgx:230000,studentName:'James Kananula'});
+  expect((await freshService.landlordTenants({userId:outsider,role:'landlord'})).some(t=>t.reservationId===saved!.reservationId)).toBe(false);
+  await expect(freshService.studentDetails({userId:outsider,role:'landlord'}, saved!.reservationId!)).rejects.toThrow();
+  await freshService.confirmMoveIn(landlord(), saved!.reservationId!);
+  expect((await freshService.landlordTenants(landlord())).find(t => t.reservationId === saved!.reservationId)).toMatchObject({status:'occupied',paidUgx:230000,balanceUgx:570000});
+  const payment = {amountUgx:570000,idempotencyKey:randomUUID(),paymentMethod:'cash' as const};
+  await freshService.recordPayment(landlord(),saved!.reservationId!,payment);
+  await freshService.recordPayment(landlord(),saved!.reservationId!,payment);
+  expect((await freshService.landlordTenants(landlord())).find(t=>t.reservationId===saved!.reservationId)).toMatchObject({paidUgx:800000,balanceUgx:0});
+});
+it('keeps repeated contacts as separate private tenants without claiming a real account', async () => {
+  const a = await bed(), b = await bed();
+  const entries = [{...record(a.bed), email:'student@intake.example',phone:'+256721111113'},
+    {...record(b.bed), name:'Edward Kiwanda',email:'student@intake.example',phone:'+256721111113',movedIn:true}];
+  const saved = await service.tenantIntake(landlord(),{entries});
+  expect(saved.map(s=>s.bookingStatus)).toEqual(['booked','occupied']);
+  const profiles = (await pool.query(`SELECT u.* FROM users u JOIN reservations r ON r.student_id=u.id WHERE r.id=ANY($1::uuid[])`,[saved.map(s=>s.reservationId)])).rows;
+  expect(new Set(profiles.map(u=>u.id)).size).toBe(2);
+  for(const profile of profiles) {
+    expect(profile).toMatchObject({phone:null,email:null,logto_user_id:null,contact_email:'student@intake.example',contact_phone:'+256721111113'});
+    expect(profile.id).not.toBe(student);
+    await expect(pool.query('UPDATE users SET logto_user_id=$2 WHERE id=$1',[profile.id,'cannot-claim-record'])).rejects.toThrow(/users_tenancy_no_login/);
+  }
+  expect((await pool.query('SELECT name,email,phone FROM users WHERE id=$1',[student])).rows[0]).toMatchObject({name:'Original Name',email:'student@intake.example',phone:'+256721111113'});
+  const tenants = await service.landlordTenants(landlord());
+  expect(tenants.find(t=>t.reservationId===saved[1]!.reservationId)).toMatchObject({name:'Edward Kiwanda',email:'student@intake.example',phone:'+256721111113'});
+});
+it('makes concurrent private-record retries idempotent and refuses changed payloads', async () => {
+  const target=await bed(), entry=record(target.bed);
+  const results=await Promise.all([service.tenantIntake(landlord(),{entries:[entry]}),service.tenantIntake(landlord(),{entries:[entry]})]);
+  expect(results[0]).toEqual(results[1]);
+  expect(results[0]![0]!.status).toBe('added');
+  expect((await pool.query('SELECT count(*)::int AS n FROM reservations WHERE bed_id=$1',[target.bed])).rows[0].n).toBe(1);
+  expect((await pool.query('SELECT count(*)::int AS n FROM payment_receipts WHERE reservation_id=$1',[results[0]![0]!.reservationId])).rows[0].n).toBe(1);
+  expect((await service.tenantIntake(landlord(),{entries:[{...entry,name:'Different Person'}]}))[0]).toMatchObject({status:'failed',message:expect.stringMatching(/different details/)});
+});
+it('rolls back a failed private record and allows retry without phantom accounts or money', async () => {
+  const a=await bed(), b=await bed();
+  const entries=[record(a.bed),{...record(b.bed),bookingFeeCollectedUgx:900000}];
+  const saved=await service.tenantIntake(landlord(),{entries});
+  expect(saved.map(s=>s.status)).toEqual(['added','failed']);
+  expect((await pool.query('SELECT count(*)::int AS n FROM users WHERE tenancy_property_id=$1',[b.property])).rows[0].n).toBe(0);
+  const replay=await service.tenantIntake(landlord(),{entries:[entries[0]!,{...entries[1]!,bookingFeeCollectedUgx:30000}]});
+  expect(replay.map(s=>s.status)).toEqual(['added','added']);
+  expect((await pool.query('SELECT count(*)::int AS n FROM reservations WHERE bed_id=ANY($1::uuid[])',[entries.map(e=>e.bedId)])).rows[0].n).toBe(2);
+});
+it('rejects foreign/private inventory and records zero payment as a booked unpaid tenant', async () => {
+  const target=await bed(), entry={...record(target.bed),bookingFeeCollectedUgx:0};
+  expect((await service.tenantIntake({userId:outsider,role:'landlord'},{entries:[entry]}))[0]!.status).toBe('failed');
+  const [saved]=await service.tenantIntake(landlord(),{entries:[entry]});
+  expect((await service.landlordTenants(landlord())).find(t=>t.reservationId===saved!.reservationId)).toMatchObject({status:'booked',paidUgx:0,balanceUgx:800000});
+  expect((await pool.query('SELECT count(*)::int AS n FROM payment_receipts WHERE reservation_id=$1',[saved!.reservationId])).rows[0].n).toBe(0);
+});
+
+it('serializes competing records for one bed without leaving an extra tenant or receipt', async()=>{
+ const target=await bed();
+ const outcomes=await Promise.all([service.tenantIntake(landlord(),{entries:[record(target.bed)]}),service.tenantIntake(landlord(),{entries:[record(target.bed)]})]);
+ expect(outcomes.flat().map(r=>r.status).sort()).toEqual(['added','failed']);
+ expect((await pool.query('SELECT count(*)::int AS n FROM users WHERE tenancy_property_id=$1',[target.property])).rows[0].n).toBe(1);
+});
+
+it('does not claim a private tenant when its supplied contact later signs up', async()=>{
+ const target=await bed();
+ const [saved]=await service.tenantIntake(landlord(),{entries:[{...record(target.bed),email:'private-record@intake.example',phone:'+256782221111'}]});
+ const recordId=(await pool.query('SELECT student_id FROM reservations WHERE id=$1',[saved!.reservationId])).rows[0].student_id;
+ const account=await new ProvisioningService(rls).provision({sub:'private-contact-signup',email:'private-record@intake.example',emailVerified:true,phoneNumber:'+256782221111',phoneVerified:true},'consumer');
+ expect(account!.id).not.toBe(recordId);
+ expect((await service.mine({userId:account!.id,role:'student'}))).toHaveLength(0);
+ expect((await pool.query('SELECT logto_user_id,name FROM users WHERE id=$1',[recordId])).rows[0]).toEqual({logto_user_id:null,name:'James Kananula'});
 });

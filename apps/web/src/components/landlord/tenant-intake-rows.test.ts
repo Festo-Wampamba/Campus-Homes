@@ -43,3 +43,8 @@ it('rematches an unresolved import on refresh without losing corrections, retry 
  expect(refreshed[0]?.bedId).toBe('b1');
  expect(refreshed[1]).toMatchObject({key,lastName:'Corrected',paid:'450000',bedId:'b2',assignmentProblem:undefined});
 });
+
+it('imports existing residents as immediate tenant records, preserving names without linking contacts',()=>{
+ const [row]=importedTenantRows([{...record,kind:'existing',email:'shared@example.test',phone:''}],[bed],[]);
+ expect(row).toMatchObject({kind:'record',firstName:'Amina',lastName:'Nakato',email:'shared@example.test',phone:'',movedIn:true});
+});

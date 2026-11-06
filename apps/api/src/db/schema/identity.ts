@@ -1,6 +1,8 @@
-import { boolean, date, pgTable, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { type AnyPgColumn, boolean, check, date, index, pgTable, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { catchment, kycStatus, opsTeam, university, userRole, userStatus } from './enums';
+import { properties } from './property';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -35,6 +37,9 @@ export const users = pgTable('users', {
   emergencyContactPhone: text('emergency_contact_phone'),
   // Onboarding contact number (0062). Never an identity key — see users.phone.
   contactPhone: text('contact_phone'),
+  contactEmail: text('contact_email'),
+  // A private landlord record cannot be claimed by signing in with its contacts.
+  tenancyPropertyId: uuid('tenancy_property_id').references((): AnyPgColumn => properties.id, { onDelete: 'cascade' }),
   notes: text('notes'),
   // Admin "delete" is deliberately recoverable: identity and audit history
   // remain intact while all sessions and active access grants are revoked.
@@ -44,7 +49,10 @@ export const users = pgTable('users', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  check('users_tenancy_no_login', sql`${t.tenancyPropertyId} IS NULL OR (${t.phone} IS NULL AND ${t.email} IS NULL AND ${t.logtoUserId} IS NULL)`),
+  index('users_tenancy_property_idx').on(t.tenancyPropertyId).where(sql`${t.tenancyPropertyId} IS NOT NULL`),
+]);
 
 export const students = pgTable('students', {
   userId: uuid('user_id')

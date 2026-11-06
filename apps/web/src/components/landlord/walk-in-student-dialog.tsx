@@ -68,8 +68,8 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
       const bed = beds.find((bed) => bed.id === row.bedId);
       const shared = { bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
         bookingFeeCollectedUgx: row.paid ? Number(row.paid) || undefined : undefined, paymentMethod: row.paymentMethod || undefined };
-      const parsed = tenantIntakeEntrySchema.safeParse(row.kind === "new"
-        ? { ...shared, kind: "new", name: studentName(row), firstName: row.firstName.trim(), lastName: row.lastName.trim(), gender: row.gender || undefined, phone: row.phone, email: row.email.trim() || undefined, university: row.university }
+      const parsed = tenantIntakeEntrySchema.safeParse(row.kind !== "existing"
+        ? { ...shared, kind: row.kind, name: studentName(row), firstName: row.firstName.trim(), lastName: row.lastName.trim(), gender: row.gender || undefined, phone: row.phone.trim() || undefined, email: row.email.trim() || undefined, university: row.university }
         : { ...shared, kind: "existing", contact: row.contact });
       const invalidMoney = Boolean(row.paid) && (!/^\d+$/.test(row.paid) || !Number.isSafeInteger(Number(row.paid)));
       const message = invalidMoney ? "Enter a whole UGX amount, using digits only." : !bed ? "Choose an available bed." : Number(row.paid) > bed.pricePerTermUgx ? "Amount paid exceeds this room’s rent." : !parsed.success ? parsed.error.issues[0]?.message : null;
@@ -133,18 +133,18 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
             return <fieldset key={row.key} disabled={pending || locked} className="min-w-0 space-y-4 rounded-lg border border-border p-4">
               <legend className="max-w-full break-words px-1 font-semibold">Student{studentName(row) ? ` · ${studentName(row)}` : ""}</legend>
               <div className="flex flex-wrap items-end gap-3">
-                <label className="min-w-0 flex-1 text-sm font-semibold">Account
+                <label className="min-w-0 flex-1 text-sm font-semibold">How to add
                   <select className={FIELD} value={row.kind} onChange={(e) => update(row.key, { kind: e.target.value as Row["kind"] })}>
-                    <option value="new">New CampusHomes student</option><option value="existing">Existing CampusHomes student</option>
+                    <option value="record">Tenant record (new booking or existing resident)</option><option value="new">Create CampusHomes account and book</option><option value="existing">Send room offer (student must accept)</option>
                   </select>
                 </label>
                 {entryMode === 'manual' && rows.length > 1 && !locked && <Button aria-label={`Remove student ${index + 1}`} type="button" variant="secondary" onClick={() => setRows((items) => items.filter((item) => item.key !== row.key))}><Trash2 aria-hidden className="size-4" /></Button>}
               </div>
-              {row.kind === "new" ? <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              {row.kind !== "existing" ? <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <label className="text-sm font-semibold">First name *<input required maxLength={60} autoComplete="given-name" className={FIELD} value={row.firstName} onChange={(e) => update(row.key, { firstName: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Last name *<input required maxLength={60} autoComplete="family-name" className={FIELD} value={row.lastName} onChange={(e) => update(row.key, { lastName: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Gender<select className={FIELD} value={row.gender} onChange={(e) => update(row.key, { gender: e.target.value as Row["gender"] })}><option value="">Not recorded</option><option value="male">Male</option><option value="female">Female</option></select></label>
-                <label className="text-sm font-semibold">Phone number *<input required type="tel" className={FIELD} placeholder="0771 234567" value={row.phone} onChange={(e) => update(row.key, { phone: e.target.value })} /></label>
+                <label className="text-sm font-semibold">Phone number {row.kind === "new" ? "*" : "(optional)"}<input required={row.kind === "new"} type="tel" className={FIELD} placeholder="0771 234567" value={row.phone} onChange={(e) => update(row.key, { phone: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Email (optional)<input type="email" className={FIELD} value={row.email} onChange={(e) => update(row.key, { email: e.target.value })} /></label>
                 <label className="text-sm font-semibold">University *<select className={FIELD} value={row.university} onChange={(e) => update(row.key, { university: e.target.value as University })}>{UNIVERSITIES.map((id) => <option key={id} value={id}>{UNIVERSITY_LABELS[id]}</option>)}</select></label>
               </div> : <div>
@@ -152,6 +152,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <label className="text-sm font-semibold">Verified email or phone *<input required className={FIELD} value={row.contact} onChange={(e) => update(row.key, { contact: e.target.value })} /></label>
                 <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
               </div>}
+              {row.kind === "record" && <p className="text-sm text-muted-foreground">Save a tenant record and book the selected bed immediately. No CampusHomes login or student acceptance is required. Contact details stay with this property record.</p>}
               <label className="block text-sm font-semibold">Property, room and bed *
                 <select required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value, assignmentNote: undefined, assignmentProblem: undefined })}>
                   <option value="">Choose a free bed</option>
@@ -167,10 +168,11 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <div className="min-w-0 text-sm font-semibold"><p>Balance (UGX)</p><output aria-label="Balance" aria-live="polite" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{bed ? formatUgx(Math.max(0, bed.pricePerTermUgx - (Number(row.paid) || 0))) : "Select a room first"}</output></div>
               </div>
               <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={row.movedIn} onChange={(e) => update(row.key, { movedIn: e.target.checked })} />Already moved in / living here</label>
+              {!row.movedIn && row.kind !== "existing" && <p className="text-sm text-muted-foreground">This tenant will be booked and awaiting move-in. Any amount paid is recorded immediately.</p>}
               {!!row.importWarnings?.length && <div role="note" className="space-y-1 rounded-md border border-border bg-muted/30 p-3 text-sm"><p className="font-semibold">Review imported row</p>{row.importWarnings.map((warning)=><p key={warning}>{warning}</p>)}</div>}
               {overpaid && !result && <p role="alert" className="text-sm text-destructive">Amount paid exceeds this room’s rent.</p>}
               {result && <p role={result.status === "failed" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${result.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-foreground"}`}>
-                {result.status === "added" ? "Student added and bed booked." : result.status === "requested" ? "Request recorded. Ask the student to check My reservations using the verified contact above. No booking is made until they accept." : result.message}
+                {result.status === "added" ? (result.bookingStatus === "occupied" ? "Tenant saved, payment recorded and move-in confirmed." : "Tenant saved and bed booked, awaiting move-in. Any amount paid has been recorded.") : result.status === "requested" ? "Room offer submitted. If the contact matches a verified student account, they can accept in My reservations. No tenancy or payment is recorded until acceptance." : result.message}
               </p>}
             </fieldset>;
           })}

@@ -43,6 +43,7 @@ export const reservations = pgTable(
       .references(() => listingVersions.id),
     status: reservationStatus('status').notNull().default('reserved'),
     idempotencyKey: text('idempotency_key').notNull(),
+    intakeFingerprint: text('intake_fingerprint'),
 
     // Snapshot of the bed's unit_semester_pricing row at reserve time
     // (2026-09 permanent-rooms redesign). Rooms are now reused across

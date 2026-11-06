@@ -20,14 +20,15 @@ const FIELD =
 
 function StatusChip({ status }: { status: LandlordTenant["status"] }) {
   return (
-    <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      {status === "occupied" ? "Moved in" : "Booked"}
+    <span className="mt-1 inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      {status === "occupied" ? "Moved in" : "Booked · Awaiting move-in"}
     </span>
   );
 }
 
 export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
   const [openRoom, setOpenRoom] = useState<TenantRoom | null>(null);
+  const [movingIn, setMovingIn] = useState<LandlordTenant | null>(null);
   const [paying, setPaying] = useState<LandlordTenant | null>(null);
   const rooms = usePagination(tenantsByRoom(tenants), 12);
   const rows = usePagination(tenants, 10);
@@ -62,7 +63,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
           <h2 id="tenant-records-heading" className="text-lg">Tenant records</h2>
           <DownloadTenantsExcel />
         </div>
-        <div className="overflow-x-auto rounded-md border border-border">
+        <div role="region" aria-labelledby="tenant-records-heading" tabIndex={0} className="relative max-w-full overflow-x-auto rounded-md border border-border focus-visible:outline-2 focus-visible:outline-ring">
           <table className="w-full min-w-[56rem] text-left text-sm">
             <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
               <tr>
@@ -85,7 +86,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
                     <span className="block text-xs text-muted-foreground">{t.propertyName} · {t.bedLabel}</span>
                   </td>
                   <td className="px-3 py-2 text-foreground">
-                    {t.name ?? "Not given"}
+                    <span className="block">{t.name ?? "Not given"}</span>
                     <StatusChip status={t.status} />
                   </td>
                   <td className="px-3 py-2">{t.phone ? <a href={`tel:${t.phone}`} className="text-primary hover:underline">{t.phone}</a> : "Not given"}</td>
@@ -96,16 +97,19 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
                       : "Not given"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.totalUgx)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.paidUgx)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.paidUgx)}<span className="block text-xs text-muted-foreground">{t.paidUgx === 0 ? "Unpaid" : t.balanceUgx > 0 ? "Part-paid" : "Paid in full"}</span></td>
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${t.balanceUgx > 0 ? "text-destructive" : "text-foreground"}`}>
                     {t.balanceUgx > 0 ? formatUgx(t.balanceUgx) : "Paid in full"}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    <div className="flex flex-wrap justify-end gap-2">
+                    {t.status === "booked" && <Button type="button" variant="secondary" size="sm" onClick={() => setMovingIn(t)}>Confirm move-in</Button>}
                     {t.balanceUgx > 0 && (
                       <Button type="button" variant="secondary" size="sm" onClick={() => setPaying(t)}>
                         Record payment
                       </Button>
                     )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -139,6 +143,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
         </Dialog>
       )}
 
+      {movingIn && <ConfirmTenantMoveIn tenant={movingIn} onClose={() => setMovingIn(null)} />}
       {paying && <RecordPaymentDialog tenant={paying} onClose={() => setPaying(null)} />}
     </div>
   );
@@ -178,7 +183,7 @@ function RecordPaymentDialog({ tenant, onClose }: { tenant: LandlordTenant; onCl
       <form onSubmit={submit} className="flex min-h-0 flex-auto flex-col">
         <DialogHeader
           title="Record a payment"
-          description={`${tenant.name ?? "Student"} · ${tenant.roomLabel}. They get an emailed receipt.`}
+          description={`${tenant.name ?? "Student"} · ${tenant.roomLabel}. A receipt is saved with this booking.`}
           onClose={onClose}
         />
         <DialogBody className="space-y-4">
@@ -223,4 +228,23 @@ function RecordPaymentDialog({ tenant, onClose }: { tenant: LandlordTenant; onCl
       </form>
     </Dialog>
   );
+}
+
+function ConfirmTenantMoveIn({ tenant, onClose }: { tenant: LandlordTenant; onClose: () => void }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function confirm() {
+    setPending(true); setError(null);
+    try {
+      await api(`/reservations/${tenant.reservationId}/move-in`, { method: "POST" });
+      router.refresh(); onClose();
+    } catch (caught) { setError(apiErrorMessage(caught, "Could not confirm move-in. Try again.")); }
+    finally { setPending(false); }
+  }
+  return <Dialog aria-label="Confirm tenant move-in" open size="sm" dismissible={false} onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
+    <DialogHeader title="Confirm move-in" onClose={() => { if (!pending) onClose(); }} />
+    <DialogBody className="space-y-3"><p>Confirm that {tenant.name ?? "this student"} is now living in {tenant.roomLabel}, {tenant.bedLabel} at {tenant.propertyName}.</p><p className="text-sm text-muted-foreground">Their status will change from booked to moved in. Their recorded payments and balance stay the same.</p>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</DialogBody>
+    <DialogFooter><Button variant="secondary" disabled={pending} onClick={onClose}>Cancel</Button><Button disabled={pending} onClick={confirm}>{pending ? "Saving…" : "Confirm move-in"}</Button></DialogFooter>
+  </Dialog>;
 }

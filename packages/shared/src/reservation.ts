@@ -62,9 +62,16 @@ export const onboardWalkInSchema = z.object({
 });
 export type OnboardWalkInInput = z.infer<typeof onboardWalkInSchema>;
 
+// Private property records book immediately without creating/claiming a login.
+// Supplied contacts are bookkeeping data, never authentication identifiers.
+export const tenantRecordSchema = onboardWalkInSchema.extend({
+  kind: z.literal('record'), idempotencyKey, phone: ugPhone.optional(),
+});
+
 // Existing accounts accept the assignment themselves; the landlord never receives
 // account lookup results or overwrites identity data. Each batch row is retry-safe.
 export const tenantIntakeEntrySchema = z.discriminatedUnion('kind', [
+  tenantRecordSchema,
   onboardWalkInSchema.extend({ kind: z.literal('new'), idempotencyKey }),
   z.object({
     kind: z.literal('existing'), bedId: uuid, semesterId: uuid.optional(), idempotencyKey,
@@ -86,7 +93,7 @@ export const tenantIntakeSchema = z.object({ entries: z.array(tenantIntakeEntryS
     }
   });
 export type TenantIntakeInput = z.infer<typeof tenantIntakeSchema>;
-export type TenantIntakeResult = { key: string; status: 'added' | 'requested' | 'failed'; message?: string };
+export type TenantIntakeResult = { key: string; status: 'added' | 'requested' | 'failed'; reservationId?: string; bookingStatus?: 'booked' | 'occupied'; message?: string };
 export type TenantAssignmentRequest = {
   id: string; propertyName: string; roomLabel: string; bedLabel: string;
   pricePerTermUgx: number; movedIn: boolean; amountPaidUgx: number; expiresAt: string;
@@ -94,7 +101,7 @@ export type TenantAssignmentRequest = {
 
 export type ImportedTenantRow = {
   rowNumber: number; firstName: string; lastName: string; gender: 'male' | 'female' | '';
-  kind: 'new' | 'existing'; phone: string; email: string; university: string;
+  kind: 'record' | 'new' | 'existing'; phone: string; email: string; university: string;
   propertyName: string; roomLabel: string; bedLabel: string; amountPaid: string;
   rent: string; balance: string; paymentMethod: string; movedIn: boolean; warnings: string[];
 };

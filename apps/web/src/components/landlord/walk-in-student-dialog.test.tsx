@@ -27,9 +27,9 @@ it("saves a new student with normalized phone and a retry key",async()=>{
   await act(async()=>container.querySelector("form")!.requestSubmit());
   const payload=JSON.parse(mockApi.mock.calls[0][1].body).entries[0];
   expect(mockApi.mock.calls[0][0]).toBe("/reservations/tenant-intake");
-  expect(payload).toMatchObject({kind:"new",phone:"+256771234567",bedId:BED.id,name:"Amina Nakato",movedIn:false});
+  expect(payload).toMatchObject({kind:"record",phone:"+256771234567",bedId:BED.id,name:"Amina Nakato",movedIn:false});
   expect(payload.idempotencyKey.length).toBeGreaterThan(15);
-  expect(container.textContent).toContain("Student added and bed booked");
+  expect(container.textContent).toContain("Tenant saved and bed booked, awaiting move-in");
 });
 it("calculates balance and prevents overpayment without scroll spinners",async()=>{
   await open();expect(container.querySelector('[aria-label="Balance"]')!.textContent).toBe("UGX\u00a0900,000");
@@ -45,12 +45,12 @@ it("saves a mixed batch and retries only the failed student",async()=>{
   await act(async()=>type(field("Verified email",1),"existing@example.com"));
   mockApi.mockImplementationOnce(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string},i:number)=>({key:row.idempotencyKey,status:i?"failed":"added",message:"Try another contact"})));
   await act(async()=>container.querySelector("form")!.requestSubmit());
-  expect(JSON.parse(mockApi.mock.calls[0][1].body).entries.map((row:{kind:string})=>row.kind)).toEqual(["new","existing"]);
+  expect(JSON.parse(mockApi.mock.calls[0][1].body).entries.map((row:{kind:string})=>row.kind)).toEqual(["record","existing"]);
   await act(async()=>type(field("Verified email",1),"correct@example.com"));
   mockApi.mockImplementationOnce(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string})=>({key:row.idempotencyKey,status:"requested"})));
   await act(async()=>container.querySelector("form")!.requestSubmit());
   expect(JSON.parse(mockApi.mock.calls[1][1].body).entries).toHaveLength(1);
-  expect(container.textContent).toContain("No booking is made until they accept");
+  expect(container.textContent).toContain("No tenancy or payment is recorded until acceptance");
 });
 it("explains managed-only approval instead of asking landlords to publish",async()=>{
   await open([]);expect(container.textContent).toContain("Managed-only properties do not need a public listing");expect(button("Save student").disabled).toBe(true);

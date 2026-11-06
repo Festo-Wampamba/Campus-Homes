@@ -41,9 +41,9 @@ export default async function LandlordTenantsPage({ searchParams }: { searchPara
 
       <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
         {stats.map((stat) => (
-          <Card key={stat.label}>
+          <Card key={stat.label} className={stat.value.startsWith("UGX") ? "col-span-2 sm:col-span-1" : undefined}>
             <CardContent className="p-4">
-              <p className={`text-2xl font-bold tabular-nums ${stat.owed ? "text-destructive" : ""}`}>{stat.value}</p>
+              <p className={`text-xl font-bold tabular-nums sm:text-2xl ${stat.owed ? "text-destructive" : ""}`}>{stat.value}</p>
               <p className="text-xs text-muted-foreground">{stat.label}</p>
             </CardContent>
           </Card>

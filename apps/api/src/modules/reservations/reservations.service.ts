@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -426,6 +427,7 @@ export class ReservationsService {
     reservation: typeof reservations.$inferSelect,
     receipt: ReceiptRow | null,
     walkIn: boolean,
+    notifyStudent = true,
   ) {
     if (receipt) this.deliverReceipt(receipt);
 
@@ -433,6 +435,7 @@ export class ReservationsService {
       bedId: reservation.bedId,
       walkIn,
     });
+    if (!notifyStudent) return;
     // The student's booking tracker moves to "Landlord confirmed"; tell them.
     this.notifications
       ?.notify(reservation.studentId, 'reservation.booked', 'in_app', {
@@ -447,8 +450,8 @@ export class ReservationsService {
    * in-app notice. Best-effort and after commit: the row is the record. */
   private deliverReceipt(receipt: ReceiptRow) {
     void this.rlsDb.run(SERVICE(receipt.landlord_id), async (_db, client) =>
-      (await client.query<{ id: string; email: string | null; name: string | null }>(
-        `SELECT id, email, NULLIF(btrim(name), '') AS name FROM users WHERE id = ANY($1::uuid[])`,
+      (await client.query<{ id: string; email: string | null; name: string | null; tenancy_property_id: string | null }>(
+        `SELECT id, email, tenancy_property_id, NULLIF(btrim(name), '') AS name FROM users WHERE id = ANY($1::uuid[])`,
         [[receipt.student_id, receipt.landlord_id]],
       )).rows)
       .then(async (people) => {
@@ -471,9 +474,9 @@ export class ReservationsService {
         await Promise.all([
           student?.email ? sendPaymentReceiptEmail(env, { ...base, to: student.email, audience: 'student' }) : null,
           landlord?.email ? sendPaymentReceiptEmail(env, { ...base, to: landlord.email, audience: 'landlord' }) : null,
-          this.notifications?.notify(receipt.student_id, 'payment.receipt', 'in_app', {
+          !student?.tenancy_property_id ? this.notifications?.notify(receipt.student_id, 'payment.receipt', 'in_app', {
             message: `Payment recorded: ${summary}.`, href: '/reservations',
-          }),
+          }) : null,
           this.notifications?.notify(receipt.landlord_id, 'payment.receipt', 'in_app', {
             message: `You recorded ${summary} from ${base.studentName}.`, href: '/landlord/payments',
           }),
@@ -511,7 +514,7 @@ export class ReservationsService {
         `SELECT r.id AS "reservationId", r.bed_id AS "bedId", r.status::text AS status,
                 p.id AS "propertyId", p.name AS "propertyName", un.id AS "unitId", un.label AS "roomLabel",
                 b.label AS "bedLabel", NULLIF(btrim(u.name), '') AS name,
-                COALESCE(u.phone, u.contact_phone) AS phone, u.email,
+                COALESCE(u.phone, u.contact_phone) AS phone, COALESCE(u.email, u.contact_email) AS email,
                 u.emergency_contact_name AS "emergencyContactName",
                 u.emergency_contact_phone AS "emergencyContactPhone",
                 r.price_per_term_ugx AS "totalUgx"
@@ -631,7 +634,7 @@ export class ReservationsService {
         throw new ForbiddenException('Student details are only available while the reservation or booking is active');
       }
       return (await client.query(
-        `SELECT NULLIF(btrim(u.name), '') AS name, COALESCE(u.phone, u.contact_phone) AS phone, u.email,
+        `SELECT NULLIF(btrim(u.name), '') AS name, COALESCE(u.phone, u.contact_phone) AS phone, COALESCE(u.email, u.contact_email) AS email,
                 s.university::text AS university, s.year_of_study AS "yearOfStudy", u.gender,
                 u.emergency_contact_name AS "emergencyContactName", u.emergency_contact_phone AS "emergencyContactPhone",
                 u.logto_user_id IS NOT NULL AS "hasSignedIn"
@@ -743,6 +746,40 @@ export class ReservationsService {
     };
   }
 
+  /** Persist a landlord's own tenant particulars, booking and initial receipt
+   * atomically. Contacts do not select, alter or claim a CampusHomes account. */
+  private async recordTenant(ctx: RlsContext, input: Extract<TenantIntakeInput['entries'][number], { kind: 'record' }>) {
+    // Hash fields explicitly so object key order and omitted defaults cannot
+    // change retry behavior. Never store contact information in the retry key.
+    const fingerprint = createHash('sha256').update(JSON.stringify([
+      input.bedId, input.semesterId ?? null, input.name, input.gender ?? null,
+      input.phone ?? null, input.email ?? null, input.university, input.movedIn,
+      input.bookingFeeCollectedUgx ?? 0, input.depositCollectedUgx ?? 0, input.paymentMethod ?? null,
+    ])).digest('hex');
+    const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
+      await this.assertCanManageBed(client, ctx, input.bedId, 'bookings.manage');
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, [`intake:${ctx.userId}:${input.idempotencyKey}`]);
+      const prior = await db.query.reservations.findFirst({ where: eq(reservations.idempotencyKey, `walkin-${ctx.userId}-${input.idempotencyKey}`) });
+      if (prior) {
+        if (!['booked', 'occupied'].includes(prior.status)) throw new ConflictException('This booking has ended. Add a new entry for a new booking.');
+        if (prior.intakeFingerprint !== fingerprint) throw new ConflictException('This entry was already saved with different details. Add a new entry for another booking.');
+        return { reservation: prior, receipt: null, replayed: true };
+      }
+      const bed = await bookableIntakeBed(client, input.bedId, input.semesterId);
+      const student = (await client.query<{ id: string }>(
+        `INSERT INTO users (name, gender, contact_phone, contact_email, tenancy_property_id, role, status)
+         VALUES ($1,$2,$3,$4,$5,'student','active') RETURNING id`,
+        [input.name, input.gender ?? null, input.phone ?? null, input.email ?? null, bed.property_id],
+      )).rows[0]!;
+      await client.query(`INSERT INTO students(user_id,university) VALUES($1,$2)`, [student.id, input.university]);
+      const booked = await this.bookInTransaction(db, client, ctx, { ...input, studentId: student.id });
+      await db.update(reservations).set({ intakeFingerprint: fingerprint }).where(eq(reservations.id, booked.reservation.id));
+      return { ...booked, replayed: false };
+    });
+    if (!result.replayed) await this.afterBook(ctx, result.reservation, result.receipt, true, false);
+    return { reservationId: result.reservation.id, status: result.reservation.status as 'booked' | 'occupied' };
+  }
+
   async walkInBeds(ctx: RlsContext) {
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
       const rows = await client.query<IntakeBed>(INTAKE_BEDS_SQL, [null, ctx.userId, null]);
@@ -757,9 +794,9 @@ export class ReservationsService {
     const results: TenantIntakeResult[] = [];
     for (const entry of input.entries) {
       try {
-        if (entry.kind === 'new') {
-          await this.onboardWalkIn(ctx, entry);
-          results.push({ key: entry.idempotencyKey, status: 'added' });
+        if (entry.kind === 'record' || entry.kind === 'new') {
+          const saved = entry.kind === 'record' ? await this.recordTenant(ctx, entry) : await this.onboardWalkIn(ctx, entry);
+          results.push({ key: entry.idempotencyKey, status: 'added', reservationId: saved.reservationId, bookingStatus: saved.status as 'booked' | 'occupied' });
         } else {
           await this.requestTenantAssignment(ctx, entry);
           results.push({ key: entry.idempotencyKey, status: 'requested' });
@@ -1013,6 +1050,8 @@ export class ReservationsService {
    * Only a Booked reservation can move in. */
   async confirmMoveIn(ctx: RlsContext, reservationId: string) {
     const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
+      // Serialize with release/payment transitions before reading the state.
+      await client.query('SELECT id FROM reservations WHERE id=$1 FOR UPDATE', [reservationId]);
       const reservation = await db.query.reservations.findFirst({
         where: eq(reservations.id, reservationId),
       });

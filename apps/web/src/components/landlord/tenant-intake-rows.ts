@@ -2,7 +2,7 @@ import type { ImportedTenantRow, University } from '@campushomes/shared';
 import type { WalkInBed } from '@/app/(landlord)/landlord/bookings/room-lookup';
 
 export type TenantIntakeRow = {
-  key: string; kind: 'new' | 'existing'; firstName: string; lastName: string;
+  key: string; kind: 'record' | 'new' | 'existing'; firstName: string; lastName: string;
   gender: 'male' | 'female' | ''; phone: string; email: string; contact: string;
   university: University; bedId: string; movedIn: boolean; paid: string; paymentMethod: string;
   importWarnings?: string[];
@@ -13,7 +13,7 @@ export type TenantIntakeRow = {
 };
 export const studentName = (row: Pick<TenantIntakeRow,'firstName'|'lastName'>) => `${row.firstName.trim()} ${row.lastName.trim()}`.trim();
 export function emptyTenantRow(bedId=''):TenantIntakeRow {
-  return {key:crypto.randomUUID(),kind:'new',firstName:'',lastName:'',gender:'',phone:'',email:'',contact:'',university:'MUK',bedId,movedIn:false,paid:'',paymentMethod:''};
+  return {key:crypto.randomUUID(),kind:'record',firstName:'',lastName:'',gender:'',phone:'',email:'',contact:'',university:'MUK',bedId,movedIn:false,paid:'',paymentMethod:''};
 }
 const normalize=(value:string)=>value.trim().replace(/\s+/g,' ').toLowerCase();
 const universities:Record<string,University>={'muk':'MUK','makerere university':'MUK','mubs':'MUBS','makerere university business school':'MUBS','kiu':'KIU','kampala international university':'KIU','kyu':'KYU','kyambogo university':'KYU','other':'other'};
@@ -62,7 +62,7 @@ export function importedTenantRows(records:ImportedTenantRow[],beds:WalkInBed[],
     if(selected&&record.rent&&Number(record.rent)!==selected.pricePerTermUgx)warnings.push('The document rent differs from this room’s rent. Check the room and money before saving.');
     if(record.university&&!universities[normalize(record.university)])warnings.push('University was not recognized. Select the correct one.');
     if(record.paymentMethod&&!methods[normalize(record.paymentMethod)])warnings.push('Payment method was not recognized. Select it in the form.');
-    return {...emptyTenantRow(),documentRowNumber:record.rowNumber,kind:record.kind,firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
+    return {...emptyTenantRow(),documentRowNumber:record.rowNumber,kind:'record',firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
       contact:record.email||record.phone,university:universities[normalize(record.university)]??'MUK',...assignment,movedIn:record.movedIn,paid:record.amountPaid,
       paymentMethod:methods[normalize(record.paymentMethod)]??'',importWarnings:warnings,
       importLocation:{propertyName:record.propertyName,roomLabel:record.roomLabel,bedLabel:record.bedLabel}};
