@@ -746,8 +746,8 @@ export class ReservationsService {
   async walkInBeds(ctx: RlsContext) {
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
       const rows = await client.query<IntakeBed>(INTAKE_BEDS_SQL, [null, ctx.userId, null]);
-      return rows.rows.map(({ id, propertyName, roomLabel, bedLabel, roomCategory, selfContained, pricePerTermUgx, semesterId, semesterName }) =>
-        ({ id, propertyName, roomLabel, bedLabel, roomCategory, selfContained, pricePerTermUgx, semesterId, semesterName }));
+      return rows.rows.map(({ id, property_id, unitId, propertyName, roomLabel, bedLabel, roomCategory, selfContained, pricePerTermUgx, semesterId, semesterName }) =>
+        ({ id, propertyId: property_id, unitId, propertyName, roomLabel, bedLabel, roomCategory, selfContained, pricePerTermUgx, semesterId, semesterName }));
     });
   }
 

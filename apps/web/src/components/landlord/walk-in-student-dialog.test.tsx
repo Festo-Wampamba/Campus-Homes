@@ -122,3 +122,29 @@ it('updates selected import rows without requiring the unused manual student', a
   mockApi.mockRejectedValueOnce(new Error('Could not read file'));await upload();
   expect(fields()).toHaveLength(0);expect(button('Save imported students').disabled).toBe(true);
 });
+
+it('automatically assigns imported numeric beds and submits both students without manual room entry',async()=>{
+ const beds=[{...BED,roomLabel:'A02'},{...BED2,roomLabel:'A03'}];
+ await open(beds);await act(async()=>button('Import tenant records').click());
+ mockApi.mockResolvedValueOnce({rows:[{...imported(beds[0]!),bedLabel:'1',amountPaid:'230000'},{...imported(beds[1]!,'Sarah'),rowNumber:3,bedLabel:'2',amountPaid:'30000',phone:'0771234568'}]});await upload();
+ const review=[...container.querySelectorAll('label')].find(label=>label.textContent?.includes('I have checked'))!.querySelector('input')!;
+ await act(async()=>review.click());
+ expect(button('Save 2 imported students').disabled).toBe(false);
+ expect(container.textContent).not.toContain('Amount paid exceeds');
+ expect(container.textContent).toContain('only free bed: Bed 1');
+ mockApi.mockImplementationOnce(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string})=>({key:row.idempotencyKey,status:'added'})));
+ await act(async()=>container.querySelector('form')!.requestSubmit());
+ expect(JSON.parse(mockApi.mock.calls[1][1].body).entries.map((row:{bedId:string})=>row.bedId)).toEqual(beds.map(bed=>bed.id));
+});
+it('explains an unmatched room without pretending a positive payment exceeds zero rent, then rematches on refresh',async()=>{
+ await open();await act(async()=>button('Import tenant records').click());
+ mockApi.mockResolvedValueOnce({rows:[{...imported(BED2),amountPaid:'300000'}]});await upload();
+ expect(container.textContent).toContain('No available room matches');
+ expect(container.textContent).not.toContain('Amount paid exceeds');
+ expect(container.querySelector('[aria-label="Rent"]')?.textContent).toBe('Select a room first');
+ await act(async()=>type(field('Last name'),'Corrected'));
+ mockApi.mockResolvedValueOnce([BED,BED2]);await act(async()=>button('Refresh beds').click());
+ expect(field('Last name').value).toBe('Corrected');
+ expect(container.querySelector('[aria-label="Rent"]')?.textContent).toBe('UGX\u00a0900,000');
+ expect(container.textContent).not.toContain('No available room matches');
+});

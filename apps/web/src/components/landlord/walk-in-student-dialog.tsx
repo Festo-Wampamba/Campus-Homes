@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { TenantImportPanel } from "./tenant-import-panel";
-import { emptyTenantRow as emptyRow, importedTenantRows, studentName, type TenantIntakeRow as Row } from "./tenant-intake-rows";
+import { emptyTenantRow as emptyRow, importedTenantRows, rematchImportedTenantRows, studentName, type TenantIntakeRow as Row } from "./tenant-intake-rows";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, UserPlus } from "lucide-react";
 import { UNIVERSITIES, tenantIntakeEntrySchema, type TenantIntakeResult, type University } from "@campushomes/shared";
@@ -47,7 +47,15 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
   }
   async function refreshBeds() {
     setError(null);
-    try { setBeds(await api<WalkInBed[]>("/reservations/walk-in-beds")); }
+    try {
+      const fresh = await api<WalkInBed[]>("/reservations/walk-in-beds");
+      setBeds(fresh);
+      setResults((current) => Object.fromEntries(Object.entries(current).filter(([,result]) => result.status !== "failed")));
+      setImportRows((current) => {
+        const rematched = new Map(rematchImportedTenantRows(current.filter((row) => !complete(row.key)), fresh).map((row) => [row.key,row]));
+        return current.map((row) => rematched.get(row.key) ?? row);
+      });
+    }
     catch (caught) { setError(apiErrorMessage(caught, "Could not load free beds. Try again.")); }
   }
   async function submit(event: React.FormEvent) {
@@ -121,7 +129,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
             const bed = beds.find((bed) => bed.id === row.bedId);
             const result = results[row.key];
             const locked = Boolean(complete(row.key));
-            const overpaid = Number(row.paid) > (bed?.pricePerTermUgx ?? 0);
+            const overpaid = Boolean(bed && Number(row.paid) > bed.pricePerTermUgx);
             return <fieldset key={row.key} disabled={pending || locked} className="min-w-0 space-y-4 rounded-lg border border-border p-4">
               <legend className="max-w-full break-words px-1 font-semibold">Student{studentName(row) ? ` · ${studentName(row)}` : ""}</legend>
               <div className="flex flex-wrap items-end gap-3">
@@ -145,16 +153,18 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
               </div>}
               <label className="block text-sm font-semibold">Property, room and bed *
-                <select required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value })}>
+                <select required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value, assignmentNote: undefined, assignmentProblem: undefined })}>
                   <option value="">Choose a free bed</option>
                   {beds.map((candidate) => <option key={candidate.id} value={candidate.id} disabled={rows.some((other) => other.key !== row.key && other.bedId === candidate.id)}>{candidate.propertyName} · {candidate.roomLabel} · {candidate.bedLabel}{candidate.semesterName ? ` · ${candidate.semesterName}` : ""}</option>)}
                 </select>
               </label>
+              {!bed && <p role="alert" className="text-sm text-destructive">{row.assignmentProblem ?? "Choose a room and free bed first. Rent and balance will appear after assignment."}</p>}
+              {bed && row.assignmentNote && <p role="status" className="rounded-md bg-primary/10 p-3 text-sm text-primary">{row.assignmentNote}</p>}
               <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="text-sm font-semibold">Amount paid (UGX)<input type="text" inputMode="numeric" pattern="[0-9]*" className={FIELD} value={row.paid} onChange={(e) => update(row.key, { paid: e.target.value })} aria-invalid={overpaid || undefined} /></label>
                 <label className="text-sm font-semibold">Paid with<select className={FIELD} value={row.paymentMethod} onChange={(e) => update(row.key, { paymentMethod: e.target.value })}><option value="">Not recorded</option>{Object.entries(PAYMENT_METHOD_LABEL).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
-                <div className="min-w-0 text-sm font-semibold"><p>Rent (UGX)</p><output aria-label="Rent" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{formatUgx(bed?.pricePerTermUgx ?? 0)}</output></div>
-                <div className="min-w-0 text-sm font-semibold"><p>Balance (UGX)</p><output aria-label="Balance" aria-live="polite" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{formatUgx(Math.max(0, (bed?.pricePerTermUgx ?? 0) - (Number(row.paid) || 0)))}</output></div>
+                <div className="min-w-0 text-sm font-semibold"><p>Rent (UGX)</p><output aria-label="Rent" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{bed ? formatUgx(bed.pricePerTermUgx) : "Select a room first"}</output></div>
+                <div className="min-w-0 text-sm font-semibold"><p>Balance (UGX)</p><output aria-label="Balance" aria-live="polite" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{bed ? formatUgx(Math.max(0, bed.pricePerTermUgx - (Number(row.paid) || 0))) : "Select a room first"}</output></div>
               </div>
               <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={row.movedIn} onChange={(e) => update(row.key, { movedIn: e.target.checked })} />Already moved in / living here</label>
               {!!row.importWarnings?.length && <div role="note" className="space-y-1 rounded-md border border-border bg-muted/30 p-3 text-sm"><p className="font-semibold">Review imported row</p>{row.importWarnings.map((warning)=><p key={warning}>{warning}</p>)}</div>}
@@ -170,7 +180,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
         </DialogBody>
         <DialogFooter className="flex-wrap [&>*]:h-auto [&>*]:min-h-11 [&>*]:whitespace-normal [&>*]:py-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{rows.length > 0 && !editable.length ? "Done" : "Close"}</Button>
-          {(editable.length > 0 || (entryMode === 'import' && !rows.length)) && <Button type="submit" disabled={pending || beds.length === 0 || (entryMode === 'import' && (!importReviewed || importBusy || !rows.length)) || editable.some((row) => Number(row.paid) > (beds.find((bed) => bed.id === row.bedId)?.pricePerTermUgx ?? 0))}>{pending ? `Saving… ${progress.done}/${progress.total}` : entryMode === 'import' ? `Save ${editable.length || ""} imported ${editable.length === 1 ? "student" : "students"}`.replace(/  /g, " ") : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
+          {(editable.length > 0 || (entryMode === 'import' && !rows.length)) && <Button type="submit" disabled={pending || beds.length === 0 || (entryMode === 'import' && (!importReviewed || importBusy || !rows.length)) || editable.some((row) => { const bed = beds.find((bed) => bed.id === row.bedId); return Boolean(bed && Number(row.paid) > bed.pricePerTermUgx); })}>{pending ? `Saving… ${progress.done}/${progress.total}` : entryMode === 'import' ? `Save ${editable.length || ""} imported ${editable.length === 1 ? "student" : "students"}`.replace(/  /g, " ") : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
         </DialogFooter>
       </form>
     </Dialog>

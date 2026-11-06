@@ -40,7 +40,7 @@ export function TenantImportPanel({ disabled, onRecordsChange, onReviewedChange,
   const chosen=rows?.filter((_,index)=>selected.includes(index))??[];
   return <section aria-label="Upload tenant records" className="min-w-0 rounded-lg border border-primary/30 bg-card p-4">
     <div className="space-y-4">
-      <p className="max-w-prose text-sm text-muted-foreground">Upload Excel, CSV, a PDF text table or a Word table. The selected records appear below automatically. Review them, correct any missing details, then click Save imported students. You do not need to fill a separate manual entry.</p>
+      <p className="max-w-prose text-sm text-muted-foreground">Upload Excel, CSV, a PDF text table or a Word table. Rooms are matched automatically to available inventory. Leave Bed blank to assign a free bed within the matched room. The selected records appear below automatically. Review them, correct any missing details, then click Save imported students. You do not need to fill a separate manual entry.</p>
       <div className="flex flex-wrap gap-3">
         <Button type="button" variant="secondary" className="h-auto min-h-11 max-w-full whitespace-normal py-2" disabled={disabled||busy||Boolean(downloading)} onClick={()=>download('xlsx')}><DownloadIcon aria-hidden/>{downloading==='xlsx'?'Downloading…':'Excel template'}</Button>
         <Button type="button" variant="secondary" className="h-auto min-h-11 max-w-full whitespace-normal py-2" disabled={disabled||busy||Boolean(downloading)} onClick={()=>download('csv')}><DownloadIcon aria-hidden/>{downloading==='csv'?'Downloading…':'CSV template'}</Button>
@@ -53,10 +53,10 @@ export function TenantImportPanel({ disabled, onRecordsChange, onReviewedChange,
       {rows&&<>
         <div className="max-h-80 max-w-full overflow-auto rounded-md border border-border" tabIndex={0} aria-label="Imported tenant preview">
           <table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">{rows.length} extracted {rows.length===1?'student':'students'} · select the rows to use</caption>
-            <thead className="bg-muted"><tr>{['Use','First name','Last name','Gender','Contact','Room','Amount paid (UGX)','Review notes'].map((label)=><th key={label} className="px-3 py-2 align-top font-semibold">{label}</th>)}</tr></thead>
+            <thead className="bg-muted"><tr>{['Use','First name','Last name','Gender','Contact','Property','Room','Requested bed','Amount paid (UGX)','Review notes'].map((label)=><th key={label} className="px-3 py-2 align-top font-semibold">{label}</th>)}</tr></thead>
             <tbody className="divide-y divide-border">{rows.map((row,index)=><tr key={row.rowNumber}>
               <td className="p-3"><input type="checkbox" aria-label={`Use document row ${row.rowNumber}`} checked={selected.includes(index)} disabled={disabled} onChange={(event)=>{const next=event.target.checked?[...selected,index]:selected.filter((item)=>item!==index);setReviewed(false);onReviewedChange(false);setSelected(next);onRecordsChange(rows.filter((_,at)=>next.includes(at)));}}/></td>
-              {[row.firstName,row.lastName,row.gender||'Not recorded',row.email||row.phone,`${row.propertyName} ${row.roomLabel} ${row.bedLabel}`.trim(),row.amountPaid||'0',row.warnings.join(' ')].map((value,col)=><td key={col} className={`max-w-64 break-words p-3 align-top ${col===5?'tabular-nums':''}`}>{value}</td>)}
+              {[row.firstName,row.lastName,row.gender||'Not recorded',row.email||row.phone,row.propertyName,row.roomLabel,row.bedLabel||'Auto-assign',row.amountPaid||'0',row.warnings.join(' ')].map((value,col)=><td key={col} className={`max-w-64 break-words p-3 align-top ${col===7?'tabular-nums':''}`}>{value}</td>)}
             </tr>)}</tbody>
           </table>
         </div>

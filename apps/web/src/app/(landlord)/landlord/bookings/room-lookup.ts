@@ -8,6 +8,8 @@ export type RoomInfo = { label: string; propertyName: string; roomCategory: stri
 /** A bed a walk-in student can be put into straight away. */
 export type WalkInBed = {
   id: string;
+  propertyId?: string;
+  unitId?: string;
   propertyName: string;
   roomLabel: string;
   bedLabel: string;

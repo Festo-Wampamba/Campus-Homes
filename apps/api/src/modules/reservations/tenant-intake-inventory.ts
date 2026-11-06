@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg';
 // The same live-inventory rules serve the picker and the write path. Public
 // publication is required only for listed properties, not approved management.
 export const INTAKE_BEDS_SQL = `
- SELECT b.id, p.id AS property_id, p.name AS "propertyName", u.label AS "roomLabel",
+ SELECT b.id, p.id AS property_id, u.id AS "unitId", p.name AS "propertyName", u.label AS "roomLabel",
    b.label AS "bedLabel", u.room_category AS "roomCategory", u.self_contained AS "selfContained",
    price.price_per_term_ugx AS "pricePerTermUgx", price.deposit_ugx, price.semester_id AS "semesterId",
    price.semester_name AS "semesterName", p.listing_intent, live.current_version_id
@@ -36,7 +36,7 @@ export const INTAKE_BEDS_SQL = `
  ORDER BY p.name,u.label,b.label`;
 
 export type IntakeBed = {
-  id: string; property_id: string; propertyName: string; roomLabel: string; bedLabel: string;
+  id: string; unitId?: string; property_id: string; propertyName: string; roomLabel: string; bedLabel: string;
   roomCategory: string; selfContained: boolean; pricePerTermUgx: number; deposit_ugx: number | null;
   semesterId: string; semesterName: string; listing_intent: string; current_version_id: string | null;
 };

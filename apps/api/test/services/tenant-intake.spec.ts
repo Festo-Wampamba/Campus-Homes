@@ -52,7 +52,7 @@ afterEach(async () => {
 
 it('offers approved managed beds with no listing and books a new student without publishing', async () => {
   const target = await bed();
-  expect((await service.walkInBeds(landlord())).map((item) => item.id)).toContain(target.bed);
+  expect((await service.walkInBeds(landlord())).find((item) => item.id === target.bed)).toMatchObject({ id: target.bed, propertyId: target.property, unitId: target.unit });
   const entry = { ...fresh(target.bed, 1), firstName: 'Sarah', lastName: 'Kato', name: 'Sarah Kato', gender: 'female' as const };
   expect((await service.tenantIntake(landlord(), { entries: [entry] }))[0]?.status).toBe('added');
   const listing = (await pool.query('SELECT status FROM listings WHERE property_id=$1', [target.property])).rows[0];
