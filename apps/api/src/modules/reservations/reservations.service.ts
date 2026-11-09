@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type TenantIntakeResult, type TenantAssignmentRequest, type TeamCapability, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type UpdateTenantEmergencyInput, type TenantIntakeResult, type TenantAssignmentRequest, type TeamCapability, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { bookableIntakeBed, intakeVersion, INTAKE_BEDS_SQL, type IntakeBed } from './tenant-intake-inventory';
 
@@ -60,7 +60,7 @@ const SERVICE = (userId: string): RlsContext => ({ userId, role: 'service_role' 
 /** A new walk-in account, or an existing student accepting their own offer.
  * Server-internal: studentId is never accepted from the HTTP booking schema;
  * an existing account can only be supplied by its authenticated owner. */
-type WalkInBooking = Omit<BookReservationInput, 'reservationId'> & { bedId: string; studentId: string; semesterId?: string; idempotencyKey?: string; movedIn?: boolean; moveInConfirmedBy?: 'student' | 'landlord' };
+type WalkInBooking = Omit<BookReservationInput, 'reservationId'> & { bedId: string; studentId: string; semesterId?: string; idempotencyKey?: string; movedIn?: boolean; moveInConfirmedBy?: 'student' | 'landlord'; emergencyContactName?: string; emergencyContactPhone?: string };
 
 /** Why a walk-in can't use this phone number, and what the landlord does instead. */
 function existingAccountMessage(account: { role: string; deleted: boolean }): string {
@@ -375,6 +375,8 @@ export class ReservationsService {
           .insert(reservations)
           .values({
             studentId,
+            emergencyContactName: 'studentId' in input ? input.emergencyContactName ?? null : null,
+            emergencyContactPhone: 'studentId' in input ? input.emergencyContactPhone ?? null : null,
             bedId,
             listingVersionId,
             status: 'booked',
@@ -515,8 +517,8 @@ export class ReservationsService {
                 p.id AS "propertyId", p.name AS "propertyName", un.id AS "unitId", un.label AS "roomLabel",
                 b.label AS "bedLabel", NULLIF(btrim(u.name), '') AS name,
                 COALESCE(u.phone, u.contact_phone) AS phone, COALESCE(u.email, u.contact_email) AS email,
-                u.emergency_contact_name AS "emergencyContactName",
-                u.emergency_contact_phone AS "emergencyContactPhone",
+                NULLIF(COALESCE(r.emergency_contact_name, u.emergency_contact_name), '') AS "emergencyContactName",
+                NULLIF(COALESCE(r.emergency_contact_phone, u.emergency_contact_phone), '') AS "emergencyContactPhone",
                 r.price_per_term_ugx AS "totalUgx"
          FROM reservations r
          JOIN beds b ON b.id = r.bed_id
@@ -533,6 +535,26 @@ export class ReservationsService {
         return { ...t, paidUgx, balanceUgx: Number(t.totalUgx) - paidUgx };
       });
     });
+  }
+
+  /** Booking-scoped contacts: authorized before reading/updating, never a
+   * write to the student's global profile or to their other bookings. */
+  async updateTenantEmergency(ctx: RlsContext, reservationId: string, input: UpdateTenantEmergencyInput) {
+    const updated = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const reservation = (await client.query<{ bed_id: string; status: string }>(
+        'SELECT bed_id, status::text AS status FROM reservations WHERE id=$1 FOR UPDATE', [reservationId],
+      )).rows[0];
+      if (!reservation) throw new NotFoundException('Tenant booking not found');
+      await this.assertCanManageBed(client, ctx, reservation.bed_id, 'bookings.manage');
+      if (!['booked', 'occupied'].includes(reservation.status)) throw new ConflictException('Emergency contacts can only be updated for a booked or moved-in tenant');
+      return (await client.query(
+        `UPDATE reservations SET emergency_contact_name=$2, emergency_contact_phone=$3, updated_at=now()
+         WHERE id=$1 RETURNING NULLIF(emergency_contact_name,'') AS "emergencyContactName", NULLIF(emergency_contact_phone,'') AS "emergencyContactPhone"`,
+        [reservationId, input.emergencyContactName, input.emergencyContactPhone],
+      )).rows[0];
+    });
+    await this.audit.record(ctx, 'reservation.emergency_contact_updated', 'reservation', reservationId, {});
+    return updated;
   }
 
   /** A later payment on a live booking (0078): one receipt per instalment,
@@ -636,10 +658,10 @@ export class ReservationsService {
       return (await client.query(
         `SELECT NULLIF(btrim(u.name), '') AS name, COALESCE(u.phone, u.contact_phone) AS phone, COALESCE(u.email, u.contact_email) AS email,
                 s.university::text AS university, s.year_of_study AS "yearOfStudy", u.gender,
-                u.emergency_contact_name AS "emergencyContactName", u.emergency_contact_phone AS "emergencyContactPhone",
+                NULLIF(COALESCE(r.emergency_contact_name, u.emergency_contact_name), '') AS "emergencyContactName", NULLIF(COALESCE(r.emergency_contact_phone, u.emergency_contact_phone), '') AS "emergencyContactPhone",
                 u.logto_user_id IS NOT NULL AS "hasSignedIn"
-         FROM users u LEFT JOIN students s ON s.user_id = u.id WHERE u.id = $1`,
-        [reservation.student_id],
+         FROM users u LEFT JOIN students s ON s.user_id = u.id JOIN reservations r ON r.student_id = u.id WHERE r.id = $1`,
+        [reservationId],
       )).rows[0];
     });
   }
@@ -702,6 +724,8 @@ export class ReservationsService {
         idempotencyKey: input.idempotencyKey,
         bookingFeeCollectedUgx: input.bookingFeeCollectedUgx,
         depositCollectedUgx: input.depositCollectedUgx,
+        emergencyContactName: input.emergencyContactName,
+        emergencyContactPhone: input.emergencyContactPhone,
         paymentMethod: input.paymentMethod,
       });
       return {
@@ -755,6 +779,9 @@ export class ReservationsService {
       input.bedId, input.semesterId ?? null, input.name, input.gender ?? null,
       input.phone ?? null, input.email ?? null, input.university, input.movedIn,
       input.bookingFeeCollectedUgx ?? 0, input.depositCollectedUgx ?? 0, input.paymentMethod ?? null,
+      // Keep pre-emergency retry fingerprints stable when neither field was sent.
+      ...(input.emergencyContactName === undefined && input.emergencyContactPhone === undefined
+        ? [] : [input.emergencyContactName ?? null, input.emergencyContactPhone ?? null]),
     ])).digest('hex');
     const result = await this.rlsDb.run(SERVICE(ctx.userId), async (db, client) => {
       await this.assertCanManageBed(client, ctx, input.bedId, 'bookings.manage');
