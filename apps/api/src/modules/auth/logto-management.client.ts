@@ -262,6 +262,7 @@ export class LogtoManagementClient {
   ): Promise<{ token: string }> {
     return this.request<{ token: string }>('/api/one-time-tokens', {
       method: 'POST',
+      signal: AbortSignal.timeout(5_000),
       body: JSON.stringify({ email, context: { interactionEvent }, expiresIn: expiresInSeconds }),
     });
   }

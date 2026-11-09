@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Pencil, Plus, Search, ShieldCheck, Trash2, UserRoundCog } from "lucide-react";
+import { Ban, LockKeyholeOpen, KeyRound, Pencil, Plus, Search, ShieldCheck, Trash2, UserRoundCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -31,13 +31,13 @@ function buttonClass(tone: "primary" | "secondary" | "danger" = "secondary") {
 
 /** `staffOnly`: the Staff accounts view — staff join through invitations and
  * the deleted-accounts view spans every user, so both controls are hidden. */
-export function UsersManager({ rows, roles, permissions, properties, canMutate, canResetPasswords = false, staffOnly = false }: { rows: UserRow[]; roles: Role[]; permissions: Permission[]; properties: Property[]; canMutate: boolean; canResetPasswords?: boolean; staffOnly?: boolean }) {
+export function UsersManager({ rows, roles, permissions, properties, canMutate, canResetPasswords = false, canBlock = false, staffOnly = false }: { rows: UserRow[]; roles: Role[]; permissions: Permission[]; properties: Property[]; canMutate: boolean; canResetPasswords?: boolean; canBlock?: boolean; staffOnly?: boolean }) {
   const router = useRouter();
   const [list, setList] = useState(rows);
   const [showDeleted, setShowDeleted] = useState(false);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
-  const [mode, setMode] = useState<"create" | "edit" | "access" | "delete" | null>(null);
+  const [mode, setMode] = useState<"create" | "edit" | "access" | "delete" | "block" | null>(null);
   // Deleting a Super Admin needs their email typed back (pasting is blocked).
   const [confirmEmail, setConfirmEmail] = useState("");
   const [selected, setSelected] = useState<UserRow | null>(null);
@@ -143,11 +143,22 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
   async function removeUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!selected) return;
     const data = new FormData(event.currentTarget);
-    if (!window.confirm(`PERMANENTLY delete ${selected.name || "this user"} and everything they own (properties, listings, reservations, roles)? This is irreversible and cannot be undone.`)) return;
     setPending(true); setNotice(null);
     const id = selected.id;
     try { const result = await api<{ identityCleanupPending?: boolean }>(`/admin/users/${id}`, { method: "DELETE", body: JSON.stringify({ reason: String(data.get("reason")), ...(deletingSuperAdmin ? { confirmEmail } : {}) }) }); setList((current) => current.filter((r) => r.id !== id)); setNotice(result.identityCleanupPending ? "Account access removed. Sign-in identity cleanup is pending and will retry automatically." : `${selected.name || "Account"} deleted from the live system.`); router.refresh(); setMode(null); setDetail(null); }
-    catch (error) { setNotice(apiErrorMessage(error, "The user could not be deleted.")); } finally { setPending(false); }
+    catch (error) { setNotice(error instanceof ApiError && error.status === 401 ? "Deleting needs a recent sign-in. Sign out, sign back in, then retry." : apiErrorMessage(error, "The user could not be deleted.")); } finally { setPending(false); }
+  }
+
+  async function changeBlock(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!selected) return;
+    const reason = String(new FormData(event.currentTarget).get("reason") ?? "");
+    setPending(true); setNotice(null);
+    try {
+      const result = await api<{ id: string; status: string }>(`/admin/users/${selected.id}/block`, { method: "POST", body: JSON.stringify({ blocked: selected.status !== "suspended", reason }) });
+      setList((current) => current.map((row) => row.id === result.id ? { ...row, status: result.status } : row));
+      setMode(null); setNotice(result.status === "suspended" ? "User blocked. Their sessions have been revoked; their records are preserved." : "User unblocked. They can sign in again once any pending approval is complete."); router.refresh();
+    } catch (error) { setNotice(error instanceof ApiError && error.status === 401 ? "Blocking needs a recent sign-in. Sign out, sign back in, then retry." : apiErrorMessage(error, "Account access could not be changed.")); }
+    finally { setPending(false); }
   }
 
   async function revokeSessions() {
@@ -182,7 +193,8 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
     if (showDeleted) {
       return <div className="flex gap-1">{canMutate && <button aria-label="Purge user" title="Permanently purge" disabled={pending} onClick={() => purge(row)} className={buttonClass("danger")}><Trash2 className="size-4" />Purge permanently</button>}</div>;
     }
-    return <div className="flex gap-1">
+    return <div className="flex flex-wrap gap-1">
+      {canBlock && <button type="button" onClick={() => { setSelected(row); setMode("block"); setNotice(null); }} className={buttonClass()}>{row.status === "suspended" ? <LockKeyholeOpen aria-hidden className="size-4" /> : <Ban aria-hidden className="size-4" />}{row.status === "suspended" ? "Unblock" : "Block"}</button>}
       <button aria-label="Edit user" title="Edit particulars" onClick={() => startDetail(row, "edit")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><Pencil className="size-4" /></button>
       <button aria-label="Manage access" title="Roles and permissions" onClick={() => startDetail(row, "access")} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-border dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950 dark:hover:text-teal-200"><KeyRound className="size-4" /></button>
       {canMutate && <button aria-label="Delete user" title="Delete user permanently" onClick={() => { setSelected(row); setMode("delete"); setConfirmEmail(""); setNotice(null); setFormError(null); }} className="grid size-10 place-items-center rounded-lg border border-red-200 text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950 dark:hover:text-red-200"><Trash2 className="size-4" /></button>}
@@ -309,6 +321,14 @@ export function UsersManager({ rows, roles, permissions, properties, canMutate, 
       </div>
     </AdminModal>
 
-    <AdminModal open={mode === "delete"} onClose={close} title={`Delete ${selected?.name ?? "user"}?`} description="The live account and its properties, listings, reservations, roles and chat are removed. Historical records remain with account links removed. Uploaded files and backups are outside this action. Sign-in identity cleanup retries automatically if the provider is unavailable."><form onSubmit={removeUser} className="space-y-4 p-5"><AdminField label="Deletion reason" required><textarea required minLength={3} name="reason" className={adminTextareaClass} placeholder="Why is this account being removed?" /></AdminField>{deletingSuperAdmin && <AdminField label={`This is a Super Admin. Type ${selected?.email ?? "their email"} to confirm`} required><input required autoComplete="off" spellCheck={false} value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} onPaste={(e) => e.preventDefault()} onDrop={(e) => e.preventDefault()} aria-describedby="confirm-email-hint" className={adminFieldClass} placeholder="Type the email address" /><p id="confirm-email-hint" className="mt-1 text-[11px] text-slate-500">Pasting is turned off. Type it letter by letter.</p></AdminField>}{notice && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">{notice}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={close} className={buttonClass()}>Cancel</button><button disabled={pending || (deletingSuperAdmin && !confirmEmailMatches)} className={buttonClass("danger")}><Trash2 className="size-4" />{pending ? "Deleting…" : "Delete permanently"}</button></div></form></AdminModal>
+    <AdminModal open={mode === "block"} onClose={close} title={`${selected?.status === "suspended" ? "Unblock" : "Block"} ${selected?.name || "user"}?`} description={selected?.status === "suspended" ? "Restore the account's access status before it was blocked. The user will need to sign in again." : "Stop this user from signing in and revoke their current sessions. Their properties, bookings, payments and account information remain saved."}>
+      <form onSubmit={changeBlock} className="space-y-4 p-5">
+        <AdminField label="Reason" required><textarea name="reason" required minLength={3} maxLength={500} className={adminTextareaClass} /></AdminField>
+        {notice && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{notice}</p>}
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={close} className={buttonClass()}>Cancel</button><button disabled={pending} className={buttonClass("primary")}>{pending ? "Saving…" : selected?.status === "suspended" ? "Unblock user" : "Block user"}</button></div>
+      </form>
+    </AdminModal>
+
+    <AdminModal open={mode === "delete"} onClose={close} title={`Delete ${selected?.name ?? "user"}?`} description="The live account and its properties, listings, reservations, roles and chat are removed. Historical records remain with account links removed. Uploaded files and backups are outside this action. Sign-in identity cleanup retries automatically if the provider is unavailable."><form onSubmit={removeUser} className="space-y-4 p-5"><AdminField label="Deletion reason" required><textarea required minLength={3} name="reason" className={adminTextareaClass} placeholder="Why is this account being removed?" /></AdminField>{deletingSuperAdmin && <AdminField label={`This is a Super Admin. Type ${selected?.email ?? "their email"} to confirm`} required><input required autoComplete="off" spellCheck={false} value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} onPaste={(e) => e.preventDefault()} onDrop={(e) => e.preventDefault()} aria-describedby="confirm-email-hint" className={adminFieldClass} placeholder="Type the email address" /><p id="confirm-email-hint" className="mt-1 text-[11px] text-slate-500">Pasting is turned off. Type it letter by letter.</p></AdminField>}{notice && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">{notice}</p>}<label className="flex items-start gap-2 text-sm"><input type="checkbox" required className="mt-1 size-4 accent-teal-700" />I understand that permanent deletion cannot be undone. Use Block to stop access while keeping records.</label><div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={close} className={buttonClass()}>Cancel</button><button disabled={pending || (deletingSuperAdmin && !confirmEmailMatches)} className={buttonClass("danger")}><Trash2 className="size-4" />{pending ? "Deleting…" : "Delete permanently"}</button></div></form></AdminModal>
   </>;
 }

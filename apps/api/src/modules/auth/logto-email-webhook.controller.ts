@@ -1,9 +1,11 @@
-import { BadRequestException, Body, Controller, Headers, HttpCode, Post, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Headers, HttpCode, Logger, Post, ServiceUnavailableException } from '@nestjs/common';
 import { z } from 'zod';
 import { authenticateConnector, parseConnectorPayload } from './otp-delivery';
 
 import { loadEnv } from '../../config/env';
-import { sendVerificationCodeEmail, type VerificationEmailKind } from './auth.email';
+import { EmailDeliveryError, sendVerificationCodeEmail, type VerificationEmailKind } from './auth.email';
+import { LogtoManagementClient } from './logto-management.client';
+import { passwordResetUrl } from './logto.config';
 
 interface LogtoEmailWebhookBody {
   to: string;
@@ -30,6 +32,8 @@ function verificationKindFor(type: LogtoEmailWebhookBody['type']): VerificationE
 // email sending stays on one adapter.
 @Controller('api/auth/logto/email-webhook')
 export class LogtoEmailWebhookController {
+  private readonly logger = new Logger(LogtoEmailWebhookController.name);
+  constructor(private readonly management: LogtoManagementClient) {}
   @Post()
   @HttpCode(204)
   async handle(@Headers('authorization') authorization: string | undefined, @Body() body: unknown) {
@@ -38,8 +42,19 @@ export class LogtoEmailWebhookController {
     const input = parseConnectorPayload(body);
     if (!z.string().email().safeParse(input.to).success) throw new BadRequestException('Invalid verification request');
     try {
-      await sendVerificationCodeEmail(env, { to: input.to, code: input.payload.code, kind: verificationKindFor(input.type) });
-    } catch {
+      let resetUrl: string | undefined;
+      if (input.type === 'ForgotPassword') {
+        try {
+          const { token } = await this.management.createOneTimeToken(input.to, 'ForgotPassword', 600);
+          resetUrl = passwordResetUrl(env, token, input.to);
+        } catch {
+          // A provider-token outage must not suppress the working OTP alternative.
+          this.logger.warn('password_reset.link_unavailable');
+        }
+      }
+      await sendVerificationCodeEmail(env, { to: input.to, code: input.payload.code, kind: verificationKindFor(input.type), resetUrl });
+    } catch (error) {
+      this.logger.warn(`verification_email.delivery_failed kind=${input.type} status=${error instanceof EmailDeliveryError ? error.providerStatus : 'unavailable'}`);
       throw new ServiceUnavailableException('Verification delivery temporarily unavailable');
     }
   }

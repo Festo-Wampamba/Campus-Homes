@@ -132,12 +132,17 @@ export function BulkRoomGeneratorDialog({
   /** Stages the valid rows through the same bulk endpoint as the other tabs,
    * one call per room type, building and floor. Rows with problems are skipped. */
   async function handleImport() {
-    if (!importPlan?.batches.length) return;
+    if (!importPlan?.validCount) return;
     setSubmitting(true);
     setError(null);
     const added: RoomUnit[] = [];
     const stamp = Date.now();
     try {
+      for (let index = 0; index < importPlan.updates.length; index += 200) {
+        added.push(...await api<RoomUnit[]>(`/room-management/properties/${propertyId}/rooms/batch-update`, {
+          method: "POST", body: JSON.stringify({ rooms: importPlan.updates.slice(index, index + 200) }),
+        }));
+      }
       for (const [index, batch] of importPlan.batches.entries()) {
         added.push(
           ...(await api<RoomUnit[]>(`/room-management/properties/${propertyId}/rooms/bulk`, {
@@ -149,9 +154,9 @@ export function BulkRoomGeneratorDialog({
       onGenerated(added);
       onOpenChange(false);
     } catch (err) {
-      if (added.length) onGenerated(added);
+      onGenerated(added);
       setError(
-        `${added.length ? `Added ${added.length} of ${importPlan.validCount} rooms. ` : ""}${apiErrorMessage(err, "Failed to add the rooms.")}`,
+        `${added.length ? `Saved ${added.length} changed rooms. Re-upload the corrected file to safely retry. ` : ""}${apiErrorMessage(err, "Failed to add the rooms.")}`,
       );
       setImportRows(null);
     } finally {
@@ -361,10 +366,11 @@ export function BulkRoomGeneratorDialog({
                 />
               </div>
 
+              <p className="text-sm text-muted-foreground">Matching room codes within the same building update existing rooms. Unchanged rooms are skipped. To rename a room or move it between buildings, include its Room ID; otherwise edit that room in Manage Rooms first.</p>
               {importPlan && importPlan.rows.length > 0 && (
                 <div>
                   <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    {importPlan.validCount} of {importPlan.rows.length} rooms ready
+                    {importPlan.createCount} new · {importPlan.updateCount} updates · {importPlan.unchangedCount} unchanged
                     {importPlan.validCount < importPlan.rows.length && " · rows with a problem are skipped"}
                   </p>
                   <div className="max-h-64 overflow-auto rounded-lg border border-border">
@@ -388,7 +394,7 @@ export function BulkRoomGeneratorDialog({
                             <td className="px-2 py-1.5">{row.buildingName}</td>
                             <td className="px-2 py-1.5">{row.floorLabel}</td>
                             <td className={`px-2 py-1.5 font-semibold ${row.error ? "text-destructive" : "text-success"}`}>
-                              {row.error ?? "OK"}
+                              {row.error ?? (row.action === "unchanged" ? "Unchanged — skip" : row.action === "update" ? "Update existing" : "Add new")}
                             </td>
                           </tr>
                         ))}
@@ -546,7 +552,7 @@ export function BulkRoomGeneratorDialog({
           {mode === "upload" ? (
             <Button type="submit" disabled={submitting || parsing || !importPlan?.validCount}>
               {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Add {importPlan?.validCount ?? 0} Room{importPlan?.validCount === 1 ? "" : "s"}
+              Save room import
             </Button>
           ) : (
             <Button

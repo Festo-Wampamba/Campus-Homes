@@ -96,6 +96,12 @@ export const deleteAdminUserSchema = z.object({
 });
 export type DeleteAdminUserInput = z.infer<typeof deleteAdminUserSchema>;
 
+export const blockAdminUserSchema = z.object({
+  blocked: z.boolean(),
+  reason: z.string().trim().min(3).max(500),
+});
+export type BlockAdminUserInput = z.infer<typeof blockAdminUserSchema>;
+
 export const adminRoleAssignmentSchema = z
   .object({
     roleKey: z.enum(ASSIGNABLE_ROLE_KEYS),

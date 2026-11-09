@@ -1,10 +1,12 @@
 import type Redis from 'ioredis';
+import type { LogtoManagementClient } from './logto-management.client';
 import { PhoneOtpDelivery } from './otp-delivery';
 import { LogtoEmailWebhookController } from './logto-email-webhook.controller';
 import { LogtoSmsWebhookController } from './logto-sms-webhook.controller';
 
 describe('OTP connector delivery', () => {
   const originalEnv = process.env;
+  const management = { createOneTimeToken: jest.fn().mockResolvedValue({ token: "reset-token" }) } as unknown as LogtoManagementClient;
   const quota = jest.fn();
   const delivery = new PhoneOtpDelivery({ eval: quota } as unknown as Redis);
   let fetchMock: jest.SpyInstance;
@@ -73,12 +75,24 @@ describe('OTP connector delivery', () => {
     expect(log).not.toHaveBeenCalled();
   });
   it.each(['SignIn', 'Register', 'ForgotPassword', 'Generic'])('delivers the %s email template', async (type) => {
-    await new LogtoEmailWebhookController().handle('Bearer email-secret', { to: 'a@example.com', type, payload: { code: '123456' } });
+    await new LogtoEmailWebhookController(management).handle('Bearer email-secret', { to: 'a@example.com', type, payload: { code: '123456' } });
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.resend.com/emails');
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).text).toContain('123456');
   });
+  it('includes a ForgotPassword-scoped, ten-minute reset link with the code', async () => {
+    await new LogtoEmailWebhookController(management).handle('Bearer email-secret', { to:'student@example.com',type:'ForgotPassword',payload:{code:'123456'} });
+    expect(management.createOneTimeToken).toHaveBeenCalledWith('student@example.com','ForgotPassword',600);
+    const body=JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.text).toContain('screen=reset_password'); expect(body.text).toContain('token=reset-token');
+    expect(body.html).toContain('Reset my password'); expect(body.text).toContain('123456');
+  });
+  it('still sends the OTP if the optional reset-link issuer is unavailable', async () => {
+    (management.createOneTimeToken as jest.Mock).mockRejectedValueOnce(new Error('unavailable'));
+    await new LogtoEmailWebhookController(management).handle('Bearer email-secret', { to:'student@example.com',type:'ForgotPassword',payload:{code:'123456'} });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).text).toContain('123456');
+  });
   it('rejects unauthorized email and malformed addresses', async () => {
-    const controller = new LogtoEmailWebhookController();
+    const controller = new LogtoEmailWebhookController(management);
     await expect(controller.handle(undefined, null)).rejects.toMatchObject({ status: 401 });
     await expect(controller.handle('Bearer email-secret', { to: 'invalid', type: 'SignIn', payload: { code: '123456' } })).rejects.toMatchObject({ status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -87,7 +101,7 @@ describe('OTP connector delivery', () => {
     process.env.NODE_ENV = 'production';
     process.env.TRUSTED_PROXY_CIDRS = 'uniquelocal';
     delete process.env.RESEND_API_KEY;
-    await expect(new LogtoEmailWebhookController().handle('Bearer email-secret', { to: 'a@example.com', type: 'SignIn', payload: { code: '123456' } })).rejects.toThrow('temporarily unavailable');
+    await expect(new LogtoEmailWebhookController(management).handle('Bearer email-secret', { to: 'a@example.com', type: 'SignIn', payload: { code: '123456' } })).rejects.toThrow('temporarily unavailable');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
