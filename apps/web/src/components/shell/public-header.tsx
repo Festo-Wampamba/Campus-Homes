@@ -3,7 +3,7 @@
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AccountAccess } from "@campushomes/shared";
 
 import type { SessionUser } from "@/lib/session";
@@ -40,13 +40,20 @@ export function PublicHeader({
   const currentSignInHref = pathname ? (isHome ? "/sign-in" : `/sign-in?next=${encodeURIComponent(currentPath)}`) : signInHref;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
-    const wide = window.matchMedia("(min-width: 1024px)");
-    const closeOnWideScreen = () => { if (wide.matches) setOpen(false); };
-    closeOnWideScreen();
-    wide.addEventListener("change", closeOnWideScreen);
-    return () => wide.removeEventListener("change", closeOnWideScreen);
+    // CSS container queries account for text enlargement as well as width.
+    // Close only when the expanded navigation actually fits again.
+    const closeWhenExpanded = () => {
+      if (menuRef.current && getComputedStyle(menuRef.current).display === "none") setOpen(false);
+    };
+    closeWhenExpanded();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(closeWhenExpanded);
+    if (headerRef.current) observer?.observe(headerRef.current);
+    window.addEventListener("resize", closeWhenExpanded);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", closeWhenExpanded); };
   }, [open]);
   const links: PublicHeaderLink[] = [
     { href: "/search", label: "Find a room" },
@@ -73,7 +80,7 @@ export function PublicHeader({
     .join(" ");
 
   return (
-    <header className={headerClass}>
+    <header ref={headerRef} className={headerClass}>
       <div className="ch-public-header__inner">
         <Link href="/" className="inline-flex min-h-11 items-center" aria-label="CampusHomes home" onClick={() => setOpen(false)}>
           <Wordmark className={hasHero && !scrolled ? "text-white" : ""} onDark={hasHero && !scrolled} />
@@ -106,6 +113,7 @@ export function PublicHeader({
           )}
 
           <button
+            ref={menuRef}
             type="button"
             className="ch-public-header__menu"
             aria-expanded={open}
@@ -121,7 +129,7 @@ export function PublicHeader({
         open={open}
         onOpenChange={setOpen}
         aria-label="Mobile navigation"
-        className="ch-public-header__menu-dialog lg:hidden"
+        className="ch-public-header__menu-dialog"
       >
         <div className="ch-public-header__menu-dialog-inner">
           <div className="ch-public-header__menu-dialog-heading">

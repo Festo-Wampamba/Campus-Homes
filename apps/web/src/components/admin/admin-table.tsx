@@ -51,13 +51,13 @@ export function AdminTable({ rows, columns, searchPlaceholder = "Search recordsâ
 
   return (
     <div>
-      <div className="flex flex-col gap-2 border-b border-slate-100 p-3 sm:flex-row sm:items-center dark:border-border">
-        <label className="relative flex-1">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3 dark:border-border">
+        <label className="relative min-w-0 flex-[1_1_16rem]">
           <span className="sr-only">Search records</span>
           <Search aria-hidden className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={searchPlaceholder} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15 dark:border-border dark:bg-background" />
         </label>
-        <div className="flex gap-2">
+        <div className="flex max-w-full flex-wrap gap-2">
           <ViewToggle view={view} onChange={setView} />
           <button type="button" onClick={download} disabled={!filtered.length} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 dark:border-border dark:text-foreground dark:hover:bg-muted">
             <Download aria-hidden className="size-4" />

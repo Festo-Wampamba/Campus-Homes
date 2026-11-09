@@ -4,14 +4,8 @@
  * journey its editorial rhythm and do not alter portal primitives.
  */
 
-/* Fluid reading size for the public site: 17px on phones and tablets,
-   about 18-19px on laptops and monitors up to 24 inches (1920px), capped at
-   21px on 27-inch and wider screens. rem-based so a reader's own browser
-   text size still applies. :has() keeps it to pages that render the public
-   shell. */
-html:has(.ch-public-shell) {
-  font-size: clamp(1.0625rem, 0.875rem + 0.28vw, 1.3125rem);
-}
+/* Keep the reader's chosen base size. Scale composition, not every rem-based
+   control, with monitor width; browser zoom and OS text scaling still work. */
 
 .ch-public-shell {
   /* Side gutter around every page container: 16px on phones, 56px on wide screens. */
@@ -25,6 +19,11 @@ html:has(.ch-public-shell) {
   --ch-peach: #fcb177;
   color: var(--ch-ink);
   background: var(--background);
+}
+
+.ch-public-shell :where(section, article, form, fieldset),
+.ch-public-shell :where([class$="__inner"], [class$="__grid"]) > * {
+  min-inline-size: 0;
 }
 
 .ch-public-header {
@@ -910,3 +909,12 @@ html:has(.ch-public-shell) {
 }
 .ch-public-header__menu-dialog .ch-public-header__menu-dialog-heading { flex-shrink: 0; gap: 12px; }
 .ch-public-shell :is(button, .ch-journey-button, .ch-landlords-button) { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+/* Component width and rem-based text determine when navigation fits. The
+   media-query fallback above remains available in older browsers. */
+.ch-public-header { container: public-header / inline-size; }
+@container public-header (max-width: 70rem) {
+  .ch-public-header__nav > .ch-public-header__link,
+  .ch-public-header__nav > [data-public-desktop="true"] { display: none; }
+  .ch-public-header__nav .ch-public-header__menu { display: inline-flex; }
+}

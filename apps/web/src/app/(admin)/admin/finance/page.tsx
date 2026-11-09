@@ -47,7 +47,7 @@ export default async function FinanceOverviewPage() {
       <PageHeader eyebrow="Finance" title="Finance" description="Revenue, refunds, and the general ledger, updated live from the reservation hold-fee flow." />
       <FinanceTabs />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="ch-auto-grid gap-3">
         <StatCard label="Net income" value={ugx(pl.netIncomeUgx)} detail={`${from} → ${to}`} icon={Wallet} tone="teal" />
         <StatCard label="Hold fee revenue" value={ugx(pl.totalRevenueUgx + refundsUgx)} detail="Gross, before refunds" icon={CircleDollarSign} tone="blue" />
         <StatCard label="Refunds" value={ugx(refundsUgx)} detail="Cancellations and expired holds" icon={TrendingDown} tone="amber" />

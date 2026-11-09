@@ -388,7 +388,7 @@ export function AppShell({
                 onClick={() => setUserMenuOpen((open) => !open)}
                 className="flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-muted"
               >
-                <span className="grid size-[32px] shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user.name)}</span>
+                <span className="grid size-[32px] shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900 dark:text-teal-200">{initials(user.name)}</span>
                 <span className="hidden min-w-0 text-left sm:block"><span className="block max-w-32 truncate text-xs font-bold">{user.name || user.email}</span><span className="block max-w-[220px] break-words text-xs text-slate-500 dark:text-muted-foreground">{portalLabel}</span></span>
                 <ChevronDown aria-hidden className={cn("size-3.5 text-slate-400 transition-transform", userMenuOpen && "rotate-180")} />
               </button>
@@ -432,7 +432,7 @@ export function AppShell({
             <div className="hidden sm:block"><SignOutButton /></div>
           </div>
         </header>
-        <main className="mx-auto min-w-0 w-full max-w-[var(--ch-app-max)] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
+        <main className="ch-workspace-main mx-auto min-w-0 w-full max-w-[var(--ch-app-max)] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">{children}</main>
       </div>
 
       {messageToast && (

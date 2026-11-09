@@ -249,7 +249,7 @@ export function RoomTypeDialog({
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="ch-auto-grid gap-4">
             <div>
               <Label htmlFor="rt-title">Room Type Display Name</Label>
               <Input
@@ -284,7 +284,7 @@ export function RoomTypeDialog({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="ch-auto-grid gap-4">
             <div>
               <Label htmlFor="rt-bathroom">Bathroom Arrangement</Label>
               <select
@@ -334,7 +334,7 @@ export function RoomTypeDialog({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="ch-auto-grid gap-4">
             <div>
               <Label htmlFor="rt-price">Semester Price per Bed (UGX)</Label>
               <Input

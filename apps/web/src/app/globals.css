@@ -51,10 +51,9 @@
  * generated components theme themselves.
  */
 :root {
-  /* Page widths grow with the screen up to a cap, so content uses a 27-inch
-     display instead of sitting in a 1248px column in the middle. */
-  --ch-page-max: clamp(1248px, 80vw, 1760px);
-  --ch-app-max: clamp(1480px, 88vw, 2048px);
+  /* Bound composition at large widths without changing the user's text size. */
+  --ch-page-max: 90rem;
+  --ch-app-max: 112rem;
   /* brand ramp */
   --teal-900: oklch(0.32 0.055 195);
   --teal-700: oklch(0.45 0.075 195);
@@ -371,8 +370,18 @@
    chosen text size. Keep form controls shrinkable in grid/flex layouts. */
 @layer base {
   :where(input, select, textarea, label) { min-inline-size: 0; max-inline-size: 100%; }
+  :where(main, section, article, fieldset), :where(.grid, .flex) > * { min-inline-size: 0; }
 }
 @layer components {
+  /* Respond to actual available space (sidebar, zoom and resizable forms),
+     instead of assuming a desktop viewport means every column can fit. */
+  .ch-auto-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ch-grid-min, 14rem)), 1fr));
+  }
+  .ch-auto-grid > * { min-inline-size: 0; }
+  .ch-workspace-main { overflow-wrap: anywhere; }
+  .ch-dialog-body .ch-auto-grid label { display: block; }
   .ch-dialog {
     --ch-dialog-gutter: clamp(8px, 2vw, 16px);
     width: min(var(--ch-dialog-width, 38rem), calc(100vw - 2 * var(--ch-dialog-gutter)));
