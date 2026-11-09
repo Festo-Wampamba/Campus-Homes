@@ -14,7 +14,7 @@ import { Pool } from 'pg';
 import { RlsDb } from '../../src/db/db.module';
 import type { RlsContext } from '../../src/db/rls-context';
 import type { LogtoManagementClient } from '../../src/modules/auth/logto-management.client';
-import { loadPermissions } from '../../src/modules/auth/permissions';
+import { loadPermissions, STEP_UP_MAX_AGE_MS } from '../../src/modules/auth/permissions';
 import { AuditService } from '../../src/modules/ops/audit.service';
 import { AdminUsersService } from '../../src/modules/staff/admin-users.service';
 import { testDatabaseUrl } from '../test-database-url';
@@ -47,7 +47,7 @@ async function assign(userId: string, roleKey: string, scopeType = 'platform_wid
 const superAdminCtx = (): RlsContext => ({ userId: superAdmin, role: 'admin' });
 const mukAdminCtx = (): RlsContext => ({ userId: mukAdmin, role: 'admin' });
 const platformWide = [{ scopeType: 'platform_wide', scopeId: null }];
-const superPerms = new Set(['users.update', 'roles.manage_super_admin']);
+const superPerms = new Set(['users.update', 'roles.manage_super_admin', 'accounts.suspend']);
 const catchmentMuk = [{ scopeType: 'catchment', scopeId: 'MUK' }];
 
 beforeAll(async () => {
@@ -436,9 +436,20 @@ describe('AdminUsersService.update / revokeSessions — staff target guards', ()
   });
 
   it('lets a super_admin actor suspend another super_admin', async () => {
-    const updated = await adminUsers.update(superAdminCtx(), superPerms, platformWide, targetSuper, { status: 'suspended' });
+    const updated = await adminUsers.update(superAdminCtx(), superPerms, platformWide, targetSuper, { status: 'suspended' }, new Date().toISOString());
     expect(updated?.status).toBe('suspended');
     await pool.query(`UPDATE users SET status = 'active' WHERE id = $1`, [targetSuper]);
+  });
+
+  it('requires accounts.suspend through the existing edit path too', async () => {
+    await expect(adminUsers.update(superAdminCtx(), new Set(['users.update', 'roles.manage_super_admin']),
+      platformWide, targetSuper, { status: 'suspended' }, new Date().toISOString()))
+      .rejects.toThrow('Account status changes require accounts.suspend');
+  });
+
+  it('requires recent sign-in for an authorized status change', async () => {
+    await expect(adminUsers.update(superAdminCtx(), superPerms, platformWide, targetSuper, { status: 'suspended' },
+      new Date(Date.now() - STEP_UP_MAX_AGE_MS - 1000).toISOString())).rejects.toMatchObject({ status: 401 });
   });
 
   it('refuses revoking the sessions of a super_admin without roles.manage_super_admin', async () => {
