@@ -39,9 +39,9 @@ export default async function LandlordTenantsPage({ searchParams }: { searchPara
         <WalkInStudentButton beds={freeBeds} />
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="mt-6 ch-auto-grid gap-4">
         {stats.map((stat) => (
-          <Card key={stat.label} className={stat.value.startsWith("UGX") ? "col-span-2 sm:col-span-1" : undefined}>
+          <Card key={stat.label}>
             <CardContent className="p-4">
               <p className={`text-xl font-bold tabular-nums sm:text-2xl ${stat.owed ? "text-destructive" : ""}`}>{stat.value}</p>
               <p className="text-xs text-muted-foreground">{stat.label}</p>

@@ -140,7 +140,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 </label>
                 {entryMode === 'manual' && rows.length > 1 && !locked && <Button aria-label={`Remove student ${index + 1}`} type="button" variant="secondary" onClick={() => setRows((items) => items.filter((item) => item.key !== row.key))}><Trash2 aria-hidden className="size-4" /></Button>}
               </div>
-              {row.kind !== "existing" ? <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              {row.kind !== "existing" ? <div className="ch-auto-grid gap-4">
                 <label className="text-sm font-semibold">First name *<input required maxLength={60} autoComplete="given-name" className={FIELD} value={row.firstName} onChange={(e) => update(row.key, { firstName: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Last name *<input required maxLength={60} autoComplete="family-name" className={FIELD} value={row.lastName} onChange={(e) => update(row.key, { lastName: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Gender<select className={FIELD} value={row.gender} onChange={(e) => update(row.key, { gender: e.target.value as Row["gender"] })}><option value="">Not recorded</option><option value="male">Male</option><option value="female">Female</option></select></label>
@@ -153,7 +153,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
               </div>}
               {row.kind === "record" && <p className="text-sm text-muted-foreground">Save a tenant record and book the selected bed immediately. No CampusHomes login or student acceptance is required. Contact details stay with this property record.</p>}
-              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="ch-auto-grid gap-4">
                 <label className="text-sm font-semibold">Emergency contact name (optional)<input autoComplete="off" maxLength={120} className={FIELD} value={row.emergencyContactName ?? ""} onChange={(e) => update(row.key, { emergencyContactName: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Emergency contact phone (optional)<input type="tel" autoComplete="off" className={FIELD} placeholder="0771 234567" value={row.emergencyContactPhone ?? ""} onChange={(e) => update(row.key, { emergencyContactPhone: e.target.value })} /></label>
               </div>
@@ -165,7 +165,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
               </label>
               {!bed && <p role="alert" className="text-sm text-destructive">{row.assignmentProblem ?? "Choose a room and free bed first. Rent and balance will appear after assignment."}</p>}
               {bed && row.assignmentNote && <p role="status" className="rounded-md bg-primary/10 p-3 text-sm text-primary">{row.assignmentNote}</p>}
-              <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="ch-auto-grid items-start gap-4">
                 <label className="text-sm font-semibold">Amount paid (UGX)<input type="text" inputMode="numeric" pattern="[0-9]*" className={FIELD} value={row.paid} onChange={(e) => update(row.key, { paid: e.target.value })} aria-invalid={overpaid || undefined} /></label>
                 <label className="text-sm font-semibold">Paid with<select className={FIELD} value={row.paymentMethod} onChange={(e) => update(row.key, { paymentMethod: e.target.value })}><option value="">Not recorded</option>{Object.entries(PAYMENT_METHOD_LABEL).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
                 <div className="min-w-0 text-sm font-semibold"><p>Rent (UGX)</p><output aria-label="Rent" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{bed ? formatUgx(bed.pricePerTermUgx) : "Select a room first"}</output></div>

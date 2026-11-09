@@ -72,7 +72,7 @@ export function Leadership({
   return (
     <div className="space-y-6">
       {mutation.feedback}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="ch-auto-grid gap-3">
         {[
           ['Properties', total],
           ['Occupied beds', data.occupied],

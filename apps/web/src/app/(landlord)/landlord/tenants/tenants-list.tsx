@@ -189,7 +189,7 @@ function RecordPaymentDialog({ tenant, onClose }: { tenant: LandlordTenant; onCl
           onClose={onClose}
         />
         <DialogBody className="space-y-4">
-          <dl className="grid grid-cols-3 gap-2 text-sm">
+          <dl className="ch-auto-grid [--ch-grid-min:9rem] gap-3 text-sm">
             <div><dt className="text-xs text-muted-foreground">Total</dt><dd className="font-semibold tabular-nums">{formatUgx(tenant.totalUgx)}</dd></div>
             <div><dt className="text-xs text-muted-foreground">Paid</dt><dd className="font-semibold tabular-nums">{formatUgx(tenant.paidUgx)}</dd></div>
             <div><dt className="text-xs text-muted-foreground">Balance</dt><dd className="font-semibold text-destructive tabular-nums">{formatUgx(tenant.balanceUgx)}</dd></div>

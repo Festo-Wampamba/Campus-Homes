@@ -81,7 +81,7 @@ function Sidebar({ user, pathname, onNavigate }: { user: SessionUser; pathname: 
           className="flex min-h-11 items-center gap-3 rounded-xl px-2 py-2 hover:bg-teal-50"
           onClick={onNavigate}
         >
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900">{initials(user)}</span>
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-900 dark:text-teal-200">{initials(user)}</span>
           <span className="min-w-0"><span className="block truncate text-sm font-bold">{user.name || "Student"}</span><span className="block truncate text-xs text-[var(--ch-ink-soft)]">{user.email || user.phoneNumber || "CampusHomes account"}</span></span>
         </Link>
         <div className="mt-2 px-2"><SignOutButton /></div>
@@ -129,7 +129,7 @@ export function StudentShell({ children, user }: { children: React.ReactNode; us
             <IdleTimeout signInPath="/sign-in" />
             <ThemeToggle />
             <Link href="/profile" className="hidden items-center gap-2 rounded-full px-2 py-1 text-sm font-bold hover:bg-teal-50 sm:flex">
-              <span className="grid size-8 place-items-center rounded-full bg-teal-100 text-xs text-teal-900">{initials(user)}</span>
+              <span className="grid size-8 place-items-center rounded-full bg-teal-100 text-xs text-teal-900 dark:text-teal-200">{initials(user)}</span>
               <span className="max-w-28 truncate">{user.name || "Profile"}</span>
             </Link>
             <Link href="/profile" className="grid min-h-11 min-w-11 place-items-center rounded-xl text-teal-800 hover:bg-teal-50 sm:hidden" aria-label="View profile">

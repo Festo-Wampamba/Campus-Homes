@@ -28,8 +28,8 @@ function change(current: number, previous: number) {
 }
 
 const TONE_TILE = {
-  positive: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950",
-  negative: "bg-red-50 text-red-700 dark:bg-red-950",
+  positive: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  negative: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
   neutral: "bg-teal-50 text-teal-700 dark:bg-teal-100",
 } as const;
 
@@ -49,7 +49,7 @@ export default async function AdminOverviewPage() {
 
   return <>
     <PageHeader eyebrow="Command centre" title={`${timeOfDayGreeting()}, ${session.user.name?.split(" ")[0] || "there"}`} description="A live view of CampusHomes growth, trust operations, reservations, and platform health." actions={<Link href="/admin/audit-log" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-border dark:bg-card dark:text-foreground"><RefreshCcw aria-hidden className="size-4" />Review activity</Link>} />
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="ch-auto-grid gap-3">
       <StatCard label="Total users" value={s.totalUsers.toLocaleString()} detail={`${s.activeUsers.toLocaleString()} active accounts`} trend={change(s.newUsers30d, s.priorUsers30d)} icon={Users} tone="teal" />
       <StatCard label="Properties" value={s.properties.toLocaleString()} detail={`${s.verifiedListings.toLocaleString()} verified listings`} icon={Building2} tone="blue" />
       <StatCard label="Reservations" value={s.reservations.toLocaleString()} detail={`${s.reservations30d.toLocaleString()} in the last 30 days`} trend={change(s.reservations30d, s.priorReservations30d)} icon={CalendarCheck2} tone="slate" />
