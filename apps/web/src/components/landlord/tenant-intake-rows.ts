@@ -2,6 +2,7 @@ import type { ImportedTenantRow, University } from '@campushomes/shared';
 import type { WalkInBed } from '@/app/(landlord)/landlord/bookings/room-lookup';
 
 export type TenantIntakeRow = {
+  reservationId?: string; existingBooking?: ImportedTenantRow['existingBooking'];
   key: string; kind: 'record' | 'new' | 'existing'; firstName: string; lastName: string;
   gender: 'male' | 'female' | ''; phone: string; email: string; contact: string;
   university: University; bedId: string; movedIn: boolean; paid: string; paymentMethod: string;
@@ -57,21 +58,21 @@ function matchLocations(locations:Location[], beds:WalkInBed[], usedBeds:string[
 export function importedTenantRows(records:ImportedTenantRow[],beds:WalkInBed[],usedBeds:string[]):TenantIntakeRow[]{
   const assignments = matchLocations(records, beds, usedBeds);
   return records.map((record,index)=>{
-    const assignment = assignments[index]!;
-    const selected = beds.find((bed) => bed.id === assignment.bedId);
+    const assignment = record.existingBooking ? {bedId:record.existingBooking.id,assignmentNote:"Updating this existing tenant record. Recorded payments and occupancy stay unchanged."} : assignments[index]!;
+    const selected = record.existingBooking ?? beds.find((bed) => bed.id === assignment.bedId);
     const warnings=[...record.warnings];
     if(selected&&record.rent&&Number(record.rent)!==selected.pricePerTermUgx)warnings.push('The document rent differs from this room’s rent. Check the room and money before saving.');
     if(record.university&&!universities[normalize(record.university)])warnings.push('University was not recognized. Select the correct one.');
     if(record.paymentMethod&&!methods[normalize(record.paymentMethod)])warnings.push('Payment method was not recognized. Select it in the form.');
-    return {...emptyTenantRow(),documentRowNumber:record.rowNumber,kind:'record',firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
-      contact:record.email||record.phone,emergencyContactName:record.emergencyContactName??'',emergencyContactPhone:record.emergencyContactPhone??'',university:universities[normalize(record.university)]??'MUK',...assignment,movedIn:record.movedIn,paid:record.amountPaid,
+    return {...emptyTenantRow(),documentRowNumber:record.rowNumber,reservationId:record.existingBooking?.reservationId ?? record.reservationId,existingBooking:record.existingBooking,kind:'record',firstName:record.firstName,lastName:record.lastName,gender:record.gender,phone:record.phone,email:record.email,
+      contact:record.email||record.phone,emergencyContactName:record.emergencyContactName??'',emergencyContactPhone:record.emergencyContactPhone??'',university:universities[normalize(record.university)]??'MUK',...assignment,movedIn:record.existingBooking ? record.existingBooking.status === 'occupied' : record.movedIn,paid:record.amountPaid || (record.existingBooking ? String(record.existingBooking.paidUgx) : ''),
       paymentMethod:methods[normalize(record.paymentMethod)]??'',importWarnings:warnings,
       importLocation:{propertyName:record.propertyName,roomLabel:record.roomLabel,bedLabel:record.bedLabel}};
   });
 }
 /** Refresh only unresolved/stale assignments, preserving edits and retry keys. */
 export function rematchImportedTenantRows(rows:TenantIntakeRow[], beds:WalkInBed[]):TenantIntakeRow[] {
-  const unresolved = rows.filter((row) => row.importLocation && !beds.some((bed) => bed.id === row.bedId));
+  const unresolved = rows.filter((row) => row.importLocation && !row.reservationId && !beds.some((bed) => bed.id === row.bedId));
   const assignments = matchLocations(unresolved.map((row) => row.importLocation!), beds, rows.filter((row) => !unresolved.includes(row)).map((row) => row.bedId));
   return rows.map((row) => {const index=unresolved.indexOf(row);return index<0?row:{...row,...assignments[index]};});
 }

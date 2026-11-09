@@ -284,8 +284,22 @@ async function inStaffPurgeTx<T>(fn: (client: PoolClient, target: string) => Pro
 }
 
 describe('purge cascade for a staff user (ops inspector)', () => {
+  it('preserves a managed property when its approval reviewer is deleted', async () => {
+    await inStaffPurgeTx(async (client, inspector) => {
+      await client.query('RESET ROLE');
+      const propertyId = (await client.query('SELECT property_id FROM verification_visits WHERE inspector_id=$1 LIMIT 1', [inspector])).rows[0].property_id;
+      await client.query('UPDATE properties SET manage_reviewed_by = $1 WHERE id=$2', [inspector, propertyId]);
+      await client.query('UPDATE users SET deleted_at=NULL WHERE id=$1', [inspector]);
+      await client.query('SET LOCAL ROLE app_user');
+      await serviceFor(client).deleteUser(actor, new Set(), inspector, 'Departed reviewer');
+      await client.query('RESET ROLE');
+      const property = await client.query('SELECT manage_reviewed_by FROM properties WHERE id=$1', [propertyId]);
+      expect(property.rows).toEqual([{ manage_reviewed_by: null }]);
+    });
+  });
   it('deletes the inspector and keeps their inspection history with the actor nulled', async () => {
     await inStaffPurgeTx(async (client, inspector) => {
+      const versionIds = (await client.query('SELECT id FROM listing_versions WHERE verified_by=$1', [inspector])).rows.map((row) => row.id);
       await expect(serviceFor(client).purgeUser(actor, new Set(), inspector)).resolves.toEqual({
         id: inspector,
         purged: true,
@@ -297,7 +311,7 @@ describe('purge cascade for a staff user (ops inspector)', () => {
         `SELECT inspector_id, approved_by FROM verification_visits WHERE client_idempotency_key = 'staff-purge-visit'`,
       );
       const version = await client.query(
-        `SELECT verified_by FROM listing_versions WHERE verified_by IS NULL`,
+        `SELECT verified_by FROM listing_versions WHERE id=ANY($1::uuid[]) AND verified_by IS NULL`, [versionIds],
       );
       expect(users.rowCount).toBe(0);
       expect(visit.rowCount).toBe(1);

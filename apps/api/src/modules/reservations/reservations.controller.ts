@@ -96,8 +96,8 @@ export class ReservationsController {
 
   @Post('tenant-import/parse')
   @Roles('landlord')
-  async parseTenantImport(@Body() body: unknown, @Query('format') format: string) {
-    return { rows: await parseTenantFile(body as Buffer, format) };
+  async parseTenantImport(@Req() req: AuthenticatedRequest, @Body() body: unknown, @Query('format') format: string) {
+    return { rows: await this.reservationsService.reconcileTenantImport(rlsCtx(req), await parseTenantFile(body as Buffer, format)) };
   }
 
   @Get('tenant-import/template')

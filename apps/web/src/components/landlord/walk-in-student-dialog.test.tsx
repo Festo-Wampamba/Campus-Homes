@@ -155,3 +155,17 @@ it('sends emergency details with a tenant record at intake',async()=>{
  await act(async()=>container.querySelector('form')!.requestSubmit());
  expect(JSON.parse(mockApi.mock.calls[0][1].body).entries[0]).toMatchObject({kind:'record',emergencyContactName:'Grace Kato',emergencyContactPhone:'+256771234567'});
 });
+it('can correct an imported existing tenant when there are no free beds', async () => {
+  await open([]); await act(async () => button('Import tenant records').click());
+  const reservationId = '5f0c2a9e-1111-4222-8333-444455550099';
+  mockApi.mockResolvedValueOnce({rows:[{...imported(),kind:'record',reservationId,existingBooking:{...BED,reservationId,propertyId:'property',unitId:'unit',semesterId:'5f0c2a9e-1111-4222-8333-444455550098',semesterName:'Current',paidUgx:0,status:'booked'}}]});
+  await upload();
+  const review=[...container.querySelectorAll('label')].find(label=>label.textContent?.includes('I have checked'))!.querySelector('input')!;
+  await act(async()=>review.click());
+  expect(button('Save 1 imported student').disabled).toBe(false);
+  expect(container.querySelector('[aria-label="Rent"]')?.textContent).toBe('UGX\u00a0900,000');
+  mockApi.mockImplementationOnce(async(_path,options)=>JSON.parse(options.body).entries.map((row:{idempotencyKey:string})=>({key:row.idempotencyKey,status:'updated'})));
+  await act(async()=>container.querySelector('form')!.requestSubmit());
+  expect(JSON.parse(mockApi.mock.calls[1][1].body).entries[0]).toMatchObject({reservationId,bedId:BED.id,imported:true});
+  expect(container.textContent).toContain('Existing tenant details updated. Payments and occupancy were preserved.');
+});

@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 
 /** One row of the landlord's tenant ledger, as landlordTenants() returns it. */
 export type TenantExportRow = {
+  reservationId?: string;
   propertyName: string;
   roomLabel: string;
   bedLabel: string;
@@ -29,6 +30,7 @@ const COLUMNS = [
   { header: 'Total (UGX)', key: 'total', width: 15 },
   { header: 'Paid (UGX)', key: 'paid', width: 15 },
   { header: 'Balance (UGX)', key: 'balance', width: 15 },
+  { header: 'Tenant record ID', key: 'recordId', width: 38 },
 ];
 const MONEY = '#,##0';
 // Brand teal-900 header with white text; balances still owed in red.
@@ -48,6 +50,7 @@ export async function tenantsWorkbook(tenants: TenantExportRow[]): Promise<Buffe
 
   for (const t of tenants) {
     const row = sheet.addRow({
+      recordId: t.reservationId ?? '',
       property: t.propertyName,
       room: t.roomLabel,
       bed: t.bedLabel,
@@ -75,6 +78,6 @@ export async function tenantsWorkbook(tenants: TenantExportRow[]): Promise<Buffe
     totals.font = { bold: true };
   }
   for (const key of ['total', 'paid', 'balance']) sheet.getColumn(key).numFmt = MONEY;
-  sheet.autoFilter = { from: 'A1', to: 'L1' };
+  sheet.autoFilter = { from: 'A1', to: 'M1' };
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

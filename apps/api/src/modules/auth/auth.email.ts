@@ -1,5 +1,6 @@
 import { STAFF_ROLE_LABELS, type StaffRoleKey } from '@campushomes/shared';
 
+import { randomUUID } from 'node:crypto';
 import type { Env } from '../../config/env';
 
 export type AuthEmailKind = 'verify-email' | 'reset-password' | 'set-password';
@@ -65,7 +66,7 @@ const VERIFICATION_COPY: Record<VerificationEmailKind, { heading: string; intro:
 };
 
 /** Exported for tests. `now` is when Logto issued the code (≈ when its webhook calls us). */
-export function verificationContent(kind: VerificationEmailKind, code: string, now = new Date()): EmailMessage {
+export function verificationContent(kind: VerificationEmailKind, code: string, now = new Date(), resetUrl?: string): EmailMessage {
   const { heading, intro } = VERIFICATION_COPY[kind];
   const title = `Your CampusHomes ${heading}`;
   const expiresAt = new Date(now.getTime() + VERIFICATION_CODE_TTL_MINUTES * 60_000).toLocaleTimeString('en-GB', {
@@ -76,6 +77,8 @@ export function verificationContent(kind: VerificationEmailKind, code: string, n
   });
   const expiry = `This code expires in ${VERIFICATION_CODE_TTL_MINUTES} minutes, at ${expiresAt} EAT.`;
   const safeCode = escapeHtml(code);
+  const link = kind === 'forgot-password' && resetUrl ? resetUrl : null;
+  const resetButton = link ? `<p style="margin:24px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#087f80;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px">Reset my password</a></p><p style="font-size:13px;line-height:1.6;color:#3d5c5c">Or enter the code below in the password reset screen you already opened. The link expires in 10 minutes and can be used once.</p>` : '';
   // Gmail's "Copy code" chip is Gmail's own detection, not something a sender
   // can add. It needs one clear, unbroken code, so the body shows it once in a
   // plain sentence, never split into per-digit boxes.
@@ -87,6 +90,7 @@ export function verificationContent(kind: VerificationEmailKind, code: string, n
 <tr><td style="padding:28px 24px 8px">
 <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;color:#173b3b">${escapeHtml(title)}</h1>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3d5c5c">${escapeHtml(intro)}</p>
+${resetButton}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef7f6;border:1px solid #cfe5e2;border-radius:14px"><tr><td style="padding:20px 16px" align="center">
 <p style="margin:0 0 6px;font-size:14px;color:#3d5c5c">Your verification code is</p>
 <p style="margin:0;font-family:'Courier New',monospace;font-size:34px;font-weight:700;color:#0b3f3f">${safeCode}</p>
@@ -100,6 +104,7 @@ export function verificationContent(kind: VerificationEmailKind, code: string, n
   const text = `${title}
 
 ${intro}
+${link ? `\nReset my password: ${link}\nThis link expires in 10 minutes and can be used once.\nOr enter the code in your open reset screen.\n` : ''}
 
 Your verification code is ${code}
 
@@ -259,25 +264,39 @@ async function deliver(env: Env, to: string, message: EmailMessage): Promise<voi
     else console.info('[email:dev] Delivery skipped: provider is not configured');
     return;
   }
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    signal: AbortSignal.timeout(10_000),
-    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [to], subject: message.subject, html: message.html, text: message.text }),
-  });
-  if (!response.ok) {
-    throw new Error(`Resend email delivery failed: HTTP ${response.status}`);
+  const body = JSON.stringify({ from: env.AUTH_EMAIL_FROM, to: [to], subject: message.subject, html: message.html, text: message.text });
+  // Retry transient provider/network failures once. The same provider key on
+  // both attempts prevents duplicate email when an accepted response is lost.
+  const idempotencyKey = randomUUID();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST', signal: AbortSignal.timeout(4_000),
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body,
+      });
+      if (response.ok) return;
+      if (attempt === 0 && (response.status === 408 || response.status === 429 || response.status >= 500)) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        continue;
+      }
+      throw new EmailDeliveryError(response.status);
+    } catch (error) {
+      if (error instanceof EmailDeliveryError || attempt === 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
   }
 }
 
-/** For Logto's HTTP Email connector — a plain verification code, not a
- * clickable link (see logto-email-webhook.controller.ts). Kept separate
- * from sendAuthEmail's link-shaped templates rather than overloading them. */
+export class EmailDeliveryError extends Error {
+  constructor(readonly providerStatus: number) { super(`Email provider rejected delivery: HTTP ${providerStatus}`); }
+}
+
+/** Provider-issued OTP, with a scoped reset-link alternative for recovery. */
 export async function sendVerificationCodeEmail(
   env: Env,
-  input: { to: string; code: string; kind: VerificationEmailKind },
+  input: { to: string; code: string; kind: VerificationEmailKind; resetUrl?: string },
 ): Promise<void> {
-  await deliver(env, input.to, verificationContent(input.kind, input.code));
+  await deliver(env, input.to, verificationContent(input.kind, input.code, new Date(), input.resetUrl));
 }
 
 export async function sendStaffInvitationEmail(env: Env, to: string, input: StaffInvitationEmailInput): Promise<void> {

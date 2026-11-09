@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type UpdateTenantEmergencyInput, type TenantIntakeResult, type TenantAssignmentRequest, type TeamCapability, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type ImportedTenantRow, type UpdateTenantEmergencyInput, type TenantIntakeResult, type TenantAssignmentRequest, type TeamCapability, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { bookableIntakeBed, intakeVersion, INTAKE_BEDS_SQL, type IntakeBed } from './tenant-intake-inventory';
 
@@ -770,9 +770,71 @@ export class ReservationsService {
     };
   }
 
-  /** Persist a landlord's own tenant particulars, booking and initial receipt
-   * atomically. Contacts do not select, alter or claim a CampusHomes account. */
+  /** Match only the caller's private, active tenancy records. Login identities
+   * are never merged by a name, room number or unverified contact. */
+  async reconcileTenantImport(ctx: RlsContext, rows: ImportedTenantRow[]): Promise<ImportedTenantRow[]> {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      const bookings = (await client.query<NonNullable<ImportedTenantRow['existingBooking']> & { name: string; university: string }>(`
+        SELECT r.id AS "reservationId", b.id, p.id AS "propertyId", un.id AS "unitId", p.name AS "propertyName",
+          un.label AS "roomLabel", b.label AS "bedLabel", un.room_category::text AS "roomCategory",
+          un.self_contained AS "selfContained", r.price_per_term_ugx AS "pricePerTermUgx", l.semester_id AS "semesterId",
+          s.name AS "semesterName", r.status::text AS status, u.name, stu.university::text AS university
+        FROM reservations r JOIN users u ON u.id=r.student_id JOIN students stu ON stu.user_id=u.id JOIN beds b ON b.id=r.bed_id
+        JOIN units un ON un.id=b.unit_id JOIN properties p ON p.id=un.property_id
+        JOIN listing_versions lv ON lv.id=r.listing_version_id JOIN listings l ON l.id=lv.listing_id JOIN semesters s ON s.id=l.semester_id
+        WHERE p.landlord_id=$1 AND u.tenancy_property_id=p.id AND u.logto_user_id IS NULL
+          AND r.status IN ('booked','occupied')`, [ctx.userId])).rows;
+      const paid = await this.paidByReservation(client, bookings.map((b) => b.reservationId));
+      const norm = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const bedCode = (value: string) => norm(value).replace(/^bed\s*/, '');
+      return rows.map((row) => {
+        const matches = bookings.filter((b) => row.reservationId ? b.reservationId === row.reservationId :
+          row.propertyName && row.roomLabel && norm(b.name) === norm(`${row.firstName} ${row.lastName}`) &&
+          norm(b.propertyName) === norm(row.propertyName) && norm(b.roomLabel) === norm(row.roomLabel) &&
+          (!row.bedLabel || bedCode(b.bedLabel) === bedCode(row.bedLabel)));
+        if (matches.length !== 1) return row;
+        const booking = matches[0]!;
+        return { ...row, kind: 'record', university: row.university || booking.university, reservationId: booking.reservationId,
+          existingBooking: { reservationId: booking.reservationId, id: booking.id, propertyId: booking.propertyId, unitId: booking.unitId,
+            propertyName: booking.propertyName, roomLabel: booking.roomLabel, bedLabel: booking.bedLabel, roomCategory: booking.roomCategory,
+            selfContained: booking.selfContained, pricePerTermUgx: booking.pricePerTermUgx, semesterId: booking.semesterId,
+            semesterName: booking.semesterName, status: booking.status, paidUgx: paid.get(booking.reservationId) ?? 0 },
+          warnings: [...row.warnings, 'Existing tenant: update particulars only. Payments, room assignment and move-in status remain unchanged.'] };
+      });
+    });
+  }
+
+  private async correctImportedTenant(ctx: RlsContext, input: Extract<TenantIntakeInput['entries'][number], { kind: 'record' }>) {
+    return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      await this.assertCanManageBed(client, ctx, input.bedId, 'bookings.manage');
+      const tenant = (await client.query<{ id: string; student_id: string; bed_id: string; status: 'booked' | 'occupied' }>(`
+        SELECT r.id,r.student_id,r.bed_id,r.status::text AS status FROM reservations r JOIN users u ON u.id=r.student_id
+        JOIN beds b ON b.id=r.bed_id JOIN units un ON un.id=b.unit_id
+        WHERE r.id=$1 AND r.bed_id=$2 AND u.tenancy_property_id=un.property_id AND u.logto_user_id IS NULL
+          AND r.status IN ('booked','occupied') FOR UPDATE OF r,u`, [input.reservationId, input.bedId])).rows[0];
+      if (!tenant || tenant.bed_id !== input.bedId) throw new ConflictException('This private tenant record cannot be matched. Download the current tenant ledger and keep its Tenant record ID.');
+      const paid = (await this.paidByReservation(client, [tenant.id])).get(tenant.id) ?? 0;
+      if ((input.bookingFeeCollectedUgx ?? 0) !== paid || (input.depositCollectedUgx ?? 0) !== 0) {
+        throw new ConflictException('The uploaded payment total differs from the saved ledger. Use Record payment or the payment correction process; re-uploading cannot replace receipts.');
+      }
+      if (input.movedIn !== (tenant.status === 'occupied')) throw new ConflictException('Use the move-in workflow to change occupancy. This import only corrects tenant particulars.');
+      await client.query(`UPDATE users SET name=$2, gender=coalesce($3,gender), contact_phone=coalesce($4,contact_phone),
+        contact_email=coalesce($5,contact_email), updated_at=now() WHERE id=$1`,
+        [tenant.student_id, input.name, input.gender ?? null, input.phone ?? null, input.email ?? null]);
+      await client.query('UPDATE students SET university=$2 WHERE user_id=$1', [tenant.student_id, input.university]);
+      await client.query(`UPDATE reservations SET emergency_contact_name=coalesce($2,emergency_contact_name),
+        emergency_contact_phone=coalesce($3,emergency_contact_phone),updated_at=now() WHERE id=$1`,
+        [tenant.id, input.emergencyContactName || null, input.emergencyContactPhone || null]);
+      await client.query(`INSERT INTO audit_log(actor_id,actor_role,action,target_type,target_id,payload)
+        VALUES($1,$2,'tenant.import_corrected','reservation',$3,'{"paymentsPreserved":true,"occupancyPreserved":true}'::jsonb)`,
+        [ctx.userId, ctx.role, tenant.id]);
+      return { reservationId: tenant.id, status: tenant.status, updated: true as const };
+    });
+  }
+
+  /** Persist property tenant particulars, booking and initial receipt atomically. */
   private async recordTenant(ctx: RlsContext, input: Extract<TenantIntakeInput['entries'][number], { kind: 'record' }>) {
+    if (input.reservationId) return this.correctImportedTenant(ctx, input);
     // Hash fields explicitly so object key order and omitted defaults cannot
     // change retry behavior. Never store contact information in the retry key.
     const fingerprint = createHash('sha256').update(JSON.stringify([
@@ -793,6 +855,19 @@ export class ReservationsService {
         return { reservation: prior, receipt: null, replayed: true };
       }
       const bed = await bookableIntakeBed(client, input.bedId, input.semesterId);
+      if (input.imported) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          `tenant-import:${bed.property_id}:${bed.semesterId}:${input.name.trim().toLowerCase().replace(/\s+/g,' ')}`,
+        ]);
+        // A corrected file without stable IDs must not allocate a second bed
+        // to a resident already imported for this property and semester.
+        const duplicate = await client.query(`SELECT r.id FROM reservations r JOIN users u ON u.id=r.student_id
+          JOIN listing_versions lv ON lv.id=r.listing_version_id JOIN listings l ON l.id=lv.listing_id
+          WHERE u.tenancy_property_id=$1 AND lower(regexp_replace(btrim(u.name),'\\s+',' ','g'))=lower(regexp_replace(btrim($2::text),'\\s+',' ','g'))
+            AND l.semester_id=$3 AND r.status IN ('booked','occupied') LIMIT 1`, [bed.property_id,input.name,bed.semesterId]);
+        if (duplicate.rows.length) throw new ConflictException('A private tenant with this name is already recorded for this property and semester. Download the tenant ledger and keep the Tenant record ID when uploading corrections.');
+      }
+
       const student = (await client.query<{ id: string }>(
         `INSERT INTO users (name, gender, contact_phone, contact_email, tenancy_property_id, role, status)
          VALUES ($1,$2,$3,$4,$5,'student','active') RETURNING id`,
@@ -823,7 +898,7 @@ export class ReservationsService {
       try {
         if (entry.kind === 'record' || entry.kind === 'new') {
           const saved = entry.kind === 'record' ? await this.recordTenant(ctx, entry) : await this.onboardWalkIn(ctx, entry);
-          results.push({ key: entry.idempotencyKey, status: 'added', reservationId: saved.reservationId, bookingStatus: saved.status as 'booked' | 'occupied' });
+          results.push({ key: entry.idempotencyKey, status: 'updated' in saved ? 'updated' : 'added', reservationId: saved.reservationId, bookingStatus: saved.status as 'booked' | 'occupied' });
         } else {
           await this.requestTenantAssignment(ctx, entry);
           results.push({ key: entry.idempotencyKey, status: 'requested' });

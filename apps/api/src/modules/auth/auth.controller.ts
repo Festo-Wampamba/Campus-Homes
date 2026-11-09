@@ -59,7 +59,7 @@ export class AuthController {
     if (intentParam !== undefined && !['student', 'landlord', 'staff'].includes(intentParam)) {
       return res.status(400).json({ code: 'INVALID_AUTH_INTENT', requestId });
     }
-    if (screen !== undefined && screen !== 'register') {
+    if (screen !== undefined && !['register', 'reset_password'].includes(screen)) {
       return res.status(400).json({ code: 'INVALID_AUTH_SCREEN', requestId });
     }
     const intent = authIntent(intentParam, portalParam, next);
@@ -106,6 +106,7 @@ export class AuthController {
           // releases use the organization policy checked in the callback.
           ...(portal === 'staff' ? { acr_values: 'urn:logto:acr:mfa' } : {}),
           ...(token ? { one_time_token: token } : {}),
+          ...(screen === 'reset_password' ? { first_screen: 'reset_password' } : {}),
         },
         ...(token && email ? { loginHint: email } : {}),
         // Staff accounts are invite-only; only consumer sign-up may open on the register screen.

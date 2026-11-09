@@ -4,6 +4,7 @@ import { createZodDto } from 'nestjs-zod';
 import {
   adminPermissionGrantSchema,
   adminRoleAssignmentSchema,
+  blockAdminUserSchema,
   createAdminUserSchema,
   deleteAdminUserSchema,
   updateAdminUserSchema,
@@ -22,6 +23,7 @@ import { AdminUsersService } from './admin-users.service';
 class CreateAdminUserDto extends createZodDto(createAdminUserSchema) {}
 class UpdateAdminUserDto extends createZodDto(updateAdminUserSchema) {}
 class DeleteAdminUserDto extends createZodDto(deleteAdminUserSchema) {}
+class BlockAdminUserDto extends createZodDto(blockAdminUserSchema) {}
 class AdminRoleAssignmentDto extends createZodDto(adminRoleAssignmentSchema) {}
 class AdminPermissionGrantDto extends createZodDto(adminPermissionGrantSchema) {}
 
@@ -61,6 +63,12 @@ export class AdminUsersController {
     @Body() body: DeleteAdminUserDto,
   ) {
     return this.users.deleteUser(rlsCtx(req), req.permissions, id, body.reason, body.confirmEmail);
+  }
+
+  @Post(':id/block')
+  @RequirePermission('accounts.suspend')
+  block(@Req() req: PermissionedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: BlockAdminUserDto) {
+    return this.users.setBlocked(rlsCtx(req), req.permissions, req.assignments, id, body);
   }
 
   @Post(':id/purge')

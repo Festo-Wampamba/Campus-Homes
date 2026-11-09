@@ -141,3 +141,18 @@ describe('invitationContent', () => {
     expect(invitationContent(invite).html).toContain('portal=staff&amp;token=t1');
   });
 });
+
+describe('email delivery recovery', () => {
+  afterEach(() => jest.restoreAllMocks());
+  it('retries a transient delivery failure once with the same idempotency key', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValueOnce(new Response(null, { status: 503 })).mockResolvedValueOnce(new Response(null, { status: 202 }));
+    await sendVerificationCodeEmail({ ...baseEnv, RESEND_API_KEY: 're_test' }, { to: 'student@example.com', code: '123456', kind: 'forgot-password' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual(fetchMock.mock.calls[1]?.[1]?.headers);
+  });
+  it('reports permanent provider rejection instead of pretending a code was sent', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 403 }));
+    await expect(sendVerificationCodeEmail({ ...baseEnv, RESEND_API_KEY: 're_test' }, { to: 'student@example.com', code: '123456', kind: 'forgot-password' })).rejects.toThrow('HTTP 403');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

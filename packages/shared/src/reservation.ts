@@ -77,7 +77,7 @@ export type OnboardWalkInInput = z.infer<typeof onboardWalkInSchema>;
 // Private property records book immediately without creating/claiming a login.
 // Supplied contacts are bookkeeping data, never authentication identifiers.
 export const tenantRecordSchema = onboardWalkInSchema.extend({
-  kind: z.literal('record'), idempotencyKey, phone: ugPhone.optional(),
+  kind: z.literal('record'), idempotencyKey, phone: ugPhone.optional(), reservationId: uuid.optional(), imported: z.boolean().optional(),
 });
 
 // Existing accounts accept the assignment themselves; the landlord never receives
@@ -107,7 +107,7 @@ export const tenantIntakeSchema = z.object({ entries: z.array(tenantIntakeEntryS
     }
   });
 export type TenantIntakeInput = z.infer<typeof tenantIntakeSchema>;
-export type TenantIntakeResult = { key: string; status: 'added' | 'requested' | 'failed'; reservationId?: string; bookingStatus?: 'booked' | 'occupied'; message?: string };
+export type TenantIntakeResult = { key: string; status: 'added' | 'updated' | 'requested' | 'failed'; reservationId?: string; bookingStatus?: 'booked' | 'occupied'; message?: string };
 export type TenantAssignmentRequest = {
   id: string; propertyName: string; roomLabel: string; bedLabel: string;
   pricePerTermUgx: number; movedIn: boolean; amountPaidUgx: number; expiresAt: string;
@@ -119,6 +119,12 @@ export type ImportedTenantRow = {
   propertyName: string; roomLabel: string; bedLabel: string; amountPaid: string;
   rent: string; balance: string; paymentMethod: string; movedIn: boolean; warnings: string[];
   emergencyContactName?: string; emergencyContactPhone?: string;
+  reservationId?: string;
+  existingBooking?: {
+    reservationId: string; id: string; propertyId: string; unitId: string; propertyName: string; roomLabel: string; bedLabel: string;
+    roomCategory: string; selfContained: boolean; pricePerTermUgx: number; semesterId: string; semesterName: string;
+    paidUgx: number; status: 'booked' | 'occupied';
+  };
 };
 
 // A booking fee / deposit a landlord recorded (0075). Both parties get a copy.

@@ -312,3 +312,41 @@ it('accepts international emergency contacts and rejects invalid phone numbers o
  expect(updateTenantEmergencySchema.safeParse({emergencyContactName:'Kin',emergencyContactPhone:'invalid'}).success).toBe(false);
  expect(updateTenantEmergencySchema.safeParse({emergencyContactName:'Kin',emergencyContactPhone:'',email:'unwanted@example.test'}).success).toBe(false);
 });
+
+it('corrected tenant uploads reuse the booking and preserve its bed, money and occupancy', async () => {
+  const target = await bed();
+  const entry = { ...record(target.bed), bookingFeeCollectedUgx: 100000, paymentMethod: 'cash' as const };
+  const [saved] = await service.tenantIntake(landlord(), { entries: [entry] });
+  const correction = { ...entry, reservationId: saved!.reservationId!, idempotencyKey: randomUUID(), imported: true,
+    name: 'James Corrected', emergencyContactName: 'Parent Kato', emergencyContactPhone: '+256700009999' };
+  expect((await service.tenantIntake(landlord(), { entries: [correction] }))[0]).toMatchObject({ status: 'updated', reservationId: saved!.reservationId, bookingStatus: 'booked' });
+  expect((await service.tenantIntake(landlord(), { entries: [{ ...correction, idempotencyKey: randomUUID() }] }))[0]?.status).toBe('updated');
+  const rows = await service.landlordTenants(landlord());
+  expect(rows.find((t) => t.reservationId === saved!.reservationId)).toMatchObject({ name: 'James Corrected', emergencyContactName: 'Parent Kato', paidUgx: 100000, status: 'booked' });
+  expect(Number((await pool.query('SELECT count(*) FROM reservations WHERE bed_id=$1', [target.bed])).rows[0].count)).toBe(1);
+  expect(Number((await pool.query('SELECT count(*) FROM payment_receipts WHERE reservation_id=$1', [saved!.reservationId])).rows[0].count)).toBe(1);
+  const changedMoney = await service.tenantIntake(landlord(), { entries: [{ ...correction, bookingFeeCollectedUgx: 200000 }] });
+  expect(changedMoney[0]).toMatchObject({ status: 'failed', message: expect.stringContaining('cannot replace receipts') });
+  const changedOccupancy = await service.tenantIntake(landlord(), { entries: [{ ...correction, movedIn: true }] });
+  expect(changedOccupancy[0]).toMatchObject({ status: 'failed', message: expect.stringContaining('move-in workflow') });
+  expect((await service.tenantIntake({ userId: outsider, role: 'landlord' }, { entries: [correction] }))[0]?.status).toBe('failed');
+});
+it('matches an uploaded stable tenant ID only within its own landlord inventory', async () => {
+  const target = await bed(), entry = record(target.bed);
+  const [saved] = await service.tenantIntake(landlord(), { entries: [entry] });
+  const { tenantRowsFromCells } = await import('../../src/modules/reservations/tenant-import');
+  const rows = tenantRowsFromCells([['First name','Last name','Tenant record ID'],['James','Corrected',saved!.reservationId!]]);
+  const matched = await service.reconcileTenantImport(landlord(), rows);
+  expect(matched[0]).toMatchObject({ university: 'MUK', existingBooking: { reservationId: saved!.reservationId, id: target.bed, status: 'booked' } });
+  expect((await service.reconcileTenantImport({ userId: outsider, role: 'landlord' }, rows))[0]?.existingBooking).toBeUndefined();
+});
+it('rejects an ambiguous old-file reupload instead of assigning another free bed to the same resident', async () => {
+  const target=await bed();
+  const entry={...record(target.bed),imported:true};
+  const [first]=await service.tenantIntake(landlord(),{entries:[entry]});
+  expect(first?.status).toBe('added');
+  const nextBed=await id(`INSERT INTO beds(unit_id,label) VALUES($1,'Bed 2') RETURNING id`,[target.unit]);
+  const [reupload]=await service.tenantIntake(landlord(),{entries:[{...entry,bedId:nextBed,idempotencyKey:randomUUID()}]});
+  expect(reupload).toMatchObject({status:'failed',message:expect.stringContaining('Tenant record ID')});
+  expect(Number((await pool.query('SELECT count(*) FROM reservations r JOIN beds b ON b.id=r.bed_id WHERE b.unit_id=$1',[target.unit])).rows[0].count)).toBe(1);
+});

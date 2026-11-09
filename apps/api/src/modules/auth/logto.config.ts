@@ -49,3 +49,9 @@ export function magicSignInUrl(env: Env, portal: Portal, token: string, email: s
   const params = new URLSearchParams({ portal, token, email });
   return `${webOrigin(env)}/api/auth/logto/sign-in?${params.toString()}`;
 }
+
+/** A ForgotPassword-scoped provider token must open the reset flow, never sign-in. */
+export function passwordResetUrl(env: Env, token: string, email: string): string {
+  const params = new URLSearchParams({ portal: 'consumer', screen: 'reset_password', token, email });
+  return `${webOrigin(env)}/api/auth/logto/sign-in?${params}`;
+}

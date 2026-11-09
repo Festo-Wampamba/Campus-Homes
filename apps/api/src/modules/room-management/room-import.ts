@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
  * the property's own room types in the browser, where they are loaded. */
 export type ImportedRoomRow = {
   rowNumber: number;
+  roomId?: string;
   roomCode: string;
   roomType: string;
   buildingName: string;
@@ -20,6 +21,7 @@ export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 // punctuation. Extra columns (tenant names, payments) are ignored on purpose:
 // student details never enter the system from a spreadsheet.
 const HEADER_ALIASES: Record<keyof Omit<ImportedRoomRow, 'rowNumber'>, string[]> = {
+  roomId: ['room id', 'unit id'],
   roomCode: ['room code', 'room', 'room no', 'room number', 'room num', 'code', 'room name', 'unit', 'door number'],
   roomType: ['room type', 'type', 'category', 'room category'],
   buildingName: ['building', 'block', 'wing', 'building block'],
@@ -76,6 +78,7 @@ export async function parseRoomSheet(file: Buffer): Promise<ImportedRoomRow[]> {
   const cell = (cells: string[], index: number) => (index >= 0 ? cells[index] ?? '' : '');
   return data.map(({ rowNumber, cells }) => ({
     rowNumber,
+    ...(cell(cells, columns.roomId) ? { roomId: cell(cells, columns.roomId) } : {}),
     roomCode: cell(cells, columns.roomCode),
     roomType: cell(cells, columns.roomType),
     buildingName: cell(cells, columns.buildingName),
@@ -83,7 +86,7 @@ export async function parseRoomSheet(file: Buffer): Promise<ImportedRoomRow[]> {
   }));
 }
 
-const TEMPLATE_HEADERS = ['Room code', 'Room type', 'Building', 'Floor'];
+const TEMPLATE_HEADERS = ['Room code', 'Room type', 'Building', 'Floor', 'Room ID'];
 
 // Excel caps a typed-in dropdown list at 255 characters, and a comma or quote
 // inside a name would split it. Within that, the list goes in the cell rule
@@ -98,11 +101,11 @@ export function roomTypeListFormula(titles: string[]): string {
 
 /** A ready-to-fill template using this property's own room type names. The
  * Excel version offers them as a dropdown on the Room type column. */
-export async function roomImportTemplate(format: 'xlsx' | 'csv', roomTypeTitles: string[]) {
+export async function roomImportTemplate(format: 'xlsx' | 'csv', roomTypeTitles: string[], existingRooms: { id: string; roomCode: string; roomType: string; buildingName?: string | null; floorLabel?: string | null }[] = []) {
   const example = roomTypeTitles[0] ?? 'Single Room';
-  const examples = [
-    ['A01', example, 'Block A', 'Ground'],
-    ['A02', example, 'Block A', 'Ground'],
+  const examples = existingRooms.length ? existingRooms.map((room) => [room.roomCode, room.roomType, room.buildingName ?? '', room.floorLabel ?? '', room.id]) : [
+    ['A01', example, 'Block A', 'Ground', ''],
+    ['A02', example, 'Block A', 'Ground', ''],
   ];
   if (format === 'csv') {
     const quote = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);

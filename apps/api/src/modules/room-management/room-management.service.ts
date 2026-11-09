@@ -839,13 +839,17 @@ export class RoomManagementService {
    * semester, named by roomTypeImportLabels so two types sharing a title still
    * get different names (the upload check matches them the same way). */
   async importTemplate(ctx: RlsContext, propertyId: string, format: 'xlsx' | 'csv', semesterId?: string) {
-    const titles = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+    const data = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
       const changeSet = await this.openChangeSet(client, propertyId, semesterId);
       const roomTypes = await this.loadRoomTypes(client, propertyId, changeSet?.id ?? null);
-      return [...roomTypeImportLabels(roomTypes).values()].sort((a, b) => a.localeCompare(b));
+      const labels = roomTypeImportLabels(roomTypes);
+      const rooms = await this.loadRooms(client, propertyId, changeSet?.id ?? null);
+      return { titles: [...labels.values()].sort((a, b) => a.localeCompare(b)), rooms: rooms.filter((room) => !('pendingRemoval' in room && room.pendingRemoval)).map((room) => ({
+        id: room.id, roomCode: room.roomCode, buildingName: typeof room.buildingName === 'string' ? room.buildingName : null, floorLabel: typeof room.floorLabel === 'string' ? room.floorLabel : null, roomType: labels.get(room.roomTypeId) ?? room.roomTypeTitle,
+      })) };
     });
-    return roomImportTemplate(format, titles);
+    return roomImportTemplate(format, data.titles, data.rooms);
   }
 
   /** Serialize name checks on the property, including the first draft, so two

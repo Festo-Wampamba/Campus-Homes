@@ -6,7 +6,7 @@ const type = (id: string, title: string, category: string) =>
 const single = type("t-single", "Single Room", "single");
 const double = type("t-double", "Double Room", "double");
 const doubleEnsuite = type("t-double-ens", "Double Self-contained", "double");
-const existing = [{ roomCode: "A01", buildingName: "Block A" }] as RoomUnit[];
+const existing = [{ id: "r1", roomTypeId: "t-single", roomCode: "A01", buildingName: "Block A", floorLabel: null }] as RoomUnit[];
 
 const row = (roomCode: string, roomType: string, buildingName = "Block A", floorLabel = ""): ImportedRoomRow =>
   ({ rowNumber: 2, roomCode, roomType, buildingName, floorLabel });
@@ -66,8 +66,18 @@ describe("planRoomImport", () => {
     expect(plan([row("A02", "")], [single]).rows[0]!.roomTypeId).toBe("t-single");
   });
 
-  it("flags a room that already exists in the same building", () => {
-    expect(plan([row("a01", "Single Room")]).rows[0]!.error).toBe("Already exists in this building");
+  it("updates an existing room instead of adding a second room", () => {
+    const result = plan([row("A01", "Double Room", "Block A", "First")]);
+    expect(result.batches).toEqual([]);
+    expect(result.updates).toEqual([{roomId:"r1",roomTypeId:"t-double",roomCode:"A01",buildingName:"Block A",floorLabel:"First"}]);
+  });
+  it("skips unchanged rooms on repeated uploads", () => {
+    const result=plan([row("A01", "Single Room")]);
+    expect(result.unchangedCount).toBe(1); expect(result.batches).toEqual([]); expect(result.updates).toEqual([]);
+  });
+  it("uses a stable ID for room renames and rejects IDs outside the property", () => {
+    expect(plan([{...row("Renamed", "Single Room", "Block B"),roomId:"r1"}]).updates[0]?.roomId).toBe("r1");
+    expect(plan([{...row("A02", "Single Room"),roomId:"foreign-room"}]).rows[0]?.error).toMatch(/does not belong/);
   });
 
   it("allows the same code in another building", () => {
@@ -102,4 +112,13 @@ describe("planRoomImport batches", () => {
     );
     expect(batches).toHaveLength(2);
   });
+});
+
+it('does not create a second room when the building was omitted for an existing code', () => {
+  const result = planRoomImport([row('A01','Single Room','')],[single],existing);
+  expect(result.validCount).toBe(0);expect(result.rows[0]?.error).toContain('specify its building');
+});
+it('flags repeated stable room IDs even when their proposed codes differ', () => {
+  const result=planRoomImport([{...row('A01','Single Room'),roomId:'r1'},{...row('Renamed','Single Room'),roomId:'r1'}],[single],existing);
+  expect(result.rows[1]?.error).toContain('Listed twice');
 });

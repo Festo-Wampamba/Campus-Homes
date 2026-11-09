@@ -55,3 +55,9 @@ describe('parseRoomSheet', () => {
     await expect(parseRoomSheet(Buffer.alloc(0))).rejects.toThrow('The file is empty');
   });
 });
+
+it('exports stable room IDs and reads them back for corrected imports', async () => {
+  const existing=[{id:'9f0c2a9e-1111-4222-8333-444455556666',roomCode:'A01',roomType:'Single',buildingName:'A',floorLabel:'Ground'}];
+  const file=await roomImportTemplate('xlsx',['Single'],existing);
+  expect(await parseRoomSheet(file.buffer)).toEqual([{rowNumber:2,roomId:existing[0]!.id,roomCode:'A01',roomType:'Single',buildingName:'A',floorLabel:'Ground'}]);
+});

@@ -65,14 +65,14 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
     const entries = [];
     const invalid: Record<string, TenantIntakeResult> = {};
     for (const row of editable) {
-      const bed = beds.find((bed) => bed.id === row.bedId);
-      const shared = { emergencyContactName: row.emergencyContactName?.trim() || undefined, emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined, bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
+      const bed = row.existingBooking ?? beds.find((bed) => bed.id === row.bedId);
+      const shared = { ...(row.kind === "record" ? {reservationId:row.reservationId, imported:entryMode === "import"} : {}), emergencyContactName: row.emergencyContactName?.trim() || undefined, emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined, bedId: row.bedId, semesterId: bed?.semesterId, idempotencyKey: row.key, movedIn: row.movedIn,
         bookingFeeCollectedUgx: row.paid ? Number(row.paid) || undefined : undefined, paymentMethod: row.paymentMethod || undefined };
       const parsed = tenantIntakeEntrySchema.safeParse(row.kind !== "existing"
         ? { ...shared, kind: row.kind, name: studentName(row), firstName: row.firstName.trim(), lastName: row.lastName.trim(), gender: row.gender || undefined, phone: row.phone.trim() || undefined, email: row.email.trim() || undefined, university: row.university }
         : { ...shared, kind: "existing", contact: row.contact });
       const invalidMoney = Boolean(row.paid) && (!/^\d+$/.test(row.paid) || !Number.isSafeInteger(Number(row.paid)));
-      const message = invalidMoney ? "Enter a whole UGX amount, using digits only." : !bed ? "Choose an available bed." : Number(row.paid) > bed.pricePerTermUgx ? "Amount paid exceeds this room’s rent." : !parsed.success ? parsed.error.issues[0]?.message : null;
+      const message = invalidMoney ? "Enter a whole UGX amount, using digits only." : !bed ? "Choose an available bed." : !row.reservationId && Number(row.paid) > bed.pricePerTermUgx ? "Amount paid exceeds this room’s rent." : !parsed.success ? parsed.error.issues[0]?.message : null;
       if (message) invalid[row.key] = { key: row.key, status: "failed", message };
       else if (parsed.success) entries.push(parsed.data);
     }
@@ -108,7 +108,8 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
           </div>
           <div hidden={entryMode !== 'import'}>
             <TenantImportPanel disabled={pending || importRows.some((row) => Boolean(complete(row.key)))}
-              onRecordsChange={(records) => setImportRows((current) => {
+              onRecordsChange={(records) => {
+                setImportRows((current) => {
                 // Changing the selected document rows must preserve corrections
                 // and retry keys on entries that remain selected.
                 const selectedNumbers = new Set(records.map((record) => record.rowNumber));
@@ -117,24 +118,24 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 const added = importedTenantRows(records.filter((record) => !keptNumbers.has(record.rowNumber)), beds, kept.map((row) => row.bedId));
                 const mapped = new Map([...kept, ...added].map((row) => [row.documentRowNumber, row]));
                 return records.map((record) => mapped.get(record.rowNumber)!);
-              })}
+              }); }}
               onReviewedChange={setImportReviewed} onBusyChange={setImportBusy} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm">{beds.length} free beds · {rows.length} {rows.length === 1 ? "student" : "students"}</p>
             <Button type="button" variant="secondary" disabled={pending} onClick={refreshBeds}>Refresh beds</Button>
           </div>
-          {beds.length === 0 && <p role="alert" className="rounded-md border border-border p-3 text-sm">No free beds right now. Check that the property is approved, rooms are open and priced for a current or upcoming semester, and beds are not occupied or blocked. Managed-only properties do not need a public listing.</p>}
+          {beds.length === 0 && rows.some((row) => !row.existingBooking) && <p role="alert" className="rounded-md border border-border p-3 text-sm">No free beds right now. Check that the property is approved, rooms are open and priced for a current or upcoming semester, and beds are not occupied or blocked. Managed-only properties do not need a public listing.</p>}
           {rows.map((row, index) => {
-            const bed = beds.find((bed) => bed.id === row.bedId);
+            const bed = row.existingBooking ?? beds.find((bed) => bed.id === row.bedId);
             const result = results[row.key];
             const locked = Boolean(complete(row.key));
-            const overpaid = Boolean(bed && Number(row.paid) > bed.pricePerTermUgx);
+            const overpaid = Boolean(!row.reservationId && bed && Number(row.paid) > bed.pricePerTermUgx);
             return <fieldset key={row.key} disabled={pending || locked} className="min-w-0 space-y-4 rounded-lg border border-border p-4">
               <legend className="max-w-full break-words px-1 font-semibold">Student{studentName(row) ? ` · ${studentName(row)}` : ""}</legend>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="min-w-0 flex-1 text-sm font-semibold">How to add
-                  <select className={FIELD} value={row.kind} onChange={(e) => update(row.key, { kind: e.target.value as Row["kind"] })}>
+                  <select disabled={Boolean(row.reservationId)} className={FIELD} value={row.kind} onChange={(e) => update(row.key, { kind: e.target.value as Row["kind"] })}>
                     <option value="record">Tenant record (new booking or existing resident)</option><option value="new">Create CampusHomes account and book</option><option value="existing">Send room offer (student must accept)</option>
                   </select>
                 </label>
@@ -152,15 +153,15 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <label className="text-sm font-semibold">Verified email or phone *<input required className={FIELD} value={row.contact} onChange={(e) => update(row.key, { contact: e.target.value })} /></label>
                 <p className="mt-2 text-sm text-muted-foreground">The student reviews and accepts this room in My reservations. Their profile stays unchanged, and the bed is booked only after acceptance. Requests expire after seven days.</p>
               </div>}
-              {row.kind === "record" && <p className="text-sm text-muted-foreground">Save a tenant record and book the selected bed immediately. No CampusHomes login or student acceptance is required. Contact details stay with this property record.</p>}
+              {row.kind === "record" && <p className="text-sm text-muted-foreground">Save a tenant record and book the selected bed immediately. No CampusHomes login or student acceptance is required. Contact details stay with this property record. For uploaded corrections, existing payments and occupancy remain unchanged.</p>}
               <div className="ch-auto-grid gap-4">
                 <label className="text-sm font-semibold">Emergency contact name (optional)<input autoComplete="off" maxLength={120} className={FIELD} value={row.emergencyContactName ?? ""} onChange={(e) => update(row.key, { emergencyContactName: e.target.value })} /></label>
                 <label className="text-sm font-semibold">Emergency contact phone (optional)<input type="tel" autoComplete="off" className={FIELD} placeholder="0771 234567" value={row.emergencyContactPhone ?? ""} onChange={(e) => update(row.key, { emergencyContactPhone: e.target.value })} /></label>
               </div>
               <label className="block text-sm font-semibold">Property, room and bed *
-                <select required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value, assignmentNote: undefined, assignmentProblem: undefined })}>
+                <select disabled={Boolean(row.reservationId)} required className={FIELD} value={row.bedId} onChange={(e) => update(row.key, { bedId: e.target.value, assignmentNote: undefined, assignmentProblem: undefined })}>
                   <option value="">Choose a free bed</option>
-                  {beds.map((candidate) => <option key={candidate.id} value={candidate.id} disabled={rows.some((other) => other.key !== row.key && other.bedId === candidate.id)}>{candidate.propertyName} · {candidate.roomLabel} · {candidate.bedLabel}{candidate.semesterName ? ` · ${candidate.semesterName}` : ""}</option>)}
+                  {(row.existingBooking ? [row.existingBooking] : beds).map((candidate) => <option key={candidate.id} value={candidate.id} disabled={rows.some((other) => other.key !== row.key && other.bedId === candidate.id)}>{candidate.propertyName} · {candidate.roomLabel} · {candidate.bedLabel}{candidate.semesterName ? ` · ${candidate.semesterName}` : ""}</option>)}
                 </select>
               </label>
               {!bed && <p role="alert" className="text-sm text-destructive">{row.assignmentProblem ?? "Choose a room and free bed first. Rent and balance will appear after assignment."}</p>}
@@ -171,12 +172,12 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
                 <div className="min-w-0 text-sm font-semibold"><p>Rent (UGX)</p><output aria-label="Rent" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{bed ? formatUgx(bed.pricePerTermUgx) : "Select a room first"}</output></div>
                 <div className="min-w-0 text-sm font-semibold"><p>Balance (UGX)</p><output aria-label="Balance" aria-live="polite" className={`${FIELD} flex items-center break-all bg-muted/40 tabular-nums`}>{bed ? formatUgx(Math.max(0, bed.pricePerTermUgx - (Number(row.paid) || 0))) : "Select a room first"}</output></div>
               </div>
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={row.movedIn} onChange={(e) => update(row.key, { movedIn: e.target.checked })} />Already moved in / living here</label>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" disabled={Boolean(row.reservationId)} checked={row.movedIn} onChange={(e) => update(row.key, { movedIn: e.target.checked })} />Already moved in / living here</label>
               {!row.movedIn && row.kind !== "existing" && <p className="text-sm text-muted-foreground">This tenant will be booked and awaiting move-in. Any amount paid is recorded immediately.</p>}
               {!!row.importWarnings?.length && <div role="note" className="space-y-1 rounded-md border border-border bg-muted/30 p-3 text-sm"><p className="font-semibold">Review imported row</p>{row.importWarnings.map((warning)=><p key={warning}>{warning}</p>)}</div>}
               {overpaid && !result && <p role="alert" className="text-sm text-destructive">Amount paid exceeds this room’s rent.</p>}
               {result && <p role={result.status === "failed" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${result.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-foreground"}`}>
-                {result.status === "added" ? (result.bookingStatus === "occupied" ? "Tenant saved, payment recorded and move-in confirmed." : "Tenant saved and bed booked, awaiting move-in. Any amount paid has been recorded.") : result.status === "requested" ? "Room offer submitted. If the contact matches a verified student account, they can accept in My reservations. No tenancy or payment is recorded until acceptance." : result.message}
+                {result.status === "updated" ? "Existing tenant details updated. Payments and occupancy were preserved." : result.status === "added" ? (result.bookingStatus === "occupied" ? "Tenant saved, payment recorded and move-in confirmed." : "Tenant saved and bed booked, awaiting move-in. Any amount paid has been recorded.") : result.status === "requested" ? "Room offer submitted. If the contact matches a verified student account, they can accept in My reservations. No tenancy or payment is recorded until acceptance." : result.message}
               </p>}
             </fieldset>;
           })}
@@ -186,7 +187,7 @@ function WalkInStudentDialog({ beds: initialBeds, onClose }: { beds: WalkInBed[]
         </DialogBody>
         <DialogFooter className="flex-wrap [&>*]:h-auto [&>*]:min-h-11 [&>*]:whitespace-normal [&>*]:py-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>{rows.length > 0 && !editable.length ? "Done" : "Close"}</Button>
-          {(editable.length > 0 || (entryMode === 'import' && !rows.length)) && <Button type="submit" disabled={pending || beds.length === 0 || (entryMode === 'import' && (!importReviewed || importBusy || !rows.length)) || editable.some((row) => { const bed = beds.find((bed) => bed.id === row.bedId); return Boolean(bed && Number(row.paid) > bed.pricePerTermUgx); })}>{pending ? `Saving… ${progress.done}/${progress.total}` : entryMode === 'import' ? `Save ${editable.length || ""} imported ${editable.length === 1 ? "student" : "students"}`.replace(/  /g, " ") : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
+          {(editable.length > 0 || (entryMode === 'import' && !rows.length)) && <Button type="submit" disabled={pending || (beds.length === 0 && editable.some((row) => !row.existingBooking)) || (entryMode === 'import' && (!importReviewed || importBusy || !rows.length)) || editable.some((row) => { const bed = row.existingBooking ?? beds.find((bed) => bed.id === row.bedId); return Boolean(!row.reservationId && bed && Number(row.paid) > bed.pricePerTermUgx); })}>{pending ? `Saving… ${progress.done}/${progress.total}` : entryMode === 'import' ? `Save ${editable.length || ""} imported ${editable.length === 1 ? "student" : "students"}`.replace(/  /g, " ") : editable.length === 1 ? "Save student" : `Save ${editable.length} students`}</Button>}
         </DialogFooter>
       </form>
     </Dialog>

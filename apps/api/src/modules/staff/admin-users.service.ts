@@ -14,6 +14,7 @@ import type { PoolClient } from 'pg';
 import type {
   AdminPermissionGrantInput,
   AdminRoleAssignmentInput,
+  BlockAdminUserInput,
   CreateAdminUserInput,
   UpdateAdminUserInput,
 } from '@campushomes/shared';
@@ -396,6 +397,7 @@ export class AdminUsersService implements OnModuleInit, OnModuleDestroy {
     let contactChange: Record<string, { from: string | null; to: string | null }> | null = null;
     const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       try {
+        if (input.status !== undefined) await client.query("SELECT pg_advisory_xact_lock(hashtextextended('account-status', 0))");
         const current = (await client.query<{
           id: string; accountType: string; status: string; email: string | null; phone: string | null;
           isClaimed: boolean;
@@ -415,6 +417,11 @@ export class AdminUsersService implements OnModuleInit, OnModuleDestroy {
         // its mere presence.
         if (actor.userId === userId && input.status !== undefined && input.status !== current.status) {
           throw new ForbiddenException('You cannot change your own status');
+        }
+        if (input.status !== undefined && input.status !== current.status) {
+          if (!actorPermissions.has('accounts.suspend')) throw new ForbiddenException('Account status changes require accounts.suspend');
+          assertFreshSignIn(authenticatedAt, 'Changing account status');
+          await this.assertCanChangeStatus(client, userId, current.status, input.status);
         }
 
         // An unclaimed row (staff or not) is claimed by whichever verified
@@ -565,6 +572,42 @@ export class AdminUsersService implements OnModuleInit, OnModuleDestroy {
     `, [userId, STAFF_ROLE_KEYS])).rows;
   }
 
+  /** Reversible access suspension. Account data and role history remain intact. */
+  async setBlocked(actor: RlsContext, permissions: Set<string>, assignments: RoleAssignment[], userId: string, input: BlockAdminUserInput) {
+    if (userId === actor.userId) throw new ForbiddenException('You cannot block or unblock your own account');
+    const result = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      // Serialize account-status changes, including the legacy edit form.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('account-status', 0))");
+      const target = (await client.query<{ status: string }>('SELECT status FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [userId])).rows[0];
+      if (!target) throw new NotFoundException('User not found');
+      await this.assertMayActOnStaffTarget(client, permissions, assignments, userId);
+      if (input.blocked && target.status === 'suspended') return { id: userId, status: 'suspended' };
+      await this.assertCanChangeStatus(client, userId, target.status, input.blocked ? 'suspended' : 'active');
+      if (!input.blocked && target.status !== 'suspended') throw new BadRequestException('Only blocked accounts can be unblocked');
+      const previous = input.blocked ? null : (await client.query<{ previous: string }>(`SELECT payload->>'from' AS previous FROM audit_log
+        WHERE target_type='user' AND target_id=$1 AND action='users.block' ORDER BY ts DESC LIMIT 1`, [userId])).rows[0]?.previous;
+      const status = input.blocked ? 'suspended' : previous === 'pending' ? 'pending' : 'active';
+      await client.query('UPDATE users SET status=$2, updated_at=now() WHERE id=$1', [userId, status]);
+      if (input.blocked) await client.query('DELETE FROM sessions WHERE user_id=$1', [userId]);
+      await client.query(`INSERT INTO audit_log(actor_id,actor_role,action,target_type,target_id,payload)
+        VALUES($1,$2,$3,'user',$4,$5::jsonb)`, [actor.userId, actor.role, input.blocked ? 'users.block' : 'users.unblock', userId, JSON.stringify({ reason: input.reason, from: target.status, to: status })]);
+      return { id: userId, status };
+    });
+    return result;
+  }
+
+  private async assertCanChangeStatus(client: PoolClient, userId: string, from: string, to: string) {
+    if (from !== 'active' || to === 'active') return;
+    const { rows } = await client.query<{ isSuperAdmin: boolean; activeCount: string }>(`
+      SELECT EXISTS(SELECT 1 FROM user_role_assignments a JOIN roles r ON r.id=a.role_id
+        WHERE a.user_id=$1 AND r.key='super_admin' AND a.revoked_at IS NULL
+          AND a.valid_from<=now() AND (a.valid_until IS NULL OR a.valid_until>now())) AS "isSuperAdmin",
+        (SELECT count(DISTINCT a.user_id) FROM user_role_assignments a JOIN roles r ON r.id=a.role_id JOIN users u ON u.id=a.user_id
+        WHERE r.key='super_admin' AND a.revoked_at IS NULL AND u.status='active' AND u.deleted_at IS NULL
+          AND a.valid_from<=now() AND (a.valid_until IS NULL OR a.valid_until>now())) AS "activeCount"`, [userId]);
+    if (rows[0]?.isSuperAdmin && Number(rows[0].activeCount) <= 1) throw new ForbiddenException('The last active Super Admin cannot be blocked');
+  }
+
   /** Revoked/expired staff assignments and legacy staff users.role values still
    * mark a row as staff: a deactivated never-claimed staffer must not become
    * claimable (or re-staffable) by whoever the editor retypes the email to. */
@@ -604,6 +647,7 @@ export class AdminUsersService implements OnModuleInit, OnModuleDestroy {
   async deleteUser(actor: RlsContext, actorPermissions: Set<string>, userId: string, reason: string, confirmEmail?: string) {
     if (actor.userId === userId) throw new ForbiddenException('You cannot delete your own account');
     const logtoUserId = await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('account-status', 0))");
       await this.lockDeletionIdentity(client, userId);
       const target = (await client.query<{
         id: string; email: string | null; logtoUserId: string | null; isSuperAdmin: boolean; isActiveSuperAdmin: boolean; isSeniorLeadership: boolean;
@@ -770,6 +814,7 @@ export class AdminUsersService implements OnModuleInit, OnModuleDestroy {
         DELETE FROM tenant_agreements WHERE student_id IN (SELECT id FROM _pg_g);
 
         UPDATE landlords SET kyc_reviewed_by = NULL WHERE kyc_reviewed_by IN (SELECT id FROM _pg_g);
+        UPDATE properties SET manage_reviewed_by = NULL WHERE manage_reviewed_by IN (SELECT id FROM _pg_g);
         UPDATE reservations SET booked_by = NULL WHERE booked_by IN (SELECT id FROM _pg_g);
         UPDATE refunds SET processed_by = NULL WHERE processed_by IN (SELECT id FROM _pg_g);
         UPDATE approval_requests SET requested_by = NULL WHERE requested_by IN (SELECT id FROM _pg_g);

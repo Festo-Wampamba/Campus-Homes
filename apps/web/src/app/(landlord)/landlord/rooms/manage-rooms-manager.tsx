@@ -199,7 +199,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
   }
 
   function onRoomsAdded(newRooms: RoomUnit[]) {
-    setRooms((prev) => [...prev, ...newRooms]);
+    setRooms((prev) => [...new Map([...prev, ...newRooms].map((room) => [room.id, room])).values()]);
     router.refresh();
   }
 
