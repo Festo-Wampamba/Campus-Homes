@@ -1,6 +1,6 @@
 # CampusHomes tenant intake and QR account activation proposal
 
-**Status: proposal for Festo's review — not authorization to implement QR activation.**
+**Status: approved by Festo 2026-11-10. Existing-resident activation (single-use landlord code) and the two-choice QR page are implemented; system-emailed invitations are not.**
 **Prepared: 9 November 2026.**
 
 ## Recommended approach

@@ -6,6 +6,7 @@ const tenant = (overrides: Partial<LandlordTenant>): LandlordTenant => ({
   reservationId: "00000000-0000-4000-8000-000000000001",
   bedId: "00000000-0000-4000-8000-000000000002",
   status: "occupied",
+  portalStatus: "active",
   propertyId: "00000000-0000-4000-8000-000000000003",
   propertyName: "Mirembe",
   unitId: "00000000-0000-4000-8000-000000000004",

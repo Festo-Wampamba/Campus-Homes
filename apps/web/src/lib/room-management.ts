@@ -154,6 +154,8 @@ export interface RoomManagementOverview {
   semesters: { id: string; name: string }[];
   summary: RoomManagementSummary;
   changeSet: RoomInventoryChangeSet | null;
+  /** Past its first Ops approval: room changes apply without review. */
+  appliesAtOnce: boolean;
   roomTypes: RoomType[];
   rooms: RoomUnit[];
 }

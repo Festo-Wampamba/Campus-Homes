@@ -156,6 +156,9 @@ export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 
 // One booked or moved-in student on the landlord's Tenants page. Total is the
 // rent stored when they booked; Paid adds up every receipt for the booking.
+export const TENANT_PORTAL_STATUSES = ['private', 'invited', 'active'] as const;
+export type TenantPortalStatus = (typeof TENANT_PORTAL_STATUSES)[number];
+
 export const landlordTenantSchema = z.object({
   reservationId: uuid,
   bedId: uuid,
@@ -173,8 +176,27 @@ export const landlordTenantSchema = z.object({
   totalUgx: z.coerce.number().int().nonnegative(),
   paidUgx: z.coerce.number().int().nonnegative(),
   balanceUgx: z.coerce.number().int(),
+  // 'private' is a landlord-recorded tenant with no login; 'invited' has a
+  // live portal code waiting; 'active' is a signed-in student account.
+  portalStatus: z.enum(TENANT_PORTAL_STATUSES),
 });
 export type LandlordTenant = z.infer<typeof landlordTenantSchema>;
+
+// Portal activation for a private tenant record (0090). The code is the only
+// proof of ownership, so it is long, single-use and expires.
+export const TENANCY_CLAIM_TTL_HOURS = 72;
+export const issueTenancyClaimSchema = z.object({ reservationId: uuid });
+export type IssueTenancyClaimInput = z.infer<typeof issueTenancyClaimSchema>;
+export const tenancyClaimIssuedSchema = z.object({ code: z.string(), expiresAt: z.coerce.date() });
+export type TenancyClaimIssued = z.infer<typeof tenancyClaimIssuedSchema>;
+/** Codes are shown as XXXXX-XXXXX in an alphabet without I, L or O; typing
+ * may drop the dash, use lower case, or put those letters for 1 and 0. */
+export const normalizeTenancyClaimCode = (value: string): string =>
+  value.toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+export const redeemTenancyClaimSchema = z.object({
+  code: z.string().max(40).transform(normalizeTenancyClaimCode).pipe(z.string().length(10, 'Enter the 10-character code')),
+});
+export type RedeemTenancyClaimInput = z.infer<typeof redeemTenancyClaimSchema>;
 
 // What the landlord of a booked bed may see about the student. Never any
 // credential: passwords live in Logto and are reset by the student or a super admin.

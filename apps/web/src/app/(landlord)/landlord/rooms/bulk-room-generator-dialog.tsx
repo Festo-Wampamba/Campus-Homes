@@ -271,7 +271,7 @@ export function BulkRoomGeneratorDialog({
         />
 
         <DialogBody className="@container space-y-5">
-          <p className="text-sm text-muted-foreground">{applyImmediately ? "Add room codes in bulk. Rooms are added immediately to this managed property." : "Add room codes in bulk. Rooms are staged into your draft change set."}</p>
+          <p className="text-sm text-muted-foreground">{applyImmediately ? "Add room codes in bulk. Rooms are added immediately." : "Add room codes in bulk. Rooms are staged into your draft change set."}</p>
           {error && (
             <div
               role="alert"

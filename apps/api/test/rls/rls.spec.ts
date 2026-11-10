@@ -1645,3 +1645,34 @@ describe('payment_receipts (0075): service-only writes, each party reads its own
     ).rejects.toThrow(/permission denied/i);
   });
 });
+
+describe('tenancy_claims (0090): portal activation codes are service-only', () => {
+  beforeAll(async () => {
+    await seed(
+      `INSERT INTO tenancy_claims (tenant_user_id, property_id, code_hash, created_by, expires_at)
+       VALUES ($1, $2, 'rls-fixture-hash', $3, now() + interval '1 day') RETURNING id`,
+      [student1, property1, landlord1],
+    );
+  });
+
+  it('a student cannot read claims', async () => {
+    const rows = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query('SELECT * FROM tenancy_claims').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('the landlord who issued a claim cannot read its hash directly', async () => {
+    const rows = await asIdentity({ userId: landlord1, role: 'landlord' }, async (c) =>
+      c.query('SELECT * FROM tenancy_claims').then((r) => r.rows),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a student cannot mark a claim as theirs', async () => {
+    const updated = await asIdentity({ userId: student1, role: 'student' }, async (c) =>
+      c.query(`UPDATE tenancy_claims SET status = 'claimed', claimed_by = $1, claimed_at = now()`, [student1]).then((r) => r.rowCount),
+    );
+    expect(updated).toBe(0);
+  });
+});

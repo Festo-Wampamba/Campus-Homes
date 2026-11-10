@@ -7,6 +7,7 @@ import type { LandlordTenant } from "@campushomes/shared";
 
 import { PAYMENT_METHOD_LABEL } from "@/components/landlord/confirm-booking-dialog";
 import { TenantEmergencyContactButton } from "@/components/landlord/tenant-emergency-contact";
+import { TenantPortalStatus } from "@/components/landlord/tenant-portal-invite";
 import { DownloadTenantsExcel } from "@/components/landlord/download-tenants-excel";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
                   <td className="px-3 py-2 text-foreground">
                     <span className="block">{t.name ?? "Not given"}</span>
                     <StatusChip status={t.status} />
+                    <TenantPortalStatus tenant={t} />
                   </td>
                   <td className="px-3 py-2">{t.phone ? <a href={`tel:${t.phone}`} className="text-primary hover:underline">{t.phone}</a> : "Not given"}</td>
                   <td className="px-3 py-2">{t.email ? <a href={`mailto:${t.email}`} className="break-all text-primary hover:underline">{t.email}</a> : "Not given"}</td>
