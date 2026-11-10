@@ -70,6 +70,14 @@ export class TenantPortalService {
    * the student reads them through the booking (ReservationsService.receipts). */
   async redeem(ctx: RlsContext, code: string): Promise<{ linked: true }> {
     const result = await this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
+      // Checked before the code, so the answer never depends on whether a code is live.
+      const student = await client.query(
+        `SELECT 1 FROM users u JOIN students s ON s.user_id = u.id
+         WHERE u.id = $1 AND u.status = 'active' AND u.deleted_at IS NULL
+           AND u.logto_user_id IS NOT NULL AND u.tenancy_property_id IS NULL`, [ctx.userId],
+      );
+      if (!student.rows.length) throw new ForbiddenException('Finish setting up your student profile, then enter the code again.');
+
       const claim = (await client.query<{
         id: string; tenant_user_id: string; property_id: string; status: string; claimed_by: string | null; expired: boolean;
       }>(
@@ -80,14 +88,9 @@ export class TenantPortalService {
       if (claim?.status === 'claimed' && claim.claimed_by === ctx.userId) return null;
       if (!claim || claim.status !== 'pending' || claim.expired) throw new NotFoundException(INVALID_CODE);
 
-      const student = await client.query(
-        `SELECT 1 FROM users u JOIN students s ON s.user_id = u.id
-         WHERE u.id = $1 AND u.status = 'active' AND u.deleted_at IS NULL
-           AND u.logto_user_id IS NOT NULL AND u.tenancy_property_id IS NULL`, [ctx.userId],
-      );
-      if (!student.rows.length) throw new ForbiddenException('Finish setting up your student profile, then enter the code again.');
-
       // Same lock a student's own reserve takes, so the two can't interleave.
+      // The reservation cap and current-occupancy rules are not applied: this
+      // booking already exists and the landlord vouched for it in person.
       await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('reservation-student:' || $1, 0))`, [ctx.userId]);
       await client.query(`UPDATE reservations SET student_id = $2, updated_at = now() WHERE student_id = $1`, [claim.tenant_user_id, ctx.userId]);
       await client.query(
