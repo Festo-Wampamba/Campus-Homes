@@ -430,7 +430,7 @@ export function RoomTypeDialog({
                 <Camera className="size-8 text-muted-foreground/60 mb-2" />
                 <p className="text-sm font-semibold text-foreground">No photos uploaded yet</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                  Photos must be approved by Operations before appearing in the public gallery.
+                  Add photos of this room type.
                 </p>
               </div>
             ) : (

@@ -76,7 +76,7 @@ export function BatchEditRoomsDialog({
       <form onSubmit={submit} className="contents">
         <DialogHeader
           title={`Edit ${rooms.length} ${rooms.length === 1 ? "room" : "rooms"}`}
-          description={applyImmediately ? "Change each code below, or number them all at once. Your changes apply immediately to this managed property." : "Change each code below, or number them all at once. Your edits are staged together and sent to Operations for approval."}
+          description={applyImmediately ? "Change each code below, or number them all at once. Your changes apply immediately." : "Change each code below, or number them all at once. Your edits are staged together and sent to Operations for approval."}
           onClose={onClose}
         />
         <DialogBody className="space-y-5">

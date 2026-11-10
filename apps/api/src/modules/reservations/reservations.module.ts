@@ -17,14 +17,17 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { OpsModule } from '../ops/ops.module';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
+import { TenantPortalController } from './tenant-portal.controller';
+import { TenantPortalService } from './tenant-portal.service';
 import { PAYMENTS, RESERVATION_EXPIRY_QUEUE, RESERVATION_EXPIRY_QUEUE_NAME } from './reservations.tokens';
 import { WebhookController } from './webhook.controller';
 
 @Module({
   imports: [AuthModule, OpsModule, FinanceModule, NotificationsModule],
-  controllers: [ReservationsController, WebhookController],
+  controllers: [ReservationsController, TenantPortalController, WebhookController],
   providers: [
     ReservationsService,
+    TenantPortalService,
     {
       provide: PAYMENTS,
       useFactory: (): PaymentsAdapter => {

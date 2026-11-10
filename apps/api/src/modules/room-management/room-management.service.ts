@@ -80,6 +80,10 @@ interface RoomBlockRow {
   created_by: string; cleared_at: Date | null; created_at: Date;
 }
 
+// Changes a landlord sent to Ops before the property was established (see
+// appliesAtOnce) need no review afterwards, and must not block new edits.
+const WAITING_FOR_REVIEW = ['pending_review', 'visit_required'];
+
 @Injectable()
 export class RoomManagementService {
   constructor(
@@ -112,6 +116,7 @@ export class RoomManagementService {
       // they appear here and the category dropdowns are populated.
       await this.ensureCategoryRoomTypes(client, propertyId, semesterId, ctx.userId);
 
+      await this.applyIfEstablished(client, propertyId, ctx.userId, WAITING_FOR_REVIEW);
       const changeSet = await this.openChangeSet(client, propertyId, semesterId);
       const roomTypes = await this.loadRoomTypes(client, propertyId, changeSet?.id ?? null);
       const rooms = await this.loadRooms(client, propertyId, changeSet?.id ?? null);
@@ -136,6 +141,7 @@ export class RoomManagementService {
         semesters: semesters.map((semester) => ({ id: semester.id, name: semester.name })),
         summary,
         changeSet: changeSet ? await this.mapChangeSet(client, changeSet) : null,
+        appliesAtOnce: await this.appliesAtOnce(client, propertyId),
         roomTypes,
         rooms,
       };
@@ -155,7 +161,7 @@ export class RoomManagementService {
       const id = type.rows[0]!.id;
       const versionId = await this.insertVersion(client, id, changeSet.id, 1, ctx.userId, input);
       await this.replacePhotos(client, versionId, ctx.userId, input.photos);
-      await this.applyIfManaged(client, propertyId, ctx.userId);
+      await this.applyIfEstablished(client, propertyId, ctx.userId);
       return id;
     });
     await this.audit.record(ctx, 'room_type.draft_create', 'room_type', roomTypeId, { propertyId });
@@ -196,7 +202,7 @@ export class RoomManagementService {
         versionId = await this.insertVersion(client, roomTypeId, changeSet.id, Number(next.rows[0]!.value), ctx.userId, input);
       }
       await this.replacePhotos(client, versionId, ctx.userId, input.photos);
-      await this.applyIfManaged(client, type.property_id, ctx.userId);
+      await this.applyIfEstablished(client, type.property_id, ctx.userId);
     });
     await this.audit.record(ctx, 'room_type.draft_update', 'room_type', roomTypeId, {});
     return this.roomType(ctx, roomTypeId);
@@ -227,7 +233,7 @@ export class RoomManagementService {
         [changeSet.id, type.id, JSON.stringify({ ...input, capacity }), ctx.userId],
       );
       const createdId = created.rows[0]!.id;
-      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      const applied = await this.applyIfEstablished(client, propertyId, ctx.userId);
       return applied?.get(createdId) ?? createdId;
     });
     await this.audit.record(ctx, 'room.draft_create', 'room_unit_change', changeId, { propertyId });
@@ -263,7 +269,7 @@ export class RoomManagementService {
         );
         ids.push(created.rows[0]!.id);
       }
-      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      const applied = await this.applyIfEstablished(client, propertyId, ctx.userId);
       return ids.map((id) => applied?.get(id) ?? id);
     });
     await this.audit.record(ctx, 'room.bulk_draft_create', 'property', propertyId, { count: changeIds.length });
@@ -279,7 +285,7 @@ export class RoomManagementService {
   async updateRoom(ctx: RlsContext, roomOrChangeId: string, input: RoomUnitInput) {
     const { propertyId, roomId } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       const propertyId = await this.stageRoomUpdate(client, ctx, roomOrChangeId, input);
-      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      const applied = await this.applyIfEstablished(client, propertyId, ctx.userId);
       return { propertyId, roomId: applied?.get(roomOrChangeId) ?? roomOrChangeId };
     });
     await this.audit.record(ctx, 'room.draft_update', 'unit', roomOrChangeId, {});
@@ -294,7 +300,7 @@ export class RoomManagementService {
         const roomPropertyId = await this.stageRoomUpdate(client, ctx, roomId, room);
         if (roomPropertyId !== propertyId) throw new BadRequestException('Every room must belong to this property');
       }
-      const applied = await this.applyIfManaged(client, propertyId, ctx.userId);
+      const applied = await this.applyIfEstablished(client, propertyId, ctx.userId);
       return input.rooms.map((room) => applied?.get(room.roomId) ?? room.roomId);
     });
     await this.audit.record(ctx, 'room.batch_draft_update', 'property', propertyId, { count: input.rooms.length });
@@ -338,7 +344,7 @@ export class RoomManagementService {
   /** Deletes rooms, all or nothing. A staged room that was never approved is
    * discarded at once; an approved room gets an archive change that Ops
    * reviews, so its reservation history stays and students see it until then.
-   * On an approved manage-only property the archive applies at once. */
+   * On an established property (see appliesAtOnce) the archive applies at once. */
   async deleteRooms(ctx: RlsContext, propertyId: string, input: BatchRoomDeleteInput) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
@@ -359,7 +365,7 @@ export class RoomManagementService {
         }
         staged += 1;
       }
-      const applied = staged > 0 && (await this.applyIfManaged(client, propertyId, ctx.userId)) !== null;
+      const applied = staged > 0 && (await this.applyIfEstablished(client, propertyId, ctx.userId)) !== null;
       return { discarded, staged, applied };
     });
     await this.audit.record(ctx, 'room.delete', 'property', propertyId, { ...result, roomIds: input.roomIds });
@@ -463,6 +469,14 @@ export class RoomManagementService {
       if (counts.physicalRoomChangesCount + counts.roomTypeChangesCount === 0) {
         throw new BadRequestException('There are no changes to submit');
       }
+      // Changes staged before the property was established (or sent back
+      // by Ops) need no second review now: apply them.
+      if (await this.appliesAtOnce(client, row.property_id)) {
+        await client.query(`UPDATE room_inventory_change_sets SET status='draft', updated_at=now() WHERE id=$1`, [changeSetId]);
+        await this.applyIfEstablished(client, row.property_id, ctx.userId);
+        const applied = await client.query<ChangeSetRow>(`SELECT * FROM room_inventory_change_sets WHERE id=$1`, [changeSetId]);
+        return { row: applied.rows[0]!, counts, propertyId: row.property_id };
+      }
       // New rooms or capacity changes on a listed property need a site visit
       // before approval. A manage-only property (0076) is never shown to
       // students, so Ops still reviews it but never visits (Festo, 2026-10-26).
@@ -484,6 +498,7 @@ export class RoomManagementService {
       return { row: updated.rows[0]!, counts, propertyId: row.property_id };
     });
     await this.audit.record(ctx, 'room_change_set.submit', 'room_inventory_change_set', changeSetId, result.counts);
+    if (result.row.status === 'approved') return { ...this.mapChangeSetRow(result.row), ...result.counts };
     await this.notifyReviewers(changeSetId, result.propertyId);
     await this.notifications.notify(ctx.userId, result.row.status === 'visit_required' ? 'room_changes.visit_required' : 'room_changes.submitted', 'in_app', {
       message: result.row.status === 'visit_required'
@@ -918,6 +933,7 @@ export class RoomManagementService {
   }
 
   private async getOrCreateDraft(client: PoolClient, propertyId: string, semesterId: string, userId: string) {
+    await this.applyIfEstablished(client, propertyId, userId, WAITING_FOR_REVIEW);
     const existing = await client.query<ChangeSetRow>(
       `SELECT * FROM room_inventory_change_sets WHERE property_id=$1 AND semester_id=$2
        AND status IN ('draft','pending_review','visit_required','rejected') FOR UPDATE`, [propertyId, semesterId],
@@ -1325,17 +1341,61 @@ export class RoomManagementService {
     return created;
   }
 
-  /** Once Ops has approved a manage-only property, its landlord's room
-   * changes apply at once instead of waiting for review (Festo, 2026-11-01):
-   * nothing there is shown to students. Returns null while changes still
-   * wait (a listed property, or a manage-only one not yet approved). */
-  private async applyIfManaged(client: PoolClient, propertyId: string, landlordId: string) {
-    const managed = await client.query(
-      `SELECT 1 FROM properties WHERE id=$1 AND listing_intent='manage_only' AND manage_review_status='approved'`,
+  /** A property is past its first approval once Ops approved it as
+   * manage-only (2026-11-01) or its listing passed inspection and is live.
+   * From then on the landlord's room changes need no review (Festo,
+   * 2026-11-10): only a first-time property waits for Ops. */
+  private async appliesAtOnce(client: PoolClient, propertyId: string): Promise<boolean> {
+    const established = await client.query(
+      `SELECT 1 FROM properties p WHERE p.id=$1 AND (
+         (p.listing_intent='manage_only' AND p.manage_review_status='approved')
+         OR (p.listing_intent='list' AND EXISTS(
+           SELECT 1 FROM listings l WHERE l.property_id=p.id AND l.status='verified')))`,
       [propertyId],
     );
-    if (!managed.rows.length) return null;
-    return this.applyOpenChangeSets(client, propertyId, landlordId, ['draft'], 'Applied at once: Operations approved this managed property');
+    return established.rows.length > 0;
+  }
+
+  /** On an established property (see appliesAtOnce) every landlord room
+   * write applies its draft in the same transaction and tells Operations
+   * what changed. Returns null while changes still wait for review. */
+  private async applyIfEstablished(client: PoolClient, propertyId: string, landlordId: string, statuses = ['draft']) {
+    if (!(await this.appliesAtOnce(client, propertyId))) return null;
+    // Read before applying, so renames still show the old code.
+    const sets = await client.query<{ id: string }>(
+      `SELECT id FROM room_inventory_change_sets WHERE property_id=$1 AND status = ANY($2::text[]) ORDER BY created_at FOR UPDATE`,
+      [propertyId, statuses],
+    );
+    const summaries: string[] = [];
+    for (const set of sets.rows) summaries.push(await this.changeSummary(client, set.id, propertyId));
+    const created = await this.applyOpenChangeSets(client, propertyId, landlordId, statuses, 'Applied at once: this property is past its first Operations approval');
+    if (summaries.length) await this.tellOperations(client, propertyId, summaries.join('; '));
+    return created;
+  }
+
+  /** In-app notice to the Ops leads and admins whose scope covers the
+   * property. Written in the caller's transaction, so a notice never exists
+   * for a change that rolled back. No email: one would go out per edit. */
+  private async tellOperations(client: PoolClient, propertyId: string, summary: string) {
+    await client.query(
+      `INSERT INTO notifications(user_id, template_key, channel, payload)
+       SELECT DISTINCT ON (u.id) u.id, 'room_changes.applied', 'in_app',
+         jsonb_build_object('message', $2::text, 'propertyId', p.id,
+           'href', CASE WHEN r.key = 'ops_lead' THEN '/ops/properties' ELSE '/admin/properties' END)
+       FROM user_role_assignments a
+       JOIN roles r ON r.id = a.role_id
+       JOIN users u ON u.id = a.user_id
+       JOIN properties p ON p.id = $1
+       WHERE r.key IN ('super_admin', 'platform_admin', 'ops_lead')
+         AND a.revoked_at IS NULL AND a.valid_from <= now()
+         AND (a.valid_until IS NULL OR a.valid_until > now())
+         AND u.status = 'active' AND u.deleted_at IS NULL
+         AND ((a.scope_type = 'platform_wide' AND a.scope_id IS NULL)
+           OR (a.scope_type = 'catchment' AND a.scope_id IN (p.catchment::text, 'all'))
+           OR (a.scope_type = 'property' AND a.scope_id = p.id::text))
+       ORDER BY u.id, CASE WHEN r.key = 'ops_lead' THEN 1 ELSE 0 END`,
+      [propertyId, `A landlord changed rooms at ${summary}. The changes are live; no approval is needed.`],
+    );
   }
 
   private async applyRoomTypeVersion(client: PoolClient, version: RoomTypeVersionRow, semesterId: string, reviewerId: string, notes: string | null) {

@@ -1623,3 +1623,27 @@ Nothing is "done" until `pnpm lint && pnpm typecheck && pnpm test` are green at 
     DB transaction, and the Logto user is deleted if anything after it fails,
     so a Logto outage no longer leaves a half-created, un-retryable account.
     Tests: `landlord-invite.spec.ts` (new), `reservations-flow.spec.ts` updated.
+
+- **Room changes apply at once on established properties; tenant portal
+  activation codes (2026-11-10, Festo):**
+  - `RoomManagementService.appliesAtOnce`: a property is established once it is
+    manage-only + Ops-approved, **or listed with a `verified` listing**. Every
+    landlord room write then applies its draft in the same transaction
+    (`applyIfEstablished`, was `applyIfManaged`) and `tellOperations` inserts an
+    in-app `room_changes.applied` notice (same transaction, no email) for the
+    ops_lead / platform_admin / super_admin assignments covering the property.
+    Only first-time properties wait for review; a draft left from before goes
+    live when the landlord submits it. The overview returns `appliesAtOnce`.
+  - Migration 0090 `tenancy_claims` (svc_all): a landlord issues a single-use,
+    72-hour code for one private tenant record (`POST /tenant-portal/invites`,
+    only the sha256 is stored, a new code revokes the last); a signed-in student
+    redeems it (`POST /tenant-portal/claims`, page `/activate`) and the private
+    record's `reservations.student_id` moves to them. Booking status, bed,
+    amounts and arrival are untouched. `payment_receipts` stay append-only and
+    keep the private record's id; `receipts('student')` reads them through the
+    booking. The private `users` row is kept (the claim row is the audit link).
+  - The property QR page (`/agreement/:propertyId`) now offers "I already live
+    here or have a booking" (→ `/activate`) and "I am looking for a room".
+    The QR proves nothing; only the code links a booking.
+  - Not built: system-emailed invitations (the landlord shares the code or
+    link), and an unlink action if a landlord gave a code to the wrong person.

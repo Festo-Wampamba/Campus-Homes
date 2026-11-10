@@ -14,7 +14,7 @@ HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); 
 it('updates an edited batch with one refresh instead of one per room', async () => {
   const rooms = [1, 2].map((n) => ({ id: `r${n}`, roomCode: `R${n}`, roomTypeId: 't1', roomTypeTitle: 'Single', totalBeds: 1, occupiedBeds: 0, derivedStatus: 'available', beds: [{ id: `b${n}`, blocked: false, status: 'available' }] })) as RoomUnit[];
   const property = { id: 'p1', name: 'Managed property', listingIntent: 'manage_only', manageReviewStatus: 'approved' };
-  const data = { property, properties: [property], semesters: [{ id: 's1', name: 'Term' }], currentSemester: { id: 's1', name: 'Term' }, changeSet: null, rooms, roomTypes: [{ id: 't1', currentVersion: { title: 'Single', capacity: 1, category: 'single', bathroomType: 'shared', pricePerTermUgx: 800000, photos: [], amenities: [] }, pendingVersion: null }] } as unknown as RoomManagementOverview;
+  const data = { property, properties: [property], semesters: [{ id: 's1', name: 'Term' }], currentSemester: { id: 's1', name: 'Term' }, changeSet: null, appliesAtOnce: true, rooms, roomTypes: [{ id: 't1', currentVersion: { title: 'Single', capacity: 1, category: 'single', bathroomType: 'shared', pricePerTermUgx: 800000, photos: [], amenities: [] }, pendingVersion: null }] } as unknown as RoomManagementOverview;
   const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container);
   try {
     await act(async () => root.render(<ManageRoomsManager initialData={data} />));

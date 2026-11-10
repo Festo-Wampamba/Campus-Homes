@@ -488,7 +488,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               rooms={rooms}
               onRoomUpdated={onRoomUpdated}
               onRoomsUpdated={onRoomsUpdated}
-              applyImmediately={property.listingIntent === "manage_only" && property.manageReviewStatus === "approved"}
+              applyImmediately={initialData.appliesAtOnce}
               onRoomsAdded={onRoomsAdded}
               onRoomsDeleted={onRoomsDeleted}
               filterStatus={roomStatusFilter}

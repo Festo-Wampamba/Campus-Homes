@@ -45,6 +45,10 @@ export default async function ReservationsPage({
       ) : (
         <ReservationsList reservations={reservations} highlightId={justReservedId} trackId={trackId} />
       )}
+      <p className="mt-6 text-sm text-muted-foreground">
+        Booked with a landlord directly, or already living at a hostel?{" "}
+        <Link href="/activate" className="font-semibold text-primary hover:underline">Link that booking with your portal code</Link>.
+      </p>
       {!!receipts?.length && (
         <section aria-labelledby="receipts-heading" className="mt-10">
           <h2 id="receipts-heading" className="text-xl">Payment receipts</h2>

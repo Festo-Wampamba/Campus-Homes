@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { PoolClient } from 'pg';
 
-import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type ImportedTenantRow, type UpdateTenantEmergencyInput, type TenantIntakeResult, type TenantAssignmentRequest, type TeamCapability, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
+import { MAX_ACTIVE_RESERVATIONS, type BookReservationInput, type OnboardWalkInInput, type TenantIntakeInput, type ImportedTenantRow, type UpdateTenantEmergencyInput, type TenantIntakeResult, type TenantAssignmentRequest, type TenantPortalStatus, type TeamCapability, type RecordPaymentInput, type ReleaseReservationInput, type ReserveInput } from '@campushomes/shared';
 
 import { bookableIntakeBed, intakeVersion, INTAKE_BEDS_SQL, type IntakeBed } from './tenant-intake-inventory';
 
@@ -489,7 +489,11 @@ export class ReservationsService {
 
   /** Receipts for the signed-in student or landlord, newest first. */
   receipts(ctx: RlsContext, side: 'student' | 'landlord') {
-    const party = side === 'student' ? 'r.student_id' : 'r.landlord_id';
+    // A student also owns the receipts of a booking they took over from a
+    // private tenant record (0090): those still carry the record's id.
+    const party = side === 'student'
+      ? 'r.student_id = $1 OR r.reservation_id IN (SELECT id FROM reservations WHERE student_id = $1)'
+      : 'r.landlord_id = $1';
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) =>
       (await client.query(
         `SELECT r.id, r.receipt_number AS "receiptNumber", r.reservation_id AS "reservationId",
@@ -499,7 +503,7 @@ export class ReservationsService {
                 r.booking_fee_ugx + r.deposit_ugx + r.rent_ugx AS "totalUgx",
                 r.payment_method::text AS "paymentMethod", r.recorded_at AS "recordedAt"
          FROM payment_receipts r JOIN users u ON u.id = r.student_id
-         WHERE ${party} = $1
+         WHERE ${party}
          ORDER BY r.recorded_at DESC LIMIT 500`,
         [ctx.userId],
       )).rows,
@@ -512,14 +516,18 @@ export class ReservationsService {
    * properties in the WHERE clause, since it runs as service_role. */
   landlordTenants(ctx: RlsContext) {
     return this.rlsDb.run(SERVICE(ctx.userId), async (_db, client) => {
-      const tenants = (await client.query<Omit<TenantExportRow, 'paidUgx' | 'balanceUgx'> & { reservationId: string }>(
+      const tenants = (await client.query<Omit<TenantExportRow, 'paidUgx' | 'balanceUgx'> & { reservationId: string; portalStatus: TenantPortalStatus }>(
         `SELECT r.id AS "reservationId", r.bed_id AS "bedId", r.status::text AS status,
                 p.id AS "propertyId", p.name AS "propertyName", un.id AS "unitId", un.label AS "roomLabel",
                 b.label AS "bedLabel", NULLIF(btrim(u.name), '') AS name,
                 COALESCE(u.phone, u.contact_phone) AS phone, COALESCE(u.email, u.contact_email) AS email,
                 NULLIF(COALESCE(r.emergency_contact_name, u.emergency_contact_name), '') AS "emergencyContactName",
                 NULLIF(COALESCE(r.emergency_contact_phone, u.emergency_contact_phone), '') AS "emergencyContactPhone",
-                r.price_per_term_ugx AS "totalUgx"
+                r.price_per_term_ugx AS "totalUgx",
+                CASE WHEN u.tenancy_property_id IS NULL THEN 'active'
+                     WHEN EXISTS (SELECT 1 FROM tenancy_claims c
+                                  WHERE c.tenant_user_id = u.id AND c.status = 'pending' AND c.expires_at > now()) THEN 'invited'
+                     ELSE 'private' END AS "portalStatus"
          FROM reservations r
          JOIN beds b ON b.id = r.bed_id
          JOIN units un ON un.id = b.unit_id

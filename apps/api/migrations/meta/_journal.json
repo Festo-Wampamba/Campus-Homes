@@ -624,6 +624,13 @@
       "when": 1793685203322,
       "tag": "0089_tenant_emergency_contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793685204322,
+      "tag": "0090_tenancy_claims",
+      "breakpoints": true
     }
   ]
 }

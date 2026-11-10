@@ -8,7 +8,7 @@ jest.mock('next/navigation',()=>({useRouter:()=>({refresh:mockRefresh})}));
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
 HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
 HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
-const tenant:LandlordTenant={reservationId:'11111111-1111-4111-8111-111111111111',bedId:'b',status:'booked',propertyId:'p',propertyName:'Courts',unitId:'u',roomLabel:'A01',bedLabel:'Bed 1',name:'James Kato',phone:null,email:null,emergencyContactName:null,emergencyContactPhone:null,totalUgx:800000,paidUgx:230000,balanceUgx:570000};
+const tenant:LandlordTenant={reservationId:'11111111-1111-4111-8111-111111111111',bedId:'b',status:'booked',propertyId:'p',propertyName:'Courts',unitId:'u',roomLabel:'A01',bedLabel:'Bed 1',name:'James Kato',phone:null,email:null,emergencyContactName:null,emergencyContactPhone:null,totalUgx:800000,paidUgx:230000,balanceUgx:570000,portalStatus:'private'};
 let container:HTMLDivElement,root:Root;
 const button=(name:string)=>[...container.querySelectorAll('button')].find(b=>b.textContent===name)!;
 function type(input:HTMLInputElement,value:string){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));}

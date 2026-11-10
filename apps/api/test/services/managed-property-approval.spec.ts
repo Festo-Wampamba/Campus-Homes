@@ -92,6 +92,30 @@ async function roomType(propertyId: string) {
   return (type as { id: string }).id;
 }
 
+/** Marks the property inspected and live. The verified-listing trigger
+ * requires a lead-approved, fully-passed visit. */
+async function verifiedListing(propertyId: string) {
+  const checklist = JSON.stringify(Object.fromEntries(
+    ['location_gps', 'rooms_capacity', 'amenities', 'photos', 'landlord_identity', 'safety'].map((c) => [c, { passed: true }]),
+  ));
+  await pool.query(
+    `INSERT INTO ops_staff (user_id, team, active) VALUES ($1, 'inspector', true), ($2, 'lead', true) ON CONFLICT DO NOTHING`,
+    [ids.inspector, ids.lead],
+  );
+  await pool.query(
+    `INSERT INTO verification_visits (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at)
+     VALUES ($1, $2, $3, $4, 'passed', $5, now())`,
+    [propertyId, ids.inspector, checklist, `live-${propertyId}`, ids.lead],
+  );
+  await pool.query(`INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'verified')`, [propertyId, semesterId]);
+}
+
+async function liveListedProperty(name: string) {
+  const propertyId = await submit(name, 'list');
+  await verifiedListing(propertyId);
+  return propertyId;
+}
+
 beforeAll(async () => {
   await pool.query(
     `TRUNCATE users, landlords, semesters, properties, units, beds, room_types, room_inventory_change_sets CASCADE`,
@@ -256,12 +280,73 @@ describe('room changes', () => {
     expect((await overview(propertyId)).summary.totalRooms).toBe(4);
   });
 
-  it('on a listed property still wait for review', async () => {
+  it('on a listed property not yet inspected wait for review', async () => {
     const propertyId = await submit('Listed Rooms Hostel', 'list');
     const typeId = await roomType(propertyId);
 
     const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'L1' });
 
     expect(room.pendingChanges).toBe(true);
+  });
+});
+
+// Festo, 2026-11-10: once a listed property has passed inspection and is
+// live, its landlord's room changes need no second approval.
+describe('room changes on a listed property with a live listing', () => {
+  it('apply at once', async () => {
+    const propertyId = await liveListedProperty('Live Add Hostel');
+    const typeId = await roomType(propertyId);
+
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'V1' });
+
+    expect([room.pendingChanges ?? false, (await overview(propertyId)).changeSet]).toEqual([false, null]);
+  });
+
+  it('remove a room at once', async () => {
+    const propertyId = await liveListedProperty('Live Delete Hostel');
+    const typeId = await roomType(propertyId);
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'V2' });
+
+    const result = await rooms.deleteRooms(landlordCtx, propertyId, { roomIds: [room.id] });
+
+    expect([result.applied, (await overview(propertyId)).summary.totalRooms]).toEqual([true, 0]);
+  });
+
+  it('tell the Ops lead covering the property what changed', async () => {
+    const propertyId = await liveListedProperty('Live Notice Hostel');
+    const typeId = await roomType(propertyId);
+    const before = new Date();
+
+    await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'V3' });
+
+    const { rows } = await pool.query<{ user_id: string; message: string }>(
+      `SELECT user_id, payload->>'message' AS message FROM notifications
+       WHERE template_key = 'room_changes.applied' AND payload->>'propertyId' = $1 AND created_at >= $2`,
+      [propertyId, before],
+    );
+    expect(rows).toEqual([{ user_id: ids.lead, message: expect.stringContaining('Live Notice Hostel: 1 room (new V3)') }]);
+  });
+
+  it('release changes that were sent for review before the listing went live', async () => {
+    const propertyId = await submit('Waiting Live Hostel', 'list');
+    const typeId = await roomType(propertyId);
+    await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'V5' });
+    await rooms.submitChangeSet(landlordCtx, (await overview(propertyId)).changeSet!.id);
+    await verifiedListing(propertyId);
+
+    const result = await overview(propertyId);
+
+    expect([result.summary.totalRooms, result.changeSet]).toEqual([1, null]);
+  });
+
+  it('apply a draft staged before the listing went live when it is submitted', async () => {
+    const propertyId = await submit('Late Live Hostel', 'list');
+    const typeId = await roomType(propertyId);
+    await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'V4' });
+    await verifiedListing(propertyId);
+
+    const submitted = await rooms.submitChangeSet(landlordCtx, (await overview(propertyId)).changeSet!.id);
+
+    expect(submitted.status).toBe('approved');
   });
 });
