@@ -339,6 +339,31 @@ describe('room changes on a listed property with a live listing', () => {
     expect([result.summary.totalRooms, result.changeSet]).toEqual([1, null]);
   });
 
+  it('hand back waiting changes that can no longer apply instead of blocking the page', async () => {
+    const propertyId = await liveListedProperty('Stuck Release Hostel');
+    const typeId = await roomType(propertyId);
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'V6' });
+    // An archive that was waiting for Ops, for a room a student has since booked.
+    const setId = await seed(
+      `INSERT INTO room_inventory_change_sets(property_id, semester_id, submitted_by, status, submitted_at)
+       VALUES ($1, $2, $3, 'pending_review', now()) RETURNING id`, [propertyId, semesterId, landlordCtx.userId]);
+    await pool.query(
+      `INSERT INTO room_unit_changes(change_set_id, action, unit_id, room_type_id, proposed_data, created_by)
+       VALUES ($1, 'archive', $2, $3, '{}'::jsonb, $4)`, [setId, room.id, typeId, landlordCtx.userId]);
+    const studentId = await seed(`INSERT INTO users (phone, role, status) VALUES ('+256710000950', 'student', 'active') RETURNING id`);
+    await pool.query(`INSERT INTO students (user_id, university) VALUES ($1, 'MUK')`, [studentId]);
+    const versionId = await seed(
+      `INSERT INTO listing_versions (listing_id, version_number, price_per_term_ugx, amenities, verified_at)
+       SELECT id, 1, 800000, '{}'::jsonb, now() FROM listings WHERE property_id = $1 RETURNING id`, [propertyId]);
+    await pool.query(
+      `INSERT INTO reservations (student_id, bed_id, listing_version_id, status, price_per_term_ugx, idempotency_key)
+       SELECT $1, b.id, $3, 'booked', 800000, 'stuck-release' FROM beds b WHERE b.unit_id = $2 LIMIT 1`, [studentId, room.id, versionId]);
+
+    const result = await overview(propertyId);
+
+    expect([result.summary.totalRooms, result.changeSet?.status]).toEqual([1, 'rejected']);
+  });
+
   it('apply a draft staged before the listing went live when it is submitted', async () => {
     const propertyId = await submit('Late Live Hostel', 'list');
     const typeId = await roomType(propertyId);

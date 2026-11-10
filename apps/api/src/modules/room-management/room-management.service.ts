@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -116,7 +117,7 @@ export class RoomManagementService {
       // they appear here and the category dropdowns are populated.
       await this.ensureCategoryRoomTypes(client, propertyId, semesterId, ctx.userId);
 
-      await this.applyIfEstablished(client, propertyId, ctx.userId, WAITING_FOR_REVIEW);
+      await this.releaseWaitingChanges(client, propertyId, ctx.userId);
       const changeSet = await this.openChangeSet(client, propertyId, semesterId);
       const roomTypes = await this.loadRoomTypes(client, propertyId, changeSet?.id ?? null);
       const rooms = await this.loadRooms(client, propertyId, changeSet?.id ?? null);
@@ -933,7 +934,7 @@ export class RoomManagementService {
   }
 
   private async getOrCreateDraft(client: PoolClient, propertyId: string, semesterId: string, userId: string) {
-    await this.applyIfEstablished(client, propertyId, userId, WAITING_FOR_REVIEW);
+    await this.releaseWaitingChanges(client, propertyId, userId);
     const existing = await client.query<ChangeSetRow>(
       `SELECT * FROM room_inventory_change_sets WHERE property_id=$1 AND semester_id=$2
        AND status IN ('draft','pending_review','visit_required','rejected') FOR UPDATE`, [propertyId, semesterId],
@@ -1371,6 +1372,30 @@ export class RoomManagementService {
     const created = await this.applyOpenChangeSets(client, propertyId, landlordId, statuses, 'Applied at once: this property is past its first Operations approval');
     if (summaries.length) await this.tellOperations(client, propertyId, summaries.join('; '));
     return created;
+  }
+
+  /** Applies changes sent for review before the property was established.
+   * One that can no longer apply as sent (a room to remove has since been
+   * reserved, say) goes back to the landlord with the reason instead of
+   * failing every later page load and edit for the property. */
+  private async releaseWaitingChanges(client: PoolClient, propertyId: string, landlordId: string) {
+    await client.query('SAVEPOINT release_waiting');
+    try {
+      await this.applyIfEstablished(client, propertyId, landlordId, WAITING_FOR_REVIEW);
+      await client.query('RELEASE SAVEPOINT release_waiting');
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      await client.query('ROLLBACK TO SAVEPOINT release_waiting');
+      const returned = await client.query<{ id: string }>(
+        `UPDATE room_inventory_change_sets SET status='rejected', rejection_reason=$3, updated_at=now()
+         WHERE property_id=$1 AND status = ANY($2::text[]) RETURNING id`,
+        [propertyId, WAITING_FOR_REVIEW, `These changes can no longer be applied: ${error.message}. Change or discard them.`],
+      );
+      await client.query(
+        `UPDATE room_type_versions SET status='rejected', rejection_reason=$2 WHERE change_set_id = ANY($1::uuid[])`,
+        [returned.rows.map((row) => row.id), error.message],
+      );
+    }
   }
 
   /** In-app notice to the Ops leads and admins whose scope covers the
