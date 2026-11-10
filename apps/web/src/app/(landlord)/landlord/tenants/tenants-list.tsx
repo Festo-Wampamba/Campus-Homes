@@ -66,54 +66,55 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
           <DownloadTenantsExcel />
         </div>
         <div role="region" aria-labelledby="tenant-records-heading" tabIndex={0} className="relative max-w-full overflow-x-auto rounded-md border border-border focus-visible:outline-2 focus-visible:outline-ring">
-          <table className="w-full min-w-[56rem] text-left text-sm">
+          {/* Sized to fit a 1280px laptop beside the sidebar: phone and email
+              share a column, the rent total sits under the amount paid, and each
+              action sits with the value it changes instead of in its own column. */}
+          <table className="w-full text-left text-sm">
             <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
               <tr>
                 <th scope="col" className="px-3 py-2">Room</th>
-                <th scope="col" className="px-3 py-2">Name</th>
-                <th scope="col" className="px-3 py-2">Phone</th>
-                <th scope="col" className="px-3 py-2">Email</th>
+                <th scope="col" className="px-3 py-2">Tenant</th>
+                <th scope="col" className="px-3 py-2">Contact</th>
                 <th scope="col" className="px-3 py-2">Emergency contact</th>
-                <th scope="col" className="px-3 py-2 text-right">Total</th>
                 <th scope="col" className="px-3 py-2 text-right">Paid</th>
                 <th scope="col" className="px-3 py-2 text-right">Balance</th>
-                <th scope="col" className="px-3 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.pageItems.map((t) => (
-                <tr key={t.reservationId}>
-                  <td className="px-3 py-2">
+                <tr key={t.reservationId} className="align-top">
+                  <td className="px-3 py-3">
                     <span className="font-semibold text-foreground">{t.roomLabel}</span>
                     <span className="block text-xs text-muted-foreground">{t.propertyName} · {t.bedLabel}</span>
                   </td>
-                  <td className="px-3 py-2 text-foreground">
-                    <span className="block">{t.name ?? "Not given"}</span>
+                  <td className="px-3 py-3 text-foreground">
+                    <span className="block min-w-36 font-medium">{t.name ?? "Not given"}</span>
                     <StatusChip status={t.status} />
                     <TenantPortalStatus tenant={t} />
+                    {t.status === "booked" && <div><Button type="button" variant="secondary" size="sm" className="mt-2" onClick={() => setMovingIn(t)}>Confirm move-in</Button></div>}
                   </td>
-                  <td className="px-3 py-2">{t.phone ? <a href={`tel:${t.phone}`} className="text-primary hover:underline">{t.phone}</a> : "Not given"}</td>
-                  <td className="px-3 py-2">{t.email ? <a href={`mailto:${t.email}`} className="break-all text-primary hover:underline">{t.email}</a> : "Not given"}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="px-3 py-3">
+                    {t.phone ? <a href={`tel:${t.phone}`} className="block whitespace-nowrap text-primary hover:underline">{t.phone}</a> : <span className="block text-muted-foreground">No phone</span>}
+                    {t.email ? <a href={`mailto:${t.email}`} className="block min-w-44 text-xs break-all text-primary hover:underline">{t.email}</a> : <span className="block text-xs text-muted-foreground">No email</span>}
+                  </td>
+                  <td className="px-3 py-3 text-muted-foreground">
                     {t.emergencyContactName || t.emergencyContactPhone
-                      ? <>{t.emergencyContactName ?? ""}{t.emergencyContactPhone && <span className="block">{t.emergencyContactPhone}</span>}</>
+                      ? <>{t.emergencyContactName ?? ""}{t.emergencyContactPhone && <span className="block whitespace-nowrap">{t.emergencyContactPhone}</span>}</>
                       : "Not given"}
                     <div><TenantEmergencyContactButton tenant={t} /></div>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.totalUgx)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatUgx(t.paidUgx)}<span className="block text-xs text-muted-foreground">{t.paidUgx === 0 ? "Unpaid" : t.balanceUgx > 0 ? "Part-paid" : "Paid in full"}</span></td>
-                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${t.balanceUgx > 0 ? "text-destructive" : "text-foreground"}`}>
-                    {t.balanceUgx > 0 ? formatUgx(t.balanceUgx) : "Paid in full"}
+                  <td className="px-3 py-3 text-right">
+                    <span className="tabular-nums">{formatUgx(t.paidUgx)}</span>
+                    <span className="block text-xs whitespace-nowrap text-muted-foreground">of <span className="tabular-nums">{formatUgx(t.totalUgx)}</span></span>
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
-                    {t.status === "booked" && <Button type="button" variant="secondary" size="sm" onClick={() => setMovingIn(t)}>Confirm move-in</Button>}
+                  <td className={`px-3 py-3 text-right font-semibold whitespace-nowrap ${t.balanceUgx > 0 ? "text-destructive" : "text-foreground"}`}>
+                    <span className="tabular-nums">{t.balanceUgx > 0 ? formatUgx(t.balanceUgx) : "Paid in full"}</span>
                     {t.balanceUgx > 0 && (
-                      <Button type="button" variant="secondary" size="sm" onClick={() => setPaying(t)}>
-                        Record payment
-                      </Button>
+                      <>
+                        <span className="block text-xs font-normal text-muted-foreground">{t.paidUgx === 0 ? "Unpaid" : "Part-paid"}</span>
+                        <Button type="button" variant="secondary" size="sm" className="mt-2 whitespace-nowrap" onClick={() => setPaying(t)}>Record payment</Button>
+                      </>
                     )}
-                    </div>
                   </td>
                 </tr>
               ))}
