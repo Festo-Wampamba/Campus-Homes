@@ -381,6 +381,12 @@
   }
   .ch-auto-grid > * { min-inline-size: 0; }
   .ch-workspace-main { overflow-wrap: anywhere; }
+  /* `anywhere` also shrinks a table column's minimum width to one character,
+     so on a laptop (1280px wide at Windows 150% scaling) "PHONE" and
+     "UGX 230,000" split mid-word. In tables, words stay whole and the
+     table's scroll wrapper takes any overflow. */
+  :where(.ch-workspace-main, .ch-dialog-body) table { overflow-wrap: break-word; }
+  :where(.ch-workspace-main, .ch-dialog-body) table :where(th, .tabular-nums) { white-space: nowrap; }
   .ch-dialog-body .ch-auto-grid label { display: block; }
   .ch-dialog {
     --ch-dialog-gutter: clamp(8px, 2vw, 16px);
