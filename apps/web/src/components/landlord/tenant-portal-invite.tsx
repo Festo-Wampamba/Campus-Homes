@@ -19,12 +19,12 @@ export function TenantPortalStatus({ tenant }: { tenant: LandlordTenant }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <span className="mt-1 ml-1 inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
         {PORTAL_LABEL[tenant.portalStatus]}
       </span>
       {tenant.portalStatus !== "active" && (
-        <div>
-          <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => setOpen(true)}>
+        <div className="w-full">
+          <Button type="button" size="xs" variant="secondary" className="mt-1" onClick={() => setOpen(true)}>
             {tenant.portalStatus === "invited" ? "New portal code" : "Invite to portal"}
           </Button>
         </div>

@@ -339,7 +339,7 @@ export function RoomsInventoryTab({
   }
 
   return (
-    <div id="rooms-inventory" className="@container scroll-mt-24 space-y-5 [&_button]:max-w-full [&_button]:whitespace-normal">
+    <div id="rooms-inventory" className="@container scroll-mt-24 space-y-5">
       {blockNotice && <p role="status" className="rounded-lg border border-primary/30 bg-accent p-3 text-sm text-foreground">{blockNotice}</p>}
       {/* Sub-Header & Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -381,8 +381,8 @@ export function RoomsInventoryTab({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="rounded-xl border border-border bg-card p-4 shadow-xs space-y-3">
-        <div className="ch-auto-grid [--ch-grid-min:11rem] gap-3">
+      <div className="rounded-xl border border-border bg-card p-3.5 shadow-xs space-y-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -513,21 +513,21 @@ export function RoomsInventoryTab({
         </div>
       ) : (
         <>
-          {/* Desktop Semantic Table */}
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+          {/* Desktop Semantic Table — sized so all columns and actions fit in view at 1280px (1920x1080 @ 150% Windows scale) without horizontal scrolling */}
+          <div className="hidden md:block overflow-hidden rounded-xl border border-border bg-card shadow-xs">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-border bg-muted/40 font-heading font-semibold text-muted-foreground uppercase tracking-wider">
+              <thead className="border-b border-border bg-muted/40 font-heading text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 <tr>
-                  <th className="w-10 py-3 pl-4">
+                  <th className="w-9 py-2.5 pl-3 pr-1">
                     <input type="checkbox" aria-label="Select all rooms shown" checked={allShownSelected} onChange={toggleAllShown} className="size-4 accent-teal-700" />
                   </th>
-                  <th className="py-3 px-4 whitespace-nowrap">Room Code</th>
-                  <th className="py-3 px-4 whitespace-nowrap">Location</th>
-                  <th className="py-3 px-4 whitespace-nowrap">Room Type</th>
-                  <th className="py-3 px-4 whitespace-nowrap">Bedspace Occupancy</th>
-                  <th className="py-3 px-4 whitespace-nowrap">Derived Status</th>
-                  <th className="py-3 px-4 whitespace-nowrap">Block State</th>
-                  <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Room Code</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Location</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Room Type</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Occupancy</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Block</th>
+                  <th className="py-2.5 pl-2 pr-3 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -542,41 +542,41 @@ export function RoomsInventoryTab({
                       key={room.id}
                       className="hover:bg-muted/30 transition-colors"
                     >
-                      <td className="py-3.5 pl-4">
+                      <td className="py-2.5 pl-3 pr-1">
                         <input type="checkbox" aria-label={`Select room ${room.roomCode}`} checked={selectedIds.has(room.id)} onChange={() => toggleSelected(room.id)} className="size-4 accent-teal-700" />
                       </td>
                       {/* Code */}
-                      <td className="py-3.5 px-4 font-mono font-bold text-foreground whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 font-mono font-bold text-foreground whitespace-nowrap">
                         {room.roomCode}
                         {room.pendingRemoval ? (
-                          <span className="ml-2 inline-flex items-center rounded bg-destructive-subtle px-1.5 py-0.5 text-[10px] font-semibold text-destructive whitespace-nowrap">
+                          <span className="ml-1.5 inline-flex items-center rounded bg-destructive-subtle px-1.5 py-0.5 text-[10px] font-semibold text-destructive whitespace-nowrap">
                             Removal pending
                           </span>
                         ) : room.pendingChanges && (
-                          <span className="ml-2 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                          <span className="ml-1.5 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">
                             Staged
                           </span>
                         )}
                       </td>
 
                       {/* Location */}
-                      <td className="py-3.5 px-4 text-foreground whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 text-foreground whitespace-nowrap">
                         {room.buildingName || "Main"}
                         {room.floorLabel ? ` · ${room.floorLabel}` : ""}
                       </td>
 
                       {/* Room Type */}
-                      <td className="py-3.5 px-4">
-                        <button type="button" onClick={() => setDetailsRoomId(room.id)} aria-label={`View ${room.roomTypeTitle} details for room ${room.roomCode}`} className="text-left font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring line-clamp-1">{room.roomTypeTitle}</button>
-                        <span className="block text-[11px] text-muted-foreground uppercase whitespace-nowrap">
+                      <td className="py-2.5 px-2.5">
+                        <button type="button" onClick={() => setDetailsRoomId(room.id)} aria-label={`View ${room.roomTypeTitle} details for room ${room.roomCode}`} className="text-left font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring">{room.roomTypeTitle}</button>
+                        <span className="block text-[10px] text-muted-foreground uppercase whitespace-nowrap">
                           {room.roomCategory}
                         </span>
                       </td>
 
                       {/* Occupancy with mini progress bar */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="w-36 space-y-1">
-                          <div className="flex justify-between text-[11px] tabular-nums font-semibold">
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <div className="w-28 space-y-1">
+                          <div className="flex justify-between gap-2 text-[11px] tabular-nums font-semibold">
                             <span>
                               {room.occupiedBeds} of {room.totalBeds} beds
                             </span>
@@ -598,12 +598,12 @@ export function RoomsInventoryTab({
                       </td>
 
                       {/* Derived Status */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
                         {renderStatusBadge(room.derivedStatus)}
                       </td>
 
                       {/* Block State */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
                         {room.activeBlock ? (
                           <button
                             type="button"
@@ -621,24 +621,24 @@ export function RoomsInventoryTab({
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-2.5 pl-2 pr-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="secondary"
-                            size="sm"
+                            size="xs"
                             onClick={() => openViewBeds(room)}
-                            className="h-8 px-2.5 text-xs whitespace-nowrap"
+                            className="gap-1 px-2"
                           >
-                            <Bed className="size-3.5 mr-1" />
+                            <Bed className="size-3.5" />
                             Beds
                           </Button>
 
                           <Button
                             variant="secondary"
-                            size="sm"
+                            size="xs"
                             onClick={() => openBlockModal(room)}
                             disabled={room.pendingChanges}
-                            className={`h-8 px-2.5 text-xs whitespace-nowrap ${
+                            className={`size-7 p-0 ${
                               room.activeBlock
                                 ? "text-destructive border-destructive/30 hover:bg-destructive-subtle"
                                 : ""
@@ -654,9 +654,9 @@ export function RoomsInventoryTab({
 
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="xs"
                             onClick={() => openEditSingleRoom(room)}
-                            className="h-8 w-8 p-0"
+                            className="size-7 p-0"
                             title="Edit Room Details"
                           >
                             <Edit className="size-3.5" />
@@ -664,10 +664,10 @@ export function RoomsInventoryTab({
 
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="xs"
                             onClick={() => openDelete([room])}
                             disabled={!canDeleteRoom(room)}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            className="size-7 p-0 text-muted-foreground hover:text-destructive"
                             title={room.occupiedBeds > 0 ? "A student is in this room" : "Delete room"}
                             aria-label={`Delete room ${room.roomCode}`}
                           >

@@ -22,7 +22,7 @@ const FIELD =
 
 function StatusChip({ status }: { status: LandlordTenant["status"] }) {
   return (
-    <span className="mt-1 inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+    <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
       {status === "occupied" ? "Moved in" : "Booked · Awaiting move-in"}
     </span>
   );
@@ -88,14 +88,16 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
                     <span className="block text-xs text-muted-foreground">{t.propertyName} · {t.bedLabel}</span>
                   </td>
                   <td data-label="Student" className="px-3 py-3 text-foreground">
-                    <span className="block min-w-36 font-medium">{t.name ?? "Not given"}</span>
-                    <StatusChip status={t.status} />
-                    <TenantPortalStatus tenant={t} />
-                    {t.status === "booked" && <div><Button type="button" variant="secondary" size="sm" className="mt-2" onClick={() => setMovingIn(t)}>Confirm move-in</Button></div>}
+                    <span className="block font-medium">{t.name ?? "Not given"}</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <StatusChip status={t.status} />
+                      <TenantPortalStatus tenant={t} />
+                    </div>
+                    {t.status === "booked" && <div><Button type="button" variant="secondary" size="xs" className="mt-1.5" onClick={() => setMovingIn(t)}>Confirm move-in</Button></div>}
                   </td>
                   <td data-label="Contact" className="px-3 py-3">
                     {t.phone ? <a href={`tel:${t.phone}`} className="block whitespace-nowrap text-primary hover:underline">{t.phone}</a> : <span className="block text-muted-foreground">No phone</span>}
-                    {t.email ? <a href={`mailto:${t.email}`} className="block min-w-44 text-xs break-all text-primary hover:underline">{t.email}</a> : <span className="block text-xs text-muted-foreground">No email</span>}
+                    {t.email ? <a href={`mailto:${t.email}`} className="block text-xs break-all text-primary hover:underline">{t.email}</a> : <span className="block text-xs text-muted-foreground">No email</span>}
                   </td>
                   <td data-label="Emergency contact" className="px-3 py-3 text-muted-foreground">
                     {t.emergencyContactName || t.emergencyContactPhone
@@ -112,7 +114,7 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
                     {t.balanceUgx > 0 && (
                       <>
                         <span className="block text-xs font-normal text-muted-foreground">{t.paidUgx === 0 ? "Unpaid" : "Part-paid"}</span>
-                        <Button type="button" variant="secondary" size="sm" className="mt-2 whitespace-nowrap" onClick={() => setPaying(t)}>Record payment</Button>
+                        <Button type="button" variant="secondary" size="xs" className="mt-1.5" onClick={() => setPaying(t)}>Record payment</Button>
                       </>
                     )}
                   </td>
