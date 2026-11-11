@@ -517,14 +517,13 @@ directly to the internet.
 
 ### Branch and release flow
 
-Changes start on a short-lived branch, pass lint, type checks, tests, and image
-builds, then enter `main` through a reviewed pull request. Dokploy staging
-tracks `main` with automatic deployment. Production also uses `main`, but its
-automatic deployment remains OFF so a tested revision is promoted manually.
-The existing `development`, `preview`, `feature`, and `sam` branches are not
-production deployment sources. The primary domains are attached only after
-staging has passed smoke tests; production is never used as the development
-environment.
+Changes start on a short-lived branch and pass lint, type checks, tests, and
+image builds. Merge into `development` to deploy to staging for acceptance
+before a later reviewed merge into `main`. CI selects the checked branch for
+both staging applications and verifies their reported commit. Pushes to `main`
+also run this staging health gate. Dokploy's own automatic deployment stays OFF
+so it cannot race the checked release. Production uses `main` and requires the
+manual production workflow; a development push never deploys production.
 
 ### Secure GitHub connection and project creation
 

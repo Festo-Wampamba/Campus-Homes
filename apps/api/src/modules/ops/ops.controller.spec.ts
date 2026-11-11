@@ -37,6 +37,7 @@ const ROUTE_PERMISSIONS: [Controller, string, string | string[]][] = [
   [OpsController, 'inviteLandlord', 'landlords.invite'],
   [OpsController, 'kycQueue', 'landlords.review_kyc'],
   [OpsController, 'decideKyc', 'landlords.review_kyc'],
+  [RoomManagementOpsController, 'activity', 'room_changes.review'],
   [RoomManagementOpsController, 'queue', 'room_changes.review'],
   [RoomManagementOpsController, 'approve', 'room_changes.review'],
   [RoomManagementOpsController, 'reject', 'room_changes.review'],

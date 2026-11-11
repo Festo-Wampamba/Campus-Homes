@@ -33,6 +33,7 @@ import { PUBLIC_LANDLORD_SUMMARY_SQL } from './public-landlord-summary';
 import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../ops/audit.service';
+import { recordOperationsNotice, type OperationChange } from '../room-management/operations-notice';
 import { dropVisitRequirement } from '../room-management/visit-requirement';
 import { loadEnv } from '../../config/env';
 import { managedPropertyReviewers, sendManagedPropertyEmail } from './managed-property-alert';
@@ -181,6 +182,8 @@ export class ListingsService {
       }
     }
     if (property.listingIntent === 'manage_only') await this.alertOpsOfManagedProperty(property.id, property.name);
+    else await this.noticeListedProperty(property.id, 'property.list_submitted',
+      `A landlord registered ${property.name} for listing. The Ops lead must arrange the first physical inspection and approval.`, [], '/ops');
     return property;
   }
 
@@ -210,15 +213,29 @@ export class ListingsService {
     }
   }
 
+  /** Follow-up alerts cannot turn a committed save into a failed request. */
+  private async noticeListedProperty(propertyId: string, template: string, message: string, changes: OperationChange[] = [], opsPath?: string) {
+    try {
+      await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+        const property = await client.query(`SELECT 1 FROM properties WHERE id=$1 AND listing_intent='list'`, [propertyId]);
+        if (property.rows.length) await recordOperationsNotice(client, propertyId, template, message, { changes, opsPath });
+      });
+    } catch (err) {
+      this.logger.error(`Operations notice failed for ${propertyId}: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
+  }
+
   // RLS (`properties_landlord_update`) already scopes this to the caller's
   // own rows — an id that isn't theirs updates zero rows, so the empty
   // result gives a clean 404 instead of a silent no-op (same pattern as
   // landlords.service upsertProfile's pending-only check).
-  updateProperty(ctx: RlsContext, propertyId: string, input: UpdatePropertyInput) {
+  async updateProperty(ctx: RlsContext, propertyId: string, input: UpdatePropertyInput) {
     if (Object.keys(input).length === 0) {
       throw new BadRequestException('No fields to update');
     }
-    return this.rlsDb.run(ctx, async (db) => {
+    const result = await this.rlsDb.run(ctx, async (db) => {
+      const [before] = await db.select().from(properties).where(eq(properties.id, propertyId));
+      if (!before) throw new NotFoundException('Property not found');
       // Only a NEW cover photo must be the caller's upload; the edit form
       // resubmits the stored value (possibly a legacy Cloudinary URL) as-is.
       if (input.coverPhotoKey) {
@@ -253,8 +270,14 @@ export class ListingsService {
       if (!property) {
         throw new NotFoundException('Property not found');
       }
-      return property;
+      const changes = Object.entries(input).filter(([key, value]) => JSON.stringify(before[key as keyof typeof before]) !== JSON.stringify(value))
+        .map(([key, value]) => ({ label: key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
+          before: JSON.stringify(before[key as keyof typeof before]) ?? 'Not set', after: JSON.stringify(value) ?? 'Not set' }));
+      return { property, changes };
     });
+    if (result.changes.length) await this.noticeListedProperty(propertyId, 'property.updated',
+      `Property details updated at ${result.property.name}. Saved immediately; the existing approval is unchanged.`, result.changes);
+    return result.property;
   }
 
   /** "Manage only" or "manage and list" for the landlord's own property (0076).
@@ -291,6 +314,8 @@ export class ListingsService {
     });
     if (from !== listingIntent) {
       await this.audit?.record(ctx, 'properties.listing_intent', 'property', propertyId, { from, to: listingIntent });
+      if (listingIntent === 'list') await this.noticeListedProperty(propertyId, 'property.list_submitted',
+        `${property.name} was submitted for public listing. The Ops lead must arrange physical inspection and approval.`, [], '/ops');
       if (listingIntent === 'manage_only' && property.manageReviewStatus !== 'approved') {
         await this.alertOpsOfManagedProperty(propertyId, property.name);
       }
@@ -497,19 +522,23 @@ export class ListingsService {
   // themselves stay Ops-only to write (RLS `units_ops_insert`/`_update`,
   // 0001), but `unit_photos_landlord_insert`/`_delete` (0008) scope this
   // table to the landlord who owns the unit's property.
-  addUnitPhoto(ctx: RlsContext, unitId: string, storageKey: string) {
+  async addUnitPhoto(ctx: RlsContext, unitId: string, storageKey: string) {
     // Insert either returns the row or throws (RLS WITH CHECK / the FK on
     // unit_id reject a room that doesn't exist or isn't theirs) — unlike
     // updateProperty/removeUnitPhoto's UPDATE/DELETE, there's no silent
     // empty-result case here to turn into a clean 404.
-    return this.rlsDb.run(ctx, async (db) => {
+    const result = await this.rlsDb.run(ctx, async (db) => {
       assertOwnedStorageKeys(ctx.userId, [storageKey]);
       const [photo] = await db
         .insert(unitPhotos)
         .values({ unitId, storageKey, uploadedBy: ctx.userId })
         .returning();
-      return photo;
+      const [unit] = await db.select({ propertyId: units.propertyId }).from(units).where(eq(units.id, photo!.unitId));
+      return { photo, propertyId: unit!.propertyId };
     });
+    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord added a room photo. Saved immediately; no new approval is needed.',
+      [{ label: 'Room photo', before: 'Not present', after: 'Added' }]);
+    return result.photo;
   }
 
   /** Whole-property gallery photos — distinct from listing_photos (Ops-only,
@@ -518,19 +547,22 @@ export class ListingsService {
    * 0026) precisely because property_media never had the ops_staff FK
    * listing_photos does — it was already structurally landlord-shaped,
    * just never wired to a landlord endpoint or the public gallery before. */
-  addPropertyMedia(ctx: RlsContext, propertyId: string, storageKey: string) {
-    return this.rlsDb.run(ctx, async (db) => {
+  async addPropertyMedia(ctx: RlsContext, propertyId: string, storageKey: string) {
+    const result = await this.rlsDb.run(ctx, async (db) => {
       assertOwnedStorageKeys(ctx.userId, [storageKey]);
       const [media] = await db
         .insert(propertyMedia)
         .values({ propertyId, storageKey, mediaType: 'image', uploadedBy: ctx.userId })
         .returning();
-      return media;
+      return { media, propertyId: media!.propertyId };
     });
+    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord added a property photo. Saved immediately; no new approval is needed.',
+      [{ label: 'Property photo', before: 'Not present', after: 'Added' }]);
+    return result.media;
   }
 
-  removePropertyMedia(ctx: RlsContext, mediaId: string) {
-    return this.rlsDb.run(ctx, async (db) => {
+  async removePropertyMedia(ctx: RlsContext, mediaId: string) {
+    const result = await this.rlsDb.run(ctx, async (db) => {
       const [media] = await db
         .delete(propertyMedia)
         .where(eq(propertyMedia.id, mediaId))
@@ -538,16 +570,21 @@ export class ListingsService {
       if (!media) {
         throw new NotFoundException('Photo not found');
       }
-      return { ok: true };
+      return { media, propertyId: media.propertyId };
     });
+    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord removed a property photo. Saved immediately; no new approval is needed.',
+      [{ label: 'Property photo', before: 'Present', after: 'Removed' }]);
+    return { ok: true };
   }
 
   /** A landlord flipping a room's status by hand — the only unit field they
    * can write (0024: column-restricted UPDATE grant). Covers a tenant found
    * outside the reservation flow: without this, an off-platform let has no
    * way to stop the room from still showing as available to students. */
-  updateUnitOperationalStatus(ctx: RlsContext, unitId: string, operationalStatus: UnitOperationalStatus) {
-    return this.rlsDb.run(ctx, async (db) => {
+  async updateUnitOperationalStatus(ctx: RlsContext, unitId: string, operationalStatus: UnitOperationalStatus) {
+    const result = await this.rlsDb.run(ctx, async (db) => {
+      const [before] = await db.select().from(units).where(eq(units.id, unitId));
+      if (!before) throw new NotFoundException('Unit not found');
       const [unit] = await db
         .update(units)
         .set({ operationalStatus })
@@ -556,12 +593,16 @@ export class ListingsService {
       if (!unit) {
         throw new NotFoundException('Unit not found');
       }
-      return unit;
+      return { unit, before: before.operationalStatus };
     });
+    if (result.before !== operationalStatus) await this.noticeListedProperty(result.unit.propertyId, 'property.updated',
+      `Room ${result.unit.label} status updated. Saved immediately; no new approval is needed.`,
+      [{ label: `${result.unit.label} · Status`, before: result.before, after: operationalStatus }]);
+    return result.unit;
   }
 
-  removeUnitPhoto(ctx: RlsContext, photoId: string) {
-    return this.rlsDb.run(ctx, async (db) => {
+  async removeUnitPhoto(ctx: RlsContext, photoId: string) {
+    const result = await this.rlsDb.run(ctx, async (db) => {
       const [photo] = await db
         .delete(unitPhotos)
         .where(eq(unitPhotos.id, photoId))
@@ -569,8 +610,12 @@ export class ListingsService {
       if (!photo) {
         throw new NotFoundException('Photo not found');
       }
-      return { ok: true };
+      const [unit] = await db.select({ propertyId: units.propertyId }).from(units).where(eq(units.id, photo.unitId));
+      return { photo, propertyId: unit!.propertyId };
     });
+    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord removed a room photo. Saved immediately; no new approval is needed.',
+      [{ label: 'Room photo', before: 'Present', after: 'Removed' }]);
+    return { ok: true };
   }
 
   addDocument(ctx: RlsContext, propertyId: string, docType: string, storageKey: string) {

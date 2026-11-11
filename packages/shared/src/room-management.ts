@@ -201,3 +201,14 @@ export function roomTypeImportLabels(roomTypes: LabelledRoomType[]): Map<string,
   }
   return labels;
 }
+
+/** Applied changes are informational; they never require another approval. */
+export interface RoomChangeActivityItem {
+  id: string;
+  propertyId: string;
+  propertyName: string;
+  landlordName: string;
+  message: string;
+  createdAt: string;
+  changes?: Array<{ label: string; before: string; after: string }>;
+}

@@ -29,6 +29,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { isOwnedStorageKey } from '../uploads/storage-key';
 import { loadEnv } from '../../config/env';
 import { sendRoomChangeEmail } from './room-change-email';
+import { recordOperationsNotice, type OperationChange } from './operations-notice';
 import { roomImportTemplate } from './room-import';
 
 type JsonRecord = Record<string, unknown>;
@@ -398,7 +399,7 @@ export class RoomManagementService {
 
   async blockRoom(ctx: RlsContext, unitId: string, input: UnitBlockInput) {
     const block = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
-      await this.assertUnitOwner(client, unitId, ctx.userId);
+      const unit = await this.assertUnitOwner(client, unitId, ctx.userId);
       const startsAt = input.startImmediately ? new Date() : new Date(input.startsAt);
       const endsAt = input.endsAt ? new Date(input.endsAt) : null;
       if (!Number.isFinite(startsAt.getTime()) || (endsAt && (!Number.isFinite(endsAt.getTime()) || endsAt <= startsAt || endsAt.getTime() <= Date.now()))) {
@@ -413,6 +414,9 @@ export class RoomManagementService {
            VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
           [unitId, input.reason, startsAt.toISOString(), endsAt?.toISOString() ?? null, input.notes ?? null, ctx.userId],
         );
+        await this.noticeRoomOperation(client, unit, 'Room block added', [
+          { label: `${unit.label} · Block`, before: 'No block in this period', after: `${input.reason}: ${startsAt.toISOString()} to ${endsAt?.toISOString() ?? 'until cleared'}` },
+        ]);
         return inserted.rows[0]!;
       } catch (error) {
         if ((error as { code?: string }).code === '23P01') {
@@ -428,16 +432,23 @@ export class RoomManagementService {
 
   async clearBlock(ctx: RlsContext, unitId: string, blockId: string) {
     await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
-      await this.assertUnitOwner(client, unitId, ctx.userId);
+      const unit = await this.assertUnitOwner(client, unitId, ctx.userId);
       const result = await client.query(
         `UPDATE unit_blocks SET cleared_at=now(), cleared_by=$3
          WHERE id=$1 AND unit_id=$2 AND cleared_at IS NULL RETURNING id`,
         [blockId, unitId, ctx.userId],
       );
       if (!result.rows.length) throw new NotFoundException('Active room block not found');
+      await this.noticeRoomOperation(client, unit, 'Room block cleared', [{ label: `${unit.label} · Block`, before: 'Blocked', after: 'Cleared' }]);
     });
     await this.audit.record(ctx, 'room.unblock', 'unit', unitId, { blockId });
     return { cleared: true, room: await this.roomAfterBlock(ctx, unitId) };
+  }
+
+  private async noticeRoomOperation(client: PoolClient, unit: { property_id: string }, message: string, changes: OperationChange[]) {
+    const listed = await client.query(`SELECT 1 FROM properties WHERE id=$1 AND listing_intent='list'`, [unit.property_id]);
+    if (listed.rows.length) await recordOperationsNotice(client, unit.property_id, 'room_changes.applied',
+      `${message}. Saved immediately; no new approval is needed.`, { changes });
   }
 
   private async roomAfterBlock(ctx: RlsContext, unitId: string) {
@@ -447,7 +458,7 @@ export class RoomManagementService {
 
   async blockBed(ctx: RlsContext, unitId: string, bedId: string, input: BedBlockInput) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
-      await this.assertUnitOwner(client, unitId, ctx.userId);
+      const unit = await this.assertUnitOwner(client, unitId, ctx.userId);
       const live = await client.query(
         `SELECT 1 FROM reservations WHERE bed_id=$1 AND status IN ('reserved','booked','occupied') LIMIT 1`, [bedId],
       );
@@ -457,6 +468,11 @@ export class RoomManagementService {
         [bedId, unitId, input.blocked, input.blocked ? input.reason ?? 'Blocked by landlord' : null],
       );
       if (!updated.rows.length) throw new NotFoundException('Bedspace not found');
+      const bed = await client.query<{ label: string }>('SELECT label FROM beds WHERE id=$1', [bedId]);
+      await this.noticeRoomOperation(client, unit, input.blocked ? 'Bed blocked' : 'Bed unblocked', [
+        { label: `${unit.label} · ${bed.rows[0]!.label}`, before: input.blocked ? 'Unblocked' : 'Blocked',
+          after: input.blocked ? `Blocked: ${input.reason ?? 'Blocked by landlord'}` : 'Unblocked' },
+      ]);
       return { blocked: input.blocked };
     });
     await this.audit.record(ctx, input.blocked ? 'bed.block' : 'bed.unblock', 'bed', bedId, { unitId });
@@ -496,11 +512,21 @@ export class RoomManagementService {
         `UPDATE room_type_versions SET status=$2, submitted_at=now(), rejection_reason=NULL, reviewer_notes=NULL
          WHERE change_set_id=$1 AND status IN ('draft','rejected')`, [changeSetId, status],
       );
-      return { row: updated.rows[0]!, counts, propertyId: row.property_id };
+      const reviewers = await recordOperationsNotice(client, row.property_id, 'room_changes.submitted',
+        status === 'visit_required'
+          ? 'Room changes require a physical inspection. The Ops lead can visit or assign an inspector.'
+          : 'Room changes are waiting for Operations review.', { changeSetId });
+      return { row: updated.rows[0]!, counts, propertyId: row.property_id, reviewers };
     });
     await this.audit.record(ctx, 'room_change_set.submit', 'room_inventory_change_set', changeSetId, result.counts);
     if (result.row.status === 'approved') return { ...this.mapChangeSetRow(result.row), ...result.counts };
-    await this.notifyReviewers(changeSetId, result.propertyId);
+    for (const portal of ['ops', 'admin'] as const) {
+      this.emailUsers((result.reviewers ?? []).filter((r) => (r.roleKey === 'ops_lead') === (portal === 'ops')).map((r) => r.userId), {
+        subject: 'Room changes are waiting for Operations',
+        message: result.row.status === 'visit_required' ? 'A landlord requested a physical inspection for room changes. Schedule a visit or assign an inspector.' : 'A landlord submitted room changes for review.',
+        path: `/${portal}/room-changes`, action: 'Open room changes',
+      });
+    }
     await this.notifications.notify(ctx.userId, result.row.status === 'visit_required' ? 'room_changes.visit_required' : 'room_changes.submitted', 'in_app', {
       message: result.row.status === 'visit_required'
         ? 'Your room changes were submitted. CampusHomes must complete a physical verification before they can be approved.'
@@ -1367,10 +1393,15 @@ export class RoomManagementService {
       `SELECT id FROM room_inventory_change_sets WHERE property_id=$1 AND status = ANY($2::text[]) ORDER BY created_at FOR UPDATE`,
       [propertyId, statuses],
     );
-    const summaries: string[] = [];
-    for (const set of sets.rows) summaries.push(await this.changeSummary(client, set.id, propertyId));
+    const notices = [];
+    for (const set of sets.rows) notices.push({ id: set.id,
+      summary: await this.changeSummary(client, set.id, propertyId),
+      changes: await this.changeDetails(client, set.id),
+    });
     const created = await this.applyOpenChangeSets(client, propertyId, landlordId, statuses, 'Applied at once: this property is past its first Operations approval');
-    if (summaries.length) await this.tellOperations(client, propertyId, summaries.join('; '));
+    for (const notice of notices) await recordOperationsNotice(client, propertyId, 'room_changes.applied',
+      `A landlord changed rooms at ${notice.summary}. The changes are live; no approval is needed.`,
+      { changeSetId: notice.id, changes: notice.changes });
     return created;
   }
 
@@ -1396,31 +1427,6 @@ export class RoomManagementService {
         [returned.rows.map((row) => row.id), error.message],
       );
     }
-  }
-
-  /** In-app notice to the Ops leads and admins whose scope covers the
-   * property. Written in the caller's transaction, so a notice never exists
-   * for a change that rolled back. No email: one would go out per edit. */
-  private async tellOperations(client: PoolClient, propertyId: string, summary: string) {
-    await client.query(
-      `INSERT INTO notifications(user_id, template_key, channel, payload)
-       SELECT DISTINCT ON (u.id) u.id, 'room_changes.applied', 'in_app',
-         jsonb_build_object('message', $2::text, 'propertyId', p.id,
-           'href', CASE WHEN r.key = 'ops_lead' THEN '/ops/properties' ELSE '/admin/properties' END)
-       FROM user_role_assignments a
-       JOIN roles r ON r.id = a.role_id
-       JOIN users u ON u.id = a.user_id
-       JOIN properties p ON p.id = $1
-       WHERE r.key IN ('super_admin', 'platform_admin', 'ops_lead')
-         AND a.revoked_at IS NULL AND a.valid_from <= now()
-         AND (a.valid_until IS NULL OR a.valid_until > now())
-         AND u.status = 'active' AND u.deleted_at IS NULL
-         AND ((a.scope_type = 'platform_wide' AND a.scope_id IS NULL)
-           OR (a.scope_type = 'catchment' AND a.scope_id IN (p.catchment::text, 'all'))
-           OR (a.scope_type = 'property' AND a.scope_id = p.id::text))
-       ORDER BY u.id, CASE WHEN r.key = 'ops_lead' THEN 1 ELSE 0 END`,
-      [propertyId, `A landlord changed rooms at ${summary}. The changes are live; no approval is needed.`],
-    );
   }
 
   private async applyRoomTypeVersion(client: PoolClient, version: RoomTypeVersionRow, semesterId: string, reviewerId: string, notes: string | null) {
@@ -1511,33 +1517,64 @@ export class RoomManagementService {
     }
   }
 
-  private async notifyReviewers(changeSetId: string, propertyId: string) {
-    const reviewers = await this.rlsDb.run({ userId: '00000000-0000-0000-0000-000000000000', role: 'service_role' }, async (_db, client) => {
-      const result = await client.query<{ user_id: string; role_key: string }>(
-        `SELECT DISTINCT ON (ura.user_id) ura.user_id, r.key role_key FROM user_role_assignments ura JOIN roles r ON r.id=ura.role_id
-         JOIN users u ON u.id=ura.user_id WHERE r.key IN ('super_admin','platform_admin','ops_lead')
-           AND ura.revoked_at IS NULL AND (ura.valid_until IS NULL OR ura.valid_until>now())
-           AND u.status='active' AND u.deleted_at IS NULL
-         ORDER BY ura.user_id, CASE WHEN r.key IN ('super_admin','platform_admin') THEN 0 ELSE 1 END`,
-      );
-      return result.rows;
+  async activity(ctx: RlsContext) {
+    return this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      const { rows } = await client.query(
+        `SELECT n.id, n.payload, n.created_at, p.name property_name,
+           coalesce(nullif(u.name,''),nullif(l.legal_name,''),'Landlord') landlord_name FROM notifications n
+         JOIN properties p ON p.id::text=n.payload->>'propertyId'
+         JOIN users u ON u.id=p.landlord_id LEFT JOIN landlords l ON l.user_id=p.landlord_id
+         WHERE n.user_id=$1 AND n.template_key IN ('room_changes.applied','property.updated')
+           AND public.app_staff_scope_for($1::uuid,$2::text,$3::boolean,p.id,true)
+         ORDER BY n.created_at DESC, n.id LIMIT 100`, [ctx.userId, ctx.role, ctx.mfaVerified === true]);
+      return rows.map((row) => ({ id: row.id, ...row.payload, propertyName: row.property_name, landlordName: row.landlord_name, createdAt: row.created_at.toISOString() }));
     });
-    await Promise.all(reviewers.map((reviewer) => this.notifications.notify(reviewer.user_id, 'room_changes.submitted', 'in_app', {
-      message: 'A landlord submitted room inventory changes for review.',
-      href: reviewer.role_key === 'ops_lead' ? '/ops/room-changes' : '/admin/room-changes',
-      propertyId,
-      changeSetId,
-    })));
-    // In-app alone went unnoticed (Festo, 2026-10-23): reviewers get an email too.
-    for (const portal of ['ops', 'admin'] as const) {
-      const ids = reviewers.filter((r) => (r.role_key === 'ops_lead') === (portal === 'ops')).map((r) => r.user_id);
-      this.emailUsers(ids, {
-        subject: 'Room changes are waiting for your review',
-        message: 'A landlord submitted room inventory changes on CampusHomes. Review and approve or send them back.',
-        path: `/${portal}/room-changes`,
-        action: 'Open room changes',
-      });
+  }
+
+  /** Capture before applying: live rows will have changed by the time Ops reads. */
+  private async changeDetails(client: PoolClient, changeSetId: string): Promise<OperationChange[]> {
+    const changes: OperationChange[] = [];
+    const display = (value: unknown): string => value == null || value === '' ? 'Not set'
+      : Array.isArray(value) ? value.join(', ') || 'None' : String(value);
+    const compare = (name: string, before: JsonRecord, after: JsonRecord, labels: Record<string, string>) => {
+      for (const [key, label] of Object.entries(labels)) {
+        if (JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) {
+          changes.push({ label: `${name} · ${label}`, before: display(before[key]), after: display(after[key]) });
+        }
+      }
+    };
+    const types = await client.query<{ title: string; before: JsonRecord | null; after: JsonRecord }>(
+      `SELECT v.title, to_jsonb(old) AS before, to_jsonb(v) AS after
+       FROM room_type_versions v JOIN room_types rt ON rt.id=v.room_type_id
+       LEFT JOIN room_type_versions old ON old.id=rt.current_version_id WHERE v.change_set_id=$1`, [changeSetId]);
+    for (const row of types.rows) {
+      compare(row.title, row.before ?? {}, row.after, { title: 'Name', category: 'Category', capacity: 'Beds',
+        bathroom_type: 'Bathroom', size_sqm: 'Size (m²)', description: 'Description', amenities: 'Amenities',
+        price_per_term_ugx: 'Term price (UGX)', deposit_ugx: 'Deposit (UGX)' });
+      const photos = await client.query<{ version_id: string; keys: string[] }>(
+        `SELECT room_type_version_id version_id, array_agg(storage_key ORDER BY sort_order,id) keys
+         FROM room_type_photos WHERE room_type_version_id=ANY($1::uuid[]) GROUP BY room_type_version_id`,
+        [[row.before?.id, row.after.id].filter(Boolean)]);
+      const oldPhotos = photos.rows.find((p) => p.version_id === row.before?.id)?.keys ?? [];
+      const newPhotos = photos.rows.find((p) => p.version_id === row.after.id)?.keys ?? [];
+      if (JSON.stringify(oldPhotos) !== JSON.stringify(newPhotos)) changes.push({ label: `${row.title} · Photos`,
+        before: `${oldPhotos.length} photos`, after: `${newPhotos.length} photos (updated)` });
     }
+    const units = await client.query<{ action: string; before: JsonRecord | null; after: JsonRecord; title: string | null; capacity: number | null }>(
+      `SELECT c.action, to_jsonb(u) AS before, c.proposed_data AS after, v.title, v.capacity
+       FROM room_unit_changes c LEFT JOIN units u ON u.id=c.unit_id
+       LEFT JOIN room_types rt ON rt.id=c.room_type_id
+       LEFT JOIN room_type_versions v ON v.id=rt.current_version_id WHERE c.change_set_id=$1`, [changeSetId]);
+    for (const row of units.rows) {
+      const name = String(row.before?.label ?? row.after.roomCode ?? 'Room');
+      if (row.action === 'archive') { changes.push({ label: `${name} · Room`, before: 'Active', after: 'Archived' }); continue; }
+      compare(name, { roomCode: row.before?.label, buildingName: row.before?.building_name,
+        floorLabel: row.before?.floor_label, roomTypeId: row.before?.room_type_id, capacity: row.before?.capacity },
+      { ...row.after, capacity: row.after.capacity ?? row.capacity },
+      { roomCode: 'Room code', buildingName: 'Building', floorLabel: 'Floor', capacity: 'Beds' });
+      if (row.before?.room_type_id !== row.after.roomTypeId && row.title) changes.push({ label: `${name} · Room type`, before: row.before ? 'Previous room type' : 'New room', after: row.title });
+    }
+    return changes;
   }
 
   /** "Mirembe Courts: 3 rooms (Double 1 → A01, …) and 1 room type", for notices. */
