@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_PUBLISH_UNITS, PHOTO_CATEGORIES, withAmenity, type PhotoCategory, type Property, type RoomCategory, type VisitPhoto } from "@campushomes/shared";
@@ -18,7 +19,6 @@ export type PropertyRoom = {
 
 import {
   bedsPerRoom,
-  emptyRoomCategoryRow,
   RoomCategoryRows,
   type RoomCategoryRow,
 } from "@/components/room-category-rows";
@@ -113,9 +113,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   // strip the listing's photos.
   const [photos, setPhotos] = useState<VisitPhoto[] | null>(null);
   const [coverKey, setCoverKey] = useState<string | null>(null);
-  const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([
-    emptyRoomCategoryRow(),
-  ]);
+  const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visitPhotoCount, setVisitPhotoCount] = useState<number | null>(null);
@@ -137,9 +135,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       visitPhotoCount: number;
       visitPhotos: VisitPhoto[];
       version: PublishedVersion | null;
+      inventoryInitialized?: boolean;
       photos: PublishedPhoto[];
     }>(`/ops/listings/${listingId}`)
-      .then(async ({ listing, property, visitPhotoCount: count, visitPhotos, version, photos: livePhotos }) => {
+      .then(async ({ listing, property, visitPhotoCount: count, visitPhotos, version, photos: livePhotos, inventoryInitialized }) => {
         if (cancelled) return;
         setVisitPhotoCount(count);
         setDeclared(property);
@@ -186,7 +185,8 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           return;
         }
 
-        if (!property.proposedRoomCategories?.length) return;
+        // Old onboarding proposals must not recreate inventory the landlord removed.
+        if (inventoryInitialized || !property.proposedRoomCategories?.length) return;
         setRoomCategoryRows(
           property.proposedRoomCategories.map((p) => ({
             key: `prefill-${p.category}-${p.pricePerTermUgx}-${Math.random()}`,
@@ -216,7 +216,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       (row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0,
     );
     if (validRows.length === 0) {
-      setError("Add at least one room type with a room count and price.");
+      setError("There are no rooms to publish yet. Finish verification without publishing, or add the real room inventory and prices.");
       return;
     }
 
@@ -271,6 +271,11 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {!published && <section className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+        <h2 className="font-semibold">Room types are optional for verification</h2>
+        <p className="text-sm text-muted-foreground">You do not need to create room types on the landlord’s behalf. Leave the listing unpublished until the landlord adds rooms and prices. Physical inspection and approval still use the visit checklist.</p>
+        <Link href="/ops" className="inline-flex min-h-11 items-center rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">Finish verification without publishing</Link>
+      </section>}
       {published && (
         <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
           <p className="font-semibold">

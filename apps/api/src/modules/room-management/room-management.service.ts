@@ -343,58 +343,86 @@ export class RoomManagementService {
       return unit.property_id;
   }
 
-  /** Deletes rooms, all or nothing. A staged room that was never approved is
-   * discarded at once; an approved room gets an archive change that Ops
-   * reviews, so its reservation history stays and students see it until then.
-   * On an established property (see appliesAtOnce) the archive applies at once. */
+  /** Removing inventory never needs a new inspection. Archive instead of
+   * hard-deleting so past reservations, payments and photos retain their links. */
   async deleteRooms(ctx: RlsContext, propertyId: string, input: BatchRoomDeleteInput) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
+      await client.query('SELECT id FROM properties WHERE id=$1 FOR UPDATE', [propertyId]);
       let discarded = 0;
-      let staged = 0;
+      const removed: string[] = [];
       for (const roomId of input.roomIds) {
         const draft = await client.query(
           `DELETE FROM room_unit_changes c USING room_inventory_change_sets cs
            WHERE c.id=$1 AND c.action='create' AND cs.id=c.change_set_id
-             AND cs.property_id=$2 AND cs.status IN ('draft','rejected')`, [roomId, propertyId],
-        );
-        if (draft.rowCount) {
-          discarded += 1;
-          continue;
-        }
-        if (await this.stageRoomArchive(client, ctx, roomId) !== propertyId) {
-          throw new BadRequestException('Every room must belong to this property');
-        }
-        staged += 1;
+             AND cs.property_id=$2 AND cs.status IN ('draft','rejected','pending_review','visit_required')`, [roomId, propertyId]);
+        if (draft.rowCount) { discarded += 1; continue; }
+        const unit = await this.assertUnitOwner(client, roomId, ctx.userId);
+        if (unit.property_id !== propertyId) throw new BadRequestException('Every room must belong to this property');
+        await this.archiveUnusedRoom(client, unit.id);
+        removed.push(unit.label);
       }
-      const applied = staged > 0 && (await this.applyIfEstablished(client, propertyId, ctx.userId)) !== null;
-      return { discarded, staged, applied };
+      await this.cancelEmptyInventoryRequests(client, propertyId);
+      await recordOperationsNotice(client, propertyId, 'room_changes.applied',
+        `${removed.length + discarded} rooms removed by the landlord. Applied immediately; no approval is needed.`,
+        { changes: removed.map((label) => ({ label: `${label} · Room`, before: 'Active', after: 'Removed' })) });
+      return { discarded, staged: 0, archived: removed.length, applied: true };
     });
     await this.audit.record(ctx, 'room.delete', 'property', propertyId, { ...result, roomIds: input.roomIds });
     return result;
   }
 
-  /** Stages one approved room's removal inside the caller's transaction; returns its property. */
-  private async stageRoomArchive(client: PoolClient, ctx: RlsContext, unitId: string) {
-    const unit = await this.assertUnitOwner(client, unitId, ctx.userId);
+  async deleteRoomType(ctx: RlsContext, roomTypeId: string) {
+    const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      const type = await this.assertRoomTypeOwner(client, roomTypeId, ctx.userId);
+      await client.query('SELECT id FROM properties WHERE id=$1 FOR UPDATE', [type.property_id]);
+      const units = await client.query<{ id: string; label: string }>(
+        `SELECT id,label FROM units WHERE room_type_id=$1 AND archived_at IS NULL ORDER BY id FOR UPDATE`, [roomTypeId]);
+      // All or nothing: one booked room rolls back the entire type removal.
+      for (const unit of units.rows) await this.archiveUnusedRoom(client, unit.id);
+      const title = await client.query<{ title: string }>(
+        `SELECT title FROM room_type_versions WHERE room_type_id=$1 ORDER BY version_number DESC LIMIT 1`, [roomTypeId]);
+      await client.query(
+        `DELETE FROM room_unit_changes c USING room_inventory_change_sets cs
+         WHERE c.room_type_id=$1 AND c.change_set_id=cs.id AND cs.status IN ('draft','rejected','pending_review','visit_required')`, [roomTypeId]);
+      // Keep the specifications/history, but withdraw them from open queues.
+      await client.query(
+        `UPDATE room_type_versions v SET change_set_id=NULL
+         FROM room_inventory_change_sets cs WHERE v.room_type_id=$1 AND cs.id=v.change_set_id
+           AND cs.status IN ('draft','rejected','pending_review','visit_required')`, [roomTypeId]);
+      await client.query('UPDATE room_types SET archived_at=now(),updated_at=now() WHERE id=$1', [roomTypeId]);
+      await this.cancelEmptyInventoryRequests(client, type.property_id);
+      await recordOperationsNotice(client, type.property_id, 'room_changes.applied',
+        `The landlord removed room type ${title.rows[0]?.title ?? 'Room type'} and ${units.rows.length} unused rooms. No approval is needed.`,
+        { changes: [{ label: 'Room type', before: title.rows[0]?.title ?? 'Room type', after: 'Removed' },
+          ...units.rows.map((unit) => ({ label: `${unit.label} · Room`, before: 'Active', after: 'Removed' }))] });
+      return { propertyId: type.property_id, archivedRooms: units.rows.length, applied: true };
+    });
+    await this.audit.record(ctx, 'room_type.delete', 'room_type', roomTypeId, result);
+    return result;
+  }
+
+  private async archiveUnusedRoom(client: PoolClient, unitId: string) {
+    await client.query('SELECT id FROM units WHERE id=$1 FOR UPDATE', [unitId]);
+    // Reservation allocation locks beds too. Hold them through the archive so
+    // a new hold cannot slip between the reservation check and this write.
+    await client.query('SELECT id FROM beds WHERE unit_id=$1 ORDER BY id FOR UPDATE', [unitId]);
     const live = await client.query(
       `SELECT 1 FROM reservations r JOIN beds b ON b.id=r.bed_id
-       WHERE b.unit_id=$1 AND r.status IN ('reserved','booked','occupied') LIMIT 1`, [unitId],
-    );
-    if (live.rows.length) throw new ConflictException(`Room ${unit.label} has a current reservation, so it can't be deleted`);
-    const semester = await client.query<{ semester_id: string }>(
-      `SELECT semester_id FROM unit_semester_pricing WHERE unit_id=$1 ORDER BY created_at DESC LIMIT 1`, [unitId],
-    );
-    if (!semester.rows[0]) throw new BadRequestException(`Room ${unit.label} has no semester pricing`);
-    const changeSet = await this.getOrCreateDraft(client, unit.property_id, semester.rows[0].semester_id, ctx.userId);
-    // Removal supersedes any edit to this room still waiting in the draft.
-    await client.query(`DELETE FROM room_unit_changes WHERE change_set_id=$1 AND unit_id=$2`, [changeSet.id, unitId]);
+       WHERE b.unit_id=$1 AND r.status IN ('reserved','booked','occupied') LIMIT 1`, [unitId]);
+    if (live.rows.length) throw new ConflictException('This room has an active reservation or tenant. Move or cancel the booking before deleting the room or its type.');
     await client.query(
-      `INSERT INTO room_unit_changes(change_set_id, action, unit_id, room_type_id, proposed_data, created_by)
-       VALUES ($1,'archive',$2,$3,'{}'::jsonb,$4)`,
-      [changeSet.id, unitId, unit.room_type_id, ctx.userId],
-    );
-    return unit.property_id;
+      `DELETE FROM room_unit_changes c USING room_inventory_change_sets cs
+       WHERE c.unit_id=$1 AND c.change_set_id=cs.id AND cs.status IN ('draft','rejected','pending_review','visit_required')`, [unitId]);
+    await client.query(`UPDATE units SET archived_at=now(),operational_status='blocked' WHERE id=$1`, [unitId]);
+  }
+
+  private async cancelEmptyInventoryRequests(client: PoolClient, propertyId: string) {
+    await client.query(
+      `UPDATE room_inventory_change_sets cs SET status='cancelled',updated_at=now()
+       WHERE cs.property_id=$1 AND cs.status IN ('draft','rejected','pending_review','visit_required')
+         AND NOT EXISTS(SELECT 1 FROM room_unit_changes c WHERE c.change_set_id=cs.id)
+         AND NOT EXISTS(SELECT 1 FROM room_type_versions v WHERE v.change_set_id=cs.id)`, [propertyId]);
   }
 
   async blockRoom(ctx: RlsContext, unitId: string, input: UnitBlockInput) {

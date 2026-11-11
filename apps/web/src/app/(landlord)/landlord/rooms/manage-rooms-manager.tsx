@@ -203,8 +203,7 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
     router.refresh();
   }
 
-  // Staged rooms vanish and approved ones gain "Removal pending"; the
-  // server's view is the only one that knows which was which.
+  // Reconcile server-side removals and withdrawn change requests after deletion.
   function onRoomsDeleted() {
     router.refresh();
   }
@@ -510,6 +509,12 @@ export function ManageRoomsManager({ initialData }: ManageRoomsManagerProps) {
               semesters={initialData.semesters}
               rooms={rooms}
               onRoomTypeSaved={onRoomTypeSaved}
+              onRoomTypeDeleted={(id) => {
+                setRoomTypes((current) => current.filter((type) => type.id !== id));
+                setRooms((current) => current.filter((room) => room.roomTypeId !== id));
+                setInventoryResetKey((key) => key + 1);
+                router.refresh();
+              }}
             />
         </div>
       </div>

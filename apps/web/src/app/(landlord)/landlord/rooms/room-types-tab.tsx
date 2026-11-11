@@ -11,7 +11,10 @@ import {
   Image as ImageIcon,
   Layers,
   Plus,
+  Trash2,
 } from "lucide-react";
+import { api, apiErrorMessage } from "@/lib/api";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/status-chip";
 import { listingPhotoUrl } from "@/lib/cloudinary";
@@ -31,6 +34,7 @@ interface RoomTypesTabProps {
   rooms?: RoomUnit[];
   semesters?: { id: string; name: string }[];
   onRoomTypeSaved: (savedType: RoomType) => void;
+  onRoomTypeDeleted: (id: string) => void;
 }
 
 export function RoomTypesTab({
@@ -40,11 +44,29 @@ export function RoomTypesTab({
   rooms = [],
   semesters = [],
   onRoomTypeSaved,
+  onRoomTypeDeleted,
 }: RoomTypesTabProps) {
   const [detailsTypeId, setDetailsTypeId] = useState<string | null>(null);
   const detailsType = roomTypes.find((type) => type.id === detailsTypeId);
   const [editingType, setEditingType] = useState<RoomType | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const [deletingType, setDeletingType] = useState<RoomType | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function deleteType() {
+    if (!deletingType) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api(`/room-management/room-types/${deletingType.id}`, { method: "DELETE" });
+      onRoomTypeDeleted(deletingType.id);
+      setDeletingType(null);
+    } catch (error) {
+      setDeleteError(apiErrorMessage(error, "Could not delete this room type. Try again."));
+    } finally { setDeleting(false); }
+  }
 
   function handleAdd() {
     setEditingType(null);
@@ -222,10 +244,15 @@ export function RoomTypesTab({
                       variant="secondary"
                       size="sm"
                       onClick={() => handleEdit(rt)}
-                      className="h-auto min-h-11 flex-1 gap-1.5 whitespace-normal py-2"
+                      className="h-auto min-h-11 gap-1.5 whitespace-normal py-2"
                     >
                       <Edit className="size-3.5" />
                       {isRejected ? "Revise and Resubmit" : "Edit Specifications"}
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" className="min-h-11 gap-2 text-destructive"
+                      aria-label={`Delete room type ${activeVer?.title ?? "room type"}`}
+                      onClick={() => { setDeleteError(null); setDeletingType(rt); }}>
+                      <Trash2 aria-hidden className="size-4" />Delete
                     </Button>
                   </div>
                 </div>
@@ -235,6 +262,15 @@ export function RoomTypesTab({
         </div>
       )}
 
+      <Dialog open={deletingType !== null} onOpenChange={(open) => { if (!open && !deleting) setDeletingType(null); }} size="sm" dismissible={!deleting}>
+        <DialogHeader title={`Delete ${deletingType?.currentVersion?.title ?? deletingType?.pendingVersion?.title ?? "room type"}?`} onClose={() => { if (!deleting) setDeletingType(null); }} />
+        <DialogBody className="space-y-3 text-sm">
+          <p>This removes the room type and its {deletingType?.attachedRoomsCount ?? 0} attached rooms from active inventory immediately. Past booking and payment records are kept.</p>
+          <p className="text-muted-foreground">If a room has an active booking or tenant, move or cancel that booking first. You can delete types created by either you or Operations.</p>
+          {deleteError && <p role="alert" className="text-destructive">{deleteError}</p>}
+        </DialogBody>
+        <DialogFooter><Button type="button" variant="secondary" disabled={deleting} onClick={() => setDeletingType(null)}>Cancel</Button><Button type="button" variant="destructive" disabled={deleting} onClick={() => void deleteType()}>{deleting ? "Deleting…" : "Delete room type"}</Button></DialogFooter>
+      </Dialog>
       {detailsType && <RoomTypeDetailsDialog roomType={detailsType} rooms={rooms} semesters={semesters} onClose={() => setDetailsTypeId(null)} />}
       {/* Add / Edit Dialog */}
       {dialogOpen && <RoomTypeDialog

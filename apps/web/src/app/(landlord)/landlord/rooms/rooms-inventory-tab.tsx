@@ -45,9 +45,9 @@ interface RoomsInventoryTabProps {
   onFilterStatusChange: (status: string) => void;
 }
 
-/** A room a student is in (or holds) can't go; one already deleted is waiting on Ops. */
+/** Only an active booking or tenant blocks removal; old pending requests can be retried. */
 export function canDeleteRoom(room: Pick<RoomUnit, "occupiedBeds" | "pendingRemoval">): boolean {
-  return room.occupiedBeds === 0 && !room.pendingRemoval;
+  return room.occupiedBeds === 0;
 }
 
 /** "has_free_beds" is what the Available Beds card means: any room a student
@@ -849,15 +849,7 @@ export function RoomsInventoryTab({
               {deleteError}
             </div>
           )}
-          {applyImmediately ? <p>These rooms will be removed from active inventory immediately. Past bookings stay on record.</p> : <>
-          <p>
-            Rooms you added but haven&apos;t sent for review are removed straight away.
-          </p>
-          <p className="text-muted-foreground">
-            Approved rooms are marked <span className="font-semibold text-destructive">Removal pending</span> and
-            are removed from active inventory when your changes are approved. Past bookings stay on record.
-          </p>
-          </>}
+          <p>These rooms will be removed from active inventory immediately, including any older pending removal requests. Past bookings stay on record.</p>
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setRoomsToDelete([])} disabled={deleting}>

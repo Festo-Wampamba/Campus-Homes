@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
@@ -40,6 +40,11 @@ export class RoomManagementController {
   @Patch('room-types/:roomTypeId')
   updateRoomType(@Req() req: AuthenticatedRequest, @Param('roomTypeId', ParseUUIDPipe) roomTypeId: string, @Body() body: RoomTypeInputDto) {
     return this.rooms.updateRoomType(rlsCtx(req), roomTypeId, body);
+  }
+
+  @Delete('room-types/:roomTypeId')
+  deleteRoomType(@Req() req: AuthenticatedRequest, @Param('roomTypeId', ParseUUIDPipe) roomTypeId: string) {
+    return this.rooms.deleteRoomType(rlsCtx(req), roomTypeId);
   }
 
   @Post('properties/:propertyId/rooms')

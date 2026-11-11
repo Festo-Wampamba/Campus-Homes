@@ -301,7 +301,7 @@ export function RoomCategoryRows({
         onClick={() => onChange([...rows, emptyRoomCategoryRow()])}
       >
         <Plus aria-hidden className="size-4" />
-        Add another room type
+        {rows.length ? "Add another room type" : "Add room type"}
       </Button>
     </div>
   );
