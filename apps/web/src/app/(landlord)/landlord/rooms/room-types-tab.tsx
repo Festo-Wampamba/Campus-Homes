@@ -110,7 +110,7 @@ export function RoomTypesTab({
           </Button>
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
           {roomTypes.map((rt) => {
             const activeVer = rt.currentVersion ?? rt.pendingVersion;
             const hasPendingProposal = Boolean(rt.pendingVersion && rt.currentVersion);
@@ -239,17 +239,17 @@ export function RoomTypesTab({
 
                   {/* Card Actions */}
                   <div className="pt-3 border-t border-border flex flex-wrap items-center gap-2">
-                    <Button type="button" variant="secondary" size="sm" className="h-auto min-h-11 whitespace-normal py-2" onClick={() => setDetailsTypeId(rt.id)}>View details</Button>
+                    <Button type="button" variant="secondary" size="sm" className="h-auto min-h-11 whitespace-nowrap py-2" onClick={() => setDetailsTypeId(rt.id)}>View details</Button>
                     <Button
                       variant="secondary"
                       size="sm"
                       onClick={() => handleEdit(rt)}
-                      className="h-auto min-h-11 gap-1.5 whitespace-normal py-2"
+                      className="h-auto min-h-11 gap-1.5 whitespace-nowrap py-2"
                     >
                       <Edit className="size-3.5" />
                       {isRejected ? "Revise and Resubmit" : "Edit Specifications"}
                     </Button>
-                    <Button type="button" variant="secondary" size="sm" className="min-h-11 gap-2 text-destructive"
+                    <Button type="button" variant="secondary" size="sm" className="min-h-11 gap-2 text-destructive whitespace-nowrap"
                       aria-label={`Delete room type ${activeVer?.title ?? "room type"}`}
                       onClick={() => { setDeleteError(null); setDeletingType(rt); }}>
                       <Trash2 aria-hidden className="size-4" />Delete

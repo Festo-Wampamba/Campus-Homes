@@ -514,20 +514,20 @@ export function RoomsInventoryTab({
       ) : (
         <>
           {/* Desktop Semantic Table */}
-          <div className="hidden @[90rem]:block overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-muted/40 font-heading font-semibold text-muted-foreground uppercase tracking-wider">
                 <tr>
                   <th className="w-10 py-3 pl-4">
                     <input type="checkbox" aria-label="Select all rooms shown" checked={allShownSelected} onChange={toggleAllShown} className="size-4 accent-teal-700" />
                   </th>
-                  <th className="py-3 px-4">Room Code</th>
-                  <th className="py-3 px-4">Location</th>
-                  <th className="py-3 px-4">Room Type</th>
-                  <th className="py-3 px-4">Bedspace Occupancy</th>
-                  <th className="py-3 px-4">Derived Status</th>
-                  <th className="py-3 px-4">Block State</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Room Code</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Location</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Room Type</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Bedspace Occupancy</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Derived Status</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Block State</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -546,35 +546,35 @@ export function RoomsInventoryTab({
                         <input type="checkbox" aria-label={`Select room ${room.roomCode}`} checked={selectedIds.has(room.id)} onChange={() => toggleSelected(room.id)} className="size-4 accent-teal-700" />
                       </td>
                       {/* Code */}
-                      <td className="py-3.5 px-4 font-mono font-bold text-foreground">
+                      <td className="py-3.5 px-4 font-mono font-bold text-foreground whitespace-nowrap">
                         {room.roomCode}
                         {room.pendingRemoval ? (
-                          <span className="ml-2 inline-flex items-center rounded bg-destructive-subtle px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                          <span className="ml-2 inline-flex items-center rounded bg-destructive-subtle px-1.5 py-0.5 text-[10px] font-semibold text-destructive whitespace-nowrap">
                             Removal pending
                           </span>
                         ) : room.pendingChanges && (
-                          <span className="ml-2 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                          <span className="ml-2 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">
                             Staged
                           </span>
                         )}
                       </td>
 
                       {/* Location */}
-                      <td className="py-3.5 px-4 text-foreground">
+                      <td className="py-3.5 px-4 text-foreground whitespace-nowrap">
                         {room.buildingName || "Main"}
                         {room.floorLabel ? ` · ${room.floorLabel}` : ""}
                       </td>
 
                       {/* Room Type */}
                       <td className="py-3.5 px-4">
-                        <button type="button" onClick={() => setDetailsRoomId(room.id)} aria-label={`View ${room.roomTypeTitle} details for room ${room.roomCode}`} className="min-h-11 text-left font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring">{room.roomTypeTitle}</button>
-                        <span className="block text-[11px] text-muted-foreground uppercase">
+                        <button type="button" onClick={() => setDetailsRoomId(room.id)} aria-label={`View ${room.roomTypeTitle} details for room ${room.roomCode}`} className="text-left font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring line-clamp-1">{room.roomTypeTitle}</button>
+                        <span className="block text-[11px] text-muted-foreground uppercase whitespace-nowrap">
                           {room.roomCategory}
                         </span>
                       </td>
 
                       {/* Occupancy with mini progress bar */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="w-36 space-y-1">
                           <div className="flex justify-between text-[11px] tabular-nums font-semibold">
                             <span>
@@ -598,36 +598,36 @@ export function RoomsInventoryTab({
                       </td>
 
                       {/* Derived Status */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {renderStatusBadge(room.derivedStatus)}
                       </td>
 
                       {/* Block State */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {room.activeBlock ? (
                           <button
                             type="button"
                             onClick={() => openBlockModal(room)}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline whitespace-nowrap"
                           >
                             <Lock className="size-3" />
                             Blocked
                           </button>
                         ) : room.scheduledBlocks?.length ? (
-                          <button type="button" onClick={() => openBlockModal(room)} className="text-[11px] font-semibold text-primary hover:underline">Scheduled ({room.scheduledBlocks.length})</button>
+                          <button type="button" onClick={() => openBlockModal(room)} className="text-[11px] font-semibold text-primary hover:underline whitespace-nowrap">Scheduled ({room.scheduledBlocks.length})</button>
                         ) : (
-                          <span className="text-[11px] text-muted-foreground">None</span>
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">None</span>
                         )}
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
                             variant="secondary"
                             size="sm"
                             onClick={() => openViewBeds(room)}
-                            className="h-8 px-2.5 text-xs"
+                            className="h-8 px-2.5 text-xs whitespace-nowrap"
                           >
                             <Bed className="size-3.5 mr-1" />
                             Beds
@@ -638,7 +638,7 @@ export function RoomsInventoryTab({
                             size="sm"
                             onClick={() => openBlockModal(room)}
                             disabled={room.pendingChanges}
-                            className={`h-8 px-2.5 text-xs ${
+                            className={`h-8 px-2.5 text-xs whitespace-nowrap ${
                               room.activeBlock
                                 ? "text-destructive border-destructive/30 hover:bg-destructive-subtle"
                                 : ""
@@ -683,7 +683,7 @@ export function RoomsInventoryTab({
           </div>
 
           {/* Mobile Card Stack */}
-          <div className="grid gap-3 @[40rem]:grid-cols-2 @[90rem]:hidden">
+          <div className="md:hidden space-y-3">
             {filteredRooms.map((room) => {
               const percent =
                 room.totalBeds > 0

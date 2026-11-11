@@ -452,7 +452,7 @@
 }
 
 /* Reflow records by their actual workspace width, including OS/browser scaling. */
-@container (max-width: 76rem) {
+@container (max-width: 42rem) {
   table[data-responsive-tenants], table[data-responsive-tenants] tbody { display: block; width: 100%; }
   table[data-responsive-tenants] thead { display: none; }
   table[data-responsive-tenants] tbody { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,25rem),1fr)); gap: 1rem; padding: .75rem; }
