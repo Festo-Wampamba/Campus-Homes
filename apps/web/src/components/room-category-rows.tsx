@@ -80,6 +80,7 @@ export function RoomCategoryRows({
   idPrefix,
   showSelfContained = false,
   showBeds = false,
+  showRoomCount = true,
   showPhotos = false,
 }: {
   rows: RoomCategoryRow[];
@@ -90,6 +91,7 @@ export function RoomCategoryRows({
   showSelfContained?: boolean;
   // Ops publish form: per-row "Beds per room" input.
   showBeds?: boolean;
+  showRoomCount?: boolean;
   // Landlord forms: per-row photos of that room type.
   showPhotos?: boolean;
 }) {
@@ -170,6 +172,7 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { customLabel: e.target.value })}
             />
           </div>
+          {showRoomCount && (
           <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-count-${i}`}>Rooms</Label>
             <Input
@@ -182,6 +185,7 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { roomCount: e.target.value })}
             />
           </div>
+          )}
           {showBeds && (
             <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
               <Label htmlFor={`${idPrefix}-beds-${i}`}>Beds per room</Label>

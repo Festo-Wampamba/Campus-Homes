@@ -5,6 +5,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequireAnyPermission, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
+  SaveOpsSpecificationsDto,
   BatchRoomDeleteDto,
   BatchRoomUpdateDto,
   BedBlockInputDto,
@@ -131,6 +132,13 @@ export class RoomManagementOpsController {
   @RequirePermission('room_changes.review')
   queue(@Req() req: AuthenticatedRequest) {
     return this.rooms.reviewQueue(rlsCtx(req));
+  }
+
+  @Post('properties/:propertyId/specifications')
+  @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
+  specifications(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: SaveOpsSpecificationsDto) {
+    return this.rooms.saveOpsSpecifications(rlsCtx(req), propertyId, body.types);
   }
 
   @Get('activity')

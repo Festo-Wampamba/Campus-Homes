@@ -65,11 +65,11 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
           <h2 id="tenant-records-heading" className="text-lg">Tenant records</h2>
           <DownloadTenantsExcel />
         </div>
-        <div role="region" aria-labelledby="tenant-records-heading" tabIndex={0} className="relative max-w-full overflow-x-auto rounded-md border border-border focus-visible:outline-2 focus-visible:outline-ring">
+        <div role="region" aria-labelledby="tenant-records-heading" tabIndex={0} className="@container relative max-w-full overflow-x-auto rounded-md border border-border focus-visible:outline-2 focus-visible:outline-ring">
           {/* Sized to fit a 1280px laptop beside the sidebar: phone and email
               share a column, the rent total sits under the amount paid, and each
               action sits with the value it changes instead of in its own column. */}
-          <table className="w-full text-left text-sm">
+          <table data-responsive-tenants className="w-full text-left text-sm">
             <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
               <tr>
                 <th scope="col" className="px-3 py-2">Room</th>
@@ -83,31 +83,31 @@ export function TenantsList({ tenants }: { tenants: LandlordTenant[] }) {
             <tbody className="divide-y divide-border">
               {rows.pageItems.map((t) => (
                 <tr key={t.reservationId} className="align-top">
-                  <td className="px-3 py-3">
+                  <td data-label="Room" className="px-3 py-3">
                     <span className="font-semibold text-foreground">{t.roomLabel}</span>
                     <span className="block text-xs text-muted-foreground">{t.propertyName} · {t.bedLabel}</span>
                   </td>
-                  <td className="px-3 py-3 text-foreground">
+                  <td data-label="Student" className="px-3 py-3 text-foreground">
                     <span className="block min-w-36 font-medium">{t.name ?? "Not given"}</span>
                     <StatusChip status={t.status} />
                     <TenantPortalStatus tenant={t} />
                     {t.status === "booked" && <div><Button type="button" variant="secondary" size="sm" className="mt-2" onClick={() => setMovingIn(t)}>Confirm move-in</Button></div>}
                   </td>
-                  <td className="px-3 py-3">
+                  <td data-label="Contact" className="px-3 py-3">
                     {t.phone ? <a href={`tel:${t.phone}`} className="block whitespace-nowrap text-primary hover:underline">{t.phone}</a> : <span className="block text-muted-foreground">No phone</span>}
                     {t.email ? <a href={`mailto:${t.email}`} className="block min-w-44 text-xs break-all text-primary hover:underline">{t.email}</a> : <span className="block text-xs text-muted-foreground">No email</span>}
                   </td>
-                  <td className="px-3 py-3 text-muted-foreground">
+                  <td data-label="Emergency contact" className="px-3 py-3 text-muted-foreground">
                     {t.emergencyContactName || t.emergencyContactPhone
                       ? <>{t.emergencyContactName ?? ""}{t.emergencyContactPhone && <span className="block whitespace-nowrap">{t.emergencyContactPhone}</span>}</>
                       : "Not given"}
                     <div><TenantEmergencyContactButton tenant={t} /></div>
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td data-label="Paid" className="px-3 py-3 text-right">
                     <span className="tabular-nums">{formatUgx(t.paidUgx)}</span>
                     <span className="block text-xs whitespace-nowrap text-muted-foreground">of <span className="tabular-nums">{formatUgx(t.totalUgx)}</span></span>
                   </td>
-                  <td className={`px-3 py-3 text-right font-semibold whitespace-nowrap ${t.balanceUgx > 0 ? "text-destructive" : "text-foreground"}`}>
+                  <td data-label="Balance" className={`px-3 py-3 text-right font-semibold whitespace-nowrap ${t.balanceUgx > 0 ? "text-destructive" : "text-foreground"}`}>
                     <span className="tabular-nums">{t.balanceUgx > 0 ? formatUgx(t.balanceUgx) : "Paid in full"}</span>
                     {t.balanceUgx > 0 && (
                       <>

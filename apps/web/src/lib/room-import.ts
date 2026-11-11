@@ -54,6 +54,17 @@ function matchRoomType(text: string, roomTypes: RoomType[]): { id: string } | { 
   );
   if (byCategory.length === 1) return { id: byCategory[0]!.id };
   if (byCategory.length > 1) return { error: `"${text}" fits several room types; use the exact name` };
+  // Older templates used a category/bathroom/rent description instead of a title.
+  const category = wanted.match(/^(single|double|triple|quad|bedsitter|studio|other)\b/)?.[1];
+  const money = wanted.match(/ugx\s*([\d,]+(?:\.\d+)?)\s*([km])?/);
+  const price = money ? Number(money[1]!.replace(/,/g, "")) * (money[2] === "m" ? 1000000 : money[2] === "k" ? 1000 : 1) : null;
+  const bathroom = /self[- ]contained|en[- ]?suite/.test(wanted) ? "ensuite" : /shared/.test(wanted) ? "shared" : null;
+  const remainder = wanted.replace(/^(single|double|triple|quad|bedsitter|studio|other)\b/, "").replace(/ugx\s*[\d,.]+\s*[km]?/, "").replace(/self[- ]contained|en[- ]?suite|shared|room|bathroom/g, "").replace(/[\s·—–-]/g, "");
+  if (category && !remainder && (money || bathroom)) {
+    const candidates = roomTypes.filter((type) => versions(type).some((v) => v.category === category && (!bathroom || v.bathroomType === bathroom) && (price === null || v.pricePerTermUgx === price)));
+    if (candidates.length === 1) return { id: candidates[0]!.id };
+    if (candidates.length > 1) return { error: `"${text}" fits several variants; choose the exact name from your template` };
+  }
   return { error: `No room type called "${text}"` };
 }
 

@@ -450,3 +450,17 @@
   .ch-dialog:not(.ch-workspace-nav) .ch-dialog-body { overflow: visible; }
   .ch-dialog-header h2 { font-size: 1rem; }
 }
+
+/* Reflow records by their actual workspace width, including OS/browser scaling. */
+@container (max-width: 76rem) {
+  table[data-responsive-tenants], table[data-responsive-tenants] tbody { display: block; width: 100%; }
+  table[data-responsive-tenants] thead { display: none; }
+  table[data-responsive-tenants] tbody { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,25rem),1fr)); gap: 1rem; padding: .75rem; }
+  table[data-responsive-tenants] tr { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; }
+  table[data-responsive-tenants] td { display: block; min-width: 0; padding: 0; text-align: left; white-space: normal; }
+  table[data-responsive-tenants] td:nth-child(2), table[data-responsive-tenants] td:nth-child(3), table[data-responsive-tenants] td:nth-child(4) { grid-column: 1 / -1; }
+  table[data-responsive-tenants] td::before { content: attr(data-label); display: block; margin-bottom: .25rem; font-size: .75rem; color: var(--muted-foreground); font-weight: 600; }
+  table[data-responsive-tenants] .min-w-36, table[data-responsive-tenants] .min-w-44 { min-width: 0; }
+}
+
+@container (max-width: 26rem) { table[data-responsive-tenants] td { grid-column: 1 / -1; } }

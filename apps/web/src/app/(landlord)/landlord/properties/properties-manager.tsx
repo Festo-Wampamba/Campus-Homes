@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search, Users } from "lucide-react";
+import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Trash2, EyeOff, AlertTriangle, Plus, Search, Users } from "lucide-react";
 import type { Property } from "@campushomes/shared";
 
+import { api, apiErrorMessage } from "@/lib/api";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -100,6 +102,21 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [view, setView] = useState<ViewMode>("grid");
+
+  const [action,setAction]=useState<{property:Property;kind:"delete"|"unpublish"}|null>(null);
+  const [confirmName,setConfirmName]=useState("");
+  const [ack,setAck]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [actionError,setActionError]=useState<string|null>(null);
+  async function applyAction(){
+    if(!action)return;setBusy(true);setActionError(null);
+    try{await api(`/listings/properties/${action.property.id}/${action.kind}`,{method:"POST",...(action.kind==="delete"?{body:JSON.stringify({confirmationName:confirmName,acknowledgeIrreversible:ack})}:{})});setAction(null);router.refresh();}
+    catch(error){setActionError(apiErrorMessage(error,"Could not update this property. Try again."));}finally{setBusy(false);}
+  }
+  function propertyActions(property:Property){return <span className="inline-flex flex-wrap gap-1" onClick={(e)=>e.stopPropagation()}>
+    <Button type="button" variant="ghost" size="icon" aria-label={`Unpublish ${property.name}`} onClick={()=>{setActionError(null);setAction({property,kind:"unpublish"});}}><EyeOff aria-hidden className="size-4"/></Button>
+    <Button type="button" variant="ghost" size="icon" className="text-destructive" aria-label={`Delete ${property.name}`} onClick={()=>{setConfirmName("");setAck(false);setActionError(null);setAction({property,kind:"delete"});}}><Trash2 aria-hidden className="size-4"/></Button>
+  </span>;}
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -213,6 +230,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                           >
                             <Pencil aria-hidden className="size-4" />
                           </Button>
+                      {propertyActions(property)}
                         </div>
                       </td>
                     </tr>
@@ -247,6 +265,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                   >
                     <Pencil aria-hidden className="size-4" />
                   </Button>
+                      {propertyActions(property)}
                 </div>
               ))}
             </div>
@@ -259,8 +278,8 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                   className="cursor-pointer overflow-hidden transition-shadow hover:shadow-md"
                 >
                   <PropertyThumbnail property={property} whole className="h-40 w-full rounded-none" />
-                  <CardContent className="flex items-start gap-3 p-4">
-                    <div className="min-w-0 flex-1">
+                  <CardContent className="flex flex-wrap items-start gap-2 p-4">
+                    <div className="min-w-0 basis-full">
                       <h2 className="font-display text-sm font-semibold text-foreground">
                         {property.name}
                       </h2>
@@ -280,6 +299,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
                     >
                       <Pencil aria-hidden className="size-4" />
                     </Button>
+                      {propertyActions(property)}
                   </CardContent>
                 </Card>
               ))}
@@ -318,6 +338,14 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
         </div>
       )}
 
+      <Dialog open={action!==null} onOpenChange={(open)=>{if(!open&&!busy)setAction(null);}} dismissible={!busy} size="sm">
+        <DialogHeader title={action?.kind==="delete"?"Permanently delete property?":"Unpublish property?"} onClose={()=>{if(!busy)setAction(null);}}/>
+        <DialogBody className="space-y-4 text-sm">
+          {action?.kind==="delete"?<><p className="flex gap-2 font-semibold text-destructive"><AlertTriangle aria-hidden className="size-5 shrink-0"/>This cannot be undone.</p><p>Deleting {action.property.name} permanently removes its rooms, bookings, tenant records and related operational data. Other properties and registered user accounts are kept.</p><label className="block">Type the property name to confirm<Input value={confirmName} onChange={(e)=>setConfirmName(e.target.value)} autoComplete="off"/></label><label className="flex gap-3"><input type="checkbox" checked={ack} onChange={(e)=>setAck(e.target.checked)}/>I understand this permanently deletes this property and its records.</label></>:<p>The property will be hidden from public listings. Its rooms, bookings and tenant records remain available to you.</p>}
+          {actionError&&<p role="alert" className="text-destructive">{actionError}</p>}
+        </DialogBody>
+        <DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setAction(null)}>Cancel</Button><Button variant={action?.kind==="delete"?"destructive":"primary"} disabled={busy||(action?.kind==="delete"&&(!ack||confirmName!==action.property.name))} onClick={()=>void applyAction()}>{busy?"Working…":action?.kind==="delete"?"Permanently delete":"Unpublish"}</Button></DialogFooter>
+      </Dialog>
       <PropertyFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}

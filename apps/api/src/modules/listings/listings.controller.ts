@@ -3,6 +3,7 @@ import { Body, Controller, Delete, Get, Headers, Param, ParseUUIDPipe, Patch, Po
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
+  DeletePropertyDto,
   AddPropertyDocumentDto,
   AddPropertyMediaDto,
   AddUnitPhotoDto,
@@ -99,6 +100,20 @@ export class ListingsController {
   @Roles('landlord')
   myProperties(@Req() req: AuthenticatedRequest) {
     return this.listings.myProperties(rlsCtx(req));
+  }
+
+  @Post('properties/:id/unpublish')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  unpublishProperty(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id:string) {
+    return this.listings.unpublishProperty(rlsCtx(req),id);
+  }
+
+  @Post('properties/:id/delete')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  deleteProperty(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id:string, @Body() body:DeletePropertyDto) {
+    return this.listings.deleteProperty(rlsCtx(req),id,body);
   }
 
   @Patch('properties/:id/listing-intent')

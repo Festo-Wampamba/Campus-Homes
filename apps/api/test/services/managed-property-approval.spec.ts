@@ -190,22 +190,22 @@ describe('the approval', () => {
     await expect(rooms.approveManagedProperty(kyuLeadCtx, propertyId)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('turns the declared room types into rooms and beds', async () => {
+  it('keeps declared room types as specifications without generating physical rooms', async () => {
     const propertyId = await submit('Declared Rooms Hostel');
 
     await rooms.approveManagedProperty(opsLeadCtx, propertyId);
 
-    expect((await overview(propertyId)).summary).toMatchObject({ totalRooms: 5, totalBeds: 7 });
+    expect((await overview(propertyId)).summary).toMatchObject({ totalRooms: 0, totalBeds: 0 });
   });
 
-  it('still creates the declared rooms after a cancelled draft room type', async () => {
+  it('keeps specifications after a cancelled draft without generating rooms', async () => {
     const propertyId = await submit('Cancelled Draft Hostel');
     await roomType(propertyId);
     await rooms.cancelChangeSet(landlordCtx, (await overview(propertyId)).changeSet!.id);
 
     await rooms.approveManagedProperty(opsLeadCtx, propertyId);
 
-    expect((await overview(propertyId)).summary.totalRooms).toBe(5);
+    expect((await overview(propertyId)).summary.totalRooms).toBe(0);
   });
 
   it('numbers variants that differ only by case as one sequence', async () => {
@@ -220,7 +220,8 @@ describe('the approval', () => {
     await rooms.approveManagedProperty(opsLeadCtx, propertyId);
 
     const codes = (await overview(propertyId)).rooms.map((room) => room.roomCode.toLowerCase());
-    expect(new Set(codes).size).toBe(4);
+    expect(codes).toHaveLength(0);
+    expect((await overview(propertyId)).roomTypes).toHaveLength(2);
   });
 
   it('applies room changes that were waiting for review', async () => {
@@ -267,17 +268,18 @@ describe('room changes', () => {
     });
 
     const result = await overview(propertyId);
-    expect([result.summary.totalRooms, result.changeSet]).toEqual([7, null]);
+    expect([result.summary.totalRooms, result.changeSet]).toEqual([2, null]);
   });
 
   it('remove a room at once after approval', async () => {
     const propertyId = await submit('Approved Delete Hostel');
     await rooms.approveManagedProperty(opsLeadCtx, propertyId);
-    const [first] = (await overview(propertyId)).rooms;
+    const typeId=(await overview(propertyId)).roomTypes[0]!.id;
+    const first=await rooms.createRoom(landlordCtx,propertyId,{roomTypeId:typeId,roomCode:"CUSTOM1"});
 
     await rooms.deleteRooms(landlordCtx, propertyId, { roomIds: [first!.id] });
 
-    expect((await overview(propertyId)).summary.totalRooms).toBe(4);
+    expect((await overview(propertyId)).summary.totalRooms).toBe(0);
   });
 
   it('on a listed property not yet inspected wait for review', async () => {
@@ -489,4 +491,44 @@ it('does not borrow a global finance scope for a different scoped admin role', a
   await notifications.feedWithActions({ userId: actor, role: 'admin', mfaVerified: true }, ['platform_admin','finance_admin']);
   const leaked = await pool.query(`SELECT 1 FROM notifications WHERE user_id=$1 AND payload->>'changeSetId'=$2`, [actor, setId]);
   expect(leaked.rows).toHaveLength(0);
+});
+
+it('saves Ops type specifications without creating any physical room codes',async()=>{
+  const propertyId=await submit('Specifications only','list');
+  const input={title:'Double - Executive',category:'double' as const,bathroomType:'ensuite' as const,capacity:2,semesterId,pricePerTermUgx:900000,amenities:[],photos:[]};
+  await rooms.saveOpsSpecifications(opsLeadCtx,propertyId,[input]);
+  await rooms.saveOpsSpecifications(opsLeadCtx,propertyId,[input]);
+  expect((await overview(propertyId)).rooms).toHaveLength(0);
+  expect((await overview(propertyId)).roomTypes).toHaveLength(1);
+  await expect(rooms.saveOpsSpecifications(kyuLeadCtx,propertyId,[input])).rejects.toThrow();
+});
+
+it('unpublishes without removing rooms, then permanently deletes only the confirmed owned property',async()=>{
+  const propertyId=await liveListedProperty('Delete lifecycle');
+  const other=await submit('Keep lifecycle','list');
+  const typeId=await roomType(propertyId);
+  const room=await rooms.createRoom(landlordCtx,propertyId,{roomTypeId:typeId,roomCode:'SAFE1'});
+  const studentId=await seed(`INSERT INTO users(phone,role,status) VALUES ('+256710000990','student','active') RETURNING id`);
+  await pool.query(`INSERT INTO students(user_id,university) VALUES ($1,'MUK')`,[studentId]);
+  const versionId=await seed(`INSERT INTO listing_versions(listing_id,version_number,price_per_term_ugx,amenities,verified_at)
+    SELECT id,1,800000,'{}',now() FROM listings WHERE property_id=$1 RETURNING id`,[propertyId]);
+  const reservationId=await seed(`INSERT INTO reservations(student_id,bed_id,listing_version_id,status,price_per_term_ugx,idempotency_key)
+    SELECT $1,id,$3,'booked',800000,'delete-property-booking' FROM beds WHERE unit_id=$2 LIMIT 1 RETURNING id`,[studentId,room.id,versionId]);
+  await pool.query(`INSERT INTO payments(reservation_id,amount_ugx,payment_method,status) VALUES($1,230000,'cash','succeeded')`,[reservationId]);
+  await listings.unpublishProperty(landlordCtx,propertyId);
+  expect((await overview(propertyId)).appliesAtOnce).toBe(true);
+  expect((await pool.query('SELECT id FROM reservations WHERE id=$1',[reservationId])).rows).toHaveLength(1);
+  expect((await pool.query('SELECT status FROM listings WHERE property_id=$1',[propertyId])).rows[0].status).toBe('suspended');
+  expect((await pool.query('SELECT id FROM units WHERE id=$1',[room.id])).rows).toHaveLength(1);
+  const confirmation={confirmationName:'Delete lifecycle',acknowledgeIrreversible:true};
+  await expect(listings.deleteProperty(opsLeadCtx,propertyId,confirmation)).rejects.toThrow();
+  await expect(listings.deleteProperty(landlordCtx,propertyId,{...confirmation,confirmationName:'wrong'})).rejects.toThrow();
+  await listings.deleteProperty(landlordCtx,propertyId,confirmation);
+  expect((await pool.query('SELECT id FROM properties WHERE id=$1',[propertyId])).rows).toHaveLength(0);
+  expect((await pool.query('SELECT id FROM units WHERE id=$1',[room.id])).rows).toHaveLength(0);
+  expect((await pool.query('SELECT id FROM properties WHERE id=$1',[other])).rows).toHaveLength(1);
+  expect((await pool.query('SELECT id FROM users WHERE id=$1',[landlordCtx.userId])).rows).toHaveLength(1);
+  expect((await pool.query('SELECT id FROM users WHERE id=$1',[studentId])).rows).toHaveLength(1);
+  expect((await pool.query('SELECT id FROM reservations WHERE id=$1',[reservationId])).rows).toHaveLength(0);
+  expect((await pool.query('SELECT id FROM payments WHERE reservation_id=$1',[reservationId])).rows).toHaveLength(0);
 });

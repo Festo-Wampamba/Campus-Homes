@@ -372,6 +372,25 @@ export class RoomManagementService {
     return result;
   }
 
+  async saveOpsSpecifications(ctx: RlsContext, propertyId: string, inputs: RoomTypeInput[]) {
+    await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
+      await assertStaffScope(client, ctx, propertyId);
+      await client.query('SELECT id FROM properties WHERE id=$1 FOR UPDATE', [propertyId]);
+      for (const input of inputs) {
+        const semester = await client.query(`SELECT 1 FROM semesters s JOIN properties p ON p.id=$2 WHERE s.id=$1 AND (s.university IS NULL OR s.university=p.catchment)`,[input.semesterId,propertyId]);
+        if (!semester.rows.length) throw new BadRequestException('Semester does not match this property');
+        const existing = await client.query(`SELECT 1 FROM room_types t JOIN room_type_versions v ON v.id=t.current_version_id WHERE t.property_id=$1 AND t.archived_at IS NULL AND lower(v.title)=lower($2) AND v.capacity=$3 AND v.bathroom_type=$4 AND v.price_per_term_ugx=$5`,[propertyId,input.title,input.capacity,input.bathroomType,input.pricePerTermUgx]);
+        if(existing.rows.length) continue;
+        const type = await client.query<{id:string}>(`INSERT INTO room_types(property_id,created_by) VALUES($1,$2) RETURNING id`,[propertyId,ctx.userId]);
+        const version = await client.query<{id:string}>(`INSERT INTO room_type_versions(room_type_id,version_number,title,category,bathroom_type,capacity,size_sqm,description,amenities,semester_id,price_per_term_ugx,deposit_ugx,status,reviewed_by,reviewed_at)
+          VALUES($1,1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'approved',$12,now()) RETURNING id`,[type.rows[0]!.id,input.title,input.category,input.bathroomType,input.capacity,input.sizeSqm??null,input.description??null,JSON.stringify(input.amenities),input.semesterId,input.pricePerTermUgx,input.depositUgx??null,ctx.userId]);
+        await client.query('UPDATE room_types SET current_version_id=$2 WHERE id=$1',[type.rows[0]!.id,version.rows[0]!.id]);
+      }
+    });
+    await this.audit.record(ctx,'room_type.ops_specifications','property',propertyId,{count:inputs.length});
+    return {saved:true};
+  }
+
   async deleteRoomType(ctx: RlsContext, roomTypeId: string) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       const type = await this.assertRoomTypeOwner(client, roomTypeId, ctx.userId);
@@ -831,8 +850,6 @@ export class RoomManagementService {
     )).rows[0];
     if (!semester) throw new ConflictException("No current semester is set up for this property's university, so its rooms can't be created");
 
-    const lastNumber = new Map<string, number>();
-    let total = 0;
     for (const row of rows) {
       const capacity = FIXED_BEDS_PER_ROOM[row.category] ?? row.bedsPerRoom ?? 1;
       const variant = row.variantName?.trim() || null;
@@ -853,31 +870,11 @@ export class RoomManagementService {
            VALUES ($1,$2,$3,$4,$5)`, [versionId, key, index, index === 0, landlordId],
         );
       }
-      // "Single 1", "Single 2", or the variant's name; numbering continues
-      // when two rows share a name so codes never collide. Keyed case-blind,
-      // like assertRoomCodeAvailable compares codes.
-      const prefix = variant ?? roomTypeTitle(row.category).replace(/ Room$/, '');
-      const numberKey = prefix.toLocaleLowerCase();
-      const first = (lastNumber.get(numberKey) ?? 0) + 1;
-      lastNumber.set(numberKey, first + row.roomCount - 1);
-      const unitIds = (await client.query<{ id: string }>(
-        `INSERT INTO units(property_id, room_type_id, label, capacity, room_category, room_category_label, self_contained)
-         SELECT $1, $2, $3 || ' ' || n, $4, $5::room_category, $6, $7 FROM generate_series($8::int, $9::int) n
-         RETURNING id`,
-        [propertyId, typeId, prefix, capacity, row.category, variant, row.selfContained ?? false, first, first + row.roomCount - 1],
-      )).rows.map((unit) => unit.id);
-      await client.query(
-        `INSERT INTO beds(unit_id, label) SELECT unit_id, 'Bed ' || n FROM unnest($1::uuid[]) unit_id, generate_series(1, $2::int) n`,
-        [unitIds, capacity],
-      );
-      await client.query(
-        `INSERT INTO unit_semester_pricing(unit_id, semester_id, price_per_term_ugx, deposit_ugx)
-         SELECT unit_id, $2, $3, $4 FROM unnest($1::uuid[]) unit_id`,
-        [unitIds, semester.id, row.pricePerTermUgx, row.depositUgx ?? null],
-      );
-      total += unitIds.length;
+      // Specifications never create physical inventory. Room codes come only
+      // from an explicit room entry, custom generation or spreadsheet import.
+
     }
-    return total;
+    return 0;
   }
 
   private async overviewForProperty(ctx: RlsContext, propertyId: string) {

@@ -339,7 +339,7 @@ export function RoomsInventoryTab({
   }
 
   return (
-    <div id="rooms-inventory" className="scroll-mt-24 space-y-5 [&_button]:max-w-full [&_button]:whitespace-normal">
+    <div id="rooms-inventory" className="@container scroll-mt-24 space-y-5 [&_button]:max-w-full [&_button]:whitespace-normal">
       {blockNotice && <p role="status" className="rounded-lg border border-primary/30 bg-accent p-3 text-sm text-foreground">{blockNotice}</p>}
       {/* Sub-Header & Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -514,7 +514,7 @@ export function RoomsInventoryTab({
       ) : (
         <>
           {/* Desktop Semantic Table */}
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+          <div className="hidden @[90rem]:block overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-muted/40 font-heading font-semibold text-muted-foreground uppercase tracking-wider">
                 <tr>
@@ -683,7 +683,7 @@ export function RoomsInventoryTab({
           </div>
 
           {/* Mobile Card Stack */}
-          <div className="md:hidden space-y-3">
+          <div className="grid gap-3 @[40rem]:grid-cols-2 @[90rem]:hidden">
             {filteredRooms.map((room) => {
               const percent =
                 room.totalBeds > 0
@@ -716,7 +716,7 @@ export function RoomsInventoryTab({
 
                   {Boolean(room.scheduledBlocks?.length) && <button type="button" onClick={() => openBlockModal(room)} className="text-primary underline">Scheduled blocks ({room.scheduledBlocks!.length})</button>}
                   {/* Occupancy bar */}
-                  <div className="space-y-1">
+                  <div className="@container space-y-1">
                     <div className="flex justify-between tabular-nums font-semibold">
                       <span>{room.occupiedBeds} of {room.totalBeds} bedspaces occupied</span>
                       <span className="text-muted-foreground">{percent}%</span>

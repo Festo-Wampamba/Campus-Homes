@@ -52,3 +52,5 @@ export class AddPropertyMediaDto extends createZodDto(
 ) {}
 
 export class UpdateUnitOperationalStatusDto extends createZodDto(updateUnitOperationalStatusSchema) {}
+
+export class DeletePropertyDto extends createZodDto(z.object({confirmationName:z.string().min(1).max(300),acknowledgeIrreversible:z.literal(true)})) {}

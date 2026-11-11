@@ -29,6 +29,7 @@ import {
   roles,
   userRoleAssignments,
 } from '../../db/schema';
+import { purgeProperty } from './property-purge';
 import { PUBLIC_LANDLORD_SUMMARY_SQL } from './public-landlord-summary';
 import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -76,6 +77,32 @@ export class ListingsService {
     @Optional() private readonly routes?: PropertyRoutes,
     @Optional() private readonly audit?: AuditService,
   ) {}
+
+  async unpublishProperty(ctx: RlsContext, propertyId: string) {
+    await this.rlsDb.run(SERVICE_CTX,async (_db,client)=>{
+      const owned=await client.query(`SELECT id FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`,[propertyId,ctx.userId]);
+      if(!owned.rows.length) throw new NotFoundException('Property not found');
+      const live=await client.query<{listed:boolean}>(`SELECT EXISTS(SELECT 1 FROM listings WHERE property_id=$1 AND status='verified') listed`,[propertyId]);
+      await client.query(`UPDATE listings SET status='suspended' WHERE property_id=$1 AND status='verified'`,[propertyId]);
+      await dropVisitRequirement(client,propertyId);
+      await client.query(`UPDATE properties SET listing_intent='manage_only',manage_review_status=CASE WHEN $2::boolean THEN 'approved' ELSE manage_review_status END WHERE id=$1`,[propertyId,live.rows[0]!.listed]);
+      await recordOperationsNotice(client,propertyId,'property.updated','The landlord unpublished this property. Public listings are hidden; rooms and bookings are retained.');
+    });
+    await this.audit?.record(ctx,'property.unpublish','property',propertyId,{});
+    return {unpublished:true};
+  }
+
+  async deleteProperty(ctx:RlsContext,propertyId:string,input:{confirmationName:string;acknowledgeIrreversible:boolean}) {
+    await this.rlsDb.run(SERVICE_CTX,async (_db,client)=>{
+      const owned=await client.query<{name:string}>(`SELECT name FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`,[propertyId,ctx.userId]);
+      if(!owned.rows[0]) throw new NotFoundException('Property not found');
+      if(input.acknowledgeIrreversible!==true || input.confirmationName!==owned.rows[0].name) throw new BadRequestException('Confirm the exact property name and acknowledge permanent deletion');
+      await recordOperationsNotice(client,propertyId,'property.deleted','The landlord permanently deleted this property and its operational records.');
+      await purgeProperty(client,propertyId);
+    });
+    await this.audit?.record(ctx,'property.delete','property',propertyId,{});
+    return {deleted:true};
+  }
 
   // ── landlord paths ─────────────────────────────────────────────────────────
 

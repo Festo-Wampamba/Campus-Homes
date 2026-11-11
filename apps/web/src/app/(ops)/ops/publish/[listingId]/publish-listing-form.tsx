@@ -114,6 +114,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
   const [photos, setPhotos] = useState<VisitPhoto[] | null>(null);
   const [coverKey, setCoverKey] = useState<string | null>(null);
   const [roomCategoryRows, setRoomCategoryRows] = useState<RoomCategoryRow[]>([]);
+  const [target, setTarget] = useState<{propertyId:string;semesterId:string}|null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visitPhotoCount, setVisitPhotoCount] = useState<number | null>(null);
@@ -140,6 +141,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
     }>(`/ops/listings/${listingId}`)
       .then(async ({ listing, property, visitPhotoCount: count, visitPhotos, version, photos: livePhotos, inventoryInitialized }) => {
         if (cancelled) return;
+        setTarget(listing);
         setVisitPhotoCount(count);
         setDeclared(property);
         // First publish starts from what the landlord declared; Ops unticks
@@ -213,7 +215,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
     setError(null);
 
     const validRows = roomCategoryRows.filter(
-      (row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0,
+      (row) => Number(row.pricePerTermUgx) > 0,
     );
     if (validRows.length === 0) {
       setError("There are no rooms to publish yet. Finish verification without publishing, or add the real room inventory and prices.");
@@ -230,9 +232,12 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
 
     setPending(true);
     try {
-      const units = validRows.flatMap((row) => {
+      const specifications = validRows.filter((row) => !row.unitIds?.length);
+      if (specifications.length && target) await api(`/ops/room-change-requests/properties/${target.propertyId}/specifications`,{method:"POST",body:JSON.stringify({types:specifications.map((row)=>({title:[roomCategoryLabel(row.category),row.customLabel.trim()].filter(Boolean).join(" - "),category:row.category,bathroomType:row.selfContained?"ensuite":"shared",capacity:bedsPerRoom(row),semesterId:target.semesterId,pricePerTermUgx:Number(row.pricePerTermUgx),depositUgx:row.depositUgx?Number(row.depositUgx):null,amenities:[],photos:[]}))})});
+      if (!validRows.some((row)=>row.unitIds?.length)) { router.push("/ops"); return; }
+      const units = validRows.filter((row)=>row.unitIds?.length).flatMap((row) => {
         const category = row.category as RoomCategory;
-        const count = Number(row.roomCount);
+        const count = row.unitIds!.length;
         const price = Number(row.pricePerTermUgx);
         const deposit = row.depositUgx ? Number(row.depositUgx) : undefined;
         const variant = row.customLabel.trim();
@@ -299,10 +304,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       <div className="space-y-1.5">
         <Label>Room types & pricing</Label>
         <p className="text-xs text-muted-foreground">
-          Each room type is published as that many individual units at that
-          price. Confirm these against what you saw on the inspection visit.
+          Save specifications without creating rooms. Physical room codes and counts come from custom generation or spreadsheet import.
         </p>
         <RoomCategoryRows
+          showRoomCount={false}
           rows={roomCategoryRows}
           onChange={setRoomCategoryRows}
           showSelfContained
@@ -331,7 +336,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
             : "Publishing…"
           : published
             ? "Save changes"
-            : "Publish listing"}
+            : roomCategoryRows.some((row)=>row.unitIds?.length) ? "Publish listing" : "Save room types"}
       </Button>
       <p role="status" className="min-h-5 text-sm text-destructive">
         {error}

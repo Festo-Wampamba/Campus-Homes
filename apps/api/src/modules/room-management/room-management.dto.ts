@@ -32,3 +32,5 @@ export class SubmitRoomChangeSetDto extends createZodDto(submitRoomChangeSetSche
 export class ReviewRoomChangeSetDto extends createZodDto(reviewRoomChangeSetSchema) {}
 export class RejectRoomChangeSetDto extends createZodDto(rejectRoomChangeSetSchema) {}
 export class RejectManagedPropertyDto extends createZodDto(rejectManagedPropertySchema) {}
+
+export class SaveOpsSpecificationsDto extends createZodDto(z.object({ types: z.array(roomTypeInputSchema).min(1).max(50) })) {}
