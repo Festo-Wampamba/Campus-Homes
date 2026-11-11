@@ -375,3 +375,99 @@ describe('room changes on a listed property with a live listing', () => {
     expect(submitted.status).toBe('approved');
   });
 });
+
+describe('Ops visibility for listed properties', () => {
+  it('alerts the responsible lead when a listed property is registered', async () => {
+    const propertyId = await submit('New Listed Notice', 'list');
+    const { rows } = await pool.query(`SELECT user_id, payload FROM notifications
+      WHERE template_key='property.list_submitted' AND payload->>'propertyId'=$1`, [propertyId]);
+    expect(rows.map((row) => row.user_id)).toEqual([ids.lead]);
+    expect(rows[0]?.payload.href).toBe('/ops');
+  });
+
+  it('sends inspection requests only to reviewers covering the property', async () => {
+    const propertyId = await submit('Inspection Notice', 'list');
+    const typeId = await roomType(propertyId);
+    await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'I01' });
+    const setId = (await overview(propertyId)).changeSet!.id;
+    await rooms.submitChangeSet(landlordCtx, setId);
+    const { rows } = await pool.query(`SELECT user_id,payload FROM notifications
+      WHERE template_key='room_changes.submitted' AND payload->>'changeSetId'=$1 AND user_id<>$2`, [setId, landlordCtx.userId]);
+    expect(rows.map((row) => row.user_id)).toEqual([ids.lead]);
+    expect(rows[0]?.payload.message).toContain('physical inspection');
+    expect((await rooms.reviewQueue(opsLeadCtx)).some((item) => item.id === setId)).toBe(true);
+    expect((await rooms.reviewQueue(kyuLeadCtx)).some((item) => item.id === setId)).toBe(false);
+  });
+
+  it('keeps applied room changes visible to the lead with before and after details', async () => {
+    const propertyId = await liveListedProperty('Activity Notice');
+    const typeId = await roomType(propertyId);
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'OLD' });
+    await rooms.updateRoom(landlordCtx, room.id, { roomTypeId: typeId, roomCode: 'NEW', buildingName: 'West' });
+    const { rows } = await pool.query(`SELECT payload FROM notifications WHERE template_key='room_changes.applied'
+      AND user_id=$1 AND payload->>'propertyId'=$2 ORDER BY created_at DESC`, [ids.lead, propertyId]);
+    expect(rows[0]?.payload.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: expect.stringContaining('Room code'), before: 'OLD', after: 'NEW' }),
+      expect.objectContaining({ label: expect.stringContaining('Building'), after: 'West' }),
+    ]));
+    expect(rows[0]?.payload.href).toBe('/ops/room-changes');
+    expect(rows[0]?.payload.landlordName).toBeTruthy();
+  });
+
+  it('saves property photos immediately and alerts Ops without reopening approval', async () => {
+    const propertyId = await liveListedProperty('Photo Notice');
+    const photo = await listings.addPropertyMedia(landlordCtx, propertyId, `uploads/${landlordCtx.userId}/gallery.jpg`);
+    await listings.removePropertyMedia(landlordCtx, photo!.id);
+    const { rows } = await pool.query(`SELECT payload FROM notifications WHERE template_key='property.updated'
+      AND user_id=$1 AND payload->>'propertyId'=$2 ORDER BY created_at`, [ids.lead, propertyId]);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.payload.message).join(' ')).toMatch(/photo/);
+    expect((await pool.query(`SELECT status FROM listings WHERE property_id=$1`, [propertyId])).rows[0].status).toBe('verified');
+  });
+});
+
+it('repairs a missed inspection notice once when the responsible lead opens notifications', async () => {
+  const propertyId = await submit('Missed Inspection', 'list');
+  const typeId = await roomType(propertyId);
+  await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'M01' });
+  const setId = (await overview(propertyId)).changeSet!.id;
+  await rooms.submitChangeSet(landlordCtx, setId);
+  await pool.query(`DELETE FROM notifications WHERE payload->>'changeSetId'=$1`, [setId]);
+  await notifications.feedWithActions(opsLeadCtx, ['ops_lead']);
+  await notifications.feedWithActions(opsLeadCtx, ['ops_lead']);
+  await notifications.feedWithActions(kyuLeadCtx, ['ops_lead']);
+  const { rows } = await pool.query(`SELECT user_id FROM notifications WHERE payload->>'changeSetId'=$1`, [setId]);
+  expect(rows.map((row) => row.user_id)).toEqual([ids.lead]);
+});
+
+it('shows applied updates only to the active, MFA-verified reviewer in the current scope', async () => {
+  const propertyId = await liveListedProperty('Scoped Activity');
+  const typeId = await roomType(propertyId);
+  await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'A01' });
+  expect((await rooms.activity(opsLeadCtx)).some((item) => item.propertyId === propertyId)).toBe(true);
+  expect(await rooms.activity({ ...opsLeadCtx, mfaVerified: false })).toEqual([]);
+  expect(await rooms.activity(kyuLeadCtx)).toEqual([]);
+});
+
+it('keeps inspection mandatory for a new property from an existing landlord', async () => {
+  const propertyId = await submit('Another New Property', 'list');
+  const typeId = await roomType(propertyId);
+  await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'F01' });
+  const setId = (await overview(propertyId)).changeSet!.id;
+  await rooms.submitChangeSet(landlordCtx, setId);
+  await expect(rooms.approveChangeSet(opsLeadCtx, setId)).rejects.toThrow('physical verification');
+});
+
+it('notifies Ops of operational room and bed changes without an approval request', async () => {
+  const propertyId = await liveListedProperty('Operational Notices');
+  const typeId = await roomType(propertyId);
+  const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'O01' });
+  await listings.updateUnitOperationalStatus(landlordCtx, room.id, 'under_maintenance');
+  const block = await rooms.blockRoom(landlordCtx, room.id, { reason: 'maintenance', startImmediately: true, startsAt: new Date().toISOString() });
+  await rooms.clearBlock(landlordCtx, room.id, block.id);
+  const bedId = (await pool.query(`SELECT id FROM beds WHERE unit_id=$1 LIMIT 1`, [room.id])).rows[0].id;
+  await rooms.blockBed(landlordCtx, room.id, bedId, { blocked: true, reason: 'Repairs' });
+  const activity = (await rooms.activity(opsLeadCtx)).filter((item) => item.propertyId === propertyId);
+  expect(activity).toHaveLength(6); // room type, room, status, block, unblock, bed block
+  expect((await overview(propertyId)).changeSet).toBeNull();
+});

@@ -1,152 +1,122 @@
 "use client";
 
-import type { RoomChangeReviewItem } from "@campushomes/shared";
+import type { RoomChangeActivityItem, RoomChangeReviewItem } from "@campushomes/shared";
 import { AlertTriangle, Check, ClipboardCheck, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-import { api, apiErrorMessage } from "@/lib/api";
+import { Button } from "../ui/button";
+import { api, apiErrorMessage } from "../../lib/api";
 
 const ugx = new Intl.NumberFormat("en-UG", { style: "currency", currency: "UGX", maximumFractionDigits: 0 });
+const date = (value: string) => new Date(value).toLocaleString("en-UG", { timeZone: "Africa/Kampala", dateStyle: "medium", timeStyle: "short" });
+type Change = { label: string; before: string; after: string };
 
-export function RoomChangeReviewManager({
-  initialItems,
-  canScheduleVisit = false,
-}: {
+function Changes({ rows }: { rows: Change[] }) {
+  return <div className="mt-3 max-h-96 overflow-y-auto overscroll-contain" tabIndex={0} role="region" aria-label="Change details">
+    <div className="hidden grid-cols-[1fr_1fr_1fr] gap-4 border-b border-border bg-muted px-4 py-2 text-xs font-semibold text-muted-foreground sm:grid" aria-hidden>
+      <span>Changed item</span><span>Before</span><span>After</span>
+    </div>
+    <ul className="divide-y divide-border">
+      {rows.map((row, index) => <li key={index} className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[1fr_1fr_1fr] sm:gap-4">
+        <span className="min-w-0 break-words font-semibold">{row.label}</span>
+        <span className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground"><span className="mr-2 font-semibold sm:sr-only">Before:</span>{row.before}</span>
+        <span className="min-w-0 whitespace-pre-wrap break-words"><span className="mr-2 font-semibold sm:sr-only">After:</span>{row.after}</span>
+      </li>)}
+    </ul>
+  </div>;
+}
+
+function reviewChanges(item: RoomChangeReviewItem): Change[] {
+  const spec = (type: RoomChangeReviewItem["roomTypeChanges"][number]["after"]) => `${type.title} · ${type.category} · ${type.capacity} ${type.capacity === 1 ? "bed" : "beds"} · ${ugx.format(type.pricePerTermUgx)}`;
+  const room = (value: RoomChangeReviewItem["physicalRoomChanges"][number]["after"]) => value
+    ? [value.roomCode, value.buildingName, value.floorLabel, `${value.capacity} ${value.capacity === 1 ? "bed" : "beds"}`].filter(Boolean).join(" · ") : "Archived";
+  return [
+    ...item.roomTypeChanges.map((change) => ({ label: `Room type · ${change.after.title}`, before: change.before ? spec(change.before) : "New room type", after: spec(change.after) })),
+    ...item.physicalRoomChanges.map((change) => ({ label: `${change.action === "create" ? "Add" : change.action === "archive" ? "Archive" : "Update"} room · ${change.after?.roomCode ?? change.before?.roomCode}`, before: change.before ? room(change.before) : "New room", after: room(change.after) })),
+  ];
+}
+
+export function RoomChangeReviewManager({ initialItems, initialActivity = [], canScheduleVisit = false }: {
   initialItems: RoomChangeReviewItem[];
+  initialActivity?: RoomChangeActivityItem[];
   canScheduleVisit?: boolean;
 }) {
   const [items, setItems] = useState(initialItems);
+  const [view, setView] = useState<"review" | "activity">(initialItems.length || !initialActivity.length ? "review" : "activity");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [decision, setDecision] = useState<{ item: RoomChangeReviewItem; action: "approve" | "reject" } | null>(null);
+  const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function decide(item: RoomChangeReviewItem, decision: "approve" | "reject") {
-    const promptText = decision === "approve"
-      ? "Optional reviewer note"
-      : "Explain exactly what the landlord must correct";
-    const notes = window.prompt(promptText, "");
-    if (notes === null) return;
-    if (decision === "reject" && notes.trim().length < 3) {
-      setError("A rejection must include a clear reason of at least 3 characters.");
-      return;
+  async function submitDecision(event: React.FormEvent) {
+    event.preventDefault();
+    if (!decision) return;
+    const { item, action } = decision;
+    if (action === "reject" && notes.trim().length < 3) {
+      setError("Explain what the landlord must correct using at least 3 characters."); return;
     }
-
-    setBusyId(item.id);
-    setError(null);
+    setBusyId(item.id); setError(null);
     try {
-      await api(`/ops/room-change-requests/${item.id}/${decision}`, {
-        method: "POST",
-        body: JSON.stringify(decision === "approve" ? { notes: notes.trim() || null } : { reason: notes.trim() }),
-      });
+      await api(`/ops/room-change-requests/${item.id}/${action}`, { method: "POST",
+        body: JSON.stringify(action === "approve" ? { notes: notes.trim() || null } : { reason: notes.trim() }) });
       setItems((current) => current.filter((entry) => entry.id !== item.id));
+      setDecision(null); setNotes("");
       window.dispatchEvent(new Event("campushomes:notifications-refresh"));
-    } catch (cause) {
-      setError(apiErrorMessage(cause, `Could not ${decision} these room changes`));
-    } finally {
-      setBusyId(null);
-    }
+    } catch (cause) { setError(apiErrorMessage(cause, `Could not ${action} these room changes`)); }
+    finally { setBusyId(null); }
   }
 
-  if (!items.length) {
-    return (
-      <div className="mt-6 rounded-xl border border-border bg-card px-6 py-14 text-center">
-        <ClipboardCheck aria-hidden className="mx-auto size-9 text-teal-600" />
-        <h2 className="mt-3 text-lg font-semibold">Room-change queue is clear</h2>
-        <p className="mt-1 text-sm text-muted-foreground">New landlord submissions will appear here for review.</p>
-      </div>
-    );
-  }
+  const beginDecision = (item: RoomChangeReviewItem, action: "approve" | "reject") => { setDecision({ item, action }); setNotes(""); setError(null); };
 
-  return (
-    <div className="mt-6 space-y-4">
-      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {items.map((item) => {
-        const busy = busyId === item.id;
-        return (
-          <article key={item.id} className="rounded-xl border border-border bg-card p-5 shadow-sm">
-            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold">{item.propertyName}</h2>
-                  <span className={item.status === "visit_required"
-                    ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800"
-                    : "rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800"}
-                  >
-                    {item.status === "visit_required" ? "Physical verification required" : "Review required"}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">Submitted by {item.landlordName}{item.submittedAt ? ` · ${new Date(item.submittedAt).toLocaleString()}` : ""}</p>
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                  <div><dt className="text-muted-foreground">Room types</dt><dd className="font-semibold">{item.roomTypeChangesCount}</dd></div>
-                  <div><dt className="text-muted-foreground">Physical rooms</dt><dd className="font-semibold">{item.physicalRoomChangesCount}</dd></div>
-                  <div><dt className="text-muted-foreground">Total changes</dt><dd className="font-semibold">{item.roomTypeChangesCount + item.physicalRoomChangesCount}</dd></div>
-                </dl>
-                {(item.roomTypeChanges.length > 0 || item.physicalRoomChanges.length > 0) && (
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {item.roomTypeChanges.length > 0 && (
-                      <section className="rounded-lg border border-border p-3">
-                        <h3 className="text-sm font-semibold">Room type changes</h3>
-                        <ul className="mt-2 space-y-2 text-xs">
-                          {item.roomTypeChanges.map((change) => (
-                            <li key={change.id} className="rounded-md bg-muted/50 p-2">
-                              <strong>{change.after.title}</strong>
-                              <p className="mt-1 text-muted-foreground">
-                                {change.before
-                                  ? `${change.before.capacity} beds · ${ugx.format(change.before.pricePerTermUgx)} → `
-                                  : "New type → "}
-                                {change.after.capacity} beds · {ugx.format(change.after.pricePerTermUgx)}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )}
-                    {item.physicalRoomChanges.length > 0 && (
-                      <section className="rounded-lg border border-border p-3">
-                        <h3 className="text-sm font-semibold">Physical room changes</h3>
-                        <ul className="mt-2 space-y-2 text-xs">
-                          {item.physicalRoomChanges.map((change) => (
-                            <li key={change.id} className="rounded-md bg-muted/50 p-2">
-                              <strong className="capitalize">{change.action.replace("_", " ")}</strong>
-                              <p className="mt-1 text-muted-foreground">
-                                {change.before ? `${change.before.roomCode} (${change.before.capacity} beds)` : "New room"}
-                                {change.after ? ` → ${change.after.roomCode} (${change.after.capacity} beds)` : " → archived"}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )}
-                  </div>
-                )}
-                {item.submissionNotes && <p className="mt-4 rounded-lg bg-muted px-3 py-2 text-sm">{item.submissionNotes}</p>}
-                {item.status === "visit_required" && (
-                  <p className="mt-4 flex gap-2 text-sm text-amber-800">
-                    <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
-                    Confirm the physical room or capacity change has been inspected before approval.
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 gap-2">
-                {canScheduleVisit && item.status === "visit_required" && (
-                  <Link
-                    href={`/ops/visits/schedule?propertyId=${encodeURIComponent(item.propertyId)}`}
-                    className="inline-flex min-h-10 items-center rounded-lg border border-amber-300 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-50"
-                  >
-                    Schedule visit
-                  </Link>
-                )}
-                <button type="button" disabled={busyId !== null} onClick={() => void decide(item, "reject")} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50">
-                  {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <X aria-hidden className="size-4" />} Reject
-                </button>
-                <button type="button" disabled={busyId !== null} onClick={() => void decide(item, "approve")} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
-                  {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <Check aria-hidden className="size-4" />} Approve
-                </button>
-              </div>
-            </div>
-          </article>
-        );
-      })}
+  return <div className="mt-6 min-w-0 space-y-5">
+    <div className="flex flex-wrap gap-2 border-b border-border pb-4" aria-label="Room change views">
+      <Button variant={view === "review" ? "primary" : "secondary"} aria-pressed={view === "review"} onClick={() => setView("review")}>Needs review ({items.length})</Button>
+      <Button variant={view === "activity" ? "primary" : "secondary"} aria-pressed={view === "activity"} onClick={() => setView("activity")}>Applied updates ({initialActivity.length})</Button>
     </div>
-  );
+    {error && <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">{error}</p>}
+    {view === "review" && !items.length && <div className="rounded-xl border border-border bg-card px-6 py-12 text-center">
+      <ClipboardCheck aria-hidden className="mx-auto size-9 text-primary" />
+      <h2 className="mt-3 text-lg font-semibold">No room changes need approval</h2>
+      <p className="mx-auto mt-2 max-w-prose text-sm text-muted-foreground">First-time property submissions appear here when rooms are submitted. Updates to an already approved property save immediately and appear under Applied updates.</p>
+    </div>}
+    {view === "review" && items.map((item) => <article key={item.id} className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="space-y-3 p-4 sm:p-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="min-w-0 break-words text-lg font-semibold">{item.propertyName}</h2>
+          <span className="rounded-md bg-muted px-3 py-1 text-sm font-semibold">{item.status === "visit_required" ? "Physical inspection required" : "Review required"}</span>
+        </div>
+        <p className="text-sm text-muted-foreground">{item.landlordName}{item.submittedAt ? ` · ${date(item.submittedAt)} EAT` : ""}</p>
+        <p className="text-sm"><strong>{item.physicalRoomChangesCount}</strong> physical room changes <span className="mx-2 text-muted-foreground" aria-hidden>·</span> <strong>{item.roomTypeChangesCount}</strong> room type changes</p>
+      </header>
+      <details open className="border-t border-border pb-2">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring sm:px-6">Before and after ({item.roomTypeChangesCount + item.physicalRoomChangesCount} changes)</summary>
+        <Changes rows={reviewChanges(item)} />
+      </details>
+      <footer className="space-y-4 border-t border-border p-4 sm:p-6">
+        {item.submissionNotes && <p className="whitespace-pre-wrap break-words text-sm">Landlord note: {item.submissionNotes}</p>}
+        {item.status === "visit_required" && <p className="flex gap-2 text-sm"><AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" /><span>An approved physical inspection completed after this submission is required. The Ops lead can visit or assign an inspector.</span></p>}
+        <div className="flex flex-wrap gap-3">
+          {canScheduleVisit && item.status === "visit_required" && <Link href={`/ops/visits/schedule?propertyId=${encodeURIComponent(item.propertyId)}`} className="inline-flex min-h-11 items-center rounded-md border border-border px-4 py-2 text-sm font-semibold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">Schedule inspection</Link>}
+          <Button variant="secondary" disabled={busyId !== null} onClick={() => beginDecision(item, "reject")}><X aria-hidden />Return for correction</Button>
+          <Button disabled={busyId !== null} onClick={() => beginDecision(item, "approve")}><Check aria-hidden />Approve changes</Button>
+        </div>
+        {decision?.item.id === item.id && <form onSubmit={(event) => void submitDecision(event)} className="space-y-3 border-t border-border pt-4">
+          <label htmlFor={`review-note-${item.id}`} className="block text-sm font-semibold">{decision.action === "approve" ? "Approval note (optional)" : "What must the landlord correct?"}</label>
+          <textarea id={`review-note-${item.id}`} value={notes} onChange={(event) => setNotes(event.target.value)} required={decision.action === "reject"} minLength={decision.action === "reject" ? 3 : undefined} maxLength={2000} disabled={busyId !== null} className="min-h-24 w-full rounded-md border border-border bg-background p-3 text-base focus-visible:outline-2 focus-visible:outline-ring" />
+          <div className="flex flex-wrap gap-3"><Button type="submit" disabled={busyId !== null}>{busyId && <Loader2 aria-hidden className="animate-spin" />}Confirm {decision.action === "approve" ? "approval" : "return"}</Button><Button variant="secondary" type="button" disabled={busyId !== null} onClick={() => setDecision(null)}>Cancel</Button></div>
+        </form>}
+      </footer>
+    </article>)}
+    {view === "activity" && <>
+      <p className="max-w-prose text-sm text-muted-foreground">Recent updates saved by landlords. These changes are already applied and need no further approval. Showing the latest 100 notices in your current property scope.</p>
+      {!initialActivity.length && <p className="rounded-xl border border-border p-6 text-sm text-muted-foreground">No applied updates to show yet.</p>}
+      {initialActivity.map((item) => <article key={item.id} className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="min-w-0 break-words text-lg font-semibold">{item.propertyName}</h2><span className="flex items-center gap-2 text-sm font-semibold text-primary"><Check aria-hidden className="size-4" />Saved · no approval needed</span></div>
+        <p className="mt-2 text-sm text-muted-foreground">{item.landlordName} · {date(item.createdAt)} EAT</p>
+        <p className="mt-3 break-words text-sm">{item.message}</p>
+        {!!item.changes?.length && <details className="mt-4 border-t border-border pt-3"><summary className="cursor-pointer text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring">What changed ({item.changes.length})</summary><Changes rows={item.changes} /></details>}
+      </article>)}
+    </>}
+  </div>;
 }

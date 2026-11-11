@@ -128,6 +128,13 @@ export class RoomManagementOpsController {
     return this.rooms.reviewQueue(rlsCtx(req));
   }
 
+  @Get('activity')
+  @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
+  activity(@Req() req: AuthenticatedRequest) {
+    return this.rooms.activity(rlsCtx(req));
+  }
+
   @Post(':changeSetId/approve')
   @Roles('ops_lead', 'admin')
   @RequirePermission('room_changes.review')

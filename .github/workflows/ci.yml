@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, development]
   pull_request:
   # Lets deploy-production (below) be triggered by hand from the Actions tab.
   # Production deploys stay a deliberate action, not an on-push one — this
@@ -127,7 +127,10 @@ jobs:
   # the Dokploy host and application id are infrastructure detail.
   deploy-staging:
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
+    concurrency:
+      group: staging-deployment
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - name: Set build-arg so the image can report its own commit
@@ -162,6 +165,15 @@ jobs:
           # is enabled and the staff account now receives amr=mfa. Keep the
           # API's fail-closed gate enabled so staff sessions can be created.
           runtime_env=$(printf '%s\nLOGTO_MFA_POLICY_VERIFIED=true\nNODE_ENV=production\nPORT=4000' "$runtime_env")
+          # Staging can validate development without merging into main.
+          # Preserve the existing provider settings when selecting this ref.
+          jq --arg branch "$GITHUB_REF_NAME" \
+            '{applicationId, repository, owner, buildPath, githubId, watchPaths, enableSubmodules, branch: $branch, triggerType: "push"}' \
+            <<<"$current" > /tmp/staging-source.json
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.saveGithubProvider" \
+            -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
+            -d @/tmp/staging-source.json
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"
@@ -245,6 +257,15 @@ jobs:
           # application.saveEnvironment replaces buildArgs. Retain every
           # configured public argument, then refresh these two deployment
           # values so authenticated SSR can reach the staging API.
+          # Staging can validate development without merging into main.
+          # Preserve the existing provider settings when selecting this ref.
+          jq --arg branch "$GITHUB_REF_NAME" \
+            '{applicationId, repository, owner, buildPath, githubId, watchPaths, enableSubmodules, branch: $branch, triggerType: "push"}' \
+            <<<"$current" > /tmp/staging-source.json
+          curl --fail --silent --show-error \
+            -X POST "$API_URL/api/application.saveGithubProvider" \
+            -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
+            -d @/tmp/staging-source.json
           existing_build_args=$(jq -r '.buildArgs // ""' <<<"$current")
           build_args=$(printf '%s\n' "$existing_build_args" | sed '/^GIT_COMMIT_SHA=/d; /^NEXT_PUBLIC_API_BASE_URL=/d')
           build_args="${build_args:+${build_args}$'\n'}GIT_COMMIT_SHA=$GITHUB_SHA"$'\n'"NEXT_PUBLIC_API_BASE_URL=https://api-staging.campushomes.co.ug"
