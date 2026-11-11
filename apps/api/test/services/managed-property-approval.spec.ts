@@ -471,3 +471,22 @@ it('notifies Ops of operational room and bed changes without an approval request
   expect(activity).toHaveLength(6); // room type, room, status, block, unblock, bed block
   expect((await overview(propertyId)).changeSet).toBeNull();
 });
+
+it('does not borrow a global finance scope for a different scoped admin role', async () => {
+  const actor = await seed(`INSERT INTO users(phone,role,status) VALUES ('+256710000905','admin','active') RETURNING id`);
+  await pool.query(`INSERT INTO user_role_assignments(user_id,role_id,scope_type,scope_id,assigned_by,reason)
+    SELECT $1,id,CASE WHEN key='platform_admin' THEN 'catchment' ELSE 'platform_wide' END,
+      CASE WHEN key='platform_admin' THEN 'KYU' ELSE NULL END,$1,'Mixed role fixture'
+    FROM roles WHERE key IN ('platform_admin','finance_admin')`, [actor]);
+  const propertyId = await submit('Mixed Role Scope', 'list');
+  const { rows } = await pool.query(`SELECT user_id FROM notifications
+    WHERE payload->>'propertyId'=$1 AND template_key='property.list_submitted'`, [propertyId]);
+  expect(rows.map((row) => row.user_id)).toEqual([ids.lead]);
+  const typeId = await roomType(propertyId);
+  await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'S01' });
+  const setId = (await overview(propertyId)).changeSet!.id;
+  await rooms.submitChangeSet(landlordCtx, setId);
+  await notifications.feedWithActions({ userId: actor, role: 'admin', mfaVerified: true }, ['platform_admin','finance_admin']);
+  const leaked = await pool.query(`SELECT 1 FROM notifications WHERE user_id=$1 AND payload->>'changeSetId'=$2`, [actor, setId]);
+  expect(leaked.rows).toHaveLength(0);
+});

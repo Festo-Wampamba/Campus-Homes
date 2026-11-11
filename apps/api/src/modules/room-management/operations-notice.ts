@@ -26,6 +26,9 @@ export async function recordOperationsNotice(
        WHERE r.key IN ('ops_lead','super_admin','platform_admin')
          AND a.revoked_at IS NULL AND a.valid_from<=now()
          AND (a.valid_until IS NULL OR a.valid_until>now())
+         AND ((a.scope_type='platform_wide' AND a.scope_id IS NULL)
+           OR (a.scope_type='catchment' AND a.scope_id IN (p.catchment::text,'all'))
+           OR (a.scope_type='property' AND a.scope_id=p.id::text))
          AND public.app_staff_scope_for(u.id,
            CASE WHEN r.key='ops_lead' THEN 'ops_lead' ELSE 'admin' END, true, p.id, true)
        ORDER BY u.id, CASE WHEN r.key='ops_lead' THEN 0 ELSE 1 END
