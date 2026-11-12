@@ -381,6 +381,12 @@
   }
   .ch-auto-grid > * { min-inline-size: 0; }
   .ch-workspace-main { overflow-wrap: anywhere; }
+  /* `anywhere` also shrinks a table column's minimum width to one character,
+     so on a laptop (1280px wide at Windows 150% scaling) "PHONE" and
+     "UGX 230,000" split mid-word. In tables, words stay whole and the
+     table's scroll wrapper takes any overflow. */
+  :where(.ch-workspace-main, .ch-dialog-body) table { overflow-wrap: break-word; }
+  :where(.ch-workspace-main, .ch-dialog-body) table :where(th, .tabular-nums) { white-space: nowrap; }
   .ch-dialog-body .ch-auto-grid label { display: block; }
   .ch-dialog {
     --ch-dialog-gutter: clamp(8px, 2vw, 16px);
@@ -444,3 +450,17 @@
   .ch-dialog:not(.ch-workspace-nav) .ch-dialog-body { overflow: visible; }
   .ch-dialog-header h2 { font-size: 1rem; }
 }
+
+/* Reflow records by their actual workspace width, including OS/browser scaling. */
+@container (max-width: 42rem) {
+  table[data-responsive-tenants], table[data-responsive-tenants] tbody { display: block; width: 100%; }
+  table[data-responsive-tenants] thead { display: none; }
+  table[data-responsive-tenants] tbody { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,25rem),1fr)); gap: 1rem; padding: .75rem; }
+  table[data-responsive-tenants] tr { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; }
+  table[data-responsive-tenants] td { display: block; min-width: 0; padding: 0; text-align: left; white-space: normal; }
+  table[data-responsive-tenants] td:nth-child(2), table[data-responsive-tenants] td:nth-child(3), table[data-responsive-tenants] td:nth-child(4) { grid-column: 1 / -1; }
+  table[data-responsive-tenants] td::before { content: attr(data-label); display: block; margin-bottom: .25rem; font-size: .75rem; color: var(--muted-foreground); font-weight: 600; }
+  table[data-responsive-tenants] .min-w-36, table[data-responsive-tenants] .min-w-44 { min-width: 0; }
+}
+
+@container (max-width: 26rem) { table[data-responsive-tenants] td { grid-column: 1 / -1; } }

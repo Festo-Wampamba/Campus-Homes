@@ -122,3 +122,14 @@ it('flags repeated stable room IDs even when their proposed codes differ', () =>
   const result=planRoomImport([{...row('A01','Single Room'),roomId:'r1'},{...row('Renamed','Single Room'),roomId:'r1'}],[single],existing);
   expect(result.rows[1]?.error).toContain('Listed twice');
 });
+
+it('accepts a legacy category/bathroom/rent label without requiring a variant',()=>{
+  const spec={...double,currentVersion:{...double.currentVersion!,title:'Double Room - Executive',bathroomType:'ensuite',capacity:2,pricePerTermUgx:900000}} as RoomType;
+  const result=plan([row('NEW1','Double self-contained - UGX 900k')],[spec]);
+  expect(result.rows[0]?.roomTypeId).toBe(spec.id);
+  expect(result.rows[0]?.error).toBeNull();
+});
+it('does not guess between two variants with the same category and price',()=>{
+  const types=['Executive','Mini'].map((name,i)=>({...double,id:`variant-${i}`,currentVersion:{...double.currentVersion!,title:`Double Room - ${name}`,bathroomType:'ensuite',capacity:2,pricePerTermUgx:900000}} as RoomType));
+  expect(plan([row('NEW1','Double self-contained - UGX 900k')],types).rows[0]?.error).toContain('several variants');
+});

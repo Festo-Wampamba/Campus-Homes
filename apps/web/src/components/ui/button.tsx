@@ -20,6 +20,7 @@ const buttonVariants = cva(
         // Minimum touch height; multiline labels can grow without clipping.
         default: "h-auto min-h-11 px-4 py-2",
         sm: "h-auto min-h-9 rounded-md px-3 py-2 text-sm",
+        xs: "h-7 min-h-0 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap [@media(pointer:coarse)]:min-h-9",
         lg: "h-auto min-h-12 rounded-md px-6 py-3",
         icon: "size-[44px] shrink-0",
       },

@@ -131,6 +131,35 @@ export class NotificationsService {
         }
       });
     }
+    const reviewRole = roleKeys.includes('ops_lead') ? 'ops_lead'
+      : roleKeys.some((role) => ['super_admin', 'platform_admin'].includes(role)) ? 'admin' : null;
+    if (reviewRole && ctx.mfaVerified === true) {
+      await this.rlsDb.run({ userId: ctx.userId, role: 'service_role' }, async (_db, client) => {
+        // Serialize reconciliation per recipient; loading the feed twice must
+        // not create two copies of a previously missed inspection request.
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`room-notices:${ctx.userId}`]);
+        await client.query(
+          `INSERT INTO notifications(user_id,template_key,channel,payload)
+           SELECT $1, 'room_changes.submitted','in_app', jsonb_build_object(
+             'message', CASE WHEN cs.status='visit_required' THEN p.name || ': physical inspection requested. Schedule a visit or assign an inspector.'
+               ELSE p.name || ': room changes await Operations review.' END,
+             'propertyId',p.id,'changeSetId',cs.id,'href',$4::text)
+           FROM room_inventory_change_sets cs JOIN properties p ON p.id=cs.property_id
+           WHERE cs.status IN ('pending_review','visit_required')
+             AND public.app_staff_scope_for($1::uuid,$2::text,$3::boolean,p.id,true)
+             AND EXISTS (
+               SELECT 1 FROM user_role_assignments a JOIN roles r ON r.id=a.role_id
+               WHERE a.user_id=$1 AND a.revoked_at IS NULL AND a.valid_from<=now()
+                 AND (a.valid_until IS NULL OR a.valid_until>now())
+                 AND (($2='ops_lead' AND r.key='ops_lead') OR ($2='admin' AND r.key IN ('super_admin','platform_admin')))
+                 AND ((a.scope_type='platform_wide' AND a.scope_id IS NULL)
+                   OR (a.scope_type='catchment' AND a.scope_id IN (p.catchment::text,'all'))
+                   OR (a.scope_type='property' AND a.scope_id=p.id::text)))
+             AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.user_id=$1
+               AND n.template_key='room_changes.submitted' AND n.payload->>'changeSetId'=cs.id::text)`,
+          [ctx.userId, reviewRole, true, reviewRole === 'ops_lead' ? '/ops/room-changes' : '/admin/room-changes']);
+      });
+    }
     return this.feed(ctx);
   }
 

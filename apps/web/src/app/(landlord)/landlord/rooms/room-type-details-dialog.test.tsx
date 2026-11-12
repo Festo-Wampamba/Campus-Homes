@@ -44,7 +44,7 @@ it.each([0,1])('opens details from inventory title (responsive rendering %s) wit
   await act(async () => [...viewer().querySelectorAll('button')].find((button) => button.textContent === 'Close details')!.click());expect(host.querySelector('[aria-label="Room type details"]')).toBeNull();
 });
 it('opens the same details view from the specifications card without entering edit mode', async () => {
-  await act(async () => root.render(<RoomTypesTab propertyId="p1" semesterId="s1" roomTypes={[type]} rooms={[room]} onRoomTypeSaved={() => {}} />));
+  await act(async () => root.render(<RoomTypesTab propertyId="p1" semesterId="s1" roomTypes={[type]} rooms={[room]} onRoomTypeSaved={() => {}} onRoomTypeDeleted={() => {}} />));
   await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === 'View details')!.click());expect(viewer().textContent).toContain('Spacious room');expect(host.querySelector('form')).toBeNull();expect(api).not.toHaveBeenCalled();
 });
 it('shows missing specifications and empty rooms explicitly instead of inventing zero prices', async () => {
@@ -55,4 +55,18 @@ it('shows missing specifications and empty rooms explicitly instead of inventing
 it('does not label an older approved specification as a pending price proposal', async () => {
   await act(async () => root.render(<RoomTypeDetailsDialog roomType={{ ...type, pendingVersion: { ...version, id: 'old-approved', pricePerTermUgx: 500000 } }} rooms={[room]} onClose={() => {}} />));
   expect(viewer().querySelector('summary')).toBeNull();expect(viewer().textContent).toContain('800,000');expect(viewer().textContent).not.toContain('500,000');
+});
+
+it('allows retrying a vacant room stuck in the old removal-pending state',async()=>{
+  const onDeleted=jest.fn();
+  const pending={...room,pendingRemoval:true,occupiedBeds:0,derivedStatus:'available' as const,beds:room.beds.map((bed)=>({...bed,status:'available' as const}))};
+  await act(async()=>root.render(<RoomsInventoryTab propertyId="p1" semesterId="s1" roomTypes={[type]} rooms={[pending]} applyImmediately={false} onRoomUpdated={()=>{}} onRoomsUpdated={()=>{}} onRoomsAdded={()=>{}} onRoomsDeleted={onDeleted} filterStatus="all" onFilterStatusChange={()=>{}}/>));
+  const remove=host.querySelector<HTMLButtonElement>('[aria-label="Delete room A1"]')!;
+  expect(remove.disabled).toBe(false);
+  await act(async()=>remove.click());
+  expect(host.querySelector('dialog[open]')?.textContent).toContain('removed from active inventory immediately');
+  jest.mocked(api).mockResolvedValueOnce({applied:true});
+  await act(async()=>[...host.querySelectorAll('dialog[open] button')].find((button)=>button.textContent==='Delete room')!.dispatchEvent(new MouseEvent('click',{bubbles:true})));
+  expect(api).toHaveBeenCalledWith('/room-management/properties/p1/rooms/delete',{method:'POST',body:JSON.stringify({roomIds:['r1']})});
+  expect(onDeleted).toHaveBeenCalledTimes(1);
 });

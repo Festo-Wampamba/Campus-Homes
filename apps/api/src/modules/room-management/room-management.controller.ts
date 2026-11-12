@@ -1,10 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequireAnyPermission, RequirePermission } from '../auth/permissions';
 import { Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
+  SaveOpsSpecificationsDto,
   BatchRoomDeleteDto,
   BatchRoomUpdateDto,
   BedBlockInputDto,
@@ -40,6 +41,11 @@ export class RoomManagementController {
   @Patch('room-types/:roomTypeId')
   updateRoomType(@Req() req: AuthenticatedRequest, @Param('roomTypeId', ParseUUIDPipe) roomTypeId: string, @Body() body: RoomTypeInputDto) {
     return this.rooms.updateRoomType(rlsCtx(req), roomTypeId, body);
+  }
+
+  @Delete('room-types/:roomTypeId')
+  deleteRoomType(@Req() req: AuthenticatedRequest, @Param('roomTypeId', ParseUUIDPipe) roomTypeId: string) {
+    return this.rooms.deleteRoomType(rlsCtx(req), roomTypeId);
   }
 
   @Post('properties/:propertyId/rooms')
@@ -126,6 +132,20 @@ export class RoomManagementOpsController {
   @RequirePermission('room_changes.review')
   queue(@Req() req: AuthenticatedRequest) {
     return this.rooms.reviewQueue(rlsCtx(req));
+  }
+
+  @Post('properties/:propertyId/specifications')
+  @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
+  specifications(@Req() req: AuthenticatedRequest, @Param('propertyId', ParseUUIDPipe) propertyId: string, @Body() body: SaveOpsSpecificationsDto) {
+    return this.rooms.saveOpsSpecifications(rlsCtx(req), propertyId, body.types);
+  }
+
+  @Get('activity')
+  @Roles('ops_lead', 'admin')
+  @RequirePermission('room_changes.review')
+  activity(@Req() req: AuthenticatedRequest) {
+    return this.rooms.activity(rlsCtx(req));
   }
 
   @Post(':changeSetId/approve')

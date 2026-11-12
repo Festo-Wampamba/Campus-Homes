@@ -24,7 +24,7 @@ import { amenityChecklist, ugxAmount, uuid } from './common.js';
 // is a plain array, not keyed by category.
 export const proposedRoomCategorySchema = z.object({
   category: z.enum(ROOM_CATEGORIES),
-  roomCount: z.number().int().min(1).max(500),
+  roomCount: z.number().int().min(0).max(500).default(0),
   pricePerTermUgx: ugxAmount,
   // Optional — not every property charges a deposit. Same "proposal"
   // status as pricePerTermUgx: informational until Ops confirms it on

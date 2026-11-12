@@ -404,7 +404,7 @@ export class OpsService {
           unitSemesterPricing,
           and(eq(unitSemesterPricing.unitId, units.id), eq(unitSemesterPricing.semesterId, semesterId)),
         )
-        .where(eq(units.propertyId, propertyId))
+        .where(and(eq(units.propertyId, propertyId), isNull(units.archivedAt)))
         .orderBy(asc(units.label)),
     );
   }
@@ -710,7 +710,7 @@ export class OpsService {
             eq(unitSemesterPricing.semesterId, listing.semesterId),
           ),
         )
-        .where(eq(units.propertyId, listing.propertyId));
+        .where(and(eq(units.propertyId, listing.propertyId), isNull(units.archivedAt)));
       const removed = currentUnits.filter((u) => !keptUnitIds.has(u.id));
       if (removed.length === 0) return;
 
@@ -1228,7 +1228,12 @@ export class OpsService {
           })) ?? null)
         : null;
       const visitPhotos = normalizeVisitPhotos(approvedVisit?.photoStorageKeys);
-      return { listing, property, visitPhotoCount, visitPhotos, photos, version };
+      const history = await db.execute(sql`
+        SELECT EXISTS(SELECT 1 FROM room_types WHERE property_id=${listing.propertyId})
+          OR EXISTS(SELECT 1 FROM units WHERE property_id=${listing.propertyId}) AS initialized
+      `);
+      return { listing, property, visitPhotoCount, visitPhotos, photos, version,
+        inventoryInitialized: history.rows[0]?.initialized === true };
     });
   }
 

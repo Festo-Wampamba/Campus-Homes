@@ -13,7 +13,7 @@ export function TenantEmergencyContactButton({ tenant }: { tenant: LandlordTenan
   const [open, setOpen] = useState(false);
   const missing = !tenant.emergencyContactName && !tenant.emergencyContactPhone;
   return <>
-    <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => setOpen(true)}>
+    <Button type="button" size="xs" variant="secondary" className="mt-1.5" onClick={() => setOpen(true)}>
       {missing ? "Add emergency contact" : "Edit emergency contact"}
     </Button>
     {open && <EmergencyContactDialog tenant={tenant} onClose={() => setOpen(false)} />}

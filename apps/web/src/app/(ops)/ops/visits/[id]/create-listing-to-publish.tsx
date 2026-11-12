@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OpsPublishableSemester } from "@campushomes/shared";
@@ -64,6 +65,8 @@ export function CreateListingToPublish({
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-muted-foreground">Publishing is optional after verification. You can finish this visit without adding room types; the landlord can add inventory later.</p>
+      <Link href="/ops" className="inline-flex min-h-11 items-center py-2 text-sm font-semibold text-primary underline underline-offset-4">Finish without publishing</Link>
       <div className="space-y-1.5">
         <Label htmlFor="semester" required>
           Semester

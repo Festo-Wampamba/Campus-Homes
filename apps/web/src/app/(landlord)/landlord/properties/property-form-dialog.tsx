@@ -157,11 +157,11 @@ function PropertyForm({
         newCoverPhotoKey = publicId;
       }
       const validRoomRows = roomCategoryRows.filter(
-        (row) => Number(row.roomCount) > 0 && Number(row.pricePerTermUgx) > 0,
+        (row) => Number(row.pricePerTermUgx) > 0,
       );
       const proposedRoomCategories = validRoomRows.map((row) => ({
         category: row.category,
-        roomCount: Number(row.roomCount),
+        roomCount: 0,
         pricePerTermUgx: Number(row.pricePerTermUgx),
         selfContained: row.selfContained,
         bedsPerRoom: bedsPerRoom(row),
@@ -173,10 +173,10 @@ function PropertyForm({
       // comment on proposedRoomCategorySchema.selfContained.
       const selfContainedRoomCount = validRoomRows
         .filter((row) => row.selfContained)
-        .reduce((sum, row) => sum + Number(row.roomCount), 0);
+        .reduce((sum) => sum, 0);
       const nonSelfContainedRoomCount = validRoomRows
         .filter((row) => !row.selfContained)
-        .reduce((sum, row) => sum + Number(row.roomCount), 0);
+        .reduce((sum) => sum, 0);
       const body = JSON.stringify({
         name,
         streetAddress,
@@ -313,9 +313,10 @@ function PropertyForm({
           <p className="text-xs text-muted-foreground">
             {managedOnly
               ? "e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. These become your rooms in Manage Rooms once Operations approves the property. No photos needed."
-              : "e.g. 30 singles at UGX 300,000, 40 doubles at UGX 700,000. Ops confirms exact pricing and room counts during verification."}
+              : "Add room types, optional variants and prices. Create physical rooms later using your own codes or a spreadsheet."}
           </p>
           <RoomCategoryRows
+            showRoomCount={false}
             rows={roomCategoryRows}
             onChange={setRoomCategoryRows}
             idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
