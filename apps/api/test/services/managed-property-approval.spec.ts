@@ -523,6 +523,11 @@ it('unpublishes without removing rooms, then permanently deletes only the confir
   const confirmation={confirmationName:'Delete lifecycle',acknowledgeIrreversible:true};
   await expect(listings.deleteProperty(opsLeadCtx,propertyId,confirmation)).rejects.toThrow();
   await expect(listings.deleteProperty(landlordCtx,propertyId,{...confirmation,confirmationName:'wrong'})).rejects.toThrow();
+  await expect(listings.deleteProperty(landlordCtx,propertyId,confirmation)).rejects.toThrow('current tenants or bookings');
+  await pool.query(`UPDATE reservations SET status='cancelled' WHERE id=$1`,[reservationId]);
+  await expect(listings.deleteProperty(landlordCtx,propertyId,confirmation)).rejects.toThrow('recorded payments or receipts');
+  expect((await pool.query('SELECT id FROM payments WHERE reservation_id=$1',[reservationId])).rows).toHaveLength(1);
+  await pool.query('DELETE FROM payments WHERE reservation_id=$1',[reservationId]);
   await listings.deleteProperty(landlordCtx,propertyId,confirmation);
   expect((await pool.query('SELECT id FROM properties WHERE id=$1',[propertyId])).rows).toHaveLength(0);
   expect((await pool.query('SELECT id FROM units WHERE id=$1',[room.id])).rows).toHaveLength(0);

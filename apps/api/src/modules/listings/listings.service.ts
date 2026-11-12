@@ -97,6 +97,15 @@ export class ListingsService {
       const owned=await client.query<{name:string}>(`SELECT name FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`,[propertyId,ctx.userId]);
       if(!owned.rows[0]) throw new NotFoundException('Property not found');
       if(input.acknowledgeIrreversible!==true || input.confirmationName!==owned.rows[0].name) throw new BadRequestException('Confirm the exact property name and acknowledge permanent deletion');
+      // Tenants and payment history outlive the landlord's wish to delete: such a property can only be unpublished.
+      // One RLS-heavy table per statement (CLAUDE.md): nesting payments/receipts inside the reservations join took 45s+.
+      const bookings=await client.query<{id:string;status:string}>(`SELECT r.id,r.status FROM reservations r JOIN beds b ON b.id=r.bed_id JOIN units u ON u.id=b.unit_id
+        WHERE u.property_id=$1`,[propertyId]);
+      if(bookings.rows.some(r=>['reserved','booked','occupied'].includes(r.status))) throw new ConflictException('This property has current tenants or bookings. Unpublish it instead; it can be deleted once no booking is active.');
+      const ids=bookings.rows.map(r=>r.id);
+      const paid=ids.length>0 && ((await client.query(`SELECT 1 FROM payments WHERE reservation_id=ANY($1::uuid[]) LIMIT 1`,[ids])).rows.length>0
+        || (await client.query(`SELECT 1 FROM payment_receipts WHERE reservation_id=ANY($1::uuid[]) LIMIT 1`,[ids])).rows.length>0);
+      if(paid) throw new ConflictException('This property has recorded payments or receipts, which must be kept. Unpublish it instead.');
       await recordOperationsNotice(client,propertyId,'property.deleted','The landlord permanently deleted this property and its operational records.');
       await purgeProperty(client,propertyId);
     });
