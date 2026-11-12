@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Headers, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
+import { assertFreshSignIn } from '../auth/permissions';
 import { AllowPendingLandlord, Roles, RolesGuard, rlsCtx } from '../auth/roles';
 import {
   DeletePropertyDto,
@@ -113,6 +114,7 @@ export class ListingsController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('landlord')
   deleteProperty(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id:string, @Body() body:DeletePropertyDto) {
+    assertFreshSignIn(req.session.access.assurance.authenticatedAt,'Deleting a property');
     return this.listings.deleteProperty(rlsCtx(req),id,body);
   }
 
