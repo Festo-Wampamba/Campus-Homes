@@ -285,4 +285,65 @@ describe("InspectionForm", () => {
       { storageKey: "already-uploaded", category: "bedroom" },
     ]);
   });
+
+  it("allows Submit without photos when the landlord is already KYC-verified", async () => {
+    await putDraft({ ...failedDraft("visit-verified-landlord"), syncStatus: "draft", completedAt: null });
+    act(() => {
+      root.render(
+        <InspectionForm
+          visitId="visit-verified-landlord"
+          serverVisit={{
+            id: "visit-verified-landlord",
+            propertyId: "prop-1",
+            inspectorId: "insp-1",
+            scheduledAt: null,
+            startedAt: null,
+            completedAt: null,
+            visitGpsLat: null,
+            visitGpsLon: null,
+            checklist: {},
+            photoStorageKeys: null,
+            result: "pending",
+            failureReason: null,
+            approvedBy: null,
+            approvedAt: null,
+            corrections: [],
+            propertyCoverPhotoKey: null,
+            landlordVerified: true,
+          }}
+        />,
+      );
+    });
+    await waitFor(() =>
+      [...container.querySelectorAll("button")].some((b) => b.textContent === "Submit checklist"),
+    );
+    const submit = [...container.querySelectorAll("button")].find((b) => b.textContent === "Submit checklist");
+    expect(submit?.disabled).toBe(false);
+    expect(container.textContent).not.toContain("Add at least one photo");
+  });
+
+  it("marks all checklist items as passed when Select all passed is clicked", async () => {
+    const empty = failedDraft("visit-select-all");
+    const blankChecklist = Object.fromEntries(
+      Object.entries(empty.checklist).map(([k, v]) => [k, { ...v, passed: null, items: {} }]),
+    ) as typeof empty.checklist;
+    await putDraft({
+      ...empty,
+      syncStatus: "draft",
+      completedAt: null,
+      result: null,
+      checklist: blankChecklist,
+    });
+    act(() => {
+      root.render(<InspectionForm visitId="visit-select-all" serverVisit={null} />);
+    });
+    await waitFor(() =>
+      [...container.querySelectorAll("button")].some((b) => b.textContent === "Select all passed"),
+    );
+    const selectAllBtn = [...container.querySelectorAll("button")].find((b) => b.textContent === "Select all passed");
+    act(() => selectAllBtn?.click());
+    const updated = await waitForDraft("visit-select-all", (d) => d.result === "passed");
+    expect(updated.result).toBe("passed");
+    expect(Object.values(updated.checklist).every((c) => c.passed === true)).toBe(true);
+  });
 });

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Trash2, EyeOff, AlertTriangle, Plus, Search, Users } from "lucide-react";
+import { BedDouble, Building2, ChevronLeft, ChevronRight, Pencil, Trash2, Eye, EyeOff, AlertTriangle, Plus, Search, Users } from "lucide-react";
 import type { Property } from "@campushomes/shared";
 
 import { api, apiErrorMessage } from "@/lib/api";
@@ -103,7 +103,7 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
   const [page, setPage] = useState(0);
   const [view, setView] = useState<ViewMode>("grid");
 
-  const [action,setAction]=useState<{property:Property;kind:"delete"|"unpublish"}|null>(null);
+  const [action,setAction]=useState<{property:Property;kind:"delete"|"unpublish"|"republish"}|null>(null);
   const [confirmName,setConfirmName]=useState("");
   const [ack,setAck]=useState(false);
   const [busy,setBusy]=useState(false);
@@ -114,7 +114,11 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
     catch(error){setActionError(apiErrorMessage(error,"Could not update this property. Try again."));}finally{setBusy(false);}
   }
   function propertyActions(property:Property){return <span className="inline-flex flex-wrap gap-1" onClick={(e)=>e.stopPropagation()}>
-    <Button type="button" variant="ghost" size="icon" aria-label={`Unpublish ${property.name}`} onClick={()=>{setActionError(null);setAction({property,kind:"unpublish"});}}><EyeOff aria-hidden className="size-4"/></Button>
+    {property.hasLiveListing ? (
+      <Button type="button" variant="ghost" size="icon" aria-label={`Unpublish ${property.name}`} title="Unpublish from public view" onClick={()=>{setActionError(null);setAction({property,kind:"unpublish"});}}><EyeOff aria-hidden className="size-4"/></Button>
+    ) : property.hasSuspendedListing ? (
+      <Button type="button" variant="ghost" size="icon" aria-label={`Publish ${property.name}`} title="Publish to public view" onClick={()=>{setActionError(null);setAction({property,kind:"republish"});}}><Eye aria-hidden className="size-4"/></Button>
+    ) : null}
     <Button type="button" variant="ghost" size="icon" className="text-destructive" aria-label={`Delete ${property.name}`} onClick={()=>{setConfirmName("");setAck(false);setActionError(null);setAction({property,kind:"delete"});}}><Trash2 aria-hidden className="size-4"/></Button>
   </span>;}
 
@@ -339,12 +343,12 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
       )}
 
       <Dialog open={action!==null} onOpenChange={(open)=>{if(!open&&!busy)setAction(null);}} dismissible={!busy} size="sm">
-        <DialogHeader title={action?.kind==="delete"?"Permanently delete property?":"Unpublish property?"} onClose={()=>{if(!busy)setAction(null);}}/>
+        <DialogHeader title={action?.kind==="delete"?"Permanently delete property?":action?.kind==="republish"?"Publish property to public view?":"Unpublish property?"} onClose={()=>{if(!busy)setAction(null);}}/>
         <DialogBody className="space-y-4 text-sm">
-          {action?.kind==="delete"?<><p className="flex gap-2 font-semibold text-destructive"><AlertTriangle aria-hidden className="size-5 shrink-0"/>This cannot be undone.</p><p>Deleting {action.property.name} permanently removes its rooms and listing data. A property with current tenants, bookings or recorded payments cannot be deleted; unpublish it instead. You may be asked to sign in again first.</p><label className="block">Type the property name to confirm<Input value={confirmName} onChange={(e)=>setConfirmName(e.target.value)} autoComplete="off"/></label><label className="flex gap-3"><input type="checkbox" checked={ack} onChange={(e)=>setAck(e.target.checked)}/>I understand this permanently deletes this property and its records.</label></>:<p>The property will be hidden from public listings. Its rooms, bookings and tenant records remain available to you.</p>}
+          {action?.kind==="delete"?<><p className="flex gap-2 font-semibold text-destructive"><AlertTriangle aria-hidden className="size-5 shrink-0"/>This cannot be undone.</p><p>Deleting {action.property.name} permanently removes its rooms and listing data. A property with current tenants, bookings or recorded payments cannot be deleted; unpublish it instead. You may be asked to sign in again first.</p><label className="block">Type the property name to confirm<Input value={confirmName} onChange={(e)=>setConfirmName(e.target.value)} autoComplete="off"/></label><label className="flex gap-3"><input type="checkbox" checked={ack} onChange={(e)=>setAck(e.target.checked)}/>I understand this permanently deletes this property and its records.</label></>:action?.kind==="republish"?<p>The property will be visible on public listings again immediately without needing Ops approval. The Ops team will be notified.</p>:<p>The property will be hidden from public listings. Its rooms, bookings and tenant records remain available to you.</p>}
           {actionError&&<p role="alert" className="text-destructive">{actionError}</p>}
         </DialogBody>
-        <DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setAction(null)}>Cancel</Button><Button variant={action?.kind==="delete"?"destructive":"primary"} disabled={busy||(action?.kind==="delete"&&(!ack||confirmName!==action.property.name))} onClick={()=>void applyAction()}>{busy?"Working…":action?.kind==="delete"?"Permanently delete":"Unpublish"}</Button></DialogFooter>
+        <DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setAction(null)}>Cancel</Button><Button variant={action?.kind==="delete"?"destructive":"primary"} disabled={busy||(action?.kind==="delete"&&(!ack||confirmName!==action.property.name))} onClick={()=>void applyAction()}>{busy?"Working…":action?.kind==="delete"?"Permanently delete":action?.kind==="republish"?"Publish":"Unpublish"}</Button></DialogFooter>
       </Dialog>
       <PropertyFormDialog
         open={formOpen}

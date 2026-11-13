@@ -220,10 +220,21 @@ export class OpsService {
         .where(eq(visitCorrections.visitId, visitId))
         .orderBy(desc(visitCorrections.raisedAt));
       const [property] = await db
-        .select({ coverPhotoKey: properties.coverPhotoKey })
+        .select({ coverPhotoKey: properties.coverPhotoKey, landlordId: properties.landlordId })
         .from(properties)
         .where(eq(properties.id, visit.propertyId));
-      return { ...visit, corrections, propertyCoverPhotoKey: property?.coverPhotoKey ?? null };
+      const landlord = property
+        ? await db.query.landlords.findFirst({
+            where: eq(landlords.userId, property.landlordId),
+            columns: { kycStatus: true },
+          })
+        : undefined;
+      return {
+        ...visit,
+        corrections,
+        propertyCoverPhotoKey: property?.coverPhotoKey ?? null,
+        landlordVerified: landlord?.kycStatus === 'verified',
+      };
     });
   }
 
@@ -590,6 +601,21 @@ export class OpsService {
       }
       if (current.approvedAt) {
         throw new ConflictException('This visit has already been approved and can no longer be resubmitted');
+      }
+      if (input.photoStorageKeys.length === 0) {
+        const [property] = await db
+          .select({ landlordId: properties.landlordId })
+          .from(properties)
+          .where(eq(properties.id, current.propertyId));
+        const landlord = property
+          ? await db.query.landlords.findFirst({
+              where: eq(landlords.userId, property.landlordId),
+              columns: { kycStatus: true },
+            })
+          : undefined;
+        if (landlord?.kycStatus !== 'verified') {
+          throw new BadRequestException('Add at least one photo');
+        }
       }
       // A resync resubmits the whole photo list; keys already staged on this
       // visit are retained, anything else must be the inspector's own upload.

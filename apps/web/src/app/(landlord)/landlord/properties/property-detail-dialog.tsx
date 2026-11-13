@@ -730,19 +730,23 @@ function ListingIntentPanel({
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="text-sm font-semibold text-foreground">{manageOnly ? "Manage only" : "Manage and list"}</p>
+        <p className="text-sm font-semibold text-foreground">
+          {manageOnly ? (property.hasSuspendedListing ? "Unpublished from public view" : "Manage only") : "Manage and list"}
+        </p>
         <p className="mt-1 text-xs text-muted-foreground">
           {manageOnly
-            ? "Not shown to students. List it whenever you want students to find it; CampusHomes inspects it first."
+            ? property.hasSuspendedListing
+              ? "Hidden from students. Publish it whenever you want students to find it again; no Ops re-inspection is required."
+              : "Not shown to students. List it whenever you want students to find it; CampusHomes inspects it first."
             : property.hasLiveListing
-              ? "Listed to students. To stop listing it, contact CampusHomes support."
+              ? "Listed to students. Use the Unpublish action on the property card to hide it."
               : "CampusHomes inspects this property before its rooms are shown to students."}
         </p>
         {error && <p role="alert" className="mt-1 text-xs text-destructive">{error}</p>}
       </div>
       {manageOnly ? (
         <Button type="button" size="sm" disabled={pending} onClick={() => switchTo("list")}>
-          {pending ? "Saving…" : "List this property"}
+          {pending ? "Saving…" : property.hasSuspendedListing ? "Publish property" : "List this property"}
         </Button>
       ) : !property.hasLiveListing ? (
         <Button type="button" variant="secondary" size="sm" disabled={pending} onClick={() => switchTo("manage_only")}>

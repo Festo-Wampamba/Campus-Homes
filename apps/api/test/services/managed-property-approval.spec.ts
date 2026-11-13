@@ -537,3 +537,20 @@ it('unpublishes without removing rooms, then permanently deletes only the confir
   expect((await pool.query('SELECT id FROM reservations WHERE id=$1',[reservationId])).rows).toHaveLength(0);
   expect((await pool.query('SELECT id FROM payments WHERE reservation_id=$1',[reservationId])).rows).toHaveLength(0);
 });
+
+it('republishes an unpublished property immediately without Ops re-inspection and notifies Ops Lead', async () => {
+  const propertyId = await liveListedProperty('Republish lifecycle');
+  await listings.unpublishProperty(landlordCtx, propertyId);
+  expect((await pool.query('SELECT status FROM listings WHERE property_id=$1', [propertyId])).rows[0].status).toBe('suspended');
+  expect((await listings.myProperties(landlordCtx)).find((p) => p.id === propertyId)?.hasSuspendedListing).toBe(true);
+
+  await listings.republishProperty(landlordCtx, propertyId);
+  expect((await pool.query('SELECT status FROM listings WHERE property_id=$1', [propertyId])).rows[0].status).toBe('verified');
+  expect((await pool.query('SELECT listing_intent FROM properties WHERE id=$1', [propertyId])).rows[0].listing_intent).toBe('list');
+
+  const notices = await pool.query(
+    `SELECT payload->>'message' AS msg FROM notifications WHERE user_id=$1 AND template_key='property.updated' ORDER BY created_at DESC LIMIT 2`,
+    [opsLeadCtx.userId],
+  );
+  expect(notices.rows.some((r) => String(r.msg).includes('republished'))).toBe(true);
+});

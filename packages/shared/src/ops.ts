@@ -138,12 +138,10 @@ export const syncVisitSchema = z.object({
   // before photo categories existed, and still accepted from an Inspection Mode
   // draft saved offline before this deploy. Read it through normalizeVisitPhotos.
   //
-  // At least one photo (2026-10-17): inspectors were submitting without any.
-  // sync-manager.ts uploads every queued offline photo before this POST, so a
-  // visit captured offline still arrives with its photos here.
+  // At least one photo is enforced in OpsService.syncVisit when the landlord
+  // is not yet KYC-verified; already-verified landlords do not require new photos.
   photoStorageKeys: z
-    .array(z.union([z.string(), visitPhotoSchema]), { error: 'Add at least one photo' })
-    .min(1, 'Add at least one photo')
+    .array(z.union([z.string(), visitPhotoSchema]))
     .max(20),
 });
 export type SyncVisitInput = z.infer<typeof syncVisitSchema>;
@@ -323,6 +321,7 @@ export const opsVisitDetailSchema = z.object({
   approvedAt: z.string().nullable(),
   corrections: z.array(visitCorrectionSchema),
   propertyCoverPhotoKey: z.string().nullable(),
+  landlordVerified: z.boolean().optional(),
 });
 export type OpsVisitDetail = z.infer<typeof opsVisitDetailSchema>;
 

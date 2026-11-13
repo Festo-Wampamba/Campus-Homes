@@ -92,6 +92,30 @@ export class ListingsService {
     return {unpublished:true};
   }
 
+  async republishProperty(ctx: RlsContext, propertyId: string) {
+    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const owned = await client.query(`SELECT id FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`, [propertyId, ctx.userId]);
+      if (!owned.rows.length) throw new NotFoundException('Property not found');
+      const suspended = await client.query<{ hasSuspended: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM listings WHERE property_id=$1 AND status='suspended') AS "hasSuspended"`,
+        [propertyId],
+      );
+      if (!suspended.rows[0]?.hasSuspended) {
+        throw new BadRequestException('This property has no unpublished listing to republish');
+      }
+      await client.query(`UPDATE properties SET listing_intent='list' WHERE id=$1`, [propertyId]);
+      await client.query(`UPDATE listings SET status='verified' WHERE property_id=$1 AND status='suspended'`, [propertyId]);
+      await recordOperationsNotice(
+        client,
+        propertyId,
+        'property.updated',
+        'The landlord republished this property to public view. Public listings are live again.',
+      );
+    });
+    await this.audit?.record(ctx, 'property.republish', 'property', propertyId, {});
+    return { republished: true };
+  }
+
   async deleteProperty(ctx:RlsContext,propertyId:string,input:{confirmationName:string;acknowledgeIrreversible:boolean}) {
     await this.rlsDb.run(SERVICE_CTX,async (_db,client)=>{
       const owned=await client.query<{name:string}>(`SELECT name FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`,[propertyId,ctx.userId]);
@@ -323,7 +347,7 @@ export class ListingsService {
   async setListingIntent(ctx: RlsContext, propertyId: string, listingIntent: ListingIntent) {
     // Service role so the switch and the room-change reconciliation commit
     // together; ownership is checked in the WHERE instead of by RLS.
-    const { property, from } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (db, client) => {
+    const { property, from, republished } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (db, client) => {
       const [current] = await db
         .select({ listingIntent: properties.listingIntent })
         .from(properties)
@@ -346,11 +370,27 @@ export class ListingsService {
         .set({ listingIntent })
         .where(eq(properties.id, propertyId))
         .returning();
-      return { property: updated!, from: current.listingIntent };
+      let restored = false;
+      if (listingIntent === 'list' && current.listingIntent === 'manage_only') {
+        const res = await client.query(
+          `UPDATE listings SET status='verified' WHERE property_id=$1 AND status='suspended' RETURNING id`,
+          [propertyId],
+        );
+        restored = res.rows.length > 0;
+        if (restored) {
+          await recordOperationsNotice(
+            client,
+            propertyId,
+            'property.updated',
+            'The landlord republished this property to public view. Public listings are live again.',
+          );
+        }
+      }
+      return { property: updated!, from: current.listingIntent, republished: restored };
     });
     if (from !== listingIntent) {
-      await this.audit?.record(ctx, 'properties.listing_intent', 'property', propertyId, { from, to: listingIntent });
-      if (listingIntent === 'list') await this.noticeListedProperty(propertyId, 'property.list_submitted',
+      await this.audit?.record(ctx, republished ? 'property.republish' : 'properties.listing_intent', 'property', propertyId, { from, to: listingIntent });
+      if (listingIntent === 'list' && !republished) await this.noticeListedProperty(propertyId, 'property.list_submitted',
         `${property.name} was submitted for public listing. The Ops lead must arrange physical inspection and approval.`, [], '/ops');
       if (listingIntent === 'manage_only' && property.manageReviewStatus !== 'approved') {
         await this.alertOpsOfManagedProperty(propertyId, property.name);
@@ -366,11 +406,13 @@ export class ListingsService {
     return this.rlsDb.run(ctx, async (db) => {
       const rows = await db.select().from(properties).orderBy(desc(properties.createdAt));
       if (rows.length === 0) return [];
-      const live = await db
-        .select({ propertyId: listings.propertyId, versionId: listings.currentVersionId })
+      const listingRows = await db
+        .select({ propertyId: listings.propertyId, versionId: listings.currentVersionId, status: listings.status })
         .from(listings)
-        .where(and(eq(listings.status, 'verified'), inArray(listings.propertyId, rows.map((p) => p.id))));
+        .where(and(inArray(listings.status, ['verified', 'suspended']), inArray(listings.propertyId, rows.map((p) => p.id))));
+      const live = listingRows.filter((l) => l.status === 'verified');
       const liveIds = new Set(live.map((l) => l.propertyId));
+      const suspendedIds = new Set(listingRows.filter((l) => l.status === 'suspended').map((l) => l.propertyId));
       const versionIds = live.flatMap((l) => (l.versionId ? [l.versionId] : []));
       const covers = versionIds.length
         ? await db
@@ -387,6 +429,7 @@ export class ListingsService {
       return rows.map((p) => ({
         ...p,
         hasLiveListing: liveIds.has(p.id),
+        hasSuspendedListing: suspendedIds.has(p.id),
         listingCoverPhotoKey: coverByProperty.get(p.id) ?? null,
       }));
     });
