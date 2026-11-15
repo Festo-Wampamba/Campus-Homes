@@ -49,7 +49,7 @@ export function AccountMenu({ user, access }: { user: SessionUser; access: Accou
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
           {displayName.charAt(0).toUpperCase()}
         </span>
-        <span className="hidden max-w-28 truncate sm:inline">{displayName}</span>
+        <span className="hidden max-w-56 truncate whitespace-nowrap sm:inline">{displayName}</span>
         <ChevronDown aria-hidden className={cn("size-4 opacity-70 transition-transform duration-150", open && "rotate-180")} />
       </button>
 

@@ -140,7 +140,7 @@ export function RoomCategoryRows({
       {rows.map((row, i) => (
         <div
           key={row.key}
-          className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl border border-border p-4 @md:grid-cols-2 @4xl:grid-cols-3"
+          className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl border border-border p-4 @md:grid-cols-[repeat(auto-fit,minmax(13rem,1fr))]"
         >
           <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-category-${i}`}>Room type</Label>

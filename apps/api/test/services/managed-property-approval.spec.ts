@@ -591,6 +591,16 @@ describe('landlord republish (0091)', () => {
     await pool.query(`UPDATE landlords SET kyc_status='verified' WHERE user_id=$1`, [landlordCtx.userId]);
   });
 
+  it('republishes a property the landlord already switched back to listing', async () => {
+    const propertyId = await liveListedProperty('Relisted Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await pool.query(`UPDATE properties SET listing_intent='list' WHERE id=$1`, [propertyId]);
+
+    await listings.republishProperty(landlordCtx, propertyId);
+
+    expect(await listingState(propertyId)).toEqual({ status: 'verified', intent: 'list' });
+  });
+
   it('marks an unpublished property as republishable in the landlord list', async () => {
     const propertyId = await liveListedProperty('Republishable Flag Hostel');
     await listings.unpublishProperty(landlordCtx, propertyId);

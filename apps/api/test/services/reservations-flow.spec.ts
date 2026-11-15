@@ -1209,6 +1209,8 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
     const property = (
       await pool.query(`SELECT id FROM properties LIMIT 1`)
     ).rows[0].id as string;
+    // These syncs carry no photos, which is allowed once the landlord's photo is on record.
+    await pool.query(`UPDATE properties SET cover_photo_key='landlord/cover' WHERE id=$1`, [property]);
     visitId = await seed(
       `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
        VALUES ($1, $2, 'server-created-sync-test') RETURNING id`,
@@ -1254,6 +1256,22 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
       result: 'passed',
       lat: '0.3300000',
     });
+  });
+
+  it('refuses a sync with no photos while the property has none on record', async () => {
+    const property = (await pool.query(`UPDATE properties SET cover_photo_key=NULL
+      WHERE id=(SELECT property_id FROM verification_visits WHERE id=$1) RETURNING id`, [visitId])).rows[0].id as string;
+    const bareVisit = await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
+       VALUES ($1, $2, 'server-created-no-photo') RETURNING id`, [property, inspector]);
+
+    const attempt = ops.syncVisit({ userId: inspector, role: 'ops_inspector', mfaVerified: true }, {
+      clientIdempotencyKey: 'sync-key-no-photo-0000001', visitId: bareVisit, checklist: FULL_CHECKLIST as never,
+      visitGpsLat: 0.33, visitGpsLon: 32.57, startedAt: new Date(Date.now() - 3600_000).toISOString(),
+      completedAt: new Date().toISOString(), result: 'passed', photoStorageKeys: [],
+    });
+
+    await expect(attempt).rejects.toThrow('Add at least one photo');
   });
 });
 

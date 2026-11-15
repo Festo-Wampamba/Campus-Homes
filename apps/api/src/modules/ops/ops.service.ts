@@ -591,6 +591,14 @@ export class OpsService {
       if (current.approvedAt) {
         throw new ConflictException('This visit has already been approved and can no longer be resubmitted');
       }
+      // One photo is needed only while the property has none on record.
+      if (input.photoStorageKeys.length === 0) {
+        const [property] = await db
+          .select({ coverPhotoKey: properties.coverPhotoKey })
+          .from(properties)
+          .where(eq(properties.id, current.propertyId));
+        if (!property?.coverPhotoKey) throw new BadRequestException('Add at least one photo');
+      }
       // A resync resubmits the whole photo list; keys already staged on this
       // visit are retained, anything else must be the inspector's own upload.
       const staged = new Set(normalizeVisitPhotos(current.photoStorageKeys).map((photo) => photo.storageKey));

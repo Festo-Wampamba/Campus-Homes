@@ -458,9 +458,20 @@ export function InspectionForm({
   const manualCoordinates = coordinatesText.trim() ? parseCoordinates(coordinatesText) : null;
   const manualCoordinatesInvalid = coordinatesText.trim() !== "" && !(manualCoordinates && isInUganda(manualCoordinates));
   // Queued photos (still on this device) count too: sync uploads them before
-  // the checklist POST, which the API rejects without at least one photo.
+  // the checklist POST. A property that already has the landlord's photo
+  // needs no new one (Festo, 2026-11-15); the API applies the same rule.
   const hasPhoto = draft.photos.length + draft.photoStorageKeys.length > 0;
-  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid && hasPhoto;
+  const photoRequired = !serverVisit?.propertyCoverPhotoKey;
+  const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid && (hasPhoto || !photoRequired);
+
+  function passAll() {
+    const checklist = { ...currentDraft.checklist };
+    for (const component of VERIFICATION_CHECKLIST_COMPONENTS) {
+      const items = Object.fromEntries(CHECKLIST_ITEMS[component].map((item) => [item.key, true]));
+      checklist[component] = { ...checklist[component], items, passed: deriveComponentPassed(component, items) };
+    }
+    persist({ ...currentDraft, checklist, result: "passed" });
+  }
 
   async function submit() {
     // Cancel any pending debounced autosave first — otherwise it can fire
@@ -586,6 +597,11 @@ export function InspectionForm({
           </details>
         </CardContent>
       </Card>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">Mark each item, or pass everything at once if the whole property checked out. You can still change single items afterwards.</p>
+        <Button type="button" size="sm" variant="secondary" onClick={passAll}>Pass all</Button>
+      </div>
 
       {VERIFICATION_CHECKLIST_COMPONENTS.map((component) => {
         const entry = draft.checklist[component];
@@ -785,7 +801,7 @@ export function InspectionForm({
       {manualCoordinatesInvalid && (
         <p className="text-sm text-destructive">Fix or clear the Coordinates box before submitting.</p>
       )}
-      {!hasPhoto && (
+      {photoRequired && !hasPhoto && (
         <p className="text-sm text-destructive">Add at least one photo before submitting.</p>
       )}
       {draft.syncStatus === "queued" && !online && (
@@ -793,7 +809,8 @@ export function InspectionForm({
           Saved on this device. Will sync automatically when back online.
         </p>
       )}
-      {draft.syncStatus === "queued" && online && (
+      {/* Syncing right after Submit is normal; only a failed attempt is worth showing. */}
+      {draft.syncStatus === "queued" && online && draft.syncError && (
         <div className="rounded-md border border-warning/30 bg-warning-subtle p-3">
           <p role="status" className="text-sm text-warning">
             Saved on this device. Still waiting to sync.
