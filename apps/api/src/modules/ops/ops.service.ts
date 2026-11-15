@@ -123,7 +123,9 @@ export class OpsService {
                 l.kyc_status AS landlord_kyc_status,
                 EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600 AS age_hours,
                 (p.listing_requested_at IS NOT NULL AND v.result = 'passed' AND v.approved_at IS NOT NULL
-                  AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)) AS needs_reinspection
+                  AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)) AS needs_reinspection,
+                (v.result = 'passed' AND v.approved_at IS NOT NULL
+                  AND (p.listing_requested_at IS NULL OR v.completed_at >= p.listing_requested_at)) AS ready_to_publish
          FROM properties p
          JOIN landlords l ON l.user_id = p.landlord_id
          LEFT JOIN LATERAL (
@@ -136,6 +138,11 @@ export class OpsService {
             OR v.result = 'pending'
             OR v.result = 'failed'
             OR (v.result = 'passed' AND v.approved_at IS NULL)
+            -- Approved but never published: without this row the property left
+            -- the queue and the lead had no way back to the publish step
+            -- (Campushomes Executives, 2026-11-15).
+            OR (v.result = 'passed' AND v.approved_at IS NOT NULL AND NOT EXISTS (
+                  SELECT 1 FROM listings pub WHERE pub.property_id = p.id AND pub.status IN ('verified','suspended')))
             OR (p.listing_requested_at IS NOT NULL AND (v.completed_at IS NULL OR v.completed_at < p.listing_requested_at)))
          ORDER BY p.created_at ASC`,
       );
@@ -389,6 +396,13 @@ export class OpsService {
              SELECT 1 FROM listings l
              WHERE l.property_id = p.id AND l.semester_id = s.id
            )
+           -- A second listing for a semester covering the same dates showed the
+           -- hostel twice in search (Campushomes Villas, 2026-11-15).
+           AND NOT EXISTS (
+             SELECT 1 FROM listings l JOIN semesters taken ON taken.id = l.semester_id
+             WHERE l.property_id = p.id AND l.status IN ('verified','suspended')
+               AND taken.starts_on <= s.ends_on AND taken.ends_on >= s.starts_on
+           )
          ORDER BY s.starts_on DESC`,
         [propertyId],
       );
@@ -459,6 +473,15 @@ export class OpsService {
         throw new BadRequestException(
           'Select an active semester configured for this property university',
         );
+      }
+      const overlapping = await client.query(
+        `SELECT 1 FROM listings l JOIN semesters taken ON taken.id = l.semester_id JOIN semesters wanted ON wanted.id = $2
+         WHERE l.property_id = $1 AND l.semester_id <> $2 AND l.status IN ('verified','suspended')
+           AND taken.starts_on <= wanted.ends_on AND taken.ends_on >= wanted.starts_on LIMIT 1`,
+        [input.propertyId, input.semesterId],
+      );
+      if (overlapping.rows.length) {
+        throw new ConflictException('This property is already listed for a semester covering the same dates');
       }
       // Atomic idempotency: two leads (or a retry) racing on the same
       // property+semester would both miss a prior SELECT and one would 500 on

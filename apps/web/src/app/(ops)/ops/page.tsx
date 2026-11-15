@@ -21,6 +21,7 @@ function ageTone(ageHours: number): "success" | "warning" | "destructive" {
 function visitStageLabel(row: OpsQueueRow): string | null {
   if (row.visit_id === null) return null;
   if (row.needs_reinspection) return "Back to listing. New inspection needed";
+  if (row.ready_to_publish) return "Approved. Not published yet";
   if (row.result === "passed") return "Awaiting your approval";
   if (row.result === "failed") return "Visit failed. Schedule a re-visit";
   if (row.result === "pending") return row.scheduled_at ? "Visit scheduled" : "Not yet scheduled";
@@ -72,7 +73,7 @@ function QueueRow({ row }: { row: OpsQueueRow }) {
             }
             className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
           >
-            {hasVisit && !needsReschedule ? "View" : "Schedule"}
+            {row.ready_to_publish && !needsReschedule ? "Publish" : hasVisit && !needsReschedule ? "View" : "Schedule"}
           </Link>
         </div>
       </CardContent>

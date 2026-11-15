@@ -1466,9 +1466,19 @@ export class RoomManagementService {
       changes: await this.changeDetails(client, set.id),
     });
     const created = await this.applyOpenChangeSets(client, propertyId, landlordId, statuses, 'Applied at once: this property is past its first Operations approval');
-    for (const notice of notices) await recordOperationsNotice(client, propertyId, 'room_changes.applied',
-      `{landlord} changed rooms at ${notice.summary}. The changes are live; no approval is needed.`,
-      { changeSetId: notice.id, changes: notice.changes });
+    for (const notice of notices) {
+      const recipients = await recordOperationsNotice(client, propertyId, 'room_changes.applied',
+        `{landlord} changed rooms at ${notice.summary}. The changes are live; no approval is needed.`,
+        { changeSetId: notice.id, changes: notice.changes });
+      // Email too (Festo, 2026-11-15); the lead's copy opens the Ops page, admins theirs.
+      for (const portal of ['ops', 'admin'] as const) {
+        this.emailUsers(recipients.filter((r) => (r.roleKey === 'ops_lead') === (portal === 'ops')).map((r) => r.userId), {
+          subject: 'A landlord changed rooms',
+          message: `A landlord changed rooms at ${notice.summary}. The changes are live; no approval is needed.`,
+          path: `/${portal}/room-changes`, action: 'Open room changes',
+        });
+      }
+    }
     return created;
   }
 

@@ -35,6 +35,7 @@ import { PropertyRoutes } from './property-routes';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../ops/audit.service';
 import { recordOperationsNotice, type OperationChange } from '../room-management/operations-notice';
+import { sendRoomChangeEmail } from '../room-management/room-change-email';
 import { dropVisitRequirement } from '../room-management/visit-requirement';
 import { loadEnv } from '../../config/env';
 import { managedPropertyReviewers, sendManagedPropertyEmail } from './managed-property-alert';
@@ -89,6 +90,7 @@ export class ListingsService {
       await recordOperationsNotice(client,propertyId,'property.updated','{landlord} unpublished this property. Public listings are hidden; rooms and bookings are retained.');
     });
     await this.audit?.record(ctx,'property.unpublish','property',propertyId,{});
+    this.emailOps(propertyId, '{landlord} unpublished this property. Public listings are hidden; rooms and bookings are retained.');
     return {unpublished:true};
   }
 
@@ -117,6 +119,7 @@ export class ListingsService {
         '{landlord} republished this property. It is visible to students again; no approval is needed.');
     });
     await this.audit?.record(ctx, 'property.republish', 'property', propertyId, {});
+    this.emailOps(propertyId, '{landlord} republished this property. It is visible to students again; no approval is needed.');
     return { republished: true };
   }
 
@@ -277,6 +280,26 @@ export class ListingsService {
     }
   }
 
+  /** Emails a landlord change to the Ops leads and inspectors covering the
+   * property (Festo, 2026-11-15). Best-effort and after commit: the in-app
+   * notice is already stored. `{landlord}` becomes the owner's name. */
+  private emailOps(propertyId: string, message: string) {
+    void this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const who = await client.query<{ name: string; landlord: string }>(
+        `SELECT p.name, coalesce(nullif(u.name,''), nullif(l.legal_name,''), 'The landlord') AS landlord
+         FROM properties p JOIN users u ON u.id=p.landlord_id LEFT JOIN landlords l ON l.user_id=p.landlord_id
+         WHERE p.id=$1`, [propertyId]);
+      const reviewers = await managedPropertyReviewers(client, propertyId);
+      return { who: who.rows[0], to: reviewers.flatMap((reviewer) => (reviewer.email ? [reviewer.email] : [])) };
+    })
+      .then(({ who, to }) => who && sendRoomChangeEmail(loadEnv(), {
+        to, subject: `${who.name}: landlord update`, message: message.replace('{landlord}', who.landlord),
+        path: '/ops', action: 'Open CampusHomes Operations',
+      }))
+      .catch((err: unknown) => this.logger.error(
+        `Operations email failed for ${propertyId}: ${err instanceof Error ? err.message : 'unknown error'}`));
+  }
+
   /** Follow-up alerts cannot turn a committed save into a failed request. */
   private async noticeListedProperty(propertyId: string, template: string, message: string, changes: OperationChange[] = [], opsPath?: string) {
     try {
@@ -338,8 +361,11 @@ export class ListingsService {
           before: JSON.stringify(before[key as keyof typeof before]) ?? 'Not set', after: JSON.stringify(value) ?? 'Not set' }));
       return { property, changes };
     });
-    if (result.changes.length) await this.noticeListedProperty(propertyId, 'property.updated',
-      `{landlord} edited ${result.property.name}: ${result.changes.map((change) => change.label).join(', ')}. Saved immediately; no approval is needed.`, result.changes);
+    if (result.changes.length) {
+      const message = `{landlord} edited ${result.property.name}: ${result.changes.map((change) => change.label).join(', ')}. Saved immediately; no approval is needed.`;
+      await this.noticeListedProperty(propertyId, 'property.updated', message, result.changes);
+      this.emailOps(propertyId, message);
+    }
     return result.property;
   }
 
@@ -1129,8 +1155,8 @@ export class ListingsService {
     return this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
       const counts = await client.query(
           `SELECT p.catchment AS university,
-                  COUNT(*) FILTER (WHERE l.status = 'verified') AS hostel_count,
-                  COUNT(*) FILTER (
+                  COUNT(DISTINCT p.id) FILTER (WHERE l.status = 'verified') AS hostel_count,
+                  COUNT(DISTINCT p.id) FILTER (
                     WHERE l.status = 'verified'
                       AND EXISTS (
                         SELECT 1

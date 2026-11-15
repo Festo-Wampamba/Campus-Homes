@@ -276,6 +276,32 @@ describe('search() self-contained filter (0053)', () => {
   });
 });
 
+describe('search() with one property listed for two semesters', () => {
+  it('returns the property once', async () => {
+    const otherSemesterId = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Sem Availability Twin', '2026-08-02', '2026-12-15', '2026-11-15') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO unit_semester_pricing (unit_id, semester_id, price_per_term_ugx) VALUES ($1, $2, 500000)`,
+      [unitCancelled, otherSemesterId],
+    );
+    const twinId = await seed(
+      `INSERT INTO listings (property_id, semester_id, status, current_version_id, verified_at)
+       SELECT property_id, $2, 'verified', current_version_id, now() FROM listings WHERE id = $1 RETURNING id`,
+      [listingId, otherSemesterId],
+    );
+
+    const rows = (await listings.search({
+      minLon: 32.5, minLat: 0.25, maxLon: 32.65, maxLat: 0.42, limit: 50,
+    } as never)) as { id: string; name: string }[];
+    // The twin is removed again so the tests below still find the original listing.
+    await pool.query(`DELETE FROM listings WHERE id = $1`, [twinId]);
+
+    expect(rows.filter((row) => row.name === 'Availability Test Hostel').map((row) => row.id)).toEqual([twinId]);
+  });
+});
+
 describe('search() availability', () => {
   it('only counts still-available beds, and keeps a partially-booked listing visible', async () => {
     const rows = (await listings.search({
