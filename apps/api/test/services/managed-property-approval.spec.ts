@@ -568,6 +568,29 @@ describe('landlord republish (0091)', () => {
     expect(await listingState(propertyId)).toEqual({ status: 'suspended', intent: 'manage_only' });
   });
 
+  it('refuses after Operations published and suspended it again since the unpublish', async () => {
+    const propertyId = await liveListedProperty('Stale Marker Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await listings.republishProperty(landlordCtx, propertyId);
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await pool.query(`UPDATE properties SET listing_intent='list' WHERE id=$1`, [propertyId]);
+    await pool.query(`UPDATE listings SET status='verified' WHERE property_id=$1`, [propertyId]);
+    await pool.query(`UPDATE listings SET status='suspended' WHERE property_id=$1`, [propertyId]);
+
+    await expect(listings.republishProperty(landlordCtx, propertyId)).rejects.toThrow('unpublished yourself');
+  });
+
+  it('refuses a landlord whose identity is no longer verified', async () => {
+    const propertyId = await liveListedProperty('Unverified Republish Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await pool.query(`UPDATE landlords SET kyc_status='rejected' WHERE user_id=$1`, [landlordCtx.userId]);
+
+    const attempt = listings.republishProperty(landlordCtx, propertyId);
+
+    await expect(attempt).rejects.toThrow('cannot be republished');
+    await pool.query(`UPDATE landlords SET kyc_status='verified' WHERE user_id=$1`, [landlordCtx.userId]);
+  });
+
   it('marks an unpublished property as republishable in the landlord list', async () => {
     const propertyId = await liveListedProperty('Republishable Flag Hostel');
     await listings.unpublishProperty(landlordCtx, propertyId);

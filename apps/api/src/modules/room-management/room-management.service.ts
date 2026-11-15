@@ -446,7 +446,9 @@ export class RoomManagementService {
     // archived room never blocks its code from being used again.
     await client.query('SAVEPOINT remove_room');
     try {
-      await client.query('DELETE FROM room_unit_changes WHERE unit_id=$1', [unitId]);
+      // Applied change records are review history: keep them (proposed_data
+      // holds the room code) and only drop the link to the deleted room.
+      await client.query('UPDATE room_unit_changes SET unit_id=NULL WHERE unit_id=$1', [unitId]);
       await client.query('DELETE FROM unit_blocks WHERE unit_id=$1', [unitId]);
       await client.query('DELETE FROM beds WHERE unit_id=$1', [unitId]);
       await client.query('DELETE FROM units WHERE id=$1', [unitId]);

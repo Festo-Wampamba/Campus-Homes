@@ -100,7 +100,13 @@ export class ListingsService {
       const owned = await client.query<{ status: string }>(
         `SELECT status FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`, [propertyId, ctx.userId]);
       if (!owned.rows[0]) throw new NotFoundException('Property not found');
-      if (owned.rows[0].status === 'suspended') throw new ConflictException('This property is suspended. Contact CampusHomes to restore it.');
+      // Same gate as a first publish: active property, active account, verified identity.
+      const eligible = await client.query(
+        `SELECT 1 FROM users u JOIN landlords l ON l.user_id=u.id
+         WHERE u.id=$1 AND u.status='active' AND u.deleted_at IS NULL AND l.kyc_status='verified'`, [ctx.userId]);
+      if (owned.rows[0].status !== 'active' || !eligible.rows.length) {
+        throw new ConflictException('This property cannot be republished right now. Contact CampusHomes to restore it.');
+      }
       // 0091's trigger skips the new-inspection stamp while the marker is set, so switch first.
       await client.query(`UPDATE properties SET listing_intent='list' WHERE id=$1`, [propertyId]);
       const restored = await client.query(
