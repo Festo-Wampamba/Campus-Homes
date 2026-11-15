@@ -304,6 +304,25 @@ describe('room changes on a listed property with a live listing', () => {
     expect([room.pendingChanges ?? false, (await overview(propertyId)).changeSet]).toEqual([false, null]);
   });
 
+  it('price a room added under another semester for the listed semester too', async () => {
+    const propertyId = await liveListedProperty('Live Other Semester Hostel');
+    const otherSemesterId = await seed(
+      `INSERT INTO semesters (name, starts_on, ends_on, re_verification_window_starts_on)
+       VALUES ('Sem Other', '2026-08-02', '2099-12-15', '2099-11-15') RETURNING id`,
+    );
+    const type = await rooms.createRoomType(landlordCtx, propertyId, {
+      title: 'Other semester single', description: 'Priced under a semester with no listing', category: 'single',
+      bathroomType: 'shared', capacity: 1, amenities: [], semesterId: otherSemesterId, pricePerTermUgx: 650000, photos: [],
+    });
+
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: (type as { id: string }).id, roomCode: 'V9' });
+
+    const listed = await pool.query(
+      `SELECT price_per_term_ugx FROM unit_semester_pricing WHERE unit_id=$1 AND semester_id=$2`, [room.id, semesterId],
+    );
+    expect(listed.rows.map((row) => Number(row.price_per_term_ugx))).toEqual([650000]);
+  });
+
   it('remove a room at once', async () => {
     const propertyId = await liveListedProperty('Live Delete Hostel');
     const typeId = await roomType(propertyId);
