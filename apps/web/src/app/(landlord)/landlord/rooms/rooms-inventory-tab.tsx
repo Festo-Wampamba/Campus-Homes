@@ -3,7 +3,7 @@
 import { roomTypeImportLabels } from "@campushomes/shared";
 
 import { useMemo, useState } from "react";
-import { Bed, Edit, Layers, Lock, Plus, Search, Trash2, Unlock } from "lucide-react";
+import { AlertTriangle, Bed, Edit, Layers, Lock, Plus, Search, Trash2, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/status-chip";
 import {
@@ -849,7 +849,8 @@ export function RoomsInventoryTab({
               {deleteError}
             </div>
           )}
-          <p>These rooms will be removed from active inventory immediately, including any older pending removal requests. Past bookings stay on record.</p>
+          <p className="flex gap-2 font-semibold text-destructive"><AlertTriangle aria-hidden className="size-5 shrink-0" />This cannot be undone.</p>
+          <p>These rooms and their room codes are permanently deleted, so the same codes can be added or uploaded again later. Records of past bookings and payments are kept.</p>
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setRoomsToDelete([])} disabled={deleting}>

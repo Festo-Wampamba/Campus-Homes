@@ -64,7 +64,7 @@ it('allows retrying a vacant room stuck in the old removal-pending state',async(
   const remove=host.querySelector<HTMLButtonElement>('[aria-label="Delete room A1"]')!;
   expect(remove.disabled).toBe(false);
   await act(async()=>remove.click());
-  expect(host.querySelector('dialog[open]')?.textContent).toContain('removed from active inventory immediately');
+  expect(host.querySelector('dialog[open]')?.textContent).toContain('permanently deleted');
   jest.mocked(api).mockResolvedValueOnce({applied:true});
   await act(async()=>[...host.querySelectorAll('dialog[open] button')].find((button)=>button.textContent==='Delete room')!.dispatchEvent(new MouseEvent('click',{bubbles:true})));
   expect(api).toHaveBeenCalledWith('/room-management/properties/p1/rooms/delete',{method:'POST',body:JSON.stringify({roomIds:['r1']})});

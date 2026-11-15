@@ -70,12 +70,12 @@ function matchRoomType(text: string, roomTypes: RoomType[]): { id: string } | { 
 
 /** Problems with the row itself. Lengths match the API's limits, so a value is
  * rejected here rather than cut short and stored somewhere else. */
-function rowError(row: ImportedRoomRow, isRepeat: boolean): string | null {
+function rowError(row: ImportedRoomRow, repeatedOnRows: number[]): string | null {
   if (!row.roomCode) return "Room code is empty";
   if (row.roomCode.length > 100) return "Room code is too long (100 characters at most)";
   if (row.buildingName.length > 120) return "Building is too long (120 characters at most)";
   if (row.floorLabel.length > 80) return "Floor is too long (80 characters at most)";
-  if (isRepeat) return "Listed twice in this file";
+  if (repeatedOnRows.length) return `Listed more than once: also on row ${repeatedOnRows.join(", ")}. Keep one and delete the rest`;
   return null;
 }
 
@@ -84,18 +84,22 @@ function rowError(row: ImportedRoomRow, isRepeat: boolean): string | null {
 export function planRoomImport(rows: ImportedRoomRow[], roomTypes: RoomType[], existingRooms: RoomUnit[]) {
   const byKey = new Map<string, RoomUnit[]>();
   for (const room of existingRooms) { const key = roomKey(room.roomCode, room.buildingName); byKey.set(key, [...(byKey.get(key) ?? []), room]); }
-  const seen = new Set<string>();
-  const seenIds = new Set<string>();
+  // Every row a code (or Room ID) appears on, so each copy can name the others.
+  const rowsByKey = new Map<string, number[]>();
+  const rowsById = new Map<string, number[]>();
+  for (const row of rows) {
+    if (row.roomCode) { const key = roomKey(row.roomCode, row.buildingName); rowsByKey.set(key, [...(rowsByKey.get(key) ?? []), row.rowNumber]); }
+    if (row.roomId) rowsById.set(row.roomId, [...(rowsById.get(row.roomId) ?? []), row.rowNumber]);
+  }
   const planned: PlannedRoomRow[] = rows.map((row) => {
     const key = roomKey(row.roomCode, row.buildingName);
     const type = matchRoomType(row.roomType, roomTypes);
     const matches = row.roomId ? existingRooms.filter((room) => room.id === row.roomId) : byKey.get(key) ?? [];
     const existing = matches.length === 1 ? matches[0] : undefined;
-    const duplicateId = !!row.roomId && seenIds.has(row.roomId);
+    const repeatedOnRows = [...new Set([...(rowsByKey.get(key) ?? []), ...(row.roomId ? rowsById.get(row.roomId) ?? [] : [])])]
+      .filter((rowNumber) => rowNumber !== row.rowNumber).sort((x, y) => x - y);
     const codeElsewhere = !row.roomId && !row.buildingName && !existing && existingRooms.some((room) => norm(room.roomCode) === norm(row.roomCode));
-    const error = rowError(row, seen.has(key) || duplicateId) ?? (codeElsewhere ? "This code exists in another building; specify its building or Room ID" : row.roomId && !existing ? "Room ID does not belong to this property" : matches.length > 1 ? "Several rooms match; include the Room ID to identify the correct one" : existing?.pendingRemoval ? "This room is pending removal" : "error" in type ? type.error : null);
-    if (row.roomCode) seen.add(key);
-    if (row.roomId) seenIds.add(row.roomId);
+    const error = rowError(row, repeatedOnRows) ?? (codeElsewhere ? "This code exists in another building; specify its building or Room ID" : row.roomId && !existing ? "Room ID does not belong to this property" : matches.length > 1 ? "Several rooms match; include the Room ID to identify the correct one" : existing?.pendingRemoval ? "This room is pending removal" : "error" in type ? type.error : null);
     const unchanged = existing && "id" in type && existing.roomTypeId === type.id &&
       existing.roomCode === row.roomCode && (existing.buildingName ?? "") === row.buildingName && (existing.floorLabel ?? "") === row.floorLabel;
     return { ...row, roomId: existing?.id ?? null, roomTypeId: "id" in type ? type.id : null, action: existing ? unchanged ? "unchanged" : "update" : "create", error };

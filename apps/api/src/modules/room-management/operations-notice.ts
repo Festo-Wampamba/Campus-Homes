@@ -2,7 +2,8 @@ import type { PoolClient } from 'pg';
 
 export interface OperationChange { label: string; before: string; after: string }
 
-/** Use only in a service-context transaction. Select recipients with the same
+/** Use only in a service-context transaction. `{landlord}` in the message
+ * becomes the property owner's name. Select recipients with the same
  * assignment/scope policy as the review queue, retaining an admin copy. */
 export async function recordOperationsNotice(
   client: PoolClient,
@@ -14,7 +15,8 @@ export async function recordOperationsNotice(
   const { rows } = await client.query<{ userId: string; roleKey: string }>(
     `INSERT INTO notifications(user_id, template_key, channel, payload)
      SELECT recipient.id, $2, 'in_app',
-       jsonb_build_object('message', $3::text, 'propertyId', p.id, 'propertyName', p.name,
+       jsonb_build_object('message', replace($3::text, '{landlord}', coalesce(nullif(owner.name,''), nullif(landlord.legal_name,''), 'The landlord')),
+         'propertyId', p.id, 'propertyName', p.name,
          'landlordName', coalesce(nullif(owner.name,''), nullif(landlord.legal_name,''), 'Landlord'),
          'href', CASE WHEN recipient.role_key='ops_lead' THEN $5::text ELSE CASE WHEN $5::text='/ops' THEN '/admin/verifications' ELSE '/admin/room-changes' END END)
          || $4::jsonb

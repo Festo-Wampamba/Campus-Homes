@@ -110,6 +110,13 @@ export class ListingsController {
     return this.listings.unpublishProperty(rlsCtx(req),id);
   }
 
+  @Post('properties/:id/republish')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('landlord')
+  republishProperty(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id:string) {
+    return this.listings.republishProperty(rlsCtx(req),id);
+  }
+
   @Post('properties/:id/delete')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('landlord')

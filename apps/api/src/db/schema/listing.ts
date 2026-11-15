@@ -31,6 +31,9 @@ export const listings = pgTable(
     currentVersionId: uuid('current_version_id'),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    // Set when the landlord unpublished it themselves (0091): only such a
+    // listing can be republished by the landlord without Ops.
+    landlordUnpublishedAt: timestamp('landlord_unpublished_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('listings_property_semester_uk').on(t.propertyId, t.semesterId)],

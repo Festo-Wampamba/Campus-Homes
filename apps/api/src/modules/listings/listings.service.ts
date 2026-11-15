@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import type {
   ListingIntent,
@@ -83,13 +83,35 @@ export class ListingsService {
       const owned=await client.query(`SELECT id FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`,[propertyId,ctx.userId]);
       if(!owned.rows.length) throw new NotFoundException('Property not found');
       const live=await client.query<{listed:boolean}>(`SELECT EXISTS(SELECT 1 FROM listings WHERE property_id=$1 AND status='verified') listed`,[propertyId]);
-      await client.query(`UPDATE listings SET status='suspended' WHERE property_id=$1 AND status='verified'`,[propertyId]);
+      await client.query(`UPDATE listings SET status='suspended',landlord_unpublished_at=now() WHERE property_id=$1 AND status='verified'`,[propertyId]);
       await dropVisitRequirement(client,propertyId);
       await client.query(`UPDATE properties SET listing_intent='manage_only',manage_review_status=CASE WHEN $2::boolean THEN 'approved' ELSE manage_review_status END WHERE id=$1`,[propertyId,live.rows[0]!.listed]);
-      await recordOperationsNotice(client,propertyId,'property.updated','The landlord unpublished this property. Public listings are hidden; rooms and bookings are retained.');
+      await recordOperationsNotice(client,propertyId,'property.updated','{landlord} unpublished this property. Public listings are hidden; rooms and bookings are retained.');
     });
     await this.audit?.record(ctx,'property.unpublish','property',propertyId,{});
     return {unpublished:true};
+  }
+
+  /** Puts back the listings the landlord unpublished themselves, with no new
+   * inspection (Festo, 2026-11-15). A listing Ops or a strike suspended has
+   * no landlord_unpublished_at and stays down. */
+  async republishProperty(ctx: RlsContext, propertyId: string) {
+    await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
+      const owned = await client.query<{ status: string }>(
+        `SELECT status FROM properties WHERE id=$1 AND landlord_id=$2 FOR UPDATE`, [propertyId, ctx.userId]);
+      if (!owned.rows[0]) throw new NotFoundException('Property not found');
+      if (owned.rows[0].status === 'suspended') throw new ConflictException('This property is suspended. Contact CampusHomes to restore it.');
+      // 0091's trigger skips the new-inspection stamp while the marker is set, so switch first.
+      await client.query(`UPDATE properties SET listing_intent='list' WHERE id=$1`, [propertyId]);
+      const restored = await client.query(
+        `UPDATE listings SET status='verified',landlord_unpublished_at=NULL
+         WHERE property_id=$1 AND status='suspended' AND landlord_unpublished_at IS NOT NULL`, [propertyId]);
+      if (!restored.rowCount) throw new ConflictException('Only a property you unpublished yourself can be republished here. Ask CampusHomes to list it.');
+      await recordOperationsNotice(client, propertyId, 'property.updated',
+        '{landlord} republished this property. It is visible to students again; no approval is needed.');
+    });
+    await this.audit?.record(ctx, 'property.republish', 'property', propertyId, {});
+    return { republished: true };
   }
 
   async deleteProperty(ctx:RlsContext,propertyId:string,input:{confirmationName:string;acknowledgeIrreversible:boolean}) {
@@ -253,8 +275,7 @@ export class ListingsService {
   private async noticeListedProperty(propertyId: string, template: string, message: string, changes: OperationChange[] = [], opsPath?: string) {
     try {
       await this.rlsDb.run(SERVICE_CTX, async (_db, client) => {
-        const property = await client.query(`SELECT 1 FROM properties WHERE id=$1 AND listing_intent='list'`, [propertyId]);
-        if (property.rows.length) await recordOperationsNotice(client, propertyId, template, message, { changes, opsPath });
+        await recordOperationsNotice(client, propertyId, template, message, { changes, opsPath });
       });
     } catch (err) {
       this.logger.error(`Operations notice failed for ${propertyId}: ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -312,7 +333,7 @@ export class ListingsService {
       return { property, changes };
     });
     if (result.changes.length) await this.noticeListedProperty(propertyId, 'property.updated',
-      `Property details updated at ${result.property.name}. Saved immediately; the existing approval is unchanged.`, result.changes);
+      `{landlord} edited ${result.property.name}: ${result.changes.map((change) => change.label).join(', ')}. Saved immediately; no approval is needed.`, result.changes);
     return result.property;
   }
 
@@ -321,6 +342,18 @@ export class ListingsService {
    * live to students can't become manage-only here: taking a listing down is
    * Ops-only, and properties_listing_intent_guard enforces that in the DB. */
   async setListingIntent(ctx: RlsContext, propertyId: string, listingIntent: ListingIntent) {
+    // A property the landlord unpublished goes straight back to students.
+    if (listingIntent === 'list') {
+      const unpublished = await this.rlsDb.run(SERVICE_CTX, (_db, client) => client.query(
+        `SELECT 1 FROM listings l JOIN properties p ON p.id=l.property_id
+         WHERE p.id=$1 AND p.landlord_id=$2 AND p.listing_intent='manage_only'
+           AND l.status='suspended' AND l.landlord_unpublished_at IS NOT NULL LIMIT 1`, [propertyId, ctx.userId]));
+      if (unpublished.rows.length) {
+        await this.republishProperty(ctx, propertyId);
+        const [property] = await this.rlsDb.run(ctx, (db) => db.select().from(properties).where(eq(properties.id, propertyId)));
+        return property!;
+      }
+    }
     // Service role so the switch and the room-change reconciliation commit
     // together; ownership is checked in the WHERE instead of by RLS.
     const { property, from } = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (db, client) => {
@@ -371,6 +404,11 @@ export class ListingsService {
         .from(listings)
         .where(and(eq(listings.status, 'verified'), inArray(listings.propertyId, rows.map((p) => p.id))));
       const liveIds = new Set(live.map((l) => l.propertyId));
+      const unpublished = await db
+        .select({ propertyId: listings.propertyId })
+        .from(listings)
+        .where(and(eq(listings.status, 'suspended'), isNotNull(listings.landlordUnpublishedAt), inArray(listings.propertyId, rows.map((p) => p.id))));
+      const republishable = new Set(unpublished.map((l) => l.propertyId));
       const versionIds = live.flatMap((l) => (l.versionId ? [l.versionId] : []));
       const covers = versionIds.length
         ? await db
@@ -387,6 +425,7 @@ export class ListingsService {
       return rows.map((p) => ({
         ...p,
         hasLiveListing: liveIds.has(p.id),
+        canRepublish: republishable.has(p.id),
         listingCoverPhotoKey: coverByProperty.get(p.id) ?? null,
       }));
     });
@@ -572,7 +611,7 @@ export class ListingsService {
       const [unit] = await db.select({ propertyId: units.propertyId }).from(units).where(eq(units.id, photo!.unitId));
       return { photo, propertyId: unit!.propertyId };
     });
-    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord added a room photo. Saved immediately; no new approval is needed.',
+    await this.noticeListedProperty(result.propertyId, 'property.updated', '{landlord} added a room photo. Saved immediately; no new approval is needed.',
       [{ label: 'Room photo', before: 'Not present', after: 'Added' }]);
     return result.photo;
   }
@@ -592,7 +631,7 @@ export class ListingsService {
         .returning();
       return { media, propertyId: media!.propertyId };
     });
-    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord added a property photo. Saved immediately; no new approval is needed.',
+    await this.noticeListedProperty(result.propertyId, 'property.updated', '{landlord} added a property photo. Saved immediately; no new approval is needed.',
       [{ label: 'Property photo', before: 'Not present', after: 'Added' }]);
     return result.media;
   }
@@ -608,7 +647,7 @@ export class ListingsService {
       }
       return { media, propertyId: media.propertyId };
     });
-    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord removed a property photo. Saved immediately; no new approval is needed.',
+    await this.noticeListedProperty(result.propertyId, 'property.updated', '{landlord} removed a property photo. Saved immediately; no new approval is needed.',
       [{ label: 'Property photo', before: 'Present', after: 'Removed' }]);
     return { ok: true };
   }
@@ -649,7 +688,7 @@ export class ListingsService {
       const [unit] = await db.select({ propertyId: units.propertyId }).from(units).where(eq(units.id, photo.unitId));
       return { photo, propertyId: unit!.propertyId };
     });
-    await this.noticeListedProperty(result.propertyId, 'property.updated', 'A landlord removed a room photo. Saved immediately; no new approval is needed.',
+    await this.noticeListedProperty(result.propertyId, 'property.updated', '{landlord} removed a room photo. Saved immediately; no new approval is needed.',
       [{ label: 'Room photo', before: 'Present', after: 'Removed' }]);
     return { ok: true };
   }

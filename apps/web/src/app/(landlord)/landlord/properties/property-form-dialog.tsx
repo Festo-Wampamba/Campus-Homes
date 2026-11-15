@@ -148,6 +148,10 @@ function PropertyForm({
       setError("Please accept every item in the consent & declaration section.");
       return;
     }
+    if (!isEdit && !coverPhotoFile) {
+      setError("Add one photo of the property. It is only required the first time.");
+      return;
+    }
     setPending(true);
     try {
       let newCoverPhotoKey: string | undefined;
@@ -289,7 +293,7 @@ function PropertyForm({
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="property-photo">Cover photo (optional)</Label>
+            <Label htmlFor="property-photo" required={!isEdit}>{isEdit ? "Cover photo (optional)" : "Property photo"}</Label>
             <div className="flex items-center gap-3">
               {coverPhotoPreview && (
                 // eslint-disable-next-line @next/next/no-img-element -- local blob preview or arbitrary-origin storage URL

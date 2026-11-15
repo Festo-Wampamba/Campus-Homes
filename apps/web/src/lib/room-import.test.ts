@@ -84,8 +84,13 @@ describe("planRoomImport", () => {
     expect(plan([row("A01", "Single Room", "Block B")]).rows[0]!.error).toBeNull();
   });
 
-  it("flags a code listed twice in the file", () => {
-    expect(plan([row("A02", "Single Room"), row("A02", "Single Room")]).rows[1]!.error).toBe("Listed twice in this file");
+  it("tells each copy of a repeated code which other rows hold it", () => {
+    const errors = plan([{ ...row("A02", "Single Room"), rowNumber: 4 }, row("A03", "Single Room"), { ...row("a02", "Single Room"), rowNumber: 9 }]).rows.map((r) => r.error);
+    expect(errors).toEqual([
+      "Listed more than once: also on row 9. Keep one and delete the rest",
+      null,
+      "Listed more than once: also on row 4. Keep one and delete the rest",
+    ]);
   });
 
   it("groups valid rows by room type, building and floor for the bulk endpoint", () => {
@@ -119,8 +124,8 @@ it('does not create a second room when the building was omitted for an existing 
   expect(result.validCount).toBe(0);expect(result.rows[0]?.error).toContain('specify its building');
 });
 it('flags repeated stable room IDs even when their proposed codes differ', () => {
-  const result=planRoomImport([{...row('A01','Single Room'),roomId:'r1'},{...row('Renamed','Single Room'),roomId:'r1'}],[single],existing);
-  expect(result.rows[1]?.error).toContain('Listed twice');
+  const result=planRoomImport([{...row('A01','Single Room'),roomId:'r1'},{...row('Renamed','Single Room'),roomId:'r1',rowNumber:3}],[single],existing);
+  expect(result.rows[1]?.error).toContain('also on row 2');
 });
 
 it('accepts a legacy category/bathroom/rent label without requiring a variant',()=>{
