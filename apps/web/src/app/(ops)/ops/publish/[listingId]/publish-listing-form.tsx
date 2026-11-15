@@ -311,7 +311,6 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
           rows={roomCategoryRows}
           onChange={setRoomCategoryRows}
           showSelfContained
-          showBeds
           idPrefix="publish-room"
         />
       </div>
@@ -378,7 +377,7 @@ function AmenityConfirmation({
             {group.title}
           </p>
           {group.declared.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">{group.declared.map(checkbox)}</div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">{group.declared.map(checkbox)}</div>
           ) : (
             <p className="text-sm text-muted-foreground">The landlord declared none.</p>
           )}
@@ -389,7 +388,7 @@ function AmenityConfirmation({
           <summary className="cursor-pointer text-sm font-medium">
             Add something the landlord didn&apos;t list
           </summary>
-          <div className="mt-2 grid grid-cols-2 gap-2">{others.map(checkbox)}</div>
+          <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">{others.map(checkbox)}</div>
         </details>
       )}
     </fieldset>

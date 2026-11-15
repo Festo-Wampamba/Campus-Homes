@@ -56,12 +56,13 @@ describe('syncVisitSchema photo staging', () => {
     expect(parsed.success).toBe(true);
   });
 
-  it('rejects a sync with no photos', () => {
-    expect(syncVisitSchema.safeParse({ ...base, photoStorageKeys: [] }).success).toBe(false);
+  // The one-photo rule lives in OpsService.syncVisit: it depends on the property.
+  it('accepts a sync with no photos', () => {
+    expect(syncVisitSchema.safeParse({ ...base, photoStorageKeys: [] }).success).toBe(true);
   });
 
   it('rejects a sync that omits photos entirely', () => {
-    expect(syncVisitSchema.safeParse(base).error?.issues[0]?.message).toBe('Add at least one photo');
+    expect(syncVisitSchema.safeParse(base).success).toBe(false);
   });
 
   it('rejects a category outside the catalogue', () => {

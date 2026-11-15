@@ -1209,6 +1209,10 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
     const property = (
       await pool.query(`SELECT id FROM properties LIMIT 1`)
     ).rows[0].id as string;
+    // These syncs carry no photos, which only a repeat visit to an already-verified property may do.
+    await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key, result, approved_at)
+       VALUES ($1, $2, 'earlier-approved-visit', 'passed', now()) RETURNING id`, [property, inspector]);
     visitId = await seed(
       `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
        VALUES ($1, $2, 'server-created-sync-test') RETURNING id`,
@@ -1254,6 +1258,23 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
       result: 'passed',
       lat: '0.3300000',
     });
+  });
+
+  it('refuses a first inspection with no photos', async () => {
+    const property = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+       VALUES ($1, 'Never Inspected Hostel', 'Kikoni', 'active', 0.336, 32.581, 'MUK') RETURNING id`, [landlord1]);
+    const bareVisit = await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
+       VALUES ($1, $2, 'server-created-no-photo') RETURNING id`, [property, inspector]);
+
+    const attempt = ops.syncVisit({ userId: inspector, role: 'ops_inspector', mfaVerified: true }, {
+      clientIdempotencyKey: 'sync-key-no-photo-0000001', visitId: bareVisit, checklist: FULL_CHECKLIST as never,
+      visitGpsLat: 0.33, visitGpsLon: 32.57, startedAt: new Date(Date.now() - 3600_000).toISOString(),
+      completedAt: new Date().toISOString(), result: 'passed', photoStorageKeys: [],
+    });
+
+    await expect(attempt).rejects.toThrow('Add at least one photo');
   });
 });
 
