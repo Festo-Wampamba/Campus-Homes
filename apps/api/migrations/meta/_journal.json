@@ -652,6 +652,13 @@
       "when": 1794708000000,
       "tag": "0093_republish_relisted_properties",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1794794400000,
+      "tag": "0094_listed_semester_pricing",
+      "breakpoints": true
     }
   ]
 }

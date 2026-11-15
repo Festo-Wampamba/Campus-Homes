@@ -1402,6 +1402,23 @@ export class RoomManagementService {
          reviewed_by=$2, reviewed_at=now(), reviewer_notes=$3, rejection_reason=NULL, updated_at=now() WHERE id=$1`,
       [set.id, reviewerId, notes],
     );
+    // Public search only counts rooms priced for the listing's own semester.
+    // Manage Rooms may be working under another semester of the same period
+    // (Campushomes Villas, 2026-11-15: 10 rooms priced for a semester with no
+    // listing, so the live listing showed nothing). Prices written under a
+    // semester this property is not listed for follow to the ones it is.
+    await client.query(
+      `INSERT INTO unit_semester_pricing(unit_id, semester_id, price_per_term_ugx, deposit_ugx)
+       SELECT u.id, l.semester_id, usp.price_per_term_ugx, usp.deposit_ugx
+       FROM listings l
+       JOIN units u ON u.property_id = l.property_id AND u.archived_at IS NULL
+       JOIN unit_semester_pricing usp ON usp.unit_id = u.id AND usp.semester_id = $2
+       WHERE l.property_id = $1 AND l.status IN ('verified','suspended')
+         AND NOT EXISTS (SELECT 1 FROM listings own WHERE own.property_id = $1 AND own.semester_id = $2)
+       ON CONFLICT (unit_id, semester_id) DO UPDATE SET
+         price_per_term_ugx = EXCLUDED.price_per_term_ugx, deposit_ugx = EXCLUDED.deposit_ugx`,
+      [set.property_id, set.semester_id],
+    );
     return created;
   }
 
