@@ -31,7 +31,8 @@ export function CreateListingToPublish({
   semesters: OpsPublishableSemester[];
 }) {
   const router = useRouter();
-  const [semesterId, setSemesterId] = useState("");
+  // One choice is no choice: don't make the lead pick it.
+  const [semesterId, setSemesterId] = useState(semesters.length === 1 ? semesters[0].id : "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

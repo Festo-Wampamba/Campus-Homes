@@ -106,6 +106,35 @@ export default async function VisitDetailPage({
           </CardContent>
         </Card>
 
+        {/* Publish step sits right under the approval, not below the checklist where it was missed (2026-11-15). */}
+        {visit.approvedAt && listings.length > 0 && (
+          <Card>
+            <CardContent className="flex items-center justify-between gap-3 p-5">
+              <p className="text-sm text-muted-foreground">Ready to publish</p>
+              <Link
+                href={`/ops/publish/${listings[0].id}`}
+                className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
+              >
+                Publish
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+
+        {!publishLoadFailed && visit.approvedAt && visit.result === "passed" && listings.length === 0 && (
+          <Card>
+            <CardContent className="space-y-3 p-5">
+              <p className="text-sm text-muted-foreground">
+                This property has no listing yet. Pick the semester to publish it for.
+              </p>
+              <CreateListingToPublish
+                propertyId={visit.propertyId}
+                semesters={publishableSemesters}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {VERIFICATION_CHECKLIST_COMPONENTS.map((component) => {
           const entry = visit.checklist[component];
           const itemCorrections = visit.corrections.filter((c) => c.component === component);
@@ -145,19 +174,6 @@ export default async function VisitDetailPage({
           );
         })}
 
-        {visit.approvedAt && listings.length > 0 && (
-          <Card>
-            <CardContent className="flex items-center justify-between gap-3 p-5">
-              <p className="text-sm text-muted-foreground">Ready to publish</p>
-              <Link
-                href={`/ops/publish/${listings[0].id}`}
-                className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs transition-colors duration-150 hover:bg-teal-700"
-              >
-                Publish
-              </Link>
-            </CardContent>
-          </Card>
-        )}
 
         {canFixHere && visit.corrections.some((c) => c.status === "open") && (
           <Card>
@@ -183,19 +199,6 @@ export default async function VisitDetailPage({
           </Card>
         )}
 
-        {!publishLoadFailed && visit.approvedAt && visit.result === "passed" && listings.length === 0 && (
-          <Card>
-            <CardContent className="space-y-3 p-5">
-              <p className="text-sm text-muted-foreground">
-                This property has no listing yet. Pick the semester to publish it for.
-              </p>
-              <CreateListingToPublish
-                propertyId={visit.propertyId}
-                semesters={publishableSemesters}
-              />
-            </CardContent>
-          </Card>
-        )}
       </div>
     </>
   );

@@ -430,7 +430,6 @@ export function OnboardingWizard({
                   onChange={setRoomCategoryRows}
                   idPrefix="onboarding-room"
                   showSelfContained
-                  showBeds
                   // Manage-only properties need no photos: nothing is shown to students.
                   showPhotos={listingIntent === "list"}
                 />

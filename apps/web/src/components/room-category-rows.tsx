@@ -79,7 +79,6 @@ export function RoomCategoryRows({
   onChange,
   idPrefix,
   showSelfContained = false,
-  showBeds = false,
   showRoomCount = true,
   showPhotos = false,
 }: {
@@ -89,8 +88,6 @@ export function RoomCategoryRows({
   // Landlord-facing forms only — the Ops publish form doesn't use this flag,
   // so it stays hidden there rather than showing a checkbox with no effect.
   showSelfContained?: boolean;
-  // Ops publish form: per-row "Beds per room" input.
-  showBeds?: boolean;
   showRoomCount?: boolean;
   // Landlord forms: per-row photos of that room type.
   showPhotos?: boolean;
@@ -185,23 +182,6 @@ export function RoomCategoryRows({
               onChange={(e) => update(row.key, { roomCount: e.target.value })}
             />
           </div>
-          )}
-          {showBeds && (
-            <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
-              <Label htmlFor={`${idPrefix}-beds-${i}`}>Beds per room</Label>
-              <Input
-                id={`${idPrefix}-beds-${i}`}
-                type="number"
-                min={1}
-                max={20}
-                inputMode="numeric"
-                // Fixed types always sleep their named count; existing rooms
-                // keep their beds (change those through room management).
-                disabled={FIXED_BEDS_PER_ROOM[row.category] !== undefined || Boolean(row.unitIds?.length)}
-                value={FIXED_BEDS_PER_ROOM[row.category] ?? row.bedsPerRoom ?? "1"}
-                onChange={(e) => update(row.key, { bedsPerRoom: e.target.value })}
-              />
-            </div>
           )}
           <div className="row-span-2 grid min-w-0 grid-rows-subgrid gap-1.5">
             <Label htmlFor={`${idPrefix}-price-${i}`}>Price per bed / semester (UGX)</Label>

@@ -230,6 +230,19 @@ WITH available_beds AS (
     )
     AND ($13::text IS NULL OR p.catchment = $13::university)
     AND ($14::text IS NULL OR p.gender_arrangement = $14)
+    ${saved ? '' : `-- One card per property: a hostel listed for two semesters of the same
+    -- period showed twice (Campushomes Villas, 2026-11-15). Keep the listing
+    -- verified last among those that still have a matching free bed.
+    AND NOT EXISTS (
+      SELECT 1
+      FROM listings newer
+      JOIN available_summary newer_available ON newer_available.listing_id = newer.id
+      WHERE newer.property_id = l.property_id
+        AND newer.status = 'verified'
+        AND newer.id <> l.id
+        AND (COALESCE(newer.verified_at, 'epoch'::timestamptz), newer.id)
+          > (COALESCE(l.verified_at, 'epoch'::timestamptz), l.id)
+    )`}
 )
 `;
 

@@ -325,7 +325,6 @@ function PropertyForm({
             onChange={setRoomCategoryRows}
             idPrefix={isEdit ? `edit-${property.id}` : "add-property"}
             showSelfContained
-            showBeds
             showPhotos={!managedOnly}
           />
         </div>

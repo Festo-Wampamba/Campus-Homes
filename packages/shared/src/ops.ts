@@ -256,6 +256,8 @@ export const opsQueueRowSchema = z.object({
   age_hours: z.coerce.number(),
   // Its approved visit predates a switch back to listing (0076): schedule a new one.
   needs_reinspection: z.boolean().default(false),
+  // Inspected and approved, but nothing published yet: the lead still has to publish.
+  ready_to_publish: z.boolean().nullable().default(false),
 });
 export type OpsQueueRow = z.infer<typeof opsQueueRowSchema>;
 

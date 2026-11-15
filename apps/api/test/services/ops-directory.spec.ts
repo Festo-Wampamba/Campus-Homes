@@ -174,6 +174,8 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, 'directory-test-visit-d-approved', 'passed', $4, now()) RETURNING id`,
     [propertyD, inspectorInactive, fullChecklist, opsLead],
   );
+  // Published too: an approved property with nothing published stays in the queue.
+  await seed(`INSERT INTO listings (property_id, semester_id, status) VALUES ($1, $2, 'verified') RETURNING id`, [propertyD, semester]);
 });
 
 afterAll(async () => {
@@ -190,7 +192,32 @@ describe('queue', () => {
     expect(byId.get(propertyB)?.result).toBe('pending');
     expect(byId.has(propertyC)).toBe(true); // latest visit: failed
     expect(byId.get(propertyC)?.result).toBe('failed');
-    expect(byId.has(propertyD)).toBe(false); // latest visit: passed and approved
+    expect(byId.has(propertyD)).toBe(false); // latest visit: passed, approved and published
+  });
+
+  // Campushomes Executives, 2026-11-15: approved, never published, and gone
+  // from the queue with no way back to the publish step.
+  it('keeps an approved property that was never published, marked ready to publish', async () => {
+    // Same landlord and approved checklist as propertyD, minus the listing.
+    const propertyE = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, catchment)
+       SELECT landlord_id, 'Property E', 'Bukoto', 'active', 'MUK' FROM properties WHERE id = $1 RETURNING id`,
+      [propertyD],
+    );
+    const visitE = await seed(
+      `INSERT INTO verification_visits
+         (property_id, inspector_id, checklist, client_idempotency_key, result, approved_by, approved_at)
+       SELECT $1, inspector_id, checklist, 'directory-test-visit-e-approved', 'passed', approved_by, now()
+       FROM verification_visits WHERE property_id = $2 RETURNING id`,
+      [propertyE, propertyD],
+    );
+
+    const rows = (await ops.queue(leadCtx())) as Array<{ id: string; ready_to_publish: boolean }>;
+    // Removed again: other tests in this file assert exact property lists.
+    await pool.query(`DELETE FROM verification_visits WHERE id = $1`, [visitE]);
+    await pool.query(`DELETE FROM properties WHERE id = $1`, [propertyE]);
+
+    expect(rows.find((row) => row.id === propertyE)?.ready_to_publish).toBe(true);
   });
 });
 
