@@ -343,8 +343,8 @@ export class RoomManagementService {
       return unit.property_id;
   }
 
-  /** Removing inventory never needs a new inspection. Archive instead of
-   * hard-deleting so past reservations, payments and photos retain their links. */
+  /** Removing inventory never needs a new inspection. Rooms are deleted for
+   * good; one that past reservations or payments point to is archived. */
   async deleteRooms(ctx: RlsContext, propertyId: string, input: BatchRoomDeleteInput) {
     const result = await this.rlsDb.run({ ...ctx, role: 'service_role' }, async (_db, client) => {
       await this.assertPropertyOwner(client, propertyId, ctx.userId);
@@ -364,7 +364,7 @@ export class RoomManagementService {
       }
       await this.cancelEmptyInventoryRequests(client, propertyId);
       await recordOperationsNotice(client, propertyId, 'room_changes.applied',
-        `${removed.length + discarded} rooms removed by the landlord. Applied immediately; no approval is needed.`,
+        `${removed.length + discarded} rooms removed by {landlord}. Applied immediately; no approval is needed.`,
         { changes: removed.map((label) => ({ label: `${label} · Room`, before: 'Active', after: 'Removed' })) });
       return { discarded, staged: 0, archived: removed.length, applied: true };
     });
@@ -412,7 +412,7 @@ export class RoomManagementService {
       await client.query('UPDATE room_types SET archived_at=now(),updated_at=now() WHERE id=$1', [roomTypeId]);
       await this.cancelEmptyInventoryRequests(client, type.property_id);
       await recordOperationsNotice(client, type.property_id, 'room_changes.applied',
-        `The landlord removed room type ${title.rows[0]?.title ?? 'Room type'} and ${units.rows.length} unused rooms. No approval is needed.`,
+        `{landlord} removed room type ${title.rows[0]?.title ?? 'Room type'} and ${units.rows.length} unused rooms. No approval is needed.`,
         { changes: [{ label: 'Room type', before: title.rows[0]?.title ?? 'Room type', after: 'Removed' },
           ...units.rows.map((unit) => ({ label: `${unit.label} · Room`, before: 'Active', after: 'Removed' }))] });
       return { propertyId: type.property_id, archivedRooms: units.rows.length, applied: true };
@@ -433,7 +433,32 @@ export class RoomManagementService {
     await client.query(
       `DELETE FROM room_unit_changes c USING room_inventory_change_sets cs
        WHERE c.unit_id=$1 AND c.change_set_id=cs.id AND cs.status IN ('draft','rejected','pending_review','visit_required')`, [unitId]);
-    await client.query(`UPDATE units SET archived_at=now(),operational_status='blocked' WHERE id=$1`, [unitId]);
+    // A staged room with this code in any open change set (another semester's
+    // is not shown in Manage Rooms) would refuse the code on re-upload.
+    await client.query(
+      `DELETE FROM room_unit_changes c USING room_inventory_change_sets cs, units u
+       WHERE u.id=$1 AND cs.id=c.change_set_id AND cs.property_id=u.property_id
+         AND cs.status IN ('draft','rejected','pending_review','visit_required') AND c.action IN ('create','update')
+         AND lower(c.proposed_data->>'roomCode')=lower(u.label)
+         AND lower(COALESCE(c.proposed_data->>'buildingName',''))=lower(COALESCE(u.building_name,''))`, [unitId]);
+    // Permanent delete (Festo, 2026-11-15). A room that past bookings or
+    // payments still point to cannot go, so it is archived instead; an
+    // archived room never blocks its code from being used again.
+    await client.query('SAVEPOINT remove_room');
+    try {
+      // Applied change records are review history: keep them (proposed_data
+      // holds the room code) and only drop the link to the deleted room.
+      await client.query('UPDATE room_unit_changes SET unit_id=NULL WHERE unit_id=$1', [unitId]);
+      await client.query('DELETE FROM unit_blocks WHERE unit_id=$1', [unitId]);
+      await client.query('DELETE FROM beds WHERE unit_id=$1', [unitId]);
+      await client.query('DELETE FROM units WHERE id=$1', [unitId]);
+      await client.query('RELEASE SAVEPOINT remove_room');
+    } catch (error) {
+      // 23503 foreign key, 23001 ON DELETE RESTRICT: history still points here.
+      if (!['23503', '23001'].includes((error as { code?: string }).code ?? '')) throw error;
+      await client.query('ROLLBACK TO SAVEPOINT remove_room');
+      await client.query(`UPDATE units SET archived_at=now(),operational_status='blocked' WHERE id=$1`, [unitId]);
+    }
   }
 
   private async cancelEmptyInventoryRequests(client: PoolClient, propertyId: string) {
@@ -1425,7 +1450,7 @@ export class RoomManagementService {
     });
     const created = await this.applyOpenChangeSets(client, propertyId, landlordId, statuses, 'Applied at once: this property is past its first Operations approval');
     for (const notice of notices) await recordOperationsNotice(client, propertyId, 'room_changes.applied',
-      `A landlord changed rooms at ${notice.summary}. The changes are live; no approval is needed.`,
+      `{landlord} changed rooms at ${notice.summary}. The changes are live; no approval is needed.`,
       { changeSetId: notice.id, changes: notice.changes });
     return created;
   }

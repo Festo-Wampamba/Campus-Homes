@@ -537,3 +537,89 @@ it('unpublishes without removing rooms, then permanently deletes only the confir
   expect((await pool.query('SELECT id FROM reservations WHERE id=$1',[reservationId])).rows).toHaveLength(0);
   expect((await pool.query('SELECT id FROM payments WHERE reservation_id=$1',[reservationId])).rows).toHaveLength(0);
 });
+
+describe('landlord republish (0091)', () => {
+  const listingState = async (propertyId: string) => (await pool.query(
+    `SELECT l.status, p.listing_intent AS intent FROM listings l JOIN properties p ON p.id=l.property_id WHERE p.id=$1`, [propertyId])).rows[0];
+
+  it('puts an unpublished property back to students without a new inspection', async () => {
+    const propertyId = await liveListedProperty('Republish Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+
+    await listings.republishProperty(landlordCtx, propertyId);
+
+    expect(await listingState(propertyId)).toEqual({ status: 'verified', intent: 'list' });
+  });
+
+  it('refuses a listing that Operations suspended', async () => {
+    const propertyId = await liveListedProperty('Ops Suspended Hostel');
+    await pool.query(`UPDATE listings SET status='suspended' WHERE property_id=$1`, [propertyId]);
+
+    await expect(listings.republishProperty(landlordCtx, propertyId)).rejects.toThrow('unpublished yourself');
+  });
+
+  it('leaves a refused property unlisted', async () => {
+    const propertyId = await liveListedProperty('Ops Suspended Stays Hostel');
+    await pool.query(`UPDATE listings SET status='suspended' WHERE property_id=$1`, [propertyId]);
+    await pool.query(`UPDATE properties SET listing_intent='manage_only' WHERE id=$1`, [propertyId]);
+
+    await listings.republishProperty(landlordCtx, propertyId).catch(() => undefined);
+
+    expect(await listingState(propertyId)).toEqual({ status: 'suspended', intent: 'manage_only' });
+  });
+
+  it('refuses after Operations published and suspended it again since the unpublish', async () => {
+    const propertyId = await liveListedProperty('Stale Marker Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await listings.republishProperty(landlordCtx, propertyId);
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await pool.query(`UPDATE properties SET listing_intent='list' WHERE id=$1`, [propertyId]);
+    await pool.query(`UPDATE listings SET status='verified' WHERE property_id=$1`, [propertyId]);
+    await pool.query(`UPDATE listings SET status='suspended' WHERE property_id=$1`, [propertyId]);
+
+    await expect(listings.republishProperty(landlordCtx, propertyId)).rejects.toThrow('unpublished yourself');
+  });
+
+  it('refuses a landlord whose identity is no longer verified', async () => {
+    const propertyId = await liveListedProperty('Unverified Republish Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+    await pool.query(`UPDATE landlords SET kyc_status='rejected' WHERE user_id=$1`, [landlordCtx.userId]);
+
+    const attempt = listings.republishProperty(landlordCtx, propertyId);
+
+    await expect(attempt).rejects.toThrow('cannot be republished');
+    await pool.query(`UPDATE landlords SET kyc_status='verified' WHERE user_id=$1`, [landlordCtx.userId]);
+  });
+
+  it('marks an unpublished property as republishable in the landlord list', async () => {
+    const propertyId = await liveListedProperty('Republishable Flag Hostel');
+    await listings.unpublishProperty(landlordCtx, propertyId);
+
+    const mine = await listings.myProperties(landlordCtx);
+
+    expect(mine.find((property) => property.id === propertyId)?.canRepublish).toBe(true);
+  });
+});
+
+describe('permanent room delete', () => {
+  it('lets a deleted room code be added again', async () => {
+    const propertyId = await liveListedProperty('Reuse Code Hostel');
+    const typeId = await roomType(propertyId);
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'A2' });
+    await rooms.deleteRooms(landlordCtx, propertyId, { roomIds: [room.id] });
+
+    const again = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'A2' });
+
+    expect(again.roomCode).toBe('A2');
+  });
+
+  it('removes the room row itself, not just hides it', async () => {
+    const propertyId = await liveListedProperty('Hard Delete Hostel');
+    const typeId = await roomType(propertyId);
+    const room = await rooms.createRoom(landlordCtx, propertyId, { roomTypeId: typeId, roomCode: 'A3' });
+
+    await rooms.deleteRooms(landlordCtx, propertyId, { roomIds: [room.id] });
+
+    expect((await pool.query('SELECT id FROM units WHERE id=$1', [room.id])).rows).toHaveLength(0);
+  });
+});

@@ -733,16 +733,18 @@ function ListingIntentPanel({
         <p className="text-sm font-semibold text-foreground">{manageOnly ? "Manage only" : "Manage and list"}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {manageOnly
-            ? "Not shown to students. List it whenever you want students to find it; CampusHomes inspects it first."
+            ? property.canRepublish
+              ? "You unpublished this property. Republish it whenever you want; no new inspection is needed."
+              : "Not shown to students. List it whenever you want students to find it; CampusHomes inspects it first."
             : property.hasLiveListing
-              ? "Listed to students. To stop listing it, contact CampusHomes support."
+              ? "Listed to students. Use the eye button on the property to unpublish it."
               : "CampusHomes inspects this property before its rooms are shown to students."}
         </p>
         {error && <p role="alert" className="mt-1 text-xs text-destructive">{error}</p>}
       </div>
       {manageOnly ? (
         <Button type="button" size="sm" disabled={pending} onClick={() => switchTo("list")}>
-          {pending ? "Saving…" : "List this property"}
+          {pending ? "Saving…" : property.canRepublish ? "Republish" : "List this property"}
         </Button>
       ) : !property.hasLiveListing ? (
         <Button type="button" variant="secondary" size="sm" disabled={pending} onClick={() => switchTo("manage_only")}>

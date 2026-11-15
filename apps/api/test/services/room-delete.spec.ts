@@ -101,7 +101,7 @@ describe('deleteRooms', () => {
     await rooms.deleteRooms(landlordCtx, propertyId, { roomIds: [unitId] });
 
     expect(await listedRoom(unitId)).toBeUndefined();
-    expect((await pool.query('SELECT archived_at FROM units WHERE id=$1', [unitId])).rows[0].archived_at).not.toBeNull();
+    expect((await pool.query('SELECT id FROM units WHERE id=$1', [unitId])).rows).toHaveLength(0);
   });
 
   it("deletes nothing when one room in the batch isn't this landlord's", async () => {

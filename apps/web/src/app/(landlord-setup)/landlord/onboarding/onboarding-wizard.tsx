@@ -221,6 +221,10 @@ export function OnboardingWizard({
       setError("Please accept every item in the consent & declaration section.");
       return;
     }
+    if (!coverPhotoFile) {
+      setError("Add one photo of the property. It is only required the first time.");
+      return;
+    }
     setPending(true);
     try {
       let coverPhotoKey: string | undefined;
@@ -400,7 +404,7 @@ export function OnboardingWizard({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="propertyPhoto">Cover photo (optional)</Label>
+                <Label htmlFor="propertyPhoto" required>Property photo</Label>
                 <div className="flex items-center gap-3">
                   {coverPhotoPreview && (
                     // eslint-disable-next-line @next/next/no-img-element -- local blob preview
