@@ -1209,8 +1209,10 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
     const property = (
       await pool.query(`SELECT id FROM properties LIMIT 1`)
     ).rows[0].id as string;
-    // These syncs carry no photos, which is allowed once the landlord's photo is on record.
-    await pool.query(`UPDATE properties SET cover_photo_key='landlord/cover' WHERE id=$1`, [property]);
+    // These syncs carry no photos, which only a repeat visit to an already-verified property may do.
+    await seed(
+      `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key, result, approved_at)
+       VALUES ($1, $2, 'earlier-approved-visit', 'passed', now()) RETURNING id`, [property, inspector]);
     visitId = await seed(
       `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
        VALUES ($1, $2, 'server-created-sync-test') RETURNING id`,
@@ -1258,9 +1260,10 @@ describe('offline-sync checklist idempotency (§9 flow 2)', () => {
     });
   });
 
-  it('refuses a sync with no photos while the property has none on record', async () => {
-    const property = (await pool.query(`UPDATE properties SET cover_photo_key=NULL
-      WHERE id=(SELECT property_id FROM verification_visits WHERE id=$1) RETURNING id`, [visitId])).rows[0].id as string;
+  it('refuses a first inspection with no photos', async () => {
+    const property = await seed(
+      `INSERT INTO properties (landlord_id, name, street_address, status, gps_lat, gps_lon, catchment)
+       VALUES ($1, 'Never Inspected Hostel', 'Kikoni', 'active', 0.336, 32.581, 'MUK') RETURNING id`, [landlord1]);
     const bareVisit = await seed(
       `INSERT INTO verification_visits (property_id, inspector_id, client_idempotency_key)
        VALUES ($1, $2, 'server-created-no-photo') RETURNING id`, [property, inspector]);

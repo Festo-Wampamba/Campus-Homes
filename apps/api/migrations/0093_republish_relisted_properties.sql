@@ -20,8 +20,13 @@ WHERE p.id = l.property_id AND l.status = 'suspended' AND l.landlord_unpublished
 ALTER TABLE properties DISABLE TRIGGER properties_listing_intent_guard;
 --> statement-breakpoint
 UPDATE properties p SET listing_requested_at = NULL
-WHERE p.listing_requested_at IS NOT NULL
+WHERE p.listing_requested_at IS NOT NULL AND p.listing_intent = 'list'
   AND EXISTS (SELECT 1 FROM listings l WHERE l.property_id = p.id
-              AND l.status = 'suspended' AND l.landlord_unpublished_at IS NOT NULL);
+              AND l.status = 'suspended' AND l.landlord_unpublished_at IS NOT NULL)
+  AND NOT EXISTS (SELECT 1 FROM listings live WHERE live.property_id = p.id AND live.status = 'verified')
+  AND EXISTS (SELECT 1 FROM audit_log a
+              WHERE a.action = 'property.unpublish' AND a.target_id = p.id AND a.actor_id = p.landlord_id)
+  AND NOT EXISTS (SELECT 1 FROM audit_log a
+                  WHERE a.action = 'properties.listing_intent' AND a.target_id = p.id AND a.actor_id <> p.landlord_id);
 --> statement-breakpoint
 ALTER TABLE properties ENABLE TRIGGER properties_listing_intent_guard;

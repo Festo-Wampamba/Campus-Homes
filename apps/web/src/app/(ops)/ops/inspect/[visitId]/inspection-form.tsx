@@ -458,10 +458,10 @@ export function InspectionForm({
   const manualCoordinates = coordinatesText.trim() ? parseCoordinates(coordinatesText) : null;
   const manualCoordinatesInvalid = coordinatesText.trim() !== "" && !(manualCoordinates && isInUganda(manualCoordinates));
   // Queued photos (still on this device) count too: sync uploads them before
-  // the checklist POST. A property that already has the landlord's photo
-  // needs no new one (Festo, 2026-11-15); the API applies the same rule.
+  // the checklist POST. Only a repeat visit to a property that already passed
+  // inspection may skip the photo (Festo, 2026-11-15); the API applies the same rule.
   const hasPhoto = draft.photos.length + draft.photoStorageKeys.length > 0;
-  const photoRequired = !serverVisit?.propertyCoverPhotoKey;
+  const photoRequired = !serverVisit?.previouslyVerified;
   const canSubmit = allAnswered && draft.result !== null && draft.visitGpsLat !== null && !manualCoordinatesInvalid && (hasPhoto || !photoRequired);
 
   function passAll() {

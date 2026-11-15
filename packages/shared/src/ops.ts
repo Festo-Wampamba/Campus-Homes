@@ -139,7 +139,7 @@ export const syncVisitSchema = z.object({
   // draft saved offline before this deploy. Read it through normalizeVisitPhotos.
   //
   // At least one photo (2026-10-17), enforced in OpsService.syncVisit: it is
-  // waived when the property already has the landlord's cover photo.
+  // waived only for a repeat visit to a property that already passed one.
   // sync-manager.ts uploads every queued offline photo before this POST, so a
   // visit captured offline still arrives with its photos here.
   photoStorageKeys: z
@@ -323,6 +323,9 @@ export const opsVisitDetailSchema = z.object({
   approvedAt: z.string().nullable(),
   corrections: z.array(visitCorrectionSchema),
   propertyCoverPhotoKey: z.string().nullable(),
+  // Another visit to this property already passed and was approved: this
+  // repeat visit may be submitted without a new photo.
+  previouslyVerified: z.boolean().optional(),
 });
 export type OpsVisitDetail = z.infer<typeof opsVisitDetailSchema>;
 

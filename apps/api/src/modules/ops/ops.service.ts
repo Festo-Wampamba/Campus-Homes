@@ -143,6 +143,17 @@ export class OpsService {
     });
   }
 
+  /** True once another visit to this property passed and a lead approved it. */
+  private async previouslyVerified(db: Parameters<Parameters<RlsDb['run']>[1]>[0], propertyId: string, visitId: string) {
+    const [earlier] = await db
+      .select({ id: verificationVisits.id })
+      .from(verificationVisits)
+      .where(and(eq(verificationVisits.propertyId, propertyId), ne(verificationVisits.id, visitId),
+        eq(verificationVisits.result, 'passed'), isNotNull(verificationVisits.approvedAt)))
+      .limit(1);
+    return Boolean(earlier);
+  }
+
   /** Inspector picker for the schedule-visit form. Ops-lead-only read.
    * Includes team='lead' too (MVP full-parity decision) so a lead can
    * self-assign a visit and run it end-to-end without an inspector. */
@@ -223,7 +234,12 @@ export class OpsService {
         .select({ coverPhotoKey: properties.coverPhotoKey })
         .from(properties)
         .where(eq(properties.id, visit.propertyId));
-      return { ...visit, corrections, propertyCoverPhotoKey: property?.coverPhotoKey ?? null };
+      return {
+        ...visit,
+        corrections,
+        propertyCoverPhotoKey: property?.coverPhotoKey ?? null,
+        previouslyVerified: await this.previouslyVerified(db, visit.propertyId, visit.id),
+      };
     });
   }
 
@@ -591,13 +607,10 @@ export class OpsService {
       if (current.approvedAt) {
         throw new ConflictException('This visit has already been approved and can no longer be resubmitted');
       }
-      // One photo is needed only while the property has none on record.
-      if (input.photoStorageKeys.length === 0) {
-        const [property] = await db
-          .select({ coverPhotoKey: properties.coverPhotoKey })
-          .from(properties)
-          .where(eq(properties.id, current.propertyId));
-        if (!property?.coverPhotoKey) throw new BadRequestException('Add at least one photo');
+      // Every first inspection carries the inspector's own photo. Only a
+      // repeat visit to a property that already passed one may go without.
+      if (input.photoStorageKeys.length === 0 && !(await this.previouslyVerified(db, current.propertyId, current.id))) {
+        throw new BadRequestException('Add at least one photo');
       }
       // A resync resubmits the whole photo list; keys already staged on this
       // visit are retained, anything else must be the inspector's own upload.
