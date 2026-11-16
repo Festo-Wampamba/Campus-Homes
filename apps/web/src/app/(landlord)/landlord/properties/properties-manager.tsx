@@ -103,20 +103,27 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
   const [page, setPage] = useState(0);
   const [view, setView] = useState<ViewMode>("grid");
 
-  const [action,setAction]=useState<{property:Property;kind:"delete"|"unpublish"|"republish"}|null>(null);
+  const [action,setAction]=useState<{property:Property;kind:"delete"|"unpublish"|"republish"|"publish"}|null>(null);
   const [confirmName,setConfirmName]=useState("");
   const [ack,setAck]=useState(false);
   const [busy,setBusy]=useState(false);
   const [actionError,setActionError]=useState<string|null>(null);
   async function applyAction(){
     if(!action)return;setBusy(true);setActionError(null);
-    try{await api(`/listings/properties/${action.property.id}/${action.kind}`,{method:"POST",...(action.kind==="delete"?{body:JSON.stringify({confirmationName:confirmName,acknowledgeIrreversible:ack})}:{})});setAction(null);router.refresh();}
+    try{
+      // A property never published yet: listing it sends it to CampusHomes for its one inspection.
+      if(action.kind==="publish") await api(`/listings/properties/${action.property.id}/listing-intent`,{method:"PATCH",body:JSON.stringify({listingIntent:"list"})});
+      else await api(`/listings/properties/${action.property.id}/${action.kind}`,{method:"POST",...(action.kind==="delete"?{body:JSON.stringify({confirmationName:confirmName,acknowledgeIrreversible:ack})}:{})});setAction(null);router.refresh();}
     catch(error){setActionError(apiErrorMessage(error,"Could not update this property. Try again."));}finally{setBusy(false);}
   }
+  // Already submitted for listing: only CampusHomes' first inspection publishes it.
+  const awaitingFirstVisit=action?.kind==="publish"&&action.property.listingIntent==="list";
   function propertyActions(property:Property){return <span className="inline-flex flex-wrap gap-1" onClick={(e)=>e.stopPropagation()}>
     {/* Open eye = students can see it (press to unpublish); crossed eye = hidden (press to republish). */}
     {property.hasLiveListing && <Button type="button" variant="ghost" size="icon" title="Published. Unpublish" aria-label={`${property.name} is published. Unpublish`} onClick={()=>{setActionError(null);setAction({property,kind:"unpublish"});}}><Eye aria-hidden className="size-4"/></Button>}
     {!property.hasLiveListing && property.canRepublish && <Button type="button" variant="ghost" size="icon" title="Unpublished. Republish" aria-label={`${property.name} is unpublished. Republish`} onClick={()=>{setActionError(null);setAction({property,kind:"republish"});}}><EyeOff aria-hidden className="size-4"/></Button>}
+    {/* Every property has the eye (Festo, 2026-11-16): one never published explains what publishes it. */}
+    {!property.hasLiveListing && !property.canRepublish && <Button type="button" variant="ghost" size="icon" title="Not published yet" aria-label={`${property.name} is not published yet`} onClick={()=>{setActionError(null);setAction({property,kind:"publish"});}}><EyeOff aria-hidden className="size-4"/></Button>}
     <Button type="button" variant="ghost" size="icon" className="text-destructive" aria-label={`Delete ${property.name}`} onClick={()=>{setConfirmName("");setAck(false);setActionError(null);setAction({property,kind:"delete"});}}><Trash2 aria-hidden className="size-4"/></Button>
   </span>;}
 
@@ -341,12 +348,12 @@ export function PropertiesManager({ properties }: { properties: Property[] }) {
       )}
 
       <Dialog open={action!==null} onOpenChange={(open)=>{if(!open&&!busy)setAction(null);}} dismissible={!busy} size="sm">
-        <DialogHeader title={action?.kind==="delete"?"Permanently delete property?":action?.kind==="republish"?"Republish property?":"Unpublish property?"} onClose={()=>{if(!busy)setAction(null);}}/>
+        <DialogHeader title={action?.kind==="delete"?"Permanently delete property?":action?.kind==="republish"?"Republish property?":action?.kind==="publish"?(awaitingFirstVisit?"Not published yet":"Publish property?"):"Unpublish property?"} onClose={()=>{if(!busy)setAction(null);}}/>
         <DialogBody className="space-y-4 text-sm">
-          {action?.kind==="delete"?<><p className="flex gap-2 font-semibold text-destructive"><AlertTriangle aria-hidden className="size-5 shrink-0"/>This cannot be undone.</p><p>Deleting {action.property.name} permanently removes its rooms and listing data. A property with current tenants, bookings or recorded payments cannot be deleted; unpublish it instead. You may be asked to sign in again first.</p><label className="block">Type the property name to confirm<Input value={confirmName} onChange={(e)=>setConfirmName(e.target.value)} autoComplete="off"/></label><label className="flex gap-3"><input type="checkbox" checked={ack} onChange={(e)=>setAck(e.target.checked)}/>I understand this permanently deletes this property and its records.</label></>:action?.kind==="republish"?<p>The property will be visible to students again straight away. No new inspection is needed; CampusHomes is told that you republished it.</p>:<p>The property will be hidden from public listings. Its rooms, bookings and tenant records remain available to you. You can republish it at any time.</p>}
+          {action?.kind==="delete"?<><p className="flex gap-2 font-semibold text-destructive"><AlertTriangle aria-hidden className="size-5 shrink-0"/>This cannot be undone.</p><p>Deleting {action.property.name} permanently removes its rooms and listing data. A property with current tenants, bookings or recorded payments cannot be deleted; unpublish it instead. You may be asked to sign in again first.</p><label className="block">Type the property name to confirm<Input value={confirmName} onChange={(e)=>setConfirmName(e.target.value)} autoComplete="off"/></label><label className="flex gap-3"><input type="checkbox" checked={ack} onChange={(e)=>setAck(e.target.checked)}/>I understand this permanently deletes this property and its records.</label></>:action?.kind==="publish"?(awaitingFirstVisit?<p>CampusHomes inspects a property once before students can see it. {action.property.name} is waiting for that visit; you don&apos;t need to do anything. After it is published you can unpublish and republish it yourself with this button.</p>:<p>{action.property.name} is managed privately, so students can&apos;t see it. Listing it asks CampusHomes for its one inspection. After that you can unpublish and republish it yourself.</p>):action?.kind==="republish"?<p>The property will be visible to students again straight away. No new inspection is needed; CampusHomes is told that you republished it.</p>:<p>The property will be hidden from public listings. Its rooms, bookings and tenant records remain available to you. You can republish it at any time.</p>}
           {actionError&&<p role="alert" className="text-destructive">{actionError}</p>}
         </DialogBody>
-        <DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setAction(null)}>Cancel</Button><Button variant={action?.kind==="delete"?"destructive":"primary"} disabled={busy||(action?.kind==="delete"&&(!ack||confirmName!==action.property.name))} onClick={()=>void applyAction()}>{busy?"Working…":action?.kind==="delete"?"Permanently delete":action?.kind==="republish"?"Republish":"Unpublish"}</Button></DialogFooter>
+        <DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setAction(null)}>{awaitingFirstVisit?"Close":"Cancel"}</Button>{!awaitingFirstVisit&&<Button variant={action?.kind==="delete"?"destructive":"primary"} disabled={busy||(action?.kind==="delete"&&(!ack||confirmName!==action.property.name))} onClick={()=>void applyAction()}>{busy?"Working…":action?.kind==="delete"?"Permanently delete":action?.kind==="republish"?"Republish":action?.kind==="publish"?"List this property":"Unpublish"}</Button>}</DialogFooter>
       </Dialog>
       <PropertyFormDialog
         open={formOpen}
