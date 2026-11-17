@@ -20,6 +20,17 @@ overrides:
   body-parser@<2.4.0: 2.4.0
   multer@<2.5.0: 2.5.0
 
+# Allowed 2026-11-18 (Festo): picomatch ReDoS (GHSA-fc5q-39xc-vjpf) has no
+# patched release yet (fix is 4.0.8, unpublished). The only production path
+# (`pnpm why picomatch -r --prod`) is next-intl > @parcel/watcher, a file
+# watcher used at build/dev time, not on any request path. Dev tooling (jest,
+# tinyglobby, fdir) also pulls picomatch but is not deployed. The ignore covers
+# this one advisory only; any new picomatch advisory still fails CI.
+# Remove this and add `picomatch@>=4.0.0 <4.0.8: 4.0.8` to overrides once 4.0.8 ships.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
+
 catalog:
   zod: ^4.6.6
   typescript: ^5.9.3

@@ -1276,7 +1276,35 @@ export class OpsService {
         SELECT EXISTS(SELECT 1 FROM room_types WHERE property_id=${listing.propertyId})
           OR EXISTS(SELECT 1 FROM units WHERE property_id=${listing.propertyId}) AS initialized
       `);
+      // Room types already registered (onboarding approval, Manage Rooms, Ops
+      // specifications), so the form shows them instead of asking again.
+      // One RLS-policied table per statement (see CLAUDE.md).
+      const activeTypes = await db
+        .select({ id: roomTypes.id, versionId: roomTypes.currentVersionId })
+        .from(roomTypes)
+        .where(and(eq(roomTypes.propertyId, listing.propertyId), isNull(roomTypes.archivedAt), isNotNull(roomTypes.currentVersionId)));
+      const typeVersions = activeTypes.length
+        ? await db
+            .select({
+              id: roomTypeVersions.id,
+              title: roomTypeVersions.title,
+              category: roomTypeVersions.category,
+              bathroomType: roomTypeVersions.bathroomType,
+              capacity: roomTypeVersions.capacity,
+              semesterId: roomTypeVersions.semesterId,
+              pricePerTermUgx: roomTypeVersions.pricePerTermUgx,
+              depositUgx: roomTypeVersions.depositUgx,
+            })
+            .from(roomTypeVersions)
+            .where(inArray(roomTypeVersions.id, activeTypes.map((t) => t.versionId!)))
+        : [];
+      const versionById = new Map(typeVersions.map(({ id, ...v }) => [id, v]));
+      const roomTypeList = activeTypes.flatMap((t) => {
+        const v = versionById.get(t.versionId!);
+        return v ? [{ id: t.id, ...v }] : [];
+      });
       return { listing, property, visitPhotoCount, visitPhotos, photos, version,
+        roomTypes: roomTypeList,
         inventoryInitialized: history.rows[0]?.initialized === true };
     });
   }

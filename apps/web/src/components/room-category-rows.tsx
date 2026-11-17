@@ -33,6 +33,9 @@ export type RoomCategoryRow = {
   // get zipped against these at submit time — the first N reuse an existing
   // room (just priced for this semester), any extra create new ones.
   unitIds?: string[];
+  // Ops publish form only: the existing room type this row shows, so submit
+  // doesn't save it again as a new specification.
+  roomTypeId?: string;
   // Ops publish form only: bed spaces in each room of this row. Fixed for
   // single/double/triple/quad; set by the lead for the variable types.
   bedsPerRoom?: string;
@@ -134,7 +137,10 @@ export function RoomCategoryRows({
         Price is per bed, not per room. For a Double or Triple, enter what one bed costs, the same
         number you&apos;d quote a student moving into just one space in that room.
       </p>
-      {rows.map((row, i) => (
+      {rows.map((row, i) => {
+        // A room type the property already has: shown, not edited here (Manage Rooms owns it).
+        const locked = Boolean(row.roomTypeId);
+        return (
         <div
           key={row.key}
           className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl border border-border p-4 @md:grid-cols-[repeat(auto-fit,minmax(13rem,1fr))]"
@@ -144,6 +150,7 @@ export function RoomCategoryRows({
             <select
               id={`${idPrefix}-category-${i}`}
               value={row.category}
+              disabled={locked}
               onChange={(e) => update(row.key, { category: e.target.value as RoomCategory })}
               className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-base text-foreground shadow-xs transition-colors duration-150 focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10"
             >
@@ -166,6 +173,7 @@ export function RoomCategoryRows({
               value={row.customLabel}
               maxLength={40}
               placeholder={row.category === "other" ? "e.g. Penthouse suite" : "Variant (optional), e.g. Executive, Mini"}
+              disabled={locked}
               onChange={(e) => update(row.key, { customLabel: e.target.value })}
             />
           </div>
@@ -191,6 +199,7 @@ export function RoomCategoryRows({
               min={1}
               inputMode="numeric"
               value={row.pricePerTermUgx}
+              disabled={locked}
               onChange={(e) => update(row.key, { pricePerTermUgx: e.target.value })}
             />
           </div>
@@ -202,15 +211,22 @@ export function RoomCategoryRows({
               min={0}
               inputMode="numeric"
               value={row.depositUgx}
+              disabled={locked}
               onChange={(e) => update(row.key, { depositUgx: e.target.value })}
             />
           </div>
+          {locked && (
+            <p className="col-span-full text-xs text-muted-foreground">
+              Saved room type. To change its name, price or beds, edit it in Manage Rooms.
+            </p>
+          )}
           <div className="col-span-full mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             {showSelfContained && (
               <label className="flex min-h-11 items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={row.selfContained}
+                  disabled={locked}
                   onChange={(e) => update(row.key, { selfContained: e.target.checked })}
                 />
                 Self-contained
@@ -272,7 +288,8 @@ export function RoomCategoryRows({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
       {photoError && <p className="text-sm font-semibold text-destructive">{photoError}</p>}
       {rows.length === 0 && (
         <p className="text-sm text-muted-foreground">No room types added yet.</p>

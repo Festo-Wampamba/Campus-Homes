@@ -95,6 +95,45 @@ export function rowsFromExistingRooms(rooms: PropertyRoom[]): RoomCategoryRow[] 
   return [...groups.values()];
 }
 
+export type ExistingRoomType = {
+  id: string;
+  title: string;
+  category: RoomCategory;
+  bathroomType: string;
+  capacity: number;
+  semesterId: string;
+  pricePerTermUgx: number;
+  depositUgx: number | null;
+};
+
+/** The variant back out of a room type title: roomTypeTitle() (api) builds
+ * "Single Room - Executive", or just the name for 'other'. */
+function variantFromTitle(category: RoomCategory, title: string): string {
+  if (category === "other") return title;
+  const general = `${category.replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())} Room - `;
+  return title.startsWith(general) ? title.slice(general.length) : "";
+}
+
+/** Room types already registered for the property (onboarding, Manage Rooms,
+ * earlier Ops specifications), shown so Ops isn't asked for them again. */
+export function rowsFromRoomTypes(types: ExistingRoomType[], semesterId: string): RoomCategoryRow[] {
+  return types.map((type) => {
+    // A price set for another semester is not this listing's price: leave it blank.
+    const sameSemester = type.semesterId === semesterId;
+    return {
+    key: `type-${type.id}`,
+    roomTypeId: type.id,
+    category: type.category,
+    customLabel: variantFromTitle(type.category, type.title),
+    roomCount: "",
+    pricePerTermUgx: sameSemester ? String(type.pricePerTermUgx) : "",
+    depositUgx: sameSemester && type.depositUgx != null ? String(type.depositUgx) : "",
+    selfContained: type.bathroomType === "ensuite",
+    bedsPerRoom: String(type.capacity),
+    };
+  });
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     const body = err.body as { message?: string | string[] } | null;
@@ -137,9 +176,10 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
       visitPhotos: VisitPhoto[];
       version: PublishedVersion | null;
       inventoryInitialized?: boolean;
+      roomTypes?: ExistingRoomType[];
       photos: PublishedPhoto[];
     }>(`/ops/listings/${listingId}`)
-      .then(async ({ listing, property, visitPhotoCount: count, visitPhotos, version, photos: livePhotos, inventoryInitialized }) => {
+      .then(async ({ listing, property, visitPhotoCount: count, visitPhotos, version, photos: livePhotos, inventoryInitialized, roomTypes }) => {
         if (cancelled) return;
         setTarget(listing);
         setVisitPhotoCount(count);
@@ -184,6 +224,11 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
 
         if (rooms.length > 0) {
           setRoomCategoryRows(rowsFromExistingRooms(rooms));
+          return;
+        }
+
+        if (roomTypes?.length) {
+          setRoomCategoryRows(rowsFromRoomTypes(roomTypes, listing.semesterId));
           return;
         }
 
@@ -232,7 +277,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
 
     setPending(true);
     try {
-      const specifications = validRows.filter((row) => !row.unitIds?.length);
+      const specifications = validRows.filter((row) => !row.unitIds?.length && !row.roomTypeId);
       if (specifications.length && target) await api(`/ops/room-change-requests/properties/${target.propertyId}/specifications`,{method:"POST",body:JSON.stringify({types:specifications.map((row)=>({title:[roomCategoryLabel(row.category),row.customLabel.trim()].filter(Boolean).join(" - "),category:row.category,bathroomType:row.selfContained?"ensuite":"shared",capacity:bedsPerRoom(row),semesterId:target.semesterId,pricePerTermUgx:Number(row.pricePerTermUgx),depositUgx:row.depositUgx?Number(row.depositUgx):null,amenities:[],photos:[]}))})});
       if (!validRows.some((row)=>row.unitIds?.length)) { router.push("/ops"); return; }
       const units = validRows.filter((row)=>row.unitIds?.length).flatMap((row) => {
