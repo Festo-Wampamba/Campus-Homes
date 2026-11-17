@@ -28,7 +28,7 @@ it('shows the property\'s registered room types when it has no rooms yet, withou
   mockApi.mockReset();
   mockApi.mockImplementation(async(path:string)=>path.includes('/rooms?')?[]:{
     listing:{propertyId:'p1',semesterId:'s1',status:'draft'},property:{name:'Douglas',proposedRoomCategories:[],proposedAmenities:{}},inventoryInitialized:true,
-    roomTypes:[{id:'rt1',title:'Double Room - Executive',category:'double',bathroomType:'ensuite',capacity:2,pricePerTermUgx:900000,depositUgx:null}],
+    roomTypes:[{id:'rt1',title:'Double Room - Executive',category:'double',bathroomType:'ensuite',capacity:2,semesterId:'s1',pricePerTermUgx:900000,depositUgx:null}],
     visitPhotoCount:0,visitPhotos:[],version:null,photos:[],
   });
   const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);

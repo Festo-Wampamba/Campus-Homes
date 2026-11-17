@@ -101,6 +101,7 @@ export type ExistingRoomType = {
   category: RoomCategory;
   bathroomType: string;
   capacity: number;
+  semesterId: string;
   pricePerTermUgx: number;
   depositUgx: number | null;
 };
@@ -115,18 +116,22 @@ function variantFromTitle(category: RoomCategory, title: string): string {
 
 /** Room types already registered for the property (onboarding, Manage Rooms,
  * earlier Ops specifications), shown so Ops isn't asked for them again. */
-export function rowsFromRoomTypes(types: ExistingRoomType[]): RoomCategoryRow[] {
-  return types.map((type) => ({
+export function rowsFromRoomTypes(types: ExistingRoomType[], semesterId: string): RoomCategoryRow[] {
+  return types.map((type) => {
+    // A price set for another semester is not this listing's price: leave it blank.
+    const sameSemester = type.semesterId === semesterId;
+    return {
     key: `type-${type.id}`,
     roomTypeId: type.id,
     category: type.category,
     customLabel: variantFromTitle(type.category, type.title),
     roomCount: "",
-    pricePerTermUgx: String(type.pricePerTermUgx),
-    depositUgx: type.depositUgx != null ? String(type.depositUgx) : "",
+    pricePerTermUgx: sameSemester ? String(type.pricePerTermUgx) : "",
+    depositUgx: sameSemester && type.depositUgx != null ? String(type.depositUgx) : "",
     selfContained: type.bathroomType === "ensuite",
     bedsPerRoom: String(type.capacity),
-  }));
+    };
+  });
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -223,7 +228,7 @@ export function PublishListingForm({ listingId }: { listingId: string }) {
         }
 
         if (roomTypes?.length) {
-          setRoomCategoryRows(rowsFromRoomTypes(roomTypes));
+          setRoomCategoryRows(rowsFromRoomTypes(roomTypes, listing.semesterId));
           return;
         }
 
