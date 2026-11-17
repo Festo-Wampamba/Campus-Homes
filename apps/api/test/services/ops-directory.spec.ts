@@ -398,3 +398,33 @@ describe('listingForPublish', () => {
     expect(target.version).toBeNull();
   });
 });
+
+// Room types registered without physical rooms (onboarding approval, Manage
+// Rooms, Ops specifications) must reach the publish form so Ops isn't asked
+// to type them again.
+describe('listingForPublish room types', () => {
+  it('returns the property\'s active room types with their current version', async () => {
+    const addType = async (title: string, archived: boolean) => {
+      const typeId = await seed(
+        `INSERT INTO room_types (property_id, archived_at) VALUES ($1, $2) RETURNING id`,
+        [propertyA, archived ? new Date() : null],
+      );
+      const versionId = await seed(
+        `INSERT INTO room_type_versions (room_type_id, version_number, title, category, bathroom_type,
+           capacity, semester_id, price_per_term_ugx, deposit_ugx, status)
+         VALUES ($1, 1, $2, 'double', 'ensuite', 2, $3, 900000, 100000, 'approved') RETURNING id`,
+        [typeId, title, semester],
+      );
+      await pool.query('UPDATE room_types SET current_version_id = $2 WHERE id = $1', [typeId, versionId]);
+      return typeId;
+    };
+    const activeId = await addType('Double Room - Executive', false);
+    await addType('Double Room - Old', true);
+
+    const target = await ops.listingForPublish(leadCtx(), pendingListingA);
+    expect(target.roomTypes).toEqual([{
+      id: activeId, title: 'Double Room - Executive', category: 'double', bathroomType: 'ensuite',
+      capacity: 2, semesterId: semester, pricePerTermUgx: 900000, depositUgx: 100000,
+    }]);
+  });
+});

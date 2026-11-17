@@ -33,6 +33,9 @@ export type RoomCategoryRow = {
   // get zipped against these at submit time — the first N reuse an existing
   // room (just priced for this semester), any extra create new ones.
   unitIds?: string[];
+  // Ops publish form only: the existing room type this row shows, so submit
+  // doesn't save it again as a new specification.
+  roomTypeId?: string;
   // Ops publish form only: bed spaces in each room of this row. Fixed for
   // single/double/triple/quad; set by the lead for the variable types.
   bedsPerRoom?: string;

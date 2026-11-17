@@ -23,3 +23,19 @@ it.each([false,true])('lets Ops finish without inventing or recreating room type
     expect(mockApi.mock.calls.some(([,options])=>options?.method==='POST')).toBe(false);
   }finally{act(()=>root.unmount());container.remove();}
 });
+
+it('shows the property\'s registered room types when it has no rooms yet, without saving them again',async()=>{
+  mockApi.mockReset();
+  mockApi.mockImplementation(async(path:string)=>path.includes('/rooms?')?[]:{
+    listing:{propertyId:'p1',semesterId:'s1',status:'draft'},property:{name:'Douglas',proposedRoomCategories:[],proposedAmenities:{}},inventoryInitialized:true,
+    roomTypes:[{id:'rt1',title:'Double Room - Executive',category:'double',bathroomType:'ensuite',capacity:2,pricePerTermUgx:900000,depositUgx:null}],
+    visitPhotoCount:0,visitPhotos:[],version:null,photos:[],
+  });
+  const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);
+  try{
+    await act(async()=>root.render(<PublishListingForm listingId="listing1"/>));
+    const row=[container.querySelector<HTMLSelectElement>('#publish-room-category-0')?.value,container.querySelector<HTMLInputElement>('#publish-room-variant-0')?.value,container.querySelector<HTMLInputElement>('#publish-room-price-0')?.value];
+    await act(async()=>container.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+    expect({row,posted:mockApi.mock.calls.some(([,options])=>options?.method==='POST')}).toEqual({row:['double','Executive','900000'],posted:false});
+  }finally{act(()=>root.unmount());container.remove();}
+});
